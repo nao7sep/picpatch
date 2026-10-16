@@ -67,7 +67,7 @@ export async function normalizeImage(snapshot: string, target: string, mask = fa
     if (preparedSize.width !== scaledSize.width || preparedSize.height !== scaledSize.height) {
       transform.extract({ ...crop, width: preparedSize.width, height: preparedSize.height });
     }
-    if (!mask) transform.toColourspace('srgb');
+    transform.toColourspace(mask ? 'b-w' : 'srgb');
     const info = await transform.png().timeout({ seconds: 60 }).toFile(target);
     await chmod(target, 0o600);
     checkCancellation(signal);

@@ -18,7 +18,7 @@ it('validates the full capability advertisement across the worker boundary', () 
   expect(() => validateEditRequest(fixture.cases[1]!.request, { ...fixture.capabilities, sourceImageRequired: true })).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
   expect(() => validateEditRequest(fixture.cases[0]!.request, { ...fixture.capabilities, referenceConditioning: 'native-role-controls' } as never)).toThrow(expect.objectContaining({ code: 'INVALID_CAPABILITIES' }));
 });
-it.each([{ maskImage: '/missing-mask.png' }, { size: { width: 17, height: 32 } }])('public editing rejects unsupported metadata before image I/O (%j)', async change => {
+it.each([{ size: { width: 17, height: 32 } }])('public editing rejects unsupported metadata before image I/O (%j)', async change => {
   vi.spyOn(WorkerProcess.prototype, 'start').mockResolvedValue({ version: 1, id: 1, type: 'ready', workerVersion: 'test', models: [fixture.capabilities] });
   const edit = vi.spyOn(WorkerProcess.prototype, 'edit');
   vi.spyOn(WorkerProcess.prototype, 'dispose').mockResolvedValue();

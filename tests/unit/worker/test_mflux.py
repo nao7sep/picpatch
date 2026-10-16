@@ -70,7 +70,7 @@ def test_references_without_source(request_data):
     assert 'Images 1, 2' in prompt
 
 
-@pytest.mark.parametrize('change', [{'maskImage': '/mask.png'}, {'model': 'other'}, {'size': {'width': 17, 'height': 32}}])
+@pytest.mark.parametrize('change', [{'model': 'other'}, {'size': {'width': 17, 'height': 32}}])
 def test_unsupported_inputs_never_load(monkeypatch, config, request_data, change):
     calls = runtime(monkeypatch)
     with pytest.raises(mflux.InvalidEditInput):
@@ -214,3 +214,17 @@ def test_group_ids_are_quoted_and_instruction_is_preserved():
     _, prompt = mflux.conditioning(request)
     assert 'group "shape\\"\\nlabel".' in prompt
     assert prompt.endswith('\n\n' + request['instruction'])
+
+
+def test_mask_is_composited_after_generation_without_becoming_a_reference(monkeypatch, config, request_data):
+    calls = runtime(monkeypatch)
+    seen = []
+    def composite(image, request):
+        seen.append(request['maskImage'])
+        return image
+    monkeypatch.setattr(mflux, 'composite_mask', composite)
+    request_data['maskImage'] = '/mask.png'
+    mflux.MfluxAdapter(config).edit(request_data, Event(), lambda event: None)
+    assert seen == ['/mask.png']
+    args = next(call[1] for call in calls if call[0] == 'generate')
+    assert '/mask.png' not in args['image_paths']

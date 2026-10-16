@@ -117,5 +117,32 @@ it('prepares existing catalog weights and checks actual model loading without ac
   const readiness = await inspectReadiness(options.pythonExecutable!, prepared.model, { load: true });
   expect(prepared.integrity).toBe('matches-manifest');
   expect(readiness).toMatchObject({ files: 'present', integrity: 'not-verified', runtime: { status: 'load-ready', version: '0.22.0' } });
-  expect(readiness.capabilities[0]?.maskMode).toBe('none');
+  expect(readiness.capabilities[0]?.maskMode).toBe('composite');
 }, 600_000);
+
+it('edits through a mask while preserving every black-mask source pixel', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'picpatch-masked-inference-'));
+  const editor = createEditor(await localOptions());
+  try {
+    const sourceImage = join(directory, 'source.png'); const maskImage = join(directory, 'mask.png');
+    await sharp({ create: { width: 256, height: 256, channels: 3, background: 'red' } }).png().toFile(sourceImage);
+    const mask = Buffer.alloc(256 * 256);
+    for (let y = 0; y < 256; y++) mask.fill(255, y * 256 + 128, (y + 1) * 256);
+    await sharp(mask, { raw: { width: 256, height: 256, channels: 1 } }).toColourspace('b-w').png().toFile(maskImage);
+    const original = await readFile(sourceImage); const originalMask = await readFile(maskImage);
+    const result = await editor.edit({ instruction: 'Make the entire image solid blue.', sourceImage, maskImage, seed: 42 });
+    expect(result.image.size).toEqual({ width: 256, height: 256 });
+    const pixels = await sharp(result.image.path).ensureAlpha().raw().toBuffer();
+    let changed = false;
+    for (let i = 0; i < mask.length; i++) {
+      const pixel = pixels.subarray(i * 4, i * 4 + 4);
+      if (mask[i] === 0) expect([...pixel]).toEqual([255, 0, 0, 255]);
+      else if (!pixel.equals(Buffer.from([255, 0, 0, 255]))) changed = true;
+    }
+    expect(changed).toBe(true);
+    expect(await readFile(sourceImage)).toEqual(original);
+    expect(await readFile(maskImage)).toEqual(originalMask);
+    await editor.dispose();
+    expect((await readdir(directory)).filter(name => name.startsWith('.picpatch-'))).toEqual([]);
+  } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
+}, 1_800_000);

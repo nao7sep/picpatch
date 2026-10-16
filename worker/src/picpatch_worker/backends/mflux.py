@@ -40,9 +40,24 @@ def conditioning(request: dict) -> tuple[list[str], str]:
             paths.append(image)
             numbers.append(str(len(paths)))
         descriptions.append(f"Images {', '.join(numbers)} are {group['role']} references for group {json.dumps(group['id'])}.")
-    if not paths or request.get('maskImage'):
-        raise InvalidEditInput('This adapter requires images and does not support masks.')
+    if not paths or (request.get('maskImage') and not request.get('sourceImage')):
+        raise InvalidEditInput('Editing requires images; masked editing requires a source.')
     return paths, '\n'.join(descriptions) + '\n\n' + request['instruction']
+
+
+def composite_mask(generated, request):
+    """sRGB channel interpolation, including alpha; black pixels copy the source exactly.
+
+    The mask never conditions Klein. The SDK supplies normalized, aligned snapshots.
+    Pillow's native pixel loop stays inside the owned inference thread.
+    """
+    if not request.get('maskImage'):
+        return generated
+    from PIL import Image
+    with Image.open(request['sourceImage']) as source, Image.open(request['maskImage']) as mask:
+        if mask.mode != 'L' or source.size != mask.size or generated.size != source.size:
+            raise InvalidEditInput('Masked output and grayscale mask must match the source dimensions.')
+        return Image.composite(generated.convert('RGBA'), source.convert('RGBA'), mask)
 
 
 def load_pipeline(config: dict):
@@ -127,7 +142,7 @@ class MfluxAdapter:
     def capabilities(self) -> dict:
         return {'model': self.config['manifest']['model'], 'instructionEditing': True,
                 'referenceRoles': ['subject', 'object', 'style', 'background'],
-                'maskMode': 'none', 'size': {'widthMultiple': 16, 'heightMultiple': 16},
+                'maskMode': 'composite', 'size': {'widthMultiple': 16, 'heightMultiple': 16},
                 'sourceImageRequired': False, 'referenceConditioning': 'ordered-images-with-role-prompt',
                 'defaultOutputSize': {'width': 1024, 'height': 1024}, 'inputGeometry': 'klein-reference'}
 
@@ -148,7 +163,7 @@ class MfluxAdapter:
                 event.update(completed=completed, total=total)
             progress(event)
 
-        pipeline = generated = mx = None
+        pipeline = generated = image = mx = None
         try:
             check_cancelled(cancel)
             emit('loading', 'Loading local editing model.')
@@ -160,11 +175,13 @@ class MfluxAdapter:
             mx.synchronize()
             check_cancelled(cancel)
             emit('saving', 'Writing edited image.')
+            image = composite_mask(generated.image, request)
+            check_cancelled(cancel)
             # Save pixels only, without MFLUX sidecars, prompt metadata or filename rewriting.
             with open(request['outputPath'], 'xb') as output:
-                generated.image.save(output, format='PNG')
+                image.save(output, format='PNG')
             check_cancelled(cancel)
-            width, height = generated.image.size
+            width, height = image.size
             return {'image': {'path': request['outputPath'], 'mimeType': 'image/png',
                               'size': {'width': width, 'height': height}},
                     'model': request['model'], 'modelRevision': self.config['manifest']['source']['revision'],
@@ -175,7 +192,7 @@ class MfluxAdapter:
             # GPU producers before reporting terminal settlement or releasing private files.
             if mx is not None:
                 mx.synchronize()
-            generated = pipeline = None
+            generated = pipeline = image = None
             gc.collect()
             if mx is not None:
                 mx.clear_cache()

@@ -8,7 +8,7 @@
       "style",
       "background"
     ],
-    "maskMode": "none",
+    "maskMode": "composite",
     "size": {
       "widthMultiple": 16,
       "heightMultiple": 16

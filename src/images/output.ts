@@ -43,13 +43,20 @@ export class ImageWorkspace {
     let index = 0;
     const prepare = async (path: string, mask = false) => {
       const stem = join(this.directory, `input-${index++}`);
-      const image = await prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal, policy);
+      const image = await prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal, mask ? undefined : policy);
       this.geometry.push({ path, ...image.geometry });
       return image;
     };
     const source = this.request.sourceImage ? await prepare(this.request.sourceImage) : undefined;
     if (source) this.workerRequest.sourceImage = source.path;
     if (this.request.maskImage) {
+      if (!source || source.width !== source.geometry.orientedSize.width || source.height !== source.geometry.orientedSize.height) {
+        throw new PicPatchUsageError('INVALID_MASK', 'Masked editing requires source dimensions that need no model resizing or cropping.');
+      }
+      if (this.request.size && (this.request.size.width !== source.width || this.request.size.height !== source.height)) {
+        throw new PicPatchUsageError('INVALID_MASK', 'Masked output dimensions must match the oriented source.');
+      }
+      this.workerRequest.size = { width: source.width, height: source.height };
       const mask = await prepare(this.request.maskImage, true);
       if (!source || mask.width !== source.width || mask.height !== source.height) {
         throw new PicPatchUsageError('INVALID_MASK', 'Mask dimensions must match the oriented source image.');
@@ -80,7 +87,7 @@ export class ImageWorkspace {
       await snapshotImage(this.workerRequest.outputPath, snapshot, signal, true);
       const image = await normalizeImage(snapshot, complete, false, signal, true);
       if (image.width !== result.image.size.width || image.height !== result.image.size.height ||
-          (this.request.size && (image.width !== this.request.size.width || image.height !== this.request.size.height))) {
+          (this.workerRequest.size && (image.width !== this.workerRequest.size.width || image.height !== this.workerRequest.size.height))) {
         throw new Error('Output dimensions do not match the result or requested size.');
       }
     } catch (cause) {
