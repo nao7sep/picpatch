@@ -104,7 +104,19 @@ it('cancels after a real denoising step and cleans unpublished output after work
 it('edits four and six grouped references in one session without changing originals or leaving private output', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-references-'));
   try {
-    await referenceWorkload(await localOptions(), directory, 256, 256, [4, 6]);
+    const events: Record<string, unknown>[] = [];
+    await referenceWorkload(await localOptions(), directory, 256, 256, [4, 6], event => events.push(event));
+    for (const index of [0, 1]) {
+      const phases = events.filter(event => event.kind === 'phase' && event.index === index);
+      const stages = phases.map(event => event.stage);
+      expect(stages).toEqual(expect.arrayContaining(['loading', 'editing', 'saving']));
+      expect(stages.filter(stage => stage === 'editing')).toHaveLength(1);
+      const elapsed = phases.map(event => event.elapsedSeconds as number);
+      expect(elapsed).toEqual([...elapsed].sort((a, b) => a - b));
+      expect(events.find(event => event.kind === 'start' && event.index === index)).toMatchObject({ inputSize: 256, outputSize: 256 });
+      expect(events.find(event => event.kind === 'end' && event.index === index)).toMatchObject({ runtime: { name: 'mflux' }, seed: 42 });
+    }
+    expect(JSON.stringify(events)).not.toContain('wooden table');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

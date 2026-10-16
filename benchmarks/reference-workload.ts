@@ -10,6 +10,9 @@ export async function referenceWorkload(options: EditorOptions, directory: strin
   inputSize: number, outputSize: number, counts: readonly number[],
   record: (event: Record<string, unknown>) => void = () => {}, signal?: AbortSignal) {
   assert(options.model, 'Supply a prepared local inference configuration.');
+  assert(Number.isSafeInteger(inputSize) && inputSize >= 16);
+  assert(Number.isSafeInteger(outputSize) && outputSize >= 16 && outputSize % 16 === 0);
+  assert(counts.length > 0 && counts.every(count => count === 2 || count === 4 || count === 6));
   const groups: string[][] = [[], []];
   for (let group = 0; group < 2; group++) {
     for (let view = 0; view < 3; view++) {
@@ -26,15 +29,19 @@ export async function referenceWorkload(options: EditorOptions, directory: strin
   const editor = createEditor(options);
   try {
     for (const [index, count] of counts.entries()) {
-      assert(count === 4 || count === 6);
       const groupReference = (group: number): ReferenceGroup => ({ id: `object-${group}`, role: 'object', images: groups[group]!.slice(0, count / 2) as [string, ...string[]] });
       const references: [ReferenceGroup, ReferenceGroup] = [groupReference(0), groupReference(1)];
       const outputPath = join(directory, `output-${index}.png`);
       const started = performance.now();
-      record({ kind: 'start', index, count });
+      record({ kind: 'start', index, count, inputSize, outputSize, elapsedSeconds: 0 });
+      let previousStage: string | undefined;
       const result = await editor.edit({ model: options.model.manifest.model,
         instruction: 'Place the red teapot and the yellow backpack together on a wooden table. Each group shows different views of one object. Show exactly one of each object, preserving their colors and shapes. Natural product photograph.',
-        references, outputPath, seed: 42, size: { width: outputSize, height: outputSize } }, signal ? { signal } : {});
+        references, outputPath, seed: 42, size: { width: outputSize, height: outputSize } }, { ...(signal ? { signal } : {}), onProgress: event => {
+          if (event.stage === previousStage) return;
+          previousStage = event.stage;
+          record({ kind: 'phase', index, stage: event.stage, elapsedSeconds: (performance.now() - started) / 1000 });
+        } });
       const metadata = await sharp(result.image.path).metadata();
       assert.equal(metadata.format, 'png');
       assert.equal(metadata.width, outputSize);
@@ -46,7 +53,9 @@ export async function referenceWorkload(options: EditorOptions, directory: strin
       assert.equal(result.cleanupWarning, undefined);
       assert.deepEqual(await Promise.all(groups.flat().map(async path => createHash('sha256').update(await readFile(path)).digest('hex'))), hashes);
       assert.equal((await readdir(directory)).length, 6 + index + 1, 'Private workspaces must be cleaned before success.');
-      record({ kind: 'end', index, count, seconds: (performance.now() - started) / 1000 });
+      record({ kind: 'end', index, count, seconds: (performance.now() - started) / 1000,
+        inputGeometry: result.inputGeometry?.map(({ path: _path, ...geometry }) => geometry),
+        runtime: result.runtime, model: result.model, modelRevision: result.modelRevision, seed: result.seed });
       // Observe settled worker memory between operations, rather than only allocation peaks.
       await new Promise(resolve => setTimeout(resolve, 1000));
     }

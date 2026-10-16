@@ -24,3 +24,20 @@ def test_memory_summary_separates_active_and_settled_samples():
                                     sample('6', 200), sample('8', 20)], events)
     assert [(run['peakFootprintBytes'], run['settledFootprintBytes']) for run in result] == [(100, 10), (200, 20)]
     assert [run['references'] for run in result] == [4, 6]
+
+
+def test_phase_costs_use_monotonic_elapsed_time_and_do_not_share_boundary_samples():
+    events = [
+        {'time': '10', 'kind': 'start', 'index': 0, 'count': 2, 'elapsedSeconds': 0, 'inputSize': 1024, 'outputSize': 1024},
+        {'time': '11', 'kind': 'phase', 'index': 0, 'stage': 'loading', 'elapsedSeconds': 0.5},
+        {'time': '12', 'kind': 'phase', 'index': 0, 'stage': 'editing', 'elapsedSeconds': 4},
+        {'time': '13', 'kind': 'phase', 'index': 0, 'stage': 'saving', 'elapsedSeconds': 9},
+        {'time': '14', 'kind': 'end', 'index': 0, 'seconds': 10},
+    ]
+    samples = [{'time': time, 'footprintBytes': size, 'residentBytes': size // 2, 'pressure': 1}
+               for time, size in [('11', 100), ('12', 200)]]
+    run = measurement.summarize(samples, events)[0]
+    assert (run['inputSize'], run['outputSize'], run['references']) == (1024, 1024, 2)
+    assert [(stage['stage'], stage['seconds'], stage['peakFootprintBytes']) for stage in run['stages']] == [
+        ('preparation', 0.5, None), ('loading', 3.5, 100), ('editing', 5, 200), ('saving', 1, None)]
+    assert [stage['sampleCount'] for stage in run['stages']] == [0, 1, 1, 0]

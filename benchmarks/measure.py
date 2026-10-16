@@ -3,6 +3,7 @@
 Run with an existing Python: python benchmarks/measure.py. No packages or weights
 are acquired. Results and neutral images stay in the ignored benchmark directory.
 """
+import argparse
 import ctypes
 from datetime import datetime, timezone
 import json
@@ -58,7 +59,19 @@ def summarize(samples, phases):
         idle = [sample for sample in samples if end['time'] < sample['time'] < next_boundary]
         if not active:
             raise RuntimeError('No memory samples cover a completed edit.')
+        transitions = [start] + [event for event in phases if event['kind'] == 'phase' and event['index'] == start['index']] + [end]
+        stages = []
+        for left, right in zip(transitions, transitions[1:]):
+            window = [sample for sample in active if left['time'] <= sample['time'] < right['time']]
+            stages.append({'stage': left.get('stage', 'preparation'),
+                           'seconds': right.get('elapsedSeconds', end['seconds']) - left.get('elapsedSeconds', 0),
+                           'sampleCount': len(window),
+                           'peakFootprintBytes': max((sample['footprintBytes'] for sample in window), default=None),
+                           'peakResidentBytes': max((sample['residentBytes'] for sample in window), default=None),
+                           'pressureLevels': sorted({sample['pressure'] for sample in window})})
         runs.append({'index': start['index'], 'references': start['count'], 'seconds': end['seconds'],
+                     'inputSize': start.get('inputSize'), 'outputSize': start.get('outputSize'),
+                     'stages': stages,
                      'peakFootprintBytes': max(sample['footprintBytes'] for sample in active),
                      'peakResidentBytes': max(sample['residentBytes'] for sample in active),
                      'pressureLevels': sorted({sample['pressure'] for sample in active}),
@@ -67,6 +80,15 @@ def summarize(samples, phases):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--input-size', type=int, default=512)
+    parser.add_argument('--output-size', type=int, default=768)
+    parser.add_argument('--counts', default='4,6,4,6,4,6', help='Comma-separated reference counts (2, 4 or 6).')
+    args = parser.parse_args()
+    if args.input_size < 16 or args.output_size < 16 or args.output_size % 16:
+        parser.error('Input size must be at least 16; output size must be a positive multiple of 16.')
+    if not args.counts or any(count not in ('2', '4', '6') for count in args.counts.split(',')):
+        parser.error('Counts must be a comma-separated sequence of 2, 4 or 6.')
     if sys.platform != 'darwin':
         raise RuntimeError('This sampler measures macOS process ledgers only.')
     root = Path(__file__).resolve().parent.parent
@@ -82,7 +104,9 @@ def main():
     before = subprocess.check_output(['sysctl', '-n', 'vm.swapusage'], text=True).strip()
     env = dict(os.environ, HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', UV_OFFLINE='1')
     with (output / 'events.log').open('w') as events:
-        process = subprocess.Popen(['node', str(root / 'benchmarks/references.ts'), str(images)],
+        process = subprocess.Popen(['node', str(root / 'benchmarks/references.ts'), str(images),
+                                    '--input-size', str(args.input_size), '--output-size', str(args.output_size),
+                                    '--counts', args.counts],
                                    cwd=root, env=env, stdout=events)
         try:
             while process.poll() is None:
