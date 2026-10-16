@@ -8,9 +8,9 @@ import { delimiter, join } from 'node:path';
 import { constants } from 'node:fs';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, setupRuntime, type Editor } from '../../src/index.ts';
+import { createEditor, type Editor } from '../../src/index.ts';
 
-it('verifies a local registration then returns a missing-runtime failure over real worker pipes', async () => {
+it('accepts a local registration then returns a missing-runtime failure over real worker pipes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-adapter-'));
   let editor: Editor | undefined;
   try {
@@ -23,9 +23,10 @@ it('verifies a local registration then returns a missing-runtime failure over re
     if (!uvExecutable) throw new Error('The full gate requires uv on PATH.');
     const runtimeDirectory = join(directory, 'runtime');
     const cacheDirectory = (await promisify(execFile)(uvExecutable, ['cache', 'dir'])).stdout.trim();
-    const runtime = await setupRuntime({ directory: runtimeDirectory, uvExecutable, cacheDirectory,
-      pythonExecutable: testPython, offline: true });
-    editor = createEditor({ pythonExecutable: runtime.pythonExecutable,
+    await promisify(execFile)(uvExecutable, ['sync', '--project', 'worker', '--python', testPython,
+      '--no-python-downloads', '--no-dev', '--no-install-project', '--locked', '--no-build', '--offline',
+      '--cache-dir', cacheDirectory], { env: { ...process.env, UV_PROJECT_ENVIRONMENT: runtimeDirectory }, timeout: 30_000 });
+    editor = createEditor({ pythonExecutable: join(runtimeDirectory, 'bin/python'),
       model: { adapter: 'mflux-flux2-klein-4b', directory, manifest: {
         version: 1, model: 'test', source: { repository: 'test', revision: 'a'.repeat(40) },
         components: [{ path: 'weights.safetensors', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],

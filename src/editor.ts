@@ -1,5 +1,5 @@
 import { contractValidator } from './contracts.ts';
-import { validateModelManifest, verifyModel } from './models/verification.ts';
+import { validateModelManifest } from './models/verification.ts';
 import type { LocalEditingModel } from './contracts.generated.ts';
 import { ImageEditor } from './images/editor.ts';
 import { isAbsolute } from 'node:path';
@@ -83,8 +83,6 @@ export class ProcessEditor implements Editor {
     try {
       if (this.model) {
         if (request.model !== this.model.manifest.model) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The editor is configured for a different model.');
-        const verified = await verifyModel(this.model.directory, this.model.manifest, { ...(signal ? { signal } : {}) });
-        if (verified.status !== 'matches-manifest') throw new PicPatchUsageError('INVALID_REQUEST', 'The local model does not match its manifest.');
       }
       let ready: WorkerResponse;
       try { ready = await this.worker.start(); }

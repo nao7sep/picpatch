@@ -262,3 +262,20 @@ describe('termination signal races', () => {
     child.close();
   });
 });
+
+it('uses a prepared model registration across edits without reading its component files', async () => {
+  const { child, worker } = setup();
+  const registered = new ProcessEditor(worker, {
+    adapter: 'mflux-flux2-klein-4b', directory: '/does-not-exist/picpatch-model',
+    manifest: { version: 1, model: 'test', source: { repository: 'local', revision: 'a'.repeat(40) },
+      components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] },
+  });
+  const base = child.onRequest;
+  child.onRequest = message => { base(message); if (message.type === 'edit') child.result(message.id); };
+  try {
+    await expect(registered.edit({ ...request, model: 'other' })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+    await expect(registered.edit(request)).resolves.toMatchObject({ model: 'test' });
+    await expect(registered.edit(request)).resolves.toMatchObject({ model: 'test' });
+    expect(child.requests.filter(message => message.type === 'edit')).toHaveLength(2);
+  } finally { await registered.dispose(); }
+});

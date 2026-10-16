@@ -6,9 +6,9 @@ The public editor validates and prepares image files, owns a persistent worker p
 
 ## Experimental local editing
 
-Supply `createEditor` with `model: { adapter: 'mflux-flux2-klein-4b', directory, manifest, quantize? }`. `directory` must be an existing absolute model bundle path; `manifest` uses the verification contract described below. Each edit hashes the declared components before starting inference. Keep the directory immutable while editing: verification neither locks the bundle nor proves an incomplete manifest covers everything MFLUX reads. The request's `model` must equal `manifest.model`. The returned revision is the caller-supplied manifest revision, not an independently authenticated identity.
+Supply `createEditor` with `model: { adapter: 'mflux-flux2-klein-4b', directory, manifest, quantize? }`. `directory` must be an existing absolute model bundle path; `manifest` uses the verification contract described below. Verify the bundle during preparation with `verifyModel` and require a `matches-manifest` result before using it. Edits do not re-hash model files. The pinned development preparation script performs this verification before publishing its configuration. Keep the directory immutable while editing: verification neither locks the bundle nor proves an incomplete manifest covers everything MFLUX reads. The request's `model` must equal `manifest.model`. The returned revision is the caller-supplied manifest revision, not an independently authenticated identity.
 
-The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. `setupRuntime` still installs only the small model-free dependencies; general inference installation and a model catalog are not automated yet. The development test uses the pinned manifest in `tests/fixtures/klein-4b-4bit.manifest.json`.
+The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. Install the optional inference extra through uv; a model catalog is not automated yet. The development test uses the pinned manifest in `tests/fixtures/klein-4b-4bit.manifest.json`.
 
 The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Masks are rejected. Explicit output dimensions must be multiples of 16; omitted dimensions use 1024 by 1024. MFLUX's distilled generation defaults apply. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
 
@@ -20,7 +20,7 @@ Use `npx tsx examples/edit-local.ts /absolute/editor-options.json /absolute/edit
 
 Use Node.js 24 or newer, npm, and uv. The worker lock targets macOS arm64. The worker declares Python 3.15 (`>=3.15,<3.16`) in `worker/pyproject.toml`; uv selects a compatible interpreter and downloads one if needed. Run `uv sync --project worker --locked` to prepare the worker environment. Install the development dependencies with `npm ci`, then run `npm test`. This checks generated contracts, TypeScript source and examples, request validation, and TypeScript/Python protocol behavior. The Python test command lets uv prepare Python and the small locked validation and test dependencies; it never downloads models.
 
-The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It uses `worker/.venv` by default, or the environment selected by `UV_PROJECT_ENVIRONMENT` (relative paths resolve from `worker/`), and currently targets macOS/POSIX. The full gate also runs real inference using `node_modules/.cache/picpatch-live/inference-config.json`, or an absolute editor-options JSON path supplied through `PICPATCH_INFERENCE_CONFIG`. Missing prerequisites fail explicitly. No test downloads models. Runtime setup tests additionally need uv on PATH and the locked worker wheels in its cache; they create disposable environments with network access disabled and fail clearly if those prerequisites are missing. Live tests are type-checked by the ordinary gate.
+The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It uses `worker/.venv` by default, or the environment selected by `UV_PROJECT_ENVIRONMENT` (relative paths resolve from `worker/`), and currently targets macOS/POSIX. The full gate also runs real inference using `node_modules/.cache/picpatch-live/inference-config.json`, or an absolute editor-options JSON path supplied through `PICPATCH_INFERENCE_CONFIG`. Missing prerequisites fail explicitly. No test downloads models. The missing-backend test needs uv on PATH and cached worker wheels to create an isolated model-free environment offline. Live tests are type-checked by the ordinary gate.
 
 To prepare the real-inference test after the development setup, run these commands from the repository root. The first installs the locked inference packages into a separate environment; the second explicitly downloads approximately 4.62 GB of pinned model files and verifies every component before publishing the local configuration. Both the environment and weights stay in the ignored test cache.
 
@@ -42,7 +42,7 @@ For resource measurements on macOS, run `python3 benchmarks/measure.py` with the
 
 Run `npm run example:request` to print an illustrative grouped-reference request. It does not read images, start a worker, or generate output. `npm run test:coverage` measures TypeScript behavioral coverage.
 
-The private package resolves directly to TypeScript source. Consumers use a TypeScript-capable runner or bundler; no SDK build step is required. The worker’s `pyproject.toml` and `uv.lock` describe an internal package with JSON Schema validation and a separately locked optional `inference` extra. Ordinary setup and tests do not install that extra. Python and inference packages are provisioned through uv project commands, outside the SDK. The SDK accepts a prepared interpreter; its optional `setupRuntime` helper only installs model-free packages using an explicitly supplied Python executable.
+The private package resolves directly to TypeScript source. Consumers use a TypeScript-capable runner or bundler; no SDK build step is required. The worker’s `pyproject.toml` and `uv.lock` describe an internal package with JSON Schema validation and a separately locked optional `inference` extra. Ordinary setup and tests do not install that extra. Python and inference packages are provisioned through uv project commands, outside the SDK. The SDK accepts a prepared interpreter and does not install packages.
 
 ## Editing contracts
 
@@ -81,33 +81,15 @@ Candidate detection is based on filenames, so unrelated files with weight-like n
 
 `verifyModel(directory, manifest, options?)` checks every declared file, streams its hash, detects changes while reading, and validates that shard-index mappings name weights in the manifest. File symlinks can point to shared cache blobs; directory symlinks cannot redirect verification outside the selected root. Unsafe or conflicting manifest paths are rejected before reading files. Verification never imports weights or executes model code.
 
+Verification is a point-in-time result. Keep prepared model files unchanged; edits do not automatically detect later modifications. Call `verifyModel` again whenever you need a fresh integrity check.
+
 A `matches-manifest` result means the declared files matched the supplied pins at verification time. It does not authenticate those pins, prove the manifest lists every component an adapter needs, or establish editing support; compatibility remains `unknown`. Missing files, mismatches and invalid indexes return an `invalid` result with component-level statuses. Filesystem failures throw `MODEL_IO`. Cancellation and progress use the same options as inspection; verification also accepts `timeoutMs`, defaulting to ten minutes. Active reads settle before cancellation or timeout is reported. No files are repaired, deleted, installed, or downloaded.
 
 ## Worker environment setup
 
 `inspectRuntime(pythonExecutable, options?)` starts the bundled worker, checks its handshake, and waits for shutdown. It returns `worker-ready` plus the worker version and advertised model capabilities. This proves that the selected interpreter can run the worker, not that it matches the dependency lock or supports any image model. Inspection installs nothing and disables Python bytecode writes and user-site/Python-environment overrides.
 
-`setupRuntime(request, options?)` explicitly creates an isolated environment in an unused absolute directory. Supply existing absolute Python and uv executable paths; the directory's parent must exist. Setup installs only the worker's locked non-development Python packages, permits prebuilt wheels only, and never downloads Python or model weights. Network package installation is allowed only by calling setup; use `offline: true` to forbid it too. An optional `cacheDirectory` can reuse an existing uv cache for offline setup.
-
-```ts
-import { setupRuntime, createEditor } from 'picpatch';
-
-const runtime = await setupRuntime({
-  directory: '/absolute/path/to/unused-runtime-directory',
-  pythonExecutable: '/absolute/path/to/python',
-  uvExecutable: '/absolute/path/to/uv',
-});
-const editor = createEditor({ pythonExecutable: runtime.pythonExecutable });
-try {
-  // Use the editor once an editing backend is available.
-} finally {
-  await editor.dispose();
-}
-```
-
-Setup confirms readiness through the actual worker handshake before returning the interpreter path and dependency-lock digest. Existing directories are never replaced; reuse a returned interpreter through `inspectRuntime` or `createEditor`. The environment stays at its final path because Python environments are not relocatable. Its directory is private and incomplete until setup returns; only the call result establishes successful setup. Keep the base Python installation and this SDK checkout available: this is source-consumed worker setup, not a bundled standalone runtime.
-
-Both runtime operations accept cancellation and structured progress. `timeoutMs` bounds installer execution (five minutes by default) or inspection startup (thirty seconds by default); worker shutdown and forced termination have separate bounded budgets. Setup waits for subprocess closure before removing its own failed or cancelled environment. Unconfirmed termination retains that directory and reports `recoveryDirectory`. No existing environment is repaired or deleted. Runtime subprocess ownership targets macOS/POSIX; Windows descendant termination remains unsupported.
+Runtime inspection accepts cancellation, progress callbacks and `timeoutMs` for startup (thirty seconds by default). It always waits for worker shutdown; shutdown and forced termination have separate bounded budgets. Prepare environments with the uv commands above.
 
 ## Editor lifecycle
 
