@@ -450,7 +450,11 @@
       "type": "object",
       "properties": {
         "adapter": {
-          "const": "mflux-flux2-klein-4b"
+          "enum": [
+            "mflux-flux2-klein-4b",
+            "mflux-z-image-turbo",
+            "mflux-flux1-schnell"
+          ]
         },
         "directory": {
           "type": "string",

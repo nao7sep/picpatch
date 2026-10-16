@@ -42,6 +42,16 @@ Preparation verifies every component, including cached or external bundles. Edit
 
 Preparation and readiness accept cancellation, progress and `timeoutMs`. Preparation defaults to one hour; readiness defaults to thirty seconds for imports and ten minutes when hashing or loading. Active work settles before cleanup or rejection. A published bundle wins a cancellation race. Cleanup or durability warnings identify retained paths without invalidating a completed publication.
 
+## Experimental external model families
+
+Alongside Klein, the worker implements text-only generation adapters for Z-Image Turbo (`mflux-z-image-turbo`) and FLUX.1 Schnell (`mflux-flux1-schnell`). They use the same MFLUX 0.22.0 environment and `editor.generate` API. Both advertise generation only: instruction editing, references and masks are rejected before image preparation. Output dimensions must be multiples of 16; omitted dimensions use 1024 by 1024, and upstream sampling defaults apply.
+
+These adapters have import and API-mapping checks, but have not been tested with real weights on the target Mac. They are not entries in `listModels()` and cannot be downloaded through `prepareModel`. Neither successful imports nor 4-bit configuration establishes that a complete pipeline fits in memory or produces good results.
+
+To try an existing compatible bundle, verify its complete manifest with `verifyModel`, then supply `createEditor` with `{ model: { adapter, directory, manifest, quantize? } }` and a prepared interpreter. The bundle must include the selected family's transformer, encoders, VAE, tokenizers and configuration in MFLUX's expected layout; a standalone checkpoint is insufficient. `quantize` accepts 4 or 8, or can be omitted for the bundle's configuration. `inspectReadiness` checks the selected family's imports and optionally loads its weights. All execution remains offline; missing components fail rather than triggering acquisition.
+
+Shared MFLUX loading, progress, cancellation, output writing and memory cleanup live in `runtimes/mflux/src/picpatch_worker/backends/runtime.py`. Families sharing the generation API use `generation.py`; `klein.py` owns Klein's reference conditioning, pipeline selection and composite masking.
+
 ## Caller defaults and diagnostics
 
 An editor accepts `defaults: { size?, seed?, outputDirectory? }`. Per-call values override these; absent size and seed continue to use the adapter's defaults. The session model is inherited, and a conflicting explicit model is rejected. Returned results contain the actual seed, dimensions and model provenance. Explicit model registration remains available for advanced local configurations.

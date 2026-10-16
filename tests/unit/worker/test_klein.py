@@ -4,7 +4,8 @@ from threading import Event
 from types import SimpleNamespace
 
 import pytest
-from picpatch_worker.backends import klein
+from picpatch_worker.backends import klein, runtime as mflux_runtime
+from picpatch_worker.backends.errors import Cancelled, BackendUnavailable
 
 
 @pytest.fixture
@@ -40,11 +41,12 @@ def runtime(monkeypatch, cancel=None, failure=None):
             if failure:
                 raise failure
             return SimpleNamespace(image=Image())
-    def load(config, operation="edit"):
+    def load(self, operation="edit"):
+        config = self.config
         calls.append(('load', config))
         calls.append(('operation', operation))
         return Pipeline(), '0.22.0', SimpleNamespace(synchronize=lambda: calls.append(('sync',)), clear_cache=lambda: calls.append(('clear',)))
-    monkeypatch.setattr(klein, 'load_pipeline', load)
+    monkeypatch.setattr(klein.KleinAdapter, 'load_pipeline', load)
     return calls
 
 
@@ -82,7 +84,7 @@ def test_unsupported_inputs_never_load(monkeypatch, config, request_data, change
 def test_cancel_at_step_settles_gpu_without_output(monkeypatch, config, request_data):
     cancel = Event()
     calls = runtime(monkeypatch, cancel)
-    with pytest.raises(klein.Cancelled):
+    with pytest.raises(Cancelled):
         klein.KleinAdapter(config).edit(request_data, cancel, lambda e: None)
     assert not Path(request_data['outputPath']).exists()
     assert calls[-2:] == [('sync',), ('clear',)]
@@ -91,7 +93,7 @@ def test_cancel_at_step_settles_gpu_without_output(monkeypatch, config, request_
 def test_pre_cancel_never_loads(monkeypatch, config, request_data):
     calls = runtime(monkeypatch)
     cancel = Event(); cancel.set()
-    with pytest.raises(klein.Cancelled):
+    with pytest.raises(Cancelled):
         klein.KleinAdapter(config).edit(request_data, cancel, lambda e: None)
     assert calls == []
 
@@ -112,11 +114,11 @@ def test_runtime_failure_releases_model(monkeypatch, config, request_data):
 
 
 def test_loader_enforces_version_and_offline_before_import(monkeypatch, config):
-    monkeypatch.setattr(klein, 'version', lambda name: '0.21.0')
+    monkeypatch.setattr(mflux_runtime, 'version', lambda name: '0.21.0')
     for key in ['HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE', 'HF_HUB_DISABLE_TELEMETRY']:
         monkeypatch.setenv(key, '0')
-    with pytest.raises(klein.BackendUnavailable):
-        klein.load_pipeline(config)
+    with pytest.raises(BackendUnavailable):
+        klein.KleinAdapter(config).load_pipeline()
     import os
     assert os.environ['HF_HUB_OFFLINE'] == os.environ['TRANSFORMERS_OFFLINE'] == '1'
 
@@ -125,9 +127,9 @@ def test_missing_directory_never_imports(monkeypatch, config):
     for key in ['HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE', 'HF_HUB_DISABLE_TELEMETRY']:
         monkeypatch.setenv(key, '0')
     config['directory'] += '/missing'
-    monkeypatch.setattr(klein, 'version', lambda name: pytest.fail('must not inspect packages'))
-    with pytest.raises(klein.BackendUnavailable):
-        klein.load_pipeline(config)
+    monkeypatch.setattr(mflux_runtime, 'version', lambda name: pytest.fail('must not inspect packages'))
+    with pytest.raises(BackendUnavailable):
+        klein.KleinAdapter(config).load_pipeline()
 
 
 @pytest.mark.parametrize('quantize', [None, 4, 8])
@@ -137,7 +139,7 @@ def test_local_loader_passes_only_explicit_options(monkeypatch, config, quantize
     calls = []
     for key in ['HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE', 'HF_HUB_DISABLE_TELEMETRY']:
         monkeypatch.setenv(key, '0')
-    monkeypatch.setattr(klein, 'version', lambda name: '0.22.0')
+    monkeypatch.setattr(mflux_runtime, 'version', lambda name: '0.22.0')
     model_config = object()
     monkeypatch.setitem(sys.modules, 'mflux.models.common.config', SimpleNamespace(
         ModelConfig=SimpleNamespace(flux2_klein_4b=lambda: model_config)))
@@ -149,41 +151,41 @@ def test_local_loader_passes_only_explicit_options(monkeypatch, config, quantize
     monkeypatch.setitem(sys.modules, 'mlx.core', core)
     if quantize:
         config['quantize'] = quantize
-    assert klein.load_pipeline(config, operation) == (operation, '0.22.0', core)
+    assert klein.KleinAdapter(config).load_pipeline(operation) == (operation, '0.22.0', core)
     assert calls == [{'model_config': model_config, 'model_path': config['directory'],
                       **({'quantize': quantize} if quantize else {})}]
 
 
 def test_runtime_readiness_distinguishes_missing_version_and_imports(monkeypatch, config):
     def missing(_):
-        raise klein.PackageNotFoundError('mflux')
-    monkeypatch.setattr(klein, 'version', missing)
-    assert klein.check_runtime(config, 'imports')['status'] == 'missing-package'
-    monkeypatch.setattr(klein, 'version', lambda _: '0.0.0')
-    assert klein.check_runtime(config, 'imports')['status'] == 'unsupported-version'
-    monkeypatch.setattr(klein, 'version', lambda _: '0.22.0')
-    monkeypatch.setattr(klein, 'import_runtime', lambda: None)
-    assert klein.check_runtime(config, 'imports')['status'] == 'imports-ready'
+        raise mflux_runtime.PackageNotFoundError('mflux')
+    monkeypatch.setattr(mflux_runtime, 'version', missing)
+    assert klein.KleinAdapter(config).inspect_runtime('imports')['status'] == 'missing-package'
+    monkeypatch.setattr(mflux_runtime, 'version', lambda _: '0.0.0')
+    assert klein.KleinAdapter(config).inspect_runtime('imports')['status'] == 'unsupported-version'
+    monkeypatch.setattr(mflux_runtime, 'version', lambda _: '0.22.0')
+    monkeypatch.setattr(klein.KleinAdapter, 'import_pipeline', lambda *args: None)
+    assert klein.KleinAdapter(config).inspect_runtime('imports')['status'] == 'imports-ready'
 
 
 def test_runtime_readiness_does_not_echo_import_failures(monkeypatch, config):
-    monkeypatch.setattr(klein, 'version', lambda _: '0.22.0')
-    def fail():
+    monkeypatch.setattr(mflux_runtime, 'version', lambda _: '0.22.0')
+    def fail(*args):
         raise RuntimeError('private sentinel')
-    monkeypatch.setattr(klein, 'import_runtime', fail)
-    assert klein.check_runtime(config, 'imports') == {'status': 'import-failed', 'version': '0.22.0'}
+    monkeypatch.setattr(klein.KleinAdapter, 'import_pipeline', fail)
+    assert klein.KleinAdapter(config).inspect_runtime('imports') == {'status': 'import-failed', 'version': '0.22.0'}
 
 
 def test_runtime_readiness_load_releases_resources(monkeypatch, config):
-    monkeypatch.setattr(klein, 'version', lambda _: '0.22.0')
-    monkeypatch.setattr(klein, 'import_runtime', lambda: None)
+    monkeypatch.setattr(mflux_runtime, 'version', lambda _: '0.22.0')
+    monkeypatch.setattr(klein.KleinAdapter, 'import_pipeline', lambda *args: None)
     calls = runtime(monkeypatch)
-    assert klein.check_runtime(config, 'load')['status'] == 'load-ready'
+    assert klein.KleinAdapter(config).inspect_runtime('load')['status'] == 'load-ready'
     assert calls[-2:] == [('sync',), ('clear',)]
-    def fail(_):
+    def fail(*args):
         raise RuntimeError('private sentinel')
-    monkeypatch.setattr(klein, 'load_pipeline', fail)
-    assert klein.check_runtime(config, 'load') == {'status': 'load-failed', 'version': '0.22.0'}
+    monkeypatch.setattr(klein.KleinAdapter, 'load_pipeline', fail)
+    assert klein.KleinAdapter(config).inspect_runtime('load') == {'status': 'load-failed', 'version': '0.22.0'}
 
 
 # Shared with TypeScript: metadata acceptance must agree with actual adapter mapping.
