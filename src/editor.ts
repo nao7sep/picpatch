@@ -6,7 +6,7 @@ import type { LocalEditingModel } from './contracts.generated.ts';
 import { ImageEditor } from './images/editor.ts';
 import { isAbsolute } from 'node:path';
 import { workerLaunch, workerTimeouts } from './worker/launch.ts';
-import type { EditRequest, EditResult, OperationOptions } from './types.ts';
+import type { EditRequest, EditResult, ModelCapabilities, OperationOptions } from './types.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from './errors.ts';
 import { validateEditRequest } from './validation.ts';
 import { WorkerProcess, type WorkerTimeouts } from './worker/process.ts';
@@ -18,7 +18,7 @@ export interface Editor {
 }
 export interface EditBackend {
   /** Check advertised metadata before image I/O; does not load model weights. */
-  validate(request: EditRequest, options?: OperationOptions): Promise<void>;
+  validate(request: EditRequest, options?: OperationOptions): Promise<ModelCapabilities>;
   edit(request: EditRequest, options?: OperationOptions): Promise<EditResult>;
   dispose(): Promise<void>;
 }
@@ -92,7 +92,7 @@ export class ProcessEditor implements EditBackend {
     } finally { this.busy = false; }
   }
 
-  async validate(request: EditRequest, options: OperationOptions = {}): Promise<void> {
+  async validate(request: EditRequest, options: OperationOptions = {}): Promise<ModelCapabilities> {
     if (this.disposed) throw new PicPatchUsageError('DISPOSED', 'Editor has been disposed.');
     const { signal } = options;
     if (signal?.aborted) throw new PicPatchCancelledError();
@@ -108,6 +108,7 @@ export class ProcessEditor implements EditBackend {
     const capabilities = ready.models.find(model => model.model === request.model);
     if (!capabilities) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The worker does not advertise the requested model.');
     validateEditRequest(request, capabilities);
+    return capabilities;
   }
 
   dispose(): Promise<void> {

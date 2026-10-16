@@ -1,7 +1,8 @@
 import { basename, dirname, join } from 'node:path';
 import { chmod, link, lstat, mkdtemp, open, realpath, rm } from 'node:fs/promises';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
-import type { EditRequest, EditResult } from '../types.ts';
+import type { EditRequest, EditResult, InputGeometry } from '../types.ts';
+import type { GeometryPolicy } from './geometry.ts';
 import { checkCancellation, normalizeImage, prepareImage, snapshotImage } from './validation.ts';
 
 /** An operation owns only this private directory, never the caller's source/output files. */
@@ -11,6 +12,7 @@ export class ImageWorkspace {
   private readonly request: EditRequest;
   private readonly destination: string;
   private retain = false;
+  private readonly geometry: InputGeometry[] = [];
   private constructor(directory: string, destination: string, request: EditRequest) {
     this.directory = directory; this.destination = destination; this.request = request;
     this.workerRequest = { ...structuredClone(request), outputPath: join(directory, 'worker.png') };
@@ -37,11 +39,13 @@ export class ImageWorkspace {
     } catch (cause) { throw new PicPatchRuntimeError('OUTPUT_IO', 'Could not create private output storage.', { cause }); }
   }
 
-  async prepare(signal?: AbortSignal): Promise<void> {
+  async prepare(signal?: AbortSignal, policy?: GeometryPolicy): Promise<void> {
     let index = 0;
-    const prepare = (path: string, mask = false) => {
+    const prepare = async (path: string, mask = false) => {
       const stem = join(this.directory, `input-${index++}`);
-      return prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal);
+      const image = await prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal, policy);
+      this.geometry.push({ path, ...image.geometry });
+      return image;
     };
     const source = this.request.sourceImage ? await prepare(this.request.sourceImage) : undefined;
     if (source) this.workerRequest.sourceImage = source.path;
@@ -102,7 +106,7 @@ export class ImageWorkspace {
       throw error;
     }
     // Publication is the commit point. A later abort must not disguise a saved result.
-    return { ...result, image: { ...result.image, path: this.request.outputPath }, references: structuredClone(this.request.references ?? []) };
+    return { ...result, image: { ...result.image, path: this.request.outputPath }, references: structuredClone(this.request.references ?? []), inputGeometry: structuredClone(this.geometry) };
   }
 
   preserve(): void { this.retain = true; }

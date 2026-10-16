@@ -201,6 +201,10 @@
         },
         "defaultOutputSize": {
           "$ref": "#/definitions/ImageSize"
+        },
+        "inputGeometry": {
+          "const": "klein-reference",
+          "description": "Aspect-preserving downscale to 1024 squared pixels, then center crop to multiples of 16. Applies to source and references."
         }
       },
       "required": [
@@ -297,6 +301,12 @@
             "message"
           ],
           "additionalProperties": false
+        },
+        "inputGeometry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InputGeometry"
+          }
         }
       },
       "required": [
@@ -452,6 +462,54 @@
         "adapter",
         "directory",
         "manifest"
+      ],
+      "additionalProperties": false
+    },
+    "InputGeometry": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "originalSize": {
+          "$ref": "#/definitions/ImageSize"
+        },
+        "orientedSize": {
+          "$ref": "#/definitions/ImageSize"
+        },
+        "scaledSize": {
+          "$ref": "#/definitions/ImageSize"
+        },
+        "preparedSize": {
+          "$ref": "#/definitions/ImageSize"
+        },
+        "crop": {
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "top": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "left",
+            "top"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "path",
+        "originalSize",
+        "orientedSize",
+        "scaledSize",
+        "preparedSize",
+        "crop"
       ],
       "additionalProperties": false
     }

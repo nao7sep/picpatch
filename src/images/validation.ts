@@ -3,6 +3,8 @@ import { chmod, open, unlink } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { isAbsolute } from 'node:path';
 import sharp from 'sharp';
+import { inputGeometry, type GeometryPolicy } from './geometry.ts';
+import type { InputGeometry } from '../types.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
 
 export interface PreparedImage {
@@ -10,6 +12,7 @@ export interface PreparedImage {
   width: number;
   height: number;
   identity: string;
+  geometry: Omit<InputGeometry, 'path'>;
 }
 export function checkCancellation(signal?: AbortSignal): void {
   if (signal?.aborted) throw new PicPatchCancelledError();
@@ -43,7 +46,7 @@ export async function snapshotImage(source: string, target: string, signal?: Abo
 }
 
 /** Native sequential decode to a file; never materializes full pixels in JavaScript. */
-export async function normalizeImage(snapshot: string, target: string, mask = false, signal?: AbortSignal, pngOnly = false): Promise<Omit<PreparedImage, 'identity'>> {
+export async function normalizeImage(snapshot: string, target: string, mask = false, signal?: AbortSignal, pngOnly = false, policy?: GeometryPolicy): Promise<Omit<PreparedImage, 'identity'>> {
   checkCancellation(signal);
   try {
     const image = sharp(snapshot, { failOn: 'warning', limitInputPixels: false, sequentialRead: true });
@@ -54,12 +57,22 @@ export async function normalizeImage(snapshot: string, target: string, mask = fa
     if (mask && (metadata.format !== 'png' || metadata.hasAlpha || metadata.space !== 'b-w')) {
       throw new PicPatchUsageError('INVALID_MASK', 'Masks must be opaque grayscale PNG images; black preserves and white edits.');
     }
+    if (mask && policy) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'This geometry policy does not support masks.');
+    const geometry = inputGeometry(metadata.width, metadata.height, metadata.orientation, policy);
     const transform = image.autoOrient();
+    const { orientedSize, scaledSize, preparedSize, crop } = geometry;
+    if (scaledSize.width !== orientedSize.width || scaledSize.height !== orientedSize.height) {
+      transform.resize(scaledSize.width, scaledSize.height, { fit: 'fill', kernel: 'lanczos3' });
+    }
+    if (preparedSize.width !== scaledSize.width || preparedSize.height !== scaledSize.height) {
+      transform.extract({ ...crop, width: preparedSize.width, height: preparedSize.height });
+    }
     if (!mask) transform.toColourspace('srgb');
     const info = await transform.png().timeout({ seconds: 60 }).toFile(target);
     await chmod(target, 0o600);
     checkCancellation(signal);
-    return { path: target, width: info.width, height: info.height };
+    if (info.width !== geometry.preparedSize.width || info.height !== geometry.preparedSize.height) throw new PicPatchUsageError('INVALID_IMAGE', 'Prepared dimensions do not match the model geometry.');
+    return { path: target, width: info.width, height: info.height, geometry };
   } catch (cause) {
     checkCancellation(signal);
     if (cause instanceof PicPatchCancelledError || cause instanceof PicPatchUsageError) throw cause;
@@ -71,9 +84,9 @@ export async function normalizeImage(snapshot: string, target: string, mask = fa
   }
 }
 
-export async function prepareImage(source: string, snapshot: string, target: string, mask = false, signal?: AbortSignal): Promise<PreparedImage> {
+export async function prepareImage(source: string, snapshot: string, target: string, mask = false, signal?: AbortSignal, policy?: GeometryPolicy): Promise<PreparedImage> {
   const identity = await snapshotImage(source, snapshot, signal);
-  const image = await normalizeImage(snapshot, target, mask, signal);
+  const image = await normalizeImage(snapshot, target, mask, signal, false, policy);
   try { await unlink(snapshot); }
   catch (cause) { throw new PicPatchRuntimeError('IMAGE_IO', 'Could not remove the input snapshot.', { cause }); }
   return { ...image, identity };

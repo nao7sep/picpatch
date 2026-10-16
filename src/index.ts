@@ -1,6 +1,6 @@
 export { createEditor } from './editor.ts';
 export type { Editor, EditorOptions } from './editor.ts';
-export type { EditRequest, EditResult, ImageArtifact, ImageSize, ModelCapabilities, OperationOptions, ProgressEvent, ReferenceGroup } from './types.ts';
+export type { EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, OperationOptions, ProgressEvent, ReferenceGroup } from './types.ts';
 export { validateEditRequest } from './validation.ts';
 export { PicPatchUsageError, PicPatchRuntimeError, PicPatchCancelledError } from './errors.ts';
 

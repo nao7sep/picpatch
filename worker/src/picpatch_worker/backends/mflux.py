@@ -129,7 +129,7 @@ class MfluxAdapter:
                 'referenceRoles': ['subject', 'object', 'style', 'background'],
                 'maskMode': 'none', 'size': {'widthMultiple': 16, 'heightMultiple': 16},
                 'sourceImageRequired': False, 'referenceConditioning': 'ordered-images-with-role-prompt',
-                'defaultOutputSize': {'width': 1024, 'height': 1024}}
+                'defaultOutputSize': {'width': 1024, 'height': 1024}, 'inputGeometry': 'klein-reference'}
 
     def edit(self, request: dict, cancel: Event, progress) -> dict:
         if request['model'] != self.capabilities['model']:

@@ -78,6 +78,10 @@ export interface ModelCapabilities {
    */
   referenceConditioning?: "ordered-images-with-role-prompt";
   defaultOutputSize?: ImageSize;
+  /**
+   * Aspect-preserving downscale to 1024 squared pixels, then center crop to multiples of 16. Applies to source and references.
+   */
+  inputGeometry?: "klein-reference";
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -105,6 +109,22 @@ export interface EditResult {
   cleanupWarning?: {
     directory: string;
     message: string;
+  };
+  inputGeometry?: InputGeometry[];
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "InputGeometry".
+ */
+export interface InputGeometry {
+  path: string;
+  originalSize: ImageSize;
+  orientedSize: ImageSize;
+  scaledSize: ImageSize;
+  preparedSize: ImageSize;
+  crop: {
+    left: number;
+    top: number;
   };
 }
 /**

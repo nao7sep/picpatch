@@ -39,8 +39,8 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
     editor = createEditor({ pythonExecutable: options.pythonExecutable!, model: prepared.model,
       defaults: { size: { width: 256, height: 256 }, seed: 42, outputDirectory: directory } });
     const images = [join(directory, 'red.png'), join(directory, 'blue.png')];
-    await sharp({ create: { width: 256, height: 256, channels: 3, background: 'red' } }).png().toFile(images[0]!);
-    await sharp({ create: { width: 256, height: 256, channels: 3, background: 'blue' } }).png().toFile(images[1]!);
+    await sharp({ create: { width: 271, height: 289, channels: 3, background: 'red' } }).png().toFile(images[0]!);
+    await sharp({ create: { width: 257, height: 263, channels: 3, background: 'blue' } }).png().toFile(images[1]!);
     for (let index = 0; index < 2; index++) {
       const result = await editor.edit({
         instruction: 'Combine both colors into a simple striped image.',
@@ -54,6 +54,9 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
       expect(result.seed).toBe(42);
       expect(result.modelRevision).toBe(options.model!.manifest.source.revision);
       expect(result.references[0]?.images).toEqual(images);
+      const geometry = result.inputGeometry!.filter(input => images.includes(input.path));
+      expect(geometry.map(input => input.preparedSize)).toEqual([{ width: 256, height: 288 }, { width: 256, height: 256 }]);
+      expect(geometry.map(input => input.crop)).toEqual([{ left: 7, top: 0 }, { left: 0, top: 3 }]);
       expect(result.image.path).toMatch(/edit-[a-f0-9-]+\.png$/);
     }
     const saved = await readFile(paths[0]!);
