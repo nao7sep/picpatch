@@ -56,13 +56,49 @@ def load_pipeline(config: dict):
     # This adapter uses an inspected API contract, not a guess at future compatibility.
     if installed != '0.22.0':
         raise BackendUnavailable('This adapter requires MFLUX 0.22.0.')
-    from mflux.models.common.config import ModelConfig
-    from mflux.models.flux2.variants import Flux2KleinEdit
-    import mlx.core as mx
+    ModelConfig, Flux2KleinEdit, mx = import_runtime()
     kwargs = {'model_config': ModelConfig.flux2_klein_4b(), 'model_path': str(directory)}
     if 'quantize' in config:
         kwargs['quantize'] = config['quantize']
     return Flux2KleinEdit(**kwargs), installed, mx
+
+
+def import_runtime():
+    from mflux.models.common.config import ModelConfig
+    from mflux.models.flux2.variants import Flux2KleinEdit
+    import mlx.core as mx
+    return ModelConfig, Flux2KleinEdit, mx
+
+
+def check_runtime(config: dict, mode: str) -> dict:
+    """Authored status only: never forward arbitrary package exception text."""
+    os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1')
+    try:
+        installed = version('mflux')
+    except PackageNotFoundError:
+        return {'status': 'missing-package'}
+    if installed != '0.22.0':
+        return {'status': 'unsupported-version', 'version': installed}
+    try:
+        import_runtime()
+    except ModuleNotFoundError:
+        return {'status': 'missing-package', 'version': installed}
+    except Exception:
+        return {'status': 'import-failed', 'version': installed}
+    if mode == 'imports':
+        return {'status': 'imports-ready', 'version': installed}
+    pipeline = mx = None
+    try:
+        pipeline, _, mx = load_pipeline(config)
+        mx.synchronize()
+    except Exception:
+        return {'status': 'load-failed', 'version': installed}
+    finally:
+        pipeline = None
+        gc.collect()
+        if mx is not None:
+            mx.clear_cache()
+    return {'status': 'load-ready', 'version': installed}
 
 
 class StepObserver:

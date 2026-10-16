@@ -18,7 +18,7 @@
       "type": "edit",
       "request": {
         "model": "test",
-        "instruction": "Combine 日本語\nsecond line",
+        "instruction": "Combine \u65e5\u672c\u8a9e\nsecond line",
         "references": [
           {
             "id": "a",
@@ -197,7 +197,7 @@
       "type": "edit",
       "request": {
         "model": "test",
-        "instruction": "Combine 日本語\nsecond line",
+        "instruction": "Combine \u65e5\u672c\u8a9e\nsecond line",
         "references": [
           {
             "id": "a",
@@ -237,6 +237,48 @@
       "version": 1,
       "id": 9007199254740992,
       "type": "hello"
+    },
+    "valid": false
+  },
+  {
+    "name": "runtime check requires model",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "hello",
+      "runtimeCheck": "imports"
+    },
+    "valid": false
+  },
+  {
+    "name": "runtime check ready",
+    "kind": "Response",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "ready",
+      "workerVersion": "0.0.0",
+      "models": [],
+      "runtimeCheck": {
+        "status": "imports-ready",
+        "version": "0.22.0"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "runtime check invalid status",
+    "kind": "Response",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "ready",
+      "workerVersion": "0.0.0",
+      "models": [],
+      "runtimeCheck": {
+        "status": "ready"
+      }
     },
     "valid": false
   }

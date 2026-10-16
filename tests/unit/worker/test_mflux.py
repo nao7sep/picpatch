@@ -149,3 +149,35 @@ def test_local_loader_passes_only_explicit_options(monkeypatch, config, quantize
     assert mflux.load_pipeline(config) == ('pipeline', '0.22.0', core)
     assert calls == [{'model_config': model_config, 'model_path': config['directory'],
                       **({'quantize': quantize} if quantize else {})}]
+
+
+def test_runtime_readiness_distinguishes_missing_version_and_imports(monkeypatch, config):
+    def missing(_):
+        raise mflux.PackageNotFoundError('mflux')
+    monkeypatch.setattr(mflux, 'version', missing)
+    assert mflux.check_runtime(config, 'imports')['status'] == 'missing-package'
+    monkeypatch.setattr(mflux, 'version', lambda _: '0.0.0')
+    assert mflux.check_runtime(config, 'imports')['status'] == 'unsupported-version'
+    monkeypatch.setattr(mflux, 'version', lambda _: '0.22.0')
+    monkeypatch.setattr(mflux, 'import_runtime', lambda: None)
+    assert mflux.check_runtime(config, 'imports')['status'] == 'imports-ready'
+
+
+def test_runtime_readiness_does_not_echo_import_failures(monkeypatch, config):
+    monkeypatch.setattr(mflux, 'version', lambda _: '0.22.0')
+    def fail():
+        raise RuntimeError('private sentinel')
+    monkeypatch.setattr(mflux, 'import_runtime', fail)
+    assert mflux.check_runtime(config, 'imports') == {'status': 'import-failed', 'version': '0.22.0'}
+
+
+def test_runtime_readiness_load_releases_resources(monkeypatch, config):
+    monkeypatch.setattr(mflux, 'version', lambda _: '0.22.0')
+    monkeypatch.setattr(mflux, 'import_runtime', lambda: None)
+    calls = runtime(monkeypatch)
+    assert mflux.check_runtime(config, 'load')['status'] == 'load-ready'
+    assert calls[-2:] == [('sync',), ('clear',)]
+    def fail(_):
+        raise RuntimeError('private sentinel')
+    monkeypatch.setattr(mflux, 'load_pipeline', fail)
+    assert mflux.check_runtime(config, 'load') == {'status': 'load-failed', 'version': '0.22.0'}

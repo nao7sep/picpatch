@@ -14,3 +14,9 @@ export type { RuntimeInspection, RuntimeOperationOptions, RuntimeProgressEvent }
 export type { LocalEditingModel } from './contracts.generated.ts';
 export { resolveStoragePaths } from './paths.ts';
 export type { StorageOptions, StoragePaths } from './paths.ts';
+export { listModels } from './models/catalog.ts';
+export type { CatalogModel } from './models/catalog.ts';
+export { prepareModel } from './models/preparation.ts';
+export type { PrepareModelOptions, PreparedModel } from './models/preparation.ts';
+export { inspectReadiness } from './runtime/readiness.ts';
+export type { ReadinessOptions, ModelReadiness } from './runtime/readiness.ts';

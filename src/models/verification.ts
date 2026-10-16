@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { contractValidator } from '../contracts.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
+import type { LocalEditingModel } from '../contracts.generated.ts';
 import type { ModelComponent, ModelManifest, ModelOperationOptions, ModelVerificationOptions, ModelVerification, VerifiedComponent } from './types.ts';
 
 const manifestValidator = contractValidator<ModelManifest>('ModelManifest');
@@ -32,6 +33,12 @@ export function validateModelManifest(input: unknown): ModelManifest {
   }
   if (!input.components.some(component => component.role === 'weights')) throw new PicPatchUsageError('INVALID_REQUEST', 'A model manifest must name its weights.');
   return structuredClone(input);
+}
+/** Shared registration validation for editing and read-only readiness. */
+export function validateLocalEditingModel(input: unknown): LocalEditingModel {
+  if (!contractValidator<LocalEditingModel>('LocalEditingModel')(input)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid local editing model configuration.');
+  absolutePath(input.directory);
+  return { ...structuredClone(input), manifest: validateModelManifest(input.manifest) };
 }
 function inside(root: string, path: string): boolean {
   const child = relative(root, path);

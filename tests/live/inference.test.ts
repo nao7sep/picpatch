@@ -77,3 +77,13 @@ it('edits four and six grouped references in one session without changing origin
     await rm(directory, { recursive: true, force: true });
   }
 }, 3_600_000);
+
+it('prepares existing catalog weights and checks actual model loading without acquisition', async () => {
+  const { prepareModel, inspectReadiness } = await import('../../src/index.ts');
+  const options = await localOptions();
+  const prepared = await prepareModel(options.model!.manifest.model, { directory: options.model!.directory });
+  const readiness = await inspectReadiness(options.pythonExecutable, prepared.model, { load: true });
+  expect(prepared.integrity).toBe('matches-manifest');
+  expect(readiness).toMatchObject({ files: 'present', integrity: 'not-verified', runtime: { status: 'load-ready', version: '0.22.0' } });
+  expect(readiness.capabilities[0]?.maskMode).toBe('none');
+}, 600_000);

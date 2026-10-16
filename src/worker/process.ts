@@ -9,6 +9,7 @@ export interface WorkerLaunch {
   args: string[];
   cwd: string;
   model?: LocalEditingModel;
+  runtimeCheck?: 'imports' | 'load';
 }
 export interface WorkerTimeouts {
   startupMs: number;
@@ -82,7 +83,7 @@ export class WorkerProcess {
           if (this.remainder.length || !this.shutdownAck) throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker output ended unexpectedly.');
         } catch (cause) { this.fail(cause instanceof PicPatchRuntimeError ? cause : new PicPatchRuntimeError('PROTOCOL_ERROR', 'Invalid worker output.', { cause })); }
       });
-      this.startup = this.request({ version: 1, id: this.nextId++, type: 'hello', ...(this.launch.model ? { model: this.launch.model } : {}) }, this.timeouts.startupMs);
+      this.startup = this.request({ version: 1, id: this.nextId++, type: 'hello', ...(this.launch.model ? { model: this.launch.model } : {}), ...(this.launch.runtimeCheck ? { runtimeCheck: this.launch.runtimeCheck } : {}) }, this.timeouts.startupMs);
     } catch (cause) {
       this.closed = true;
       this.closeWait.resolve();

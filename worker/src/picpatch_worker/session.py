@@ -3,7 +3,7 @@ from threading import Event, RLock, Thread
 import traceback
 import sys
 from .protocol import Protocol, ProtocolError
-from .backends.mflux import MfluxAdapter, Cancelled, BackendUnavailable, InvalidEditInput
+from .backends.mflux import MfluxAdapter, Cancelled, BackendUnavailable, InvalidEditInput, check_runtime
 
 
 class Session:
@@ -41,7 +41,10 @@ class Session:
                 self.adapter = MfluxAdapter(request['model'])
             self.ready = True
             models = [self.adapter.capabilities] if self.adapter else []
-            return {**envelope, 'type': 'ready', 'workerVersion': '0.0.0', 'models': models}
+            result = {**envelope, 'type': 'ready', 'workerVersion': '0.0.0', 'models': models}
+            if 'runtimeCheck' in request:
+                result['runtimeCheck'] = check_runtime(request['model'], request['runtimeCheck'])
+            return result
         if not self.ready:
             return error('NOT_READY', 'Complete the handshake first.')
         if kind == 'shutdown':

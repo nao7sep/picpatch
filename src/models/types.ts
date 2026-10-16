@@ -20,8 +20,8 @@ export interface ModelIssue {
 }
 export interface ModelProgressEvent {
   type: 'progress';
-  verb: 'inspectModel' | 'discoverModels' | 'verifyModel';
-  stage: 'inspecting' | 'verifying';
+  verb: 'inspectModel' | 'discoverModels' | 'verifyModel' | 'prepareModel';
+  stage: 'inspecting' | 'verifying' | 'downloading';
   message: string;
   path: string;
 }

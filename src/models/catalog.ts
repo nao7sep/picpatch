@@ -1,0 +1,29 @@
+import manifest from './catalog/klein-4b-4bit.manifest.json' with { type: 'json' };
+import type { LocalEditingModel, ModelManifest } from '../contracts.generated.ts';
+import { PicPatchUsageError } from '../errors.ts';
+import { validateModelManifest } from './verification.ts';
+
+export interface CatalogModel {
+  id: string;
+  adapter: LocalEditingModel['adapter'];
+  status: 'experimental';
+  manifest: ModelManifest;
+  downloadBytes: number;
+  sourceUrl: string;
+  license: { id: string; url: string };
+  runtime: { name: 'mflux'; version: string; platform: 'darwin'; architecture: 'arm64' };
+}
+/** Pinned community quantization, not an official upstream weight distribution. */
+export function listModels(): CatalogModel[] {
+  const pinned = validateModelManifest(manifest);
+  const sourceUrl = `https://huggingface.co/${pinned.source.repository}/tree/${pinned.source.revision}`;
+  return [{ id: pinned.model, adapter: 'mflux-flux2-klein-4b', status: 'experimental', manifest: pinned,
+    downloadBytes: pinned.components.reduce((total, component) => total + component.bytes, 0), sourceUrl,
+    license: { id: 'Apache-2.0', url: `https://huggingface.co/${pinned.source.repository}/blob/${pinned.source.revision}/README.md` },
+    runtime: { name: 'mflux', version: '0.22.0', platform: 'darwin', architecture: 'arm64' } }];
+}
+export function catalogModel(id: string): CatalogModel {
+  const entry = listModels().find(model => model.id === id);
+  if (!entry) throw new PicPatchUsageError('INVALID_REQUEST', 'Choose a model ID returned by listModels.');
+  return entry;
+}

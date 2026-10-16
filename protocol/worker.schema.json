@@ -26,6 +26,12 @@
         },
         "model": {
           "$ref": "contracts.schema.json#/definitions/LocalEditingModel"
+        },
+        "runtimeCheck": {
+          "enum": [
+            "imports",
+            "load"
+          ]
         }
       },
       "required": [
@@ -33,7 +39,12 @@
         "id",
         "type"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "dependencies": {
+        "runtimeCheck": [
+          "model"
+        ]
+      }
     },
     "Edit": {
       "type": "object",
@@ -135,6 +146,9 @@
           "items": {
             "$ref": "contracts.schema.json#/definitions/ModelCapabilities"
           }
+        },
+        "runtimeCheck": {
+          "$ref": "#/definitions/RuntimeCheck"
         }
       },
       "required": [
@@ -337,6 +351,28 @@
           "$ref": "#/definitions/ShutdownAck"
         }
       ]
+    },
+    "RuntimeCheck": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "imports-ready",
+            "load-ready",
+            "missing-package",
+            "unsupported-version",
+            "import-failed",
+            "load-failed"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
     }
   }
 }

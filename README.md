@@ -2,13 +2,13 @@
 
 PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, and masked edits.
 
-The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness and larger-image memory limits remain unverified. The SDK does not acquire Python or models automatically.
+The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness and larger-image memory limits remain unverified. The SDK does not acquire Python or models automatically. Explicit model preparation is available through the SDK.
 
 ## Experimental local editing
 
 Supply `createEditor` with `model: { adapter: 'mflux-flux2-klein-4b', directory, manifest, quantize? }`. `directory` must be an existing absolute model bundle path; `manifest` uses the verification contract described below. Verify the bundle during preparation with `verifyModel` and require a `matches-manifest` result before using it. Edits do not re-hash model files. The pinned development preparation script performs this verification before publishing its configuration. Keep the directory immutable while editing: verification neither locks the bundle nor proves an incomplete manifest covers everything MFLUX reads. The request's `model` must equal `manifest.model`. The returned revision is the caller-supplied manifest revision, not an independently authenticated identity.
 
-The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. Install the optional inference extra through uv; a model catalog is not automated yet. The development test uses the pinned manifest in `tests/fixtures/klein-4b-4bit.manifest.json`.
+The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. Install the optional inference extra through uv. The SDK catalog supplies the pinned manifest and adapter configuration; `prepareModel` verifies the bundle before returning it.
 
 The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Masks are rejected. Explicit output dimensions must be multiples of 16; omitted dimensions use 1024 by 1024. MFLUX's distilled generation defaults apply. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
 
@@ -16,23 +16,46 @@ Models are loaded and released for each edit, while the worker is reused. This a
 
 Use `npx tsx examples/edit-local.ts /absolute/editor-options.json /absolute/edit-request.json` with a prepared interpreter, local bundle and existing input images. The example only uses supplied files; it never installs packages or downloads models.
 
+## Preparing models and checking readiness
+
+`listModels()` returns independent catalog entries with immutable component pins, total download bytes, source and license links, tested runtime requirements and experimental status. The first entry is the community 4-bit Klein bundle (about 4.62 GB); the catalog's `downloadBytes` is the precise size. It is not a claim that arbitrary checkpoints or portrait-quality workflows are supported.
+
+```ts
+import { listModels, prepareModel, inspectReadiness, createEditor } from 'picpatch';
+
+const choice = listModels()[0]!;
+// Reuse a verified managed bundle; missing files fail without downloading.
+const prepared = await prepareModel(choice.id);
+// Alternatively: { directory: '/absolute/existing/bundle' } verifies in place.
+// Explicit acquisition: prepareModel(choice.id, { download: true }).
+const readiness = await inspectReadiness('/absolute/prepared/python', prepared.model);
+const editor = createEditor({ pythonExecutable: '/absolute/prepared/python', model: prepared.model });
+// Use editor.edit(...) with model: choice.id, then await editor.dispose().
+```
+
+Preparation verifies every component, including cached or external bundles. Edits do not repeat that hashing. Downloads stream to private staging, verify the complete pinned revision, and publish it atomically. Existing invalid bundles are preserved and reported; preparation does not silently repair or replace them. Concurrent preparation can reuse a complete winner. Imports and read-only operations never download. The community distribution uses Apache-2.0 according to its pinned model card; runtime licensing is separate. Python and inference packages remain uv responsibilities.
+
+`inspectReadiness` distinguishes file presence, integrity (`not-verified` by default), inference import/version status, and advertised capabilities. Use `{ verify: true }` for a fresh full integrity check or `{ load: true }` to load existing weights without generating an image. Loading may consume substantial memory and time; the worker exits and releases resources before the check resolves. Successful imports are not proof of successful loading, and successful loading is not a quality guarantee. Missing or wrong-size files, or corruption found by explicit verification, prevent a load check; missing packages, unsupported versions, import failures and load failures have distinct statuses. Process and I/O failures remain typed exceptions. Masks remain unsupported.
+
+Preparation and readiness accept cancellation, progress and `timeoutMs`. Preparation defaults to one hour; readiness defaults to thirty seconds for imports and ten minutes when hashing or loading. Active work settles before cleanup or rejection. A published bundle wins a cancellation race. Cleanup or durability warnings identify retained paths without invalidating a completed publication.
+
 ## Development
 
 Use Node.js 24 or newer, npm, and uv. The worker lock targets macOS arm64. The worker declares Python 3.15 (`>=3.15,<3.16`) in `worker/pyproject.toml`; uv selects a compatible interpreter and downloads one if needed. Run `uv sync --project worker --locked` to prepare the worker environment. Install the development dependencies with `npm ci`, then run `npm test`. This checks generated contracts, TypeScript source and examples, request validation, and TypeScript/Python protocol behavior. The Python test command lets uv prepare Python and the small locked validation and test dependencies; it never downloads models.
 
 The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It uses `worker/.venv` by default, or the environment selected by `UV_PROJECT_ENVIRONMENT` (relative paths resolve from `worker/`), and currently targets macOS/POSIX. The full gate also runs real inference using `node_modules/.cache/picpatch-live/inference-config.json`, or an absolute editor-options JSON path supplied through `PICPATCH_INFERENCE_CONFIG`. Missing prerequisites fail explicitly. No test downloads models. The missing-backend test needs uv on PATH and cached worker wheels to create an isolated model-free environment offline. Live tests are type-checked by the ordinary gate.
 
-To prepare the real-inference test after the development setup, run these commands from the repository root. The first installs the locked inference packages into a separate environment; the second explicitly downloads approximately 4.62 GB of pinned model files and verifies every component before publishing the local configuration. Both the environment and weights stay in the ignored test cache.
+To prepare the real-inference test after the development setup, run these commands from the repository root. The first installs the locked inference packages into a separate environment; the second explicitly downloads approximately 4.62 GB of pinned model files and verifies every component before publishing the local configuration. The runtime and test configuration stay in the ignored test cache; new model acquisitions use the configured model store. Existing external bundles can be reused without copying.
 
 ```sh
 UV_PROJECT_ENVIRONMENT="$PWD/node_modules/.cache/picpatch-live/inference-runtime" \
   uv sync --project worker --python "$PWD/worker/.venv/bin/python" \
   --extra inference --no-dev --locked --no-python-downloads
-node_modules/.cache/picpatch-live/inference-runtime/bin/python scripts/prepare-inference.py
+npx tsx scripts/prepare-inference.ts --python "$PWD/node_modules/.cache/picpatch-live/inference-runtime/bin/python" --download
 npm run test:full
 ```
 
-Use `scripts/prepare-inference.py --offline` through that same interpreter to rebuild the configuration from cached weights without network access. The preparation tool is an explicit development download command; the test itself never downloads models. Its pinned manifest covers the encoder, transformer, VAE and tokenizer files required by this checkpoint. The full gate checks sequential grouped-reference/source edits, four and six references in two object groups, and cancellation after a denoising step using generated 256-pixel fixtures. It verifies artifacts, provenance and cleanup, not visual quality.
+Omit `--download` to reuse the managed cache without network access, or supply `--directory /absolute/existing/bundle` to verify and reuse external weights in place. The preparation tool calls the public SDK and acquires models only with `--download`; the test itself never downloads models. Its pinned manifest covers the encoder, transformer, VAE and tokenizer files required by this checkpoint. The full gate checks sequential grouped-reference/source edits, four and six references in two object groups, and cancellation after a denoising step using generated 256-pixel fixtures. It verifies artifacts, provenance and cleanup, not visual quality.
 
 To test another Python version without replacing a working runtime, install the `inference` extra into a new `UV_PROJECT_ENVIRONMENT` using `uv sync --project worker --python /absolute/path/to/python --extra inference --locked --no-python-downloads`. Keep development dependencies installed for the gate. Copy the existing inference configuration to a separate JSON file and change only `pythonExecutable` to the new environment. Run `npm run test:full` with that environment, `UV_NO_SYNC=1` (to retain the inference extra), and `PICPATCH_INFERENCE_CONFIG` pointing to the copied configuration. This reuses the existing model bundle. Set `UV_OFFLINE=1` to prevent package acquisition during testing.
 
@@ -81,11 +104,11 @@ Candidate detection is based on filenames, so unrelated files with weight-like n
 
 `resolveStoragePaths({ dataDirectory?, modelsDirectory? })` resolves owned locations without filesystem I/O. Explicit options take precedence over `PICPATCH_DATA_DIR` and `PICPATCH_MODELS_DIR`; defaults are `~/.picpatch` and its `models` child. Overrides accept `~`, `$VAR` and `%VAR%`; relative values resolve against home, never the working directory. Unset expansion variables and invalid values are rejected. Configuration is read at each call. To use an explicit resolver option for discovery, pass `[locations.modelsDirectory]` as the roots.
 
-These settings select model discovery locations; they do not move existing files, change a supplied editor model directory or redirect input/output paths. Explicit file paths remain literal. No directory is created by resolution or discovery, and model acquisition is not implemented yet.
+These settings select model discovery locations; they do not move existing files, change a supplied editor model directory or redirect input/output paths. Explicit file paths remain literal. No directory is created by resolution or discovery, and only explicit preparation with `download: true` acquires a missing catalog bundle.
 
 ### Verifying a model bundle
 
-`validateModelManifest` validates a model identity, a hexadecimal immutable source revision, and a required component list. Each component declares a relative path, role, exact byte length, and SHA-256 digest. Manifest types are generated from the shared schema. Obtain these pins from a source you trust; PicPatch does not currently ship a tested model catalog or fetch manifests.
+`validateModelManifest` validates a model identity, a hexadecimal immutable source revision, and a required component list. Each component declares a relative path, role, exact byte length, and SHA-256 digest. Manifest types are generated from the shared schema. Obtain these pins from a source you trust; the built-in catalog supplies pins for its experimental Klein configuration, while custom manifests remain caller-provided evidence.
 
 `verifyModel(directory, manifest, options?)` checks every declared file, streams its hash, detects changes while reading, and validates that shard-index mappings name weights in the manifest. File symlinks can point to shared cache blobs; directory symlinks cannot redirect verification outside the selected root. Unsafe or conflicting manifest paths are rejected before reading files. Verification never imports weights or executes model code.
 

@@ -1,5 +1,4 @@
-import { contractValidator } from './contracts.ts';
-import { validateModelManifest } from './models/verification.ts';
+import { validateLocalEditingModel } from './models/verification.ts';
 import type { LocalEditingModel } from './contracts.generated.ts';
 import { ImageEditor } from './images/editor.ts';
 import { isAbsolute } from 'node:path';
@@ -40,11 +39,7 @@ export function createEditor(options: EditorOptions): Editor {
   }
   let model: LocalEditingModel | undefined;
   if (options.model !== undefined) {
-    if (!contractValidator<LocalEditingModel>('LocalEditingModel')(options.model) ||
-        !isAbsolute(options.model.directory) || options.model.directory.includes('\0')) {
-      throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid local editing model configuration.');
-    }
-    model = { ...structuredClone(options.model), manifest: validateModelManifest(options.model.manifest) };
+    model = validateLocalEditingModel(options.model);
   }
   const worker = new WorkerProcess({ ...workerLaunch(options.pythonExecutable), ...(model ? { model } : {}) }, timeouts);
   return new ImageEditor(new ProcessEditor(worker, model));

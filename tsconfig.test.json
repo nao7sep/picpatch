@@ -6,7 +6,8 @@
     "examples/**/*.ts",
     "vitest.config.ts",
     "vitest.live.config.ts",
-    "benchmarks/**/*.ts"
+    "benchmarks/**/*.ts",
+    "scripts/prepare-inference.ts"
   ],
   "exclude": [
     "node_modules"

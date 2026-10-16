@@ -5,10 +5,12 @@ import type { EditRequest, EditResult, ModelCapabilities, ProgressEvent } from '
 import type { LocalEditingModel } from '../contracts.generated.ts';
 import schema from '../../protocol/worker.schema.json' with { type: 'json' };
 
+export interface RuntimeCheck { status: 'imports-ready' | 'load-ready' | 'missing-package' | 'unsupported-version' | 'import-failed' | 'load-failed'; version?: string }
+
 type Envelope<T extends string> = { version: 1; id: number; type: T };
-export type WorkerRequest = Envelope<'shutdown'> | (Envelope<'hello'> & { model?: LocalEditingModel }) |
+export type WorkerRequest = Envelope<'shutdown'> | (Envelope<'hello'> & { model?: LocalEditingModel; runtimeCheck?: 'imports' | 'load' }) |
   (Envelope<'edit'> & { request: EditRequest }) | (Envelope<'cancel'> & { targetId: number });
-export type WorkerResponse = (Envelope<'ready'> & { workerVersion: string; models: ModelCapabilities[] }) |
+export type WorkerResponse = (Envelope<'ready'> & { workerVersion: string; models: ModelCapabilities[]; runtimeCheck?: RuntimeCheck }) |
   (Envelope<'progress'> & { event: ProgressEvent }) | (Envelope<'result'> & { result: EditResult }) |
   (Envelope<'error'> & { error: { code: 'INVALID_REQUEST' | 'NOT_READY' | 'BACKEND_UNAVAILABLE' | 'BUSY' | 'CANCELLED' | 'RUNTIME_FAILURE'; message: string } }) |
   (Envelope<'cancelAck'> & { targetId: number; accepted: boolean }) | Envelope<'shutdownAck'>;
