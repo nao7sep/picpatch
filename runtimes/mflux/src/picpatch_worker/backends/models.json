@@ -55,7 +55,7 @@
   },
   {
     "id": "z-image-turbo",
-    "family": "z-image-turbo",
+    "family": "z-image",
     "config": "z_image_turbo",
     "defaults": {},
     "requiredDirectories": [
@@ -67,7 +67,7 @@
   },
   {
     "id": "flux1-schnell",
-    "family": "flux1-schnell",
+    "family": "flux1",
     "config": "schnell",
     "defaults": {},
     "requiredDirectories": [
@@ -128,6 +128,68 @@
       "tokenizer",
       "text_encoder_2",
       "tokenizer_2"
+    ]
+  },
+  {
+    "id": "flux1-kontext-dev",
+    "family": "flux1-kontext",
+    "config": "dev_kontext",
+    "defaults": {
+      "num_inference_steps": 25,
+      "guidance": 2.5
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer",
+      "text_encoder_2",
+      "tokenizer_2"
+    ]
+  },
+  {
+    "id": "z-image",
+    "family": "z-image",
+    "config": "z_image",
+    "defaults": {
+      "num_inference_steps": 50,
+      "guidance": 4.0
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ]
+  },
+  {
+    "id": "ernie-image",
+    "family": "ernie-image",
+    "config": "ernie_image",
+    "defaults": {
+      "num_inference_steps": 50,
+      "guidance": 4.0
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ]
+  },
+  {
+    "id": "ernie-image-turbo",
+    "family": "ernie-image",
+    "config": "ernie_image_turbo",
+    "defaults": {
+      "num_inference_steps": 8,
+      "guidance": 1.0
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
     ]
   }
 ]

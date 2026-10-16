@@ -7,6 +7,9 @@ from mflux_double import fake_runtime
 from picpatch_worker.backends.errors import InvalidEditInput, Cancelled
 
 FAMILIES = [
+    ('z-image', 'mflux.models.z_image.variants.z_image', 'ZImage', 'z_image'),
+    ('ernie-image', 'mflux.models.ernie_image.variants.txt2img.ernie_image', 'ErnieImage', 'ernie_image'),
+    ('ernie-image-turbo', 'mflux.models.ernie_image.variants.txt2img.ernie_image', 'ErnieImage', 'ernie_image_turbo'),
     ('z-image-turbo', 'mflux.models.z_image.variants.z_image', 'ZImage', 'z_image_turbo'),
     ('flux1-dev', 'mflux.models.flux.variants.txt2img.flux', 'Flux1', 'dev'),
     ('flux1-krea-dev', 'mflux.models.flux.variants.txt2img.flux', 'Flux1', 'krea_dev'),
@@ -38,6 +41,10 @@ def test_local_loading_generation_and_provenance(monkeypatch, family, tmp_path):
     expected = {'prompt': 'A blue bowl.', 'seed': 0, 'width': 32, 'height': 16}
     if adapter.config['variant'] in {'flux1-dev', 'flux1-krea-dev'}:
         expected.update(num_inference_steps=25, guidance=3.5)
+    if adapter.config['variant'] in {'z-image', 'ernie-image'}:
+        expected.update(num_inference_steps=50, guidance=4.0)
+    if adapter.config['variant'] == 'ernie-image-turbo':
+        expected.update(num_inference_steps=8, guidance=1.0)
     assert calls[1] == ('generate', expected)
     assert result['references'] == [] and result['modelRevision'] == 'a' * 40
     assert result['runtime'] == {'name': 'mflux', 'version': '0.22.0'}

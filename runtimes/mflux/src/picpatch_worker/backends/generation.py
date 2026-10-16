@@ -7,12 +7,15 @@ class GenerationAdapter(MfluxAdapter):
     def import_pipeline(self, operation):
         from mflux.models.common.config import ModelConfig
         import mlx.core as mx
-        if self.definition['family'] == 'z-image-turbo':
+        if self.definition['family'] == 'z-image':
             from mflux.models.z_image.variants.z_image import ZImage
-            return ModelConfig.z_image_turbo(), ZImage, mx
-        if self.definition['family'] in {'flux1-schnell', 'flux1'}:
+            return getattr(ModelConfig, self.definition['config'])(), ZImage, mx
+        if self.definition['family'] == 'flux1':
             from mflux.models.flux.variants.txt2img.flux import Flux1
             return getattr(ModelConfig, self.definition['config'])(), Flux1, mx
+        if self.definition['family'] == 'ernie-image':
+            from mflux.models.ernie_image.variants.txt2img.ernie_image import ErnieImage
+            return getattr(ModelConfig, self.definition['config'])(), ErnieImage, mx
         raise InvalidEditInput('Unsupported MFLUX generation adapter.')
 
     @property

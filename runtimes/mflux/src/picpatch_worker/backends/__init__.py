@@ -1,6 +1,7 @@
 """Explicit model-family selection for the MFLUX runtime."""
 from .klein import KleinAdapter
 from .fill import FillAdapter
+from .kontext import KontextAdapter
 from .generation import GenerationAdapter
 from .errors import InvalidEditInput
 from .runtime import MODEL_DEFINITIONS
@@ -14,4 +15,6 @@ def create_adapter(config):
         return KleinAdapter(config)
     if definition['family'] == 'flux1-fill':
         return FillAdapter(config)
+    if definition['family'] == 'flux1-kontext':
+        return KontextAdapter(config)
     return GenerationAdapter(config)

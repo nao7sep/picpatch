@@ -187,7 +187,11 @@ export interface LocalEditingModel {
     | "flux1-schnell"
     | "flux1-dev"
     | "flux1-krea-dev"
-    | "flux1-fill-dev";
+    | "flux1-fill-dev"
+    | "flux1-kontext-dev"
+    | "z-image"
+    | "ernie-image"
+    | "ernie-image-turbo";
   directory: string;
   manifest: ModelManifest;
   quantize?: 4 | 8;

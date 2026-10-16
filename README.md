@@ -44,7 +44,7 @@ Preparation and readiness accept cancellation, progress and `timeoutMs`. Prepara
 
 ## Experimental external model families
 
-The selectable variants are FLUX.2 Klein 4B/9B and base 4B/9B for editing and generation, plus Z-Image Turbo and FLUX.1 Schnell, Dev and Krea Dev for generation only. FLUX.1 Fill Dev supports native masked editing. Klein variants share one family implementation; the runtime selects the appropriate architecture and sampling defaults. The generation-only variants reject edits, references and masks. FLUX.3 is not implemented.
+The selectable variants are FLUX.2 Klein 4B/9B and base 4B/9B for editing and generation, plus Z-Image Base/Turbo, ERNIE-Image Base/Turbo and FLUX.1 Schnell, Dev and Krea Dev for generation only. FLUX.1 Fill Dev supports native masked editing; FLUX.1 Kontext Dev supports single-source instruction editing. Klein variants share one family implementation; the runtime selects the appropriate architecture and sampling defaults. The generation-only variants reject edits, references and masks. FLUX.3 is not implemented.
 
 Only the pinned Klein 4B 4-bit bundle has real-weight inference evidence. Other selections have pipeline import and argument-mapping tests, not measured memory fit or quality evidence. Base sampling defaults follow the [upstream Klein example](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4B).
 
@@ -62,7 +62,11 @@ try {
 
 External preparation reads a complete MFLUX directory layout: transformer, VAE, text encoder and tokenizer directories (plus the second encoder/tokenizer for FLUX.1). It hashes their files, validates shard references and returns an in-memory manifest with a deterministic local revision. File links used by Hugging Face caches are supported; component directory links are rejected. It neither copies nor modifies the bundle, and never downloads. The result reports `locally-fingerprinted`, which does not authenticate an upstream checkpoint or prove tensor compatibility. Select the variant explicitly; names of folders are not architecture evidence. Use `inspectReadiness(python, prepared.model, { load: true })` for an actual load check, and `verifyModel` for later explicit verification. Keep the complete bundle unchanged during use. Standalone checkpoint files and arbitrary architectures are not supported.
 
-Shared MFLUX loading, progress, cancellation, output writing and memory cleanup live in `runtimes/mflux/src/picpatch_worker/backends/runtime.py`. `models.json` owns variant configuration and base defaults; `generation.py` handles text-only families, `klein.py` owns Klein reference conditioning and composite masking, and `fill.py` supplies native Fill conditioning.
+Shared MFLUX loading, progress, cancellation, output writing and memory cleanup live in `runtimes/mflux/src/picpatch_worker/backends/runtime.py`. `models.json` owns variant configuration and base defaults; `generation.py` handles text-only families, `klein.py` owns Klein reference conditioning and composite masking, `fill.py` supplies native Fill conditioning, and `kontext.py` supplies single-source Kontext conditioning.
+
+Kontext (`flux1-kontext-dev`) uses the same `prepareModel` and `editor.edit` flow with a required `sourceImage`. It rejects masks, grouped references and text-only generation. The source is normalized without Klein's crop/downscale policy; MFLUX resizes the conditioning image to the output size. Output defaults to 1024 by 1024 and accepts multiples of 16. Kontext uses 25 steps and guidance 2.5. Its single-source conditioning offers another editing approach, not a verified identity-preservation guarantee.
+
+Z-Image Base (`z-image`) uses 50 steps and guidance 4, following the pinned runtime's base-model example. ERNIE-Image (`ernie-image`) uses 50 steps and guidance 4; ERNIE-Image Turbo (`ernie-image-turbo`) uses 8 steps and guidance 1. These are text-only generation selections with the same four component directories used by Z-Image Turbo. Both base variants are substantially slower than their distilled counterparts. All new variants require complete local bundles and remain API/import-tested experiments; no additional weights are downloaded or implied to fit a particular Mac.
 
 ## Caller defaults and diagnostics
 
