@@ -62,18 +62,26 @@ Temporary files are removed after their writers settle. Publication failures ret
 
 ## Local model inspection
 
-`inspectModel` inventories a caller-selected absolute file or directory. `discoverModels` searches explicit absolute roots recursively, grouping a directory with its nested components when it contains model configuration or weight filenames. It follows cached weight-file symlinks, skips nested directory symlinks and `.git`, and deduplicates aliases and overlapping bundles. There is no automatic home-directory scan.
+`inspectModel` inventories a caller-selected absolute file or directory. `discoverModels()` searches the configured model directory; supplying absolute roots searches those locations instead. It searches recursively, grouping a directory with its nested components when it contains model configuration or weight filenames. It follows cached weight-file symlinks, skips nested directory symlinks and `.git`, and deduplicates aliases and overlapping bundles. There is no automatic home-directory scan.
 
 ```ts
-import { inspectModel, discoverModels } from 'picpatch';
+import { inspectModel, discoverModels, resolveStoragePaths } from 'picpatch';
 
-const inventory = await discoverModels(['/absolute/path/to/local/models']);
+const locations = resolveStoragePaths(); // read-only; no directory creation
+const inventory = await discoverModels();
+const elsewhere = await discoverModels(['/absolute/path/to/local/models']);
 const details = await inspectModel('/absolute/path/to/local/model');
 ```
 
-Both operations are read-only, accept `signal` and `onProgress` options, and need neither Python nor a network connection. They inspect file metadata without loading weights, parsing model configurations, hashing large files, or running model code. Missing locations and filesystem failures reject with `MODEL_IO`; a failed search does not return a deceptively complete partial list.
+Both operations are read-only, accept `signal`, `onProgress` and `timeoutMs` options (one minute by default), and need neither Python nor a network connection. They inspect file metadata without loading weights, parsing model configurations, hashing large files, or running model code. Missing locations and filesystem failures reject with `MODEL_IO`; a failed search does not return a deceptively complete partial list. An absent default model directory returns an empty list; missing explicit roots and broken directory links remain errors. Deadlines report `TIMEOUT`; cancellation and deadlines wait for active filesystem operations to settle before rejecting.
 
 Candidate detection is based on filenames, so unrelated files with weight-like names may appear. Results always report integrity as `not-verified` and compatibility as `unknown`. `unverified` means weight-named files are present; `incomplete` means an empty, partial, or missing linked file was observed; `unrecognized` means no weight-named files were found. These states do not prove bundle completeness, safe contents, upstream identity, supported editing capabilities, or readiness to load. Use explicit manifest verification for stronger file checks; runtime compatibility still requires a tested adapter. Inspection is a point-in-time inventory, not a lock against other processes changing files.
+
+### Model storage locations
+
+`resolveStoragePaths({ dataDirectory?, modelsDirectory? })` resolves owned locations without filesystem I/O. Explicit options take precedence over `PICPATCH_DATA_DIR` and `PICPATCH_MODELS_DIR`; defaults are `~/.picpatch` and its `models` child. Overrides accept `~`, `$VAR` and `%VAR%`; relative values resolve against home, never the working directory. Unset expansion variables and invalid values are rejected. Configuration is read at each call. To use an explicit resolver option for discovery, pass `[locations.modelsDirectory]` as the roots.
+
+These settings select model discovery locations; they do not move existing files, change a supplied editor model directory or redirect input/output paths. Explicit file paths remain literal. No directory is created by resolution or discovery, and model acquisition is not implemented yet.
 
 ### Verifying a model bundle
 

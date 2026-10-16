@@ -26,6 +26,8 @@ export interface ModelProgressEvent {
   path: string;
 }
 export interface ModelOperationOptions {
+  /** Whole operation budget: one minute for inspection/discovery, ten for verification. */
+  timeoutMs?: number;
   signal?: AbortSignal;
   onProgress?: (event: ModelProgressEvent) => void;
 }
@@ -47,7 +49,4 @@ export interface VerifiedComponent {
   sha256?: string;
 }
 
-export interface ModelVerificationOptions extends ModelOperationOptions {
-  /** Whole verification budget, default ten minutes; cancellation settles active reads first. */
-  timeoutMs?: number;
-}
+export type ModelVerificationOptions = ModelOperationOptions;

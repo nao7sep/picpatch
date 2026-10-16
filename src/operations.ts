@@ -23,3 +23,20 @@ export function timeBudget(value: unknown, fallback: number): number {
   if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > 1_000_000_000) throw new PicPatchUsageError('INVALID_REQUEST', 'Timeout must be positive whole milliseconds within the timer range.');
   return value as number;
 }
+
+/** A deadline stops new work; the action still owns pending I/O until it settles. */
+export async function withDeadline<T>(signal: AbortSignal | undefined, milliseconds: number, message: string, action: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  checkSignal(signal);
+  const deadline = new AbortController();
+  const combined = AbortSignal.any([deadline.signal, ...(signal ? [signal] : [])]);
+  const timer = setTimeout(() => deadline.abort(), milliseconds);
+  try {
+    const result = await action(combined);
+    checkSignal(combined);
+    return result;
+  } catch (cause) {
+    checkSignal(signal);
+    if (deadline.signal.aborted) throw new PicPatchRuntimeError('TIMEOUT', message, { cause });
+    throw cause;
+  } finally { clearTimeout(timer); }
+}

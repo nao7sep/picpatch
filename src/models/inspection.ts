@@ -1,11 +1,12 @@
-import { absolutePath, checkSignal, emitProgress, validateOperation } from '../operations.ts';
+import { resolveStoragePaths } from '../paths.ts';
+import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { lstat, stat, realpath, opendir } from 'node:fs/promises';
 import { basename, extname, isAbsolute, join, normalize, relative, sep } from 'node:path';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
 import type { LocalModelFile, ModelDiscovery, ModelInspection, ModelIssue, ModelOperationOptions } from './types.ts';
 
 const validatePath: typeof absolutePath = absolutePath;
-const validateOptions = validateOperation;
+function validateOptions(options: ModelOperationOptions): void { validateOperation(options, ['timeoutMs']); }
 function check(options: ModelOperationOptions): void { checkSignal(options.signal); }
 function progress(path: string, verb: 'inspectModel' | 'discoverModels', options: ModelOperationOptions): void {
   emitProgress(options, { type: 'progress', verb, stage: 'inspecting', message: 'Inspecting local model files.', path });
@@ -38,16 +39,18 @@ async function inspect(path: string, options: ModelOperationOptions, verb: 'insp
     let info;
     try { info = await lstat(current); }
     catch (error) { if (missing(error) && current !== path) { issues.push({ path: current, code: 'MISSING_FILE' }); continue; } throw error; }
+    check(options);
     if (info.isSymbolicLink()) {
       try { info = await stat(current); }
       catch (error) { if (missing(error)) { issues.push({ path: current, code: 'MISSING_FILE' }); continue; } throw error; }
       if (info.isDirectory() && current !== path) { issues.push({ path: current, code: 'SKIPPED_DIRECTORY_LINK' }); continue; }
     }
+    check(options);
     if (info.isDirectory()) {
       const directory = await opendir(current);
       for await (const entry of directory) {
         check(options);
-        if (entry.name !== '.git') pending.push(join(current, entry.name));
+        if (entry.name !== '.git' && (entry.isDirectory() || entry.isSymbolicLink() || kind(entry.name))) pending.push(join(current, entry.name));
       }
     } else if (info.isFile()) {
       const category = kind(current);
@@ -68,51 +71,70 @@ async function inspect(path: string, options: ModelOperationOptions, verb: 'insp
 /** Read-only inventory. Does not parse configurations, load weights, or start a worker. */
 export async function inspectModel(path: string, options: ModelOperationOptions = {}): Promise<ModelInspection> {
   validatePath(path); validateOptions(options); check(options);
-  return boundary(() => inspect(normalize(path), options, 'inspectModel'), options);
+  return withDeadline(options.signal, timeBudget(options.timeoutMs, 60_000), 'Model inspection timed out.', signal => {
+    const operation = { ...options, signal };
+    return boundary(() => inspect(normalize(path), operation, 'inspectModel'), operation);
+  });
 }
 
-/** Search only explicit roots; do not follow nested directory symlinks. */
-export async function discoverModels(roots: string[], options: ModelOperationOptions = {}): Promise<ModelDiscovery> {
+/** Search selected roots, or the configured model directory; never scan home. */
+export async function discoverModels(roots?: string[], options: ModelOperationOptions = {}): Promise<ModelDiscovery> {
+  const defaultRoot = roots === undefined;
+  if (roots === undefined) roots = [resolveStoragePaths().modelsDirectory];
   if (!Array.isArray(roots) || roots.length === 0) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply at least one model search root.');
   for (const root of roots) validatePath(root);
   validateOptions(options); check(options);
   const selected = roots.map(root => normalize(root));
-  return boundary(async () => {
-    const models: ModelInspection[] = []; const visited = new Set<string>();
-    const pending = [...selected].reverse();
-    while (pending.length) {
-      check(options);
-      const path = pending.pop()!;
-      const resolved = await realpath(path);
-      if (visited.has(resolved)) continue;
-      visited.add(resolved);
-      progress(path, 'discoverModels', options);
-      const info = await stat(path);
-      if (info.isFile()) {
-        if (kind(path)) models.push(await inspect(path, options, 'discoverModels'));
-        continue;
+  return withDeadline(options.signal, timeBudget(options.timeoutMs, 60_000), 'Model discovery timed out.', signal => {
+    const operation = { ...options, signal };
+    return boundary(async () => {
+      const models: ModelInspection[] = []; const visited = new Set<string>();
+      const pending = [...selected].reverse();
+      while (pending.length) {
+        check(operation);
+        const path = pending.pop()!;
+        let resolved: string;
+        try { resolved = await realpath(path); }
+        catch (cause) {
+          // An absent default cache is empty; explicit or broken linked roots still fail.
+          if (defaultRoot && path === selected[0] && missing(cause)) {
+            try { await lstat(path); }
+            catch (entryError) { if (missing(entryError)) { check(operation); return { models: [] }; } throw entryError; }
+          }
+          throw cause;
+        }
+        if (visited.has(resolved)) continue;
+        check(operation);
+        visited.add(resolved);
+        progress(path, 'discoverModels', operation);
+        const info = await stat(path);
+        check(operation);
+        if (info.isFile()) {
+          if (kind(path)) models.push(await inspect(path, operation, 'discoverModels'));
+          continue;
+        }
+        if (!info.isDirectory()) throw new PicPatchUsageError('INVALID_REQUEST', 'Select regular model files or directories.');
+        const children: string[] = []; let candidate = false;
+        const directory = await opendir(path);
+        for await (const entry of directory) {
+          check(operation);
+          if (entry.name === '.git') continue;
+          if (entry.isDirectory()) children.push(join(path, entry.name));
+          else if (kind(entry.name)) candidate = true;
+        }
+        if (candidate) {
+          models.push(await inspect(path, operation, 'discoverModels'));
+          // The whole candidate is one model bundle, not one model per component.
+        } else pending.push(...children.sort().reverse());
       }
-      if (!info.isDirectory()) throw new PicPatchUsageError('INVALID_REQUEST', 'Select regular model files or directories.');
-      const children: string[] = []; let candidate = false;
-      const directory = await opendir(path);
-      for await (const entry of directory) {
-        check(options);
-        if (entry.name === '.git') continue;
-        if (entry.isDirectory()) children.push(join(path, entry.name));
-        else if (kind(entry.name)) candidate = true;
-      }
-      if (candidate) {
-        models.push(await inspect(path, options, 'discoverModels'));
-        // The whole candidate is one model bundle, not one model per component.
-      } else pending.push(...children.sort().reverse());
-    }
-    check(options);
-    // Overlapping explicit roots must not return a component twice.
-    const bundles = models.filter(model => !models.some(other => {
-      if (other === model) return false;
-      const child = relative(other.resolvedPath, model.resolvedPath);
-      return child !== '' && child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
-    }));
-    return { models: bundles.sort((a, b) => a.path.localeCompare(b.path)) };
-  }, options);
+      check(operation);
+      // Overlapping explicit roots must not return a component twice.
+      const bundles = models.filter(model => !models.some(other => {
+        if (other === model) return false;
+        const child = relative(other.resolvedPath, model.resolvedPath);
+        return child !== '' && child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
+      }));
+      return { models: bundles.sort((a, b) => a.path.localeCompare(b.path)) };
+    }, operation);
+  });
 }

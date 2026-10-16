@@ -12,3 +12,5 @@ export { inspectRuntime } from './runtime/inspection.ts';
 export type { RuntimeInspection, RuntimeOperationOptions, RuntimeProgressEvent } from './runtime/types.ts';
 
 export type { LocalEditingModel } from './contracts.generated.ts';
+export { resolveStoragePaths } from './paths.ts';
+export type { StorageOptions, StoragePaths } from './paths.ts';

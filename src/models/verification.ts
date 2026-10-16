@@ -6,7 +6,7 @@ import { parser } from 'stream-json';
 import { pipeline } from 'node:stream/promises';
 import { contractValidator } from '../contracts.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
-import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation } from '../operations.ts';
+import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import type { ModelComponent, ModelManifest, ModelOperationOptions, ModelVerificationOptions, ModelVerification, VerifiedComponent } from './types.ts';
 
 const manifestValidator = contractValidator<ModelManifest>('ModelManifest');
@@ -122,23 +122,22 @@ export async function verifyModel(path: string, input: ModelManifest, options: M
   absolutePath(path); validateOperation(options, ['timeoutMs']); const manifest = validateModelManifest(input);
   checkSignal(options.signal);
   const budget = timeBudget(options.timeoutMs, 600_000);
-  const deadline = new AbortController();
-  const operation = { ...options, signal: AbortSignal.any([deadline.signal, ...(options.signal ? [options.signal] : [])]) };
-  const timer = setTimeout(() => deadline.abort(), budget);
-  try {
-    const root = await realpath(path);
-    if (!(await stat(root)).isDirectory()) throw new PicPatchUsageError('INVALID_REQUEST', 'Model verification requires a directory.');
-    const components: VerifiedComponent[] = [];
-    for (const component of manifest.components) {
-      emitProgress(operation, { type: 'progress', verb: 'verifyModel', stage: 'verifying', message: 'Verifying a model component.', path: join(path, component.path) });
-      components.push(await verifyComponent(root, component, manifest, operation));
+  return withDeadline(options.signal, budget, 'Model verification timed out.', async signal => {
+    const operation = { ...options, signal };
+    try {
+      const root = await realpath(path);
+      if (!(await stat(root)).isDirectory()) throw new PicPatchUsageError('INVALID_REQUEST', 'Model verification requires a directory.');
+      const components: VerifiedComponent[] = [];
+      for (const component of manifest.components) {
+        emitProgress(operation, { type: 'progress', verb: 'verifyModel', stage: 'verifying', message: 'Verifying a model component.', path: join(path, component.path) });
+        components.push(await verifyComponent(root, component, manifest, operation));
+      }
+      checkSignal(operation.signal);
+      return { path, manifest, components, status: components.every(c => c.status === 'verified') ? 'matches-manifest' : 'invalid', compatibility: 'unknown' };
+    } catch (cause) {
+      checkSignal(options.signal);
+      if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError || cause instanceof PicPatchCancelledError) throw cause;
+      throw new PicPatchRuntimeError('MODEL_IO', 'Could not verify the selected model files.', { cause });
     }
-    checkSignal(operation.signal);
-    return { path, manifest, components, status: components.every(c => c.status === 'verified') ? 'matches-manifest' : 'invalid', compatibility: 'unknown' };
-  } catch (cause) {
-    checkSignal(options.signal);
-    if (deadline.signal.aborted) throw new PicPatchRuntimeError('TIMEOUT', 'Model verification timed out.', { cause });
-    if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError || cause instanceof PicPatchCancelledError) throw cause;
-    throw new PicPatchRuntimeError('MODEL_IO', 'Could not verify the selected model files.', { cause });
-  } finally { clearTimeout(timer); }
+  });
 }
