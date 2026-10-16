@@ -133,3 +133,13 @@ export interface ModelManifest {
    */
   components: [ModelComponent, ...ModelComponent[]];
 }
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "LocalEditingModel".
+ */
+export interface LocalEditingModel {
+  adapter: "mflux-flux2-klein-4b";
+  directory: string;
+  manifest: ModelManifest;
+  quantize?: 4 | 8;
+}

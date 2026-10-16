@@ -2,10 +2,11 @@ import { contractAjv } from '../contracts.ts';
 import { PicPatchRuntimeError } from '../errors.ts';
 import { validateEditRequest } from '../validation.ts';
 import type { EditRequest, EditResult, ModelCapabilities, ProgressEvent } from '../types.ts';
+import type { LocalEditingModel } from '../contracts.generated.ts';
 import schema from '../../protocol/worker.schema.json' with { type: 'json' };
 
 type Envelope<T extends string> = { version: 1; id: number; type: T };
-export type WorkerRequest = Envelope<'hello' | 'shutdown'> |
+export type WorkerRequest = Envelope<'shutdown'> | (Envelope<'hello'> & { model?: LocalEditingModel }) |
   (Envelope<'edit'> & { request: EditRequest }) | (Envelope<'cancel'> & { targetId: number });
 export type WorkerResponse = (Envelope<'ready'> & { workerVersion: string; models: ModelCapabilities[] }) |
   (Envelope<'progress'> & { event: ProgressEvent }) | (Envelope<'result'> & { result: EditResult }) |

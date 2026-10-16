@@ -11,3 +11,5 @@ export type { ModelManifest, ModelComponent, ModelVerification, ModelVerificatio
 export { inspectRuntime } from './runtime/inspection.ts';
 export { setupRuntime } from './runtime/setup.ts';
 export type { RuntimeInspection, RuntimeOperationOptions, RuntimeProgressEvent, RuntimeSetupRequest, RuntimeSetupResult } from './runtime/types.ts';
+
+export type { LocalEditingModel } from './contracts.generated.ts';

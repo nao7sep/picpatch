@@ -2,17 +2,29 @@
 
 PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, and masked edits.
 
-The SDK exports typed editing contracts, categorized errors, and runtime request validation, but cannot edit images yet. The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. Explicit setup can install the locked model-free worker dependencies into a new environment using existing Python and uv executables. No Python downloader, model downloader, or inference backend is implemented. MFLUX is the first runtime candidate for an Apple Silicon Mac with 24 GB of unified memory; it is not installed by this scaffold.
+The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. Its mapping and process contracts are tested without weights; actual inference, image quality, GPU cancellation and memory fit on a 24 GB Mac remain unverified. No Python or model downloader is implemented.
+
+## Experimental local editing
+
+Supply `createEditor` with `model: { adapter: 'mflux-flux2-klein-4b', directory, manifest, quantize? }`. `directory` must be an existing absolute model bundle path; `manifest` uses the verification contract described below. Each edit hashes the declared components before starting inference. Keep the directory immutable while editing: verification neither locks the bundle nor proves an incomplete manifest covers everything MFLUX reads. The request's `model` must equal `manifest.model`. The returned revision is the caller-supplied manifest revision, not an independently authenticated identity.
+
+The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. `setupRuntime` still installs only the small model-free dependencies; inference installation and a trusted complete model catalog are not automated yet.
+
+The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Masks are rejected. Explicit output dimensions must be multiples of 16; omitted dimensions use 1024 by 1024. MFLUX's distilled generation defaults apply. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
+
+Models are loaded and released for each edit, while the worker is reused. This avoids retaining unmeasured model memory between operations, at the cost of reload latency. Progress reports loading, conditioning/editing, denoising steps and saving. Pixel output is saved without prompt metadata or sidecars. Hugging Face and Transformers run offline; the worker additionally rejects Python socket connections and isolates both Python and native standard output from protocol frames. This is not a general sandbox for arbitrary native packages.
+
+Use `npx tsx examples/edit-local.ts /absolute/editor-options.json /absolute/edit-request.json` with a prepared interpreter, local bundle and existing input images. The example only uses supplied files; it never installs packages or downloads models.
 
 ## Development
 
 Use Node.js 24 or newer, npm, uv, and Python 3.12 or newer. Install the development dependencies with `npm ci`, then run `npm test`. This checks generated contracts, TypeScript source and examples, request validation, and TypeScript/Python protocol behavior. The Python test command installs the small locked validation and test dependencies, but will not download Python or models.
 
-The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It needs the existing `worker/.venv` created by the ordinary Python test setup and currently targets macOS/POSIX. These tests perform no inference and download no models. Runtime setup tests additionally need uv on PATH and the locked worker wheels in its cache; they create disposable environments with network access disabled and fail clearly if those prerequisites are missing. Live tests are type-checked by the ordinary gate.
+The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It needs the existing `worker/.venv` created by the ordinary Python test setup and currently targets macOS/POSIX. The full gate also runs real inference and requires `PICPATCH_INFERENCE_CONFIG`, an absolute path to a JSON file containing editor options with a prepared inference interpreter and local model configuration. Missing prerequisites fail explicitly. No test downloads models. Runtime setup tests additionally need uv on PATH and the locked worker wheels in its cache; they create disposable environments with network access disabled and fail clearly if those prerequisites are missing. Live tests are type-checked by the ordinary gate.
 
 Run `npm run example:request` to print an illustrative grouped-reference request. It does not read images, start a worker, or generate output. `npm run test:coverage` measures TypeScript behavioral coverage.
 
-The private package resolves directly to TypeScript source. Consumers use a TypeScript-capable runner or bundler; no SDK build step is required. The worker’s `pyproject.toml` and `uv.lock` describe an internal package with JSON Schema validation and no inference dependencies. Worker setup is explicit; bundling or acquiring Python and inference-runtime packaging remain planned work.
+The private package resolves directly to TypeScript source. Consumers use a TypeScript-capable runner or bundler; no SDK build step is required. The worker’s `pyproject.toml` and `uv.lock` describe an internal package with JSON Schema validation and a separately locked optional `inference` extra. Ordinary setup and tests do not install that extra. Worker setup is explicit; bundling or acquiring Python and inference-runtime packaging remain planned work.
 
 ## Editing contracts
 
@@ -22,7 +34,7 @@ Optional model capabilities describe supported reference roles, mask semantics, 
 
 `validateEditRequest` checks metadata only. `editor.edit` additionally opens and fully decodes single-frame PNG, JPEG, and WebP files by content. It rejects missing, malformed, animated, and unsupported images, and detects reference duplicates through symlink or hardlink aliases. Original files remain untouched. Results describe output dimensions, actual seed, model revision, runtime version, and the original ordered references.
 
-Preparation uses Sharp to apply EXIF orientation, convert image color to sRGB, strip metadata, and write private PNG copies. Masks must be opaque grayscale PNGs matching the oriented source dimensions; black preserves and white edits. No resizing, cropping, or model-specific preprocessing is implemented yet. Native decoding has a 60-second processing budget; cancellation waits for an active native writer to settle before removing its files.
+Preparation uses Sharp to apply EXIF orientation, convert image color to sRGB, strip metadata, and write private PNG copies. Masks must be opaque grayscale PNGs matching the oriented source dimensions; black preserves and white edits. The baseline preparation does not resize or crop. The experimental MFLUX adapter delegates reference conditioning to MFLUX: references above one megapixel are downscaled preserving aspect ratio, then center-cropped to multiples of 16 pixels. Very small or narrow references can be rejected. Native decoding has a 60-second processing budget; cancellation waits for an active native writer to settle before removing its files.
 
 The output directory must already exist. Each edit owns a private temporary directory there; the worker receives only prepared paths and a private output path. Publication fully decodes the worker’s PNG, checks dimensions, syncs the completed file, then uses an exclusive atomic hard link. Existing destinations, including symlinks and hardlinks, are never overwritten—even if another writer creates the destination during an edit. The destination filesystem must support hard links; there is no non-atomic fallback.
 
@@ -81,7 +93,7 @@ Both runtime operations accept cancellation and structured progress. `timeoutMs`
 
 ## Editor lifecycle
 
-`createEditor({ pythonExecutable })` accepts the absolute path to an existing Python interpreter with the worker’s locked dependencies installed. Construction is lazy and performs no setup or downloads. The first `edit` prepares the inputs, starts the worker, and checks its advertised capabilities. The current model-free worker advertises no models, so valid prepared requests fail with `UNSUPPORTED_CAPABILITY` and their temporary files are cleaned up.
+`createEditor({ pythonExecutable })` accepts the absolute path to an existing Python interpreter with the worker’s locked dependencies installed. Construction is lazy and performs no setup or downloads. The first `edit` prepares the inputs, starts the worker, and checks its advertised capabilities. Without a `model` option the worker advertises no models, so valid prepared requests fail with `UNSUPPORTED_CAPABILITY` and their temporary files are cleaned up.
 
 ```ts
 import { createEditor } from 'picpatch';
@@ -115,16 +127,16 @@ The model-free worker runs with `uv run --project worker --locked --no-python-do
 
 Each frame is one UTF-8 JSON object followed by LF. Standard output is reserved for frames; diagnostics go to standard error. Images travel as paths, never inline pixels. Consumers process one frame at a time and must close the session on malformed JSON, invalid messages, unsupported versions, or correlation failures. There is no arbitrary image-count or frame-size cap; actual model limits are advertised as capabilities.
 
-All messages carry `version: 1`, a positive, strictly increasing request `id` (within JavaScript’s safe integer range), and `type`. Responses echo the request ID. Send `hello` first; `ready` supplies the worker version and available model capabilities. This worker advertises no models and returns `BACKEND_UNAVAILABLE` for edits. It performs no image I/O or inference.
+All messages carry `version: 1`, a positive, strictly increasing request `id` (within JavaScript’s safe integer range), and `type`. Responses echo the request ID. Send `hello` first; `ready` supplies the worker version and available model capabilities. An optional local `model` registration in `hello` selects the adapter. Its capabilities describe the adapter contract, not proof of installed dependencies, complete weights or measured hardware support; loading happens during the edit. Without registration the worker advertises no models and returns `BACKEND_UNAVAILABLE` for edits.
 
-An edit may produce `progress` followed by exactly one `result` or `error`. Optional completed/total counters appear together. Only one edit may be pending. A `cancel` request has its own ID and an edit `targetId`; `cancelAck` acknowledges the request, while the edit must still settle separately. An accepted cancellation can race with successful completion. This worker always acknowledges cancellation as not accepted because no asynchronous edit can be running. Send `shutdown` after pending operations settle, then wait for `shutdownAck` and process exit.
+An edit may produce `progress` followed by exactly one `result` or `error`. Optional completed/total counters appear together. Only one edit may be pending. A `cancel` request has its own ID and an edit `targetId`; `cancelAck` acknowledges the request, while the edit must still settle separately. An accepted cancellation can race with successful completion. Inference runs on one owned thread so the reader can acknowledge cancellation while the producer is still active. Cancellation checks occur around loading, denoising callbacks and saving; native calls that cannot respond are bounded by the parent process termination deadline. Send `shutdown` after pending operations settle, then wait for `shutdownAck` and process exit.
 
-The internal TypeScript `ProtocolSession` validates correlation and session ordering; `WorkerProcess` owns the child process, pipes, deadlines, and termination. The Python entry point dispatches the model-free protocol and exits with status 2 for malformed input, without echoing private frame contents. Shared fixtures are validated by both languages.
+The internal TypeScript `ProtocolSession` validates correlation and session ordering; `WorkerProcess` owns the child process, pipes, deadlines, and termination. The Python entry point dispatches the protocol and inference and exits with status 2 for malformed input, without echoing private frame contents. Shared fixtures are validated by both languages.
 
 ## Repository layout
 
 - `src/` contains the public SDK contracts, request validation, image preparation and output handling, worker integration, and local model inspection.
-- `worker/` contains the Python worker package and future MFLUX adapter.
+- `worker/` contains the Python worker package and experimental MFLUX adapter.
 - `protocol/` defines shared editing payloads and the versioned worker wire contract.
 - `tests/` holds ordinary tests and small fixtures; `benchmarks/` will hold opt-in quality and performance experiments.
 - `examples/` contains source-consumed SDK examples; `scripts/` contains development tools.

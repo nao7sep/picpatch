@@ -415,6 +415,33 @@
         "components"
       ],
       "additionalProperties": false
+    },
+    "LocalEditingModel": {
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "const": "mflux-flux2-klein-4b"
+        },
+        "directory": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifest": {
+          "$ref": "#/definitions/ModelManifest"
+        },
+        "quantize": {
+          "enum": [
+            4,
+            8
+          ]
+        }
+      },
+      "required": [
+        "adapter",
+        "directory",
+        "manifest"
+      ],
+      "additionalProperties": false
     }
   }
 }

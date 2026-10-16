@@ -23,7 +23,10 @@ dev = [
     "pytest-cov>=7.1.0",
 ]
 
-# No inference dependencies or model acquisition hooks.
+[project.optional-dependencies]
+inference = ["mflux==0.22.0"]
+
+# The inference extra is never installed by default; models are always supplied locally.
 
 [tool.coverage.run]
 data_file = "coverage/.coverage-python"

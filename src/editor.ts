@@ -1,3 +1,6 @@
+import { contractValidator } from './contracts.ts';
+import { validateModelManifest, verifyModel } from './models/verification.ts';
+import type { LocalEditingModel } from './contracts.generated.ts';
 import { ImageEditor } from './images/editor.ts';
 import { isAbsolute } from 'node:path';
 import { workerLaunch, workerTimeouts } from './worker/launch.ts';
@@ -15,6 +18,8 @@ export interface EditorOptions {
   /** An existing interpreter with the worker's locked dependencies installed. */
   pythonExecutable: string;
   timeouts?: Partial<WorkerTimeouts>;
+  /** Experimental offline adapter; the manifest pins caller-supplied files. */
+  model?: LocalEditingModel;
 }
 const defaults = workerTimeouts;
 
@@ -23,7 +28,7 @@ export function createEditor(options: EditorOptions): Editor {
   if (!options || typeof options.pythonExecutable !== 'string' || !isAbsolute(options.pythonExecutable) || options.pythonExecutable.includes('\0')) {
     throw new PicPatchUsageError('INVALID_REQUEST', 'pythonExecutable must be an absolute interpreter path.');
   }
-  if (Object.keys(options).some(key => !['pythonExecutable', 'timeouts'].includes(key)) ||
+  if (Object.keys(options).some(key => !['pythonExecutable', 'timeouts', 'model'].includes(key)) ||
       (options.timeouts !== undefined && (typeof options.timeouts !== 'object' || options.timeouts === null || Array.isArray(options.timeouts)))) {
     throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid editor options.');
   }
@@ -33,8 +38,16 @@ export function createEditor(options: EditorOptions): Editor {
       throw new PicPatchUsageError('INVALID_REQUEST', 'Timeouts must be positive whole milliseconds within the timer range.');
     }
   }
-  const worker = new WorkerProcess(workerLaunch(options.pythonExecutable), timeouts);
-  return new ImageEditor(new ProcessEditor(worker));
+  let model: LocalEditingModel | undefined;
+  if (options.model !== undefined) {
+    if (!contractValidator<LocalEditingModel>('LocalEditingModel')(options.model) ||
+        !isAbsolute(options.model.directory) || options.model.directory.includes('\0')) {
+      throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid local editing model configuration.');
+    }
+    model = { ...structuredClone(options.model), manifest: validateModelManifest(options.model.manifest) };
+  }
+  const worker = new WorkerProcess({ ...workerLaunch(options.pythonExecutable), ...(model ? { model } : {}) }, timeouts);
+  return new ImageEditor(new ProcessEditor(worker, model));
 }
 
 function responseError(response: Extract<WorkerResponse, { type: 'error' }>): Error {
@@ -50,7 +63,8 @@ export class ProcessEditor implements Editor {
   private disposed = false;
   private disposal: Promise<void> | undefined;
   private readonly worker: WorkerProcess;
-  constructor(worker: WorkerProcess) { this.worker = worker; }
+  private readonly model: LocalEditingModel | undefined;
+  constructor(worker: WorkerProcess, model?: LocalEditingModel) { this.worker = worker; this.model = model; }
 
   async edit(input: EditRequest, options: OperationOptions = {}): Promise<EditResult> {
     if (this.disposed) throw new PicPatchUsageError('DISPOSED', 'Editor has been disposed.');
@@ -67,6 +81,11 @@ export class ProcessEditor implements Editor {
     const abortStartup = () => this.worker.abortStartup();
     signal?.addEventListener('abort', abortStartup, { once: true });
     try {
+      if (this.model) {
+        if (request.model !== this.model.manifest.model) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The editor is configured for a different model.');
+        const verified = await verifyModel(this.model.directory, this.model.manifest, { ...(signal ? { signal } : {}) });
+        if (verified.status !== 'matches-manifest') throw new PicPatchUsageError('INVALID_REQUEST', 'The local model does not match its manifest.');
+      }
       let ready: WorkerResponse;
       try { ready = await this.worker.start(); }
       finally { signal?.removeEventListener('abort', abortStartup); }
@@ -80,7 +99,7 @@ export class ProcessEditor implements Editor {
       if (response.type === 'error') throw responseError(response);
       if (response.type !== 'result') throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker returned no edit result.');
       return response.result;
-    } finally { this.busy = false; }
+    } finally { signal?.removeEventListener('abort', abortStartup); this.busy = false; }
   }
 
   dispose(): Promise<void> {
