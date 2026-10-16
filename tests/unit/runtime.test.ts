@@ -26,3 +26,7 @@ it('cleans only its new directory if a setup progress callback fails', async () 
   await expect(setupRuntime({ directory: path, pythonExecutable: '/unused', uvExecutable: '/unused' }, { onProgress: () => { throw new Error('callback'); } })).rejects.toMatchObject({ code: 'CALLBACK_FAILED' });
   await expect(readFile(join(path, 'project', 'uv.lock'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
+it('rejects malformed optional runtime selections before creating a directory', async () => {
+  await expect(setupRuntime({ directory, uvExecutable: '/unused', pythonExecutable: 'python' })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(setupRuntime({ directory, uvExecutable: '/unused', inference: 'yes' as unknown as boolean })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+});

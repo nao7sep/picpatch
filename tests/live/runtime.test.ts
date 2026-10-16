@@ -87,3 +87,43 @@ it('cleans a new environment when cancelled after installation, before returning
   })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(await readdir(directory)).toEqual([]);
 });
+it('owns Python 3.15 without system Python or ambient uv redirection', async () => {
+  const uvExecutable = await uvPath();
+  const cacheDirectory = (await execute(uvExecutable, ['cache', 'dir'])).stdout.trim();
+  const destination = join(directory, 'managed');
+  const original = { PATH: process.env.PATH, UV_PYTHON_INSTALL_DIR: process.env.UV_PYTHON_INSTALL_DIR, UV_PYTHON: process.env.UV_PYTHON };
+  let result;
+  try {
+    process.env.PATH = directory;
+    process.env.UV_PYTHON_INSTALL_DIR = join(directory, 'must-not-use');
+    process.env.UV_PYTHON = '/missing/python';
+    result = await setupRuntime({ directory: destination, uvExecutable, cacheDirectory });
+  } finally {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+  const probe = JSON.parse((await execute(result.pythonExecutable, ['-I', '-c', 'import json,sys,platform; print(json.dumps([list(sys.version_info[:3]),sys.base_prefix,platform.machine()]))'], { env: { PATH: directory } })).stdout);
+  expect(probe[0]).toEqual([3, 15, 0]);
+  expect(probe[1]).toContain(join(destination, 'python'));
+  expect(probe[2]).toBe('arm64');
+  await expect(access(join(directory, 'must-not-use'))).rejects.toMatchObject({ code: 'ENOENT' });
+  expect((await inspectRuntime(result.pythonExecutable)).status).toBe('worker-ready');
+}, 300_000);
+it('refuses an unavailable managed Python offline instead of falling back to system Python', async () => {
+  await expect(setupRuntime({ directory: join(directory, 'managed'), uvExecutable: await uvPath(), offline: true })).rejects.toMatchObject({ code: 'RUNTIME_SETUP' });
+  expect(await readdir(directory)).toEqual([]);
+});
+it('removes an owned interpreter when cancelled before package installation', async () => {
+  const controller = new AbortController();
+  const destination = join(directory, 'managed');
+  let installedPython = false;
+  await expect(setupRuntime({ directory: destination, uvExecutable: await uvPath() }, {
+    signal: controller.signal,
+    onProgress: event => {
+      if (event.stage === 'installing') { installedPython = true; controller.abort(); }
+    },
+  })).rejects.toMatchObject({ code: 'CANCELLED' });
+  expect(installedPython).toBe(true);
+  expect(await readdir(directory)).toEqual([]);
+}, 300_000);

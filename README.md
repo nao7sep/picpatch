@@ -2,13 +2,13 @@
 
 PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, and masked edits.
 
-The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness and larger-image memory limits remain unverified. The SDK does not acquire Python or models automatically.
+The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness and larger-image memory limits remain unverified. Runtime acquisition is explicit; imports and editing never install Python, packages or models.
 
 ## Experimental local editing
 
 Supply `createEditor` with `model: { adapter: 'mflux-flux2-klein-4b', directory, manifest, quantize? }`. `directory` must be an existing absolute model bundle path; `manifest` uses the verification contract described below. Each edit hashes the declared components before starting inference. Keep the directory immutable while editing: verification neither locks the bundle nor proves an incomplete manifest covers everything MFLUX reads. The request's `model` must equal `manifest.model`. The returned revision is the caller-supplied manifest revision, not an independently authenticated identity.
 
-The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. `setupRuntime` still installs only the small model-free dependencies; general inference installation and a model catalog are not automated yet. The development test uses the pinned manifest in `tests/fixtures/klein-4b-4bit.manifest.json`.
+The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. `setupRuntime({ directory, uvExecutable, inference: true })` prepares an owned Python 3.15 runtime with those packages. Omit `inference` for a small model-free environment. A model catalog is not automated yet. The development test uses the pinned manifest in `tests/fixtures/klein-4b-4bit.manifest.json`.
 
 The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Masks are rejected. Explicit output dimensions must be multiples of 16; omitted dimensions use 1024 by 1024. MFLUX's distilled generation defaults apply. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
 
@@ -42,7 +42,7 @@ For resource measurements on macOS, run `python3 benchmarks/measure.py` with the
 
 Run `npm run example:request` to print an illustrative grouped-reference request. It does not read images, start a worker, or generate output. `npm run test:coverage` measures TypeScript behavioral coverage.
 
-The private package resolves directly to TypeScript source. Consumers use a TypeScript-capable runner or bundler; no SDK build step is required. The worker’s `pyproject.toml` and `uv.lock` describe an internal package with JSON Schema validation and a separately locked optional `inference` extra. Ordinary setup and tests do not install that extra. Worker setup is explicit; bundling or acquiring Python and inference-runtime packaging remain planned work.
+The private package resolves directly to TypeScript source. Consumers use a TypeScript-capable runner or bundler; no SDK build step is required. The worker’s `pyproject.toml` and `uv.lock` describe an internal package with JSON Schema validation and a separately locked optional `inference` extra. Ordinary setup and tests do not install that extra. Worker setup explicitly acquires managed Python and optionally installs inference packages. uv itself must already be available.
 
 ## Editing contracts
 
@@ -87,14 +87,15 @@ A `matches-manifest` result means the declared files matched the supplied pins a
 
 `inspectRuntime(pythonExecutable, options?)` starts the bundled worker, checks its handshake, and waits for shutdown. It returns `worker-ready` plus the worker version and advertised model capabilities. This proves that the selected interpreter can run the worker, not that it matches the dependency lock or supports any image model. Inspection installs nothing and disables Python bytecode writes and user-site/Python-environment overrides.
 
-`setupRuntime(request, options?)` explicitly creates an isolated environment in an unused absolute directory. Supply existing absolute Python and uv executable paths; the directory's parent must exist. Setup installs only the worker's locked non-development Python packages, permits prebuilt wheels only, and never downloads Python or model weights. Network package installation is allowed only by calling setup; use `offline: true` to forbid it too. An optional `cacheDirectory` can reuse an existing uv cache for offline setup.
+`setupRuntime(request, options?)` explicitly creates an isolated environment in an unused absolute directory. Supply an existing absolute uv executable path; the directory's parent must exist. On macOS arm64, omitting `pythonExecutable` acquires CPython 3.15.0 through uv from Astral's python-build-standalone distribution. The interpreter lives inside this runtime directory, with no system-Python fallback, global shims or registry changes. This is a third-party standalone build, not a python.org installer; uv handles distribution selection, archive verification and extraction.
+
+Setup installs the locked non-development worker packages. Set `inference: true` to include MFLUX and its dependencies; this may build packages from source and requires CMake and a C++ toolchain when wheels are unavailable. Python alone is a download of tens of megabytes; inference packages add hundreds of megabytes of downloads and substantially more installed disk space. No model weights are downloaded. A supplied `pythonExecutable` retains the existing external-interpreter mode and never downloads Python. `offline: true` forbids acquisition; a fresh managed runtime cannot fall back to another installed Python. An optional `cacheDirectory` can reuse uv's package cache.
 
 ```ts
 import { setupRuntime, createEditor } from 'picpatch';
 
 const runtime = await setupRuntime({
   directory: '/absolute/path/to/unused-runtime-directory',
-  pythonExecutable: '/absolute/path/to/python',
   uvExecutable: '/absolute/path/to/uv',
 });
 const editor = createEditor({ pythonExecutable: runtime.pythonExecutable });
@@ -105,9 +106,9 @@ try {
 }
 ```
 
-Setup confirms readiness through the actual worker handshake before returning the interpreter path and dependency-lock digest. Existing directories are never replaced; reuse a returned interpreter through `inspectRuntime` or `createEditor`. The environment stays at its final path because Python environments are not relocatable. Its directory is private and incomplete until setup returns; only the call result establishes successful setup. Keep the base Python installation and this SDK checkout available: this is source-consumed worker setup, not a bundled standalone runtime.
+Setup confirms readiness through the actual worker handshake before returning the interpreter path and dependency-lock digest. Existing directories are never replaced; reuse a returned interpreter through `inspectRuntime` or `createEditor`. The environment stays at its final path because Python environments are not relocatable. Its directory is private and incomplete until setup returns; only the call result establishes successful setup. Keep this SDK checkout and the entire runtime directory available. Managed mode owns its base interpreter; external-interpreter mode still requires the supplied Python installation. Runtime directories are not movable, and uv must be installed separately for setup. No setup tool is needed to run a prepared worker.
 
-Both runtime operations accept cancellation and structured progress. `timeoutMs` bounds installer execution (five minutes by default) or inspection startup (thirty seconds by default); worker shutdown and forced termination have separate bounded budgets. Setup waits for subprocess closure before removing its own failed or cancelled environment. Unconfirmed termination retains that directory and reports `recoveryDirectory`. No existing environment is repaired or deleted. Runtime subprocess ownership targets macOS/POSIX; Windows descendant termination remains unsupported.
+Both runtime operations accept cancellation and structured progress. `timeoutMs` bounds the combined interpreter/package installation and import probes (five minutes by default) or inspection startup (thirty seconds by default); worker shutdown and forced termination have separate bounded budgets. Setup waits for subprocess closure before removing its own failed or cancelled environment. Unconfirmed termination retains that directory and reports `recoveryDirectory`. No existing environment is repaired or deleted. Runtime subprocess ownership targets macOS/POSIX; Windows descendant termination remains unsupported.
 
 ## Editor lifecycle
 
