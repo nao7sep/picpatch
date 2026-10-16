@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { referenceWorkload } from '../../benchmarks/reference-workload.ts';
-import { createEditor, type EditorOptions, type DiagnosticEvent } from '../../src/index.ts';
+import { createEditor, listModels, prepareModel, inspectReadiness, discoverModels, resolveStoragePaths, type EditorOptions, type DiagnosticEvent } from '../../src/index.ts';
 
 async function localOptions(): Promise<EditorOptions> {
   const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
@@ -16,13 +16,28 @@ async function localOptions(): Promise<EditorOptions> {
   return options;
 }
 
-it('edits grouped references and a source image sequentially through the offline public adapter', async () => {
+it('completes the catalog-to-edit consumer journey with existing weights and isolated owned storage', async () => {
   const options = await localOptions();
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-inference-'));
-  const editor = createEditor({ ...options, defaults: { size: { width: 256, height: 256 }, seed: 42, outputDirectory: directory } });
-  const paths: string[] = [];
+  vi.stubEnv('PICPATCH_DATA_DIR', join(directory, 'data'));
+  vi.stubEnv('PICPATCH_MODELS_DIR', join(directory, 'models'));
   const events: DiagnosticEvent[] = [];
+  let editor: ReturnType<typeof createEditor> | undefined;
+  const paths: string[] = [];
   try {
+    // The harness supplies only existing filesystem locations. Consumer code uses public operations.
+    const selected = listModels().find(entry => entry.id === options.model!.manifest.model)!;
+    expect(selected).toBeDefined();
+    expect(resolveStoragePaths().modelsDirectory).toBe(join(directory, 'models'));
+    expect(await discoverModels()).toEqual({ models: [] });
+    await expect(prepareModel(selected.id)).rejects.toMatchObject({ code: 'MODEL_IO' });
+    const prepared = await prepareModel(selected.id, { directory: options.model!.directory });
+    expect(prepared).toMatchObject({ origin: 'external', integrity: 'matches-manifest' });
+    expect(await inspectReadiness(options.pythonExecutable!, prepared.model)).toMatchObject({
+      files: 'present', runtime: { status: 'imports-ready' },
+    });
+    editor = createEditor({ pythonExecutable: options.pythonExecutable!, model: prepared.model,
+      defaults: { size: { width: 256, height: 256 }, seed: 42, outputDirectory: directory } });
     const images = [join(directory, 'red.png'), join(directory, 'blue.png')];
     await sharp({ create: { width: 256, height: 256, channels: 3, background: 'red' } }).png().toFile(images[0]!);
     await sharp({ create: { width: 256, height: 256, channels: 3, background: 'blue' } }).png().toFile(images[1]!);
@@ -41,11 +56,18 @@ it('edits grouped references and a source image sequentially through the offline
       expect(result.references[0]?.images).toEqual(images);
       expect(result.image.path).toMatch(/edit-[a-f0-9-]+\.png$/);
     }
+    const saved = await readFile(paths[0]!);
+    await expect(editor.edit({ instruction: 'Use blue.', sourceImage: images[0]!, outputPath: paths[0]! })).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT' });
+    expect(await readFile(paths[0]!)).toEqual(saved);
+    await editor.dispose();
+    await expect(editor.edit({ instruction: 'Use blue.', sourceImage: images[0]! })).rejects.toMatchObject({ code: 'DISPOSED' });
+    expect((await readdir(directory)).sort()).toEqual(['red.png', 'blue.png', ...paths.map(path => path.split('/').at(-1)!)].sort());
     expect(events.filter(event => event.stage === 'succeeded')).toHaveLength(2);
     expect(new Set(events.map(event => event.operationId)).size).toBe(2);
     expect(JSON.stringify(events)).not.toContain('Combine both colors');
   } finally {
-    await editor.dispose();
+    await editor?.dispose();
+    vi.unstubAllEnvs();
     await rm(directory, { recursive: true, force: true });
   }
 }, 3_600_000);
