@@ -23,7 +23,7 @@ it('accepts a local registration then returns a missing-runtime failure over rea
     if (!uvExecutable) throw new Error('The full gate requires uv on PATH.');
     const runtimeDirectory = join(directory, 'runtime');
     const cacheDirectory = (await promisify(execFile)(uvExecutable, ['cache', 'dir'])).stdout.trim();
-    await promisify(execFile)(uvExecutable, ['sync', '--project', 'worker', '--python', testPython,
+    await promisify(execFile)(uvExecutable, ['sync', '--project', 'runtimes/mflux', '--python', testPython,
       '--no-python-downloads', '--no-dev', '--no-install-project', '--locked', '--no-build', '--offline',
       '--cache-dir', cacheDirectory], { env: { ...process.env, UV_PROJECT_ENVIRONMENT: runtimeDirectory }, timeout: 30_000 });
     const options: EditorOptions = { pythonExecutable: join(runtimeDirectory, 'bin/python'),

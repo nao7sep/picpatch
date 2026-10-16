@@ -19,7 +19,7 @@ it('composites black, white and soft masks with exact sRGB and alpha channel end
     }
     const script = `from PIL import Image
 from pathlib import Path
-from picpatch_worker.backends.mflux import composite_mask, InvalidEditInput
+from picpatch_worker.backends.klein import composite_mask, InvalidEditInput
 import sys
 root = Path(sys.argv[1])
 request = {'sourceImage': str(root / 'source.png'), 'maskImage': str(root / 'mask.png')}
@@ -34,7 +34,7 @@ with Image.open(root / 'generated.png') as generated:
     for (const mask of [[0, 0, 0], [255, 255, 255], [0, 128, 255]]) {
       await sharp(Buffer.from(mask), { raw: { width: 3, height: 1, channels: 1 } }).toColourspace('b-w').png().toFile(join(directory, 'mask.png'));
       await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { timeout: 30_000,
-        env: { ...process.env, PYTHONPATH: fileURLToPath(new URL('../../worker/src/', import.meta.url)) } });
+        env: { ...process.env, PYTHONPATH: fileURLToPath(new URL('../../runtimes/mflux/src/', import.meta.url)) } });
       const output = await sharp(join(directory, 'out.png')).ensureAlpha().raw().toBuffer();
       const expected = Buffer.from(source.map((value, index) => Math.round((value * (255 - mask[Math.floor(index / 4)]!) + generated[index]! * mask[Math.floor(index / 4)]!) / 255)));
       expect(output).toEqual(expected);

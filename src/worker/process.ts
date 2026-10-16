@@ -19,6 +19,7 @@ export interface WorkerTimeouts {
   shutdownMs: number;
   terminationMs: number;
 }
+export const workerTimeouts: WorkerTimeouts = { startupMs: 30_000, editMs: 1_800_000, cancellationMs: 5_000, shutdownMs: 5_000, terminationMs: 2_000 };
 export type SpawnWorker = (launch: WorkerLaunch) => ChildProcessWithoutNullStreams;
 const spawnWorker: SpawnWorker = launch => spawn(launch.executable, launch.args, {
   cwd: launch.cwd, stdio: 'pipe', detached: process.platform !== 'win32',

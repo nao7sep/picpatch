@@ -1,7 +1,8 @@
 """One active inference thread; the protocol reader remains responsive to cancellation."""
 from threading import Event, RLock, Thread
 from .protocol import Protocol, ProtocolError
-from .backends.mflux import MfluxAdapter, Cancelled, BackendUnavailable, InvalidEditInput, check_runtime
+from .backends import create_adapter
+from .backends.errors import Cancelled, BackendUnavailable, InvalidEditInput
 
 
 def diagnostic(error, phase):
@@ -57,12 +58,12 @@ class Session:
             if self.ready:
                 raise ProtocolError('Handshake already completed.')
             if 'model' in request:
-                self.adapter = MfluxAdapter(request['model'])
+                self.adapter = create_adapter(request['model'])
             self.ready = True
             models = [self.adapter.capabilities] if self.adapter else []
             result = {**envelope, 'type': 'ready', 'workerVersion': '0.0.0', 'models': models}
             if 'runtimeCheck' in request:
-                result['runtimeCheck'] = check_runtime(request['model'], request['runtimeCheck'])
+                result['runtimeCheck'] = self.adapter.inspect_runtime(request['runtimeCheck'])
             return result
         if not self.ready:
             return error('NOT_READY', 'Complete the handshake first.')

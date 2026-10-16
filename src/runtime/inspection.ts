@@ -1,6 +1,7 @@
 import { withDiagnostics } from '../diagnostics.ts';
 import { WorkerProcess } from '../worker/process.ts';
-import { workerLaunch, workerTimeouts } from '../worker/launch.ts';
+import { workerLaunch } from '../backends/mflux/launch.ts';
+import { workerTimeouts } from '../worker/process.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation } from '../operations.ts';
 import { PicPatchRuntimeError } from '../errors.ts';
 import type { RuntimeInspection, RuntimeOperationOptions } from './types.ts';

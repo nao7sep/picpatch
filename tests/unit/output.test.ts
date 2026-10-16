@@ -1,11 +1,11 @@
-import type { EditBackend as Editor } from '../../src/editor.ts';
+import type { EditBackend as Editor } from '../../src/execution/backend.ts';
 import { mkdtemp, rm, readFile, writeFile, readdir, symlink, link, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import sharp from 'sharp';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ImageWorkspace } from '../../src/images/output.ts';
-import { ImageEditor } from '../../src/images/editor.ts';
+import { ImageEditor } from '../../src/execution/session.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, type EditRequest, type EditResult } from '../../src/index.ts';
 let directory: string;
 let request: EditRequest;

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createEditor } from '../../src/index.ts';
 import { resolveEditRequest, validateDefaults } from '../../src/defaults.ts';
-import { defaultPythonExecutable } from '../../src/worker/launch.ts';
+import { defaultPythonExecutable } from '../../src/backends/mflux/launch.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 it('inherits the model and settings while per-edit options take precedence', () => {
@@ -37,7 +37,7 @@ it('snapshots session defaults and keeps absent inference settings absent', () =
 });
 it('resolves uv project environments deterministically without system Python selection', async () => {
   vi.stubEnv('UV_PROJECT_ENVIRONMENT', undefined);
-  const worker = fileURLToPath(new URL('../../worker/', import.meta.url));
+  const worker = fileURLToPath(new URL('../../runtimes/mflux/', import.meta.url));
   const executable = process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python';
   expect(defaultPythonExecutable()).toBe(join(worker, '.venv', executable));
   vi.stubEnv('UV_PROJECT_ENVIRONMENT', 'custom-env');

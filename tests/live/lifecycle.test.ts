@@ -7,7 +7,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createEditor, type Editor, type EditRequest } from '../../src/index.ts';
-import { ProcessEditor } from '../../src/editor.ts';
+import { ProcessEditor } from '../../src/execution/worker-backend.ts';
 import { WorkerProcess, type WorkerLaunch } from '../../src/worker/process.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -54,7 +54,7 @@ describe('real model-free worker processes', () => {
   });
   it('runs the bundled Python handshake and verifies process closure', async () => {
     const python = testPython;
-    const editor = tracked({ executable: python, args: ['-u', '-m', 'picpatch_worker', '--protocol-dir', fileURLToPath(new URL('../../protocol/', import.meta.url))], cwd: fileURLToPath(new URL('../../worker/src/', import.meta.url)) });
+    const editor = tracked({ executable: python, args: ['-u', '-m', 'picpatch_worker', '--protocol-dir', fileURLToPath(new URL('../../protocol/', import.meta.url))], cwd: fileURLToPath(new URL('../../runtimes/mflux/src/', import.meta.url)) });
     await expect(editor.edit(request)).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     await editor.dispose(); expect(children[0]!.exitCode).toBe(0);
   });

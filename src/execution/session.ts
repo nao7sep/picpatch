@@ -1,11 +1,12 @@
 import { resolveEditRequest, type EditDefaults, type EditInput } from '../defaults.ts';
 import { emitProgress, validateOperation } from '../operations.ts';
 import { withDiagnostics } from '../diagnostics.ts';
-import type { Editor, EditBackend } from '../editor.ts';
+import type { Editor } from '../client.ts';
+import type { EditBackend } from './backend.ts';
 import type { EditRequest, EditResult, OperationOptions } from '../types.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
-import { checkCancellation } from './validation.ts';
-import { ImageWorkspace } from './output.ts';
+import { checkCancellation } from '../images/validation.ts';
+import { ImageWorkspace } from '../images/output.ts';
 
 /** Coordinates files with the worker's actual settlement, including disposal. */
 export class ImageEditor implements Editor {

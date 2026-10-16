@@ -8,18 +8,7 @@ import secrets
 from threading import Event
 
 
-class Cancelled(Exception):
-    pass
-
-
-class InvalidEditInput(Exception):
-    pass
-
-
-class BackendUnavailable(Exception):
-    def __init__(self, message, reason=None):
-        super().__init__(message)
-        self.reason = reason
+from .errors import Cancelled, InvalidEditInput, BackendUnavailable
 
 
 def check_cancelled(cancel: Event) -> None:
@@ -134,9 +123,12 @@ class StepObserver:
         check_cancelled(self.cancel)
 
 
-class MfluxAdapter:
+class KleinAdapter:
     def __init__(self, config: dict):
         self.config = config
+
+    def inspect_runtime(self, mode):
+        return check_runtime(self.config, mode)
 
     @property
     def capabilities(self) -> dict:

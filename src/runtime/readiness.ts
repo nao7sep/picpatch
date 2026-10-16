@@ -8,7 +8,8 @@ import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation,
 import { PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
 import { WorkerProcess } from '../worker/process.ts';
 import type { RuntimeCheck } from '../worker/protocol.ts';
-import { workerLaunch, workerTimeouts } from '../worker/launch.ts';
+import { workerLaunch } from '../backends/mflux/launch.ts';
+import { workerTimeouts } from '../worker/process.ts';
 
 export interface ReadinessOptions extends DiagnosticOptions {
   signal?: AbortSignal;

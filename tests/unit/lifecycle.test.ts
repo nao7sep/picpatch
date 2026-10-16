@@ -3,7 +3,7 @@ import { PassThrough, Writable } from 'node:stream';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEditor, type EditRequest } from '../../src/index.ts';
-import { ProcessEditor } from '../../src/editor.ts';
+import { ProcessEditor } from '../../src/execution/worker-backend.ts';
 import { WorkerProcess, type WorkerTimeouts } from '../../src/worker/process.ts';
 import type { WorkerRequest } from '../../src/worker/protocol.ts';
 
@@ -304,7 +304,7 @@ it('preserves structured worker failure causes on the public runtime error', asy
 });
 
 it('cancels capability discovery before image preparation and closes the worker', async () => {
-  const { ImageEditor } = await import('../../src/images/editor.ts');
+  const { ImageEditor } = await import('../../src/execution/session.ts');
   const { child, editor: backend } = setup();
   child.onRequest = () => {};
   const editor = new ImageEditor(backend);

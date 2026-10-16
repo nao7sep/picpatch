@@ -3,7 +3,7 @@ from threading import Event
 
 from picpatch_worker.protocol import Protocol
 from picpatch_worker.session import Session
-from picpatch_worker.backends.mflux import Cancelled
+from picpatch_worker.backends.errors import Cancelled
 
 
 def test_cancel_ack_keeps_active_until_producer_settles():
