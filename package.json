@@ -6,22 +6,32 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "engines": { "node": ">=24" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
   "packageManager": "npm@12.2.0",
   "license": "GPL-3.0-or-later",
   "author": "Yoshinao Inoguchi <yoshinao@inoguchi.com>",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
-    "test": "npm run typecheck && vitest run --passWithNoTests",
-    "test:coverage": "vitest run --coverage --passWithNoTests",
-    "example:request": "tsx examples/edit-request.ts"
+    "test": "npm run contracts:check && npm run typecheck && vitest run",
+    "test:coverage": "npm run contracts:check && npm run typecheck && vitest run --coverage",
+    "example:request": "tsx examples/edit-request.ts",
+    "contracts:generate": "node scripts/generate-contracts.mjs",
+    "contracts:check": "node scripts/generate-contracts.mjs --check"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^5.0.5",
+    "json-schema-to-typescript": "^16.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0"
   }
 }

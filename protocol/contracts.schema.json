@@ -1,0 +1,324 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EditRequestContract",
+  "$ref": "#/definitions/EditRequest",
+  "definitions": {
+    "ReferenceGroup": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "role": {
+          "enum": [
+            "subject",
+            "object",
+            "style",
+            "background"
+          ]
+        },
+        "images": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\u0000]+$"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "images"
+      ],
+      "additionalProperties": false
+    },
+    "ImageSize": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    "EditRequest": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "sourceImage": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000]+$"
+        },
+        "references": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/ReferenceGroup"
+          }
+        },
+        "maskImage": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000]+$"
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000]+$"
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "size": {
+          "$ref": "#/definitions/ImageSize"
+        }
+      },
+      "required": [
+        "model",
+        "instruction",
+        "outputPath"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "sourceImage"
+          ]
+        },
+        {
+          "required": [
+            "references"
+          ]
+        }
+      ],
+      "dependencies": {
+        "maskImage": [
+          "sourceImage"
+        ]
+      }
+    },
+    "ModelCapabilities": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "instructionEditing": {
+          "type": "boolean"
+        },
+        "referenceRoles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "subject",
+              "object",
+              "style",
+              "background"
+            ]
+          }
+        },
+        "maxReferenceImages": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maskMode": {
+          "enum": [
+            "none",
+            "native",
+            "composite"
+          ]
+        },
+        "size": {
+          "type": "object",
+          "properties": {
+            "widthMultiple": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "heightMultiple": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "maxWidth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "maxHeight": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "widthMultiple",
+            "heightMultiple"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "model",
+        "instructionEditing",
+        "referenceRoles",
+        "maskMode"
+      ],
+      "additionalProperties": false
+    },
+    "ImageArtifact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000]+$"
+        },
+        "mimeType": {
+          "const": "image/png"
+        },
+        "size": {
+          "$ref": "#/definitions/ImageSize"
+        }
+      },
+      "required": [
+        "path",
+        "mimeType",
+        "size"
+      ],
+      "additionalProperties": false
+    },
+    "EditResult": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "$ref": "#/definitions/ImageArtifact"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "modelRevision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReferenceGroup"
+          }
+        }
+      },
+      "required": [
+        "image",
+        "model",
+        "modelRevision",
+        "runtime",
+        "seed",
+        "references"
+      ],
+      "additionalProperties": false
+    },
+    "ProgressEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "progress"
+        },
+        "verb": {
+          "const": "edit"
+        },
+        "stage": {
+          "enum": [
+            "preparing",
+            "loading",
+            "editing",
+            "saving"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "completed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "type",
+        "verb",
+        "stage",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
