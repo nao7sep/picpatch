@@ -1,0 +1,7 @@
+PicPatch
+Copyright (C) 2026 Yoshinao Inoguchi
+Project license: GPL-3.0-or-later; see LICENSE.
+
+This source scaffold does not vendor or bundle third-party inference code,
+model weights, or a Python runtime. Development dependencies are obtained
+separately through npm and retain their upstream licenses.

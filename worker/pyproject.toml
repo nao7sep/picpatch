@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "picpatch-worker"
+version = "0.0.0"
+description = "Internal inference worker scaffold for PicPatch"
+requires-python = ">=3.12"
+license = "GPL-3.0-or-later"
+authors = [{ name = "Yoshinao Inoguchi", email = "yoshinao@inoguchi.com" }]
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/picpatch_worker"]
+
+# The scaffold has no inference dependencies.

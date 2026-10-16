@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PicPatch worker protocol (reserved)",
+  "description": "No wire messages are supported in the scaffold. Replace this rejecting schema when the transport contract is implemented.",
+  "not": {}
+}
