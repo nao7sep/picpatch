@@ -22,8 +22,8 @@
     "example:request": "tsx examples/edit-request.ts",
     "contracts:generate": "node scripts/generate-contracts.mjs",
     "contracts:check": "node scripts/generate-contracts.mjs --check",
-    "test:python": "uv run --project worker --locked --no-python-downloads pytest tests/unit/worker",
-    "test:python:coverage": "uv run --project worker --locked --no-python-downloads pytest tests/unit/worker --cov=picpatch_worker --cov-report=term-missing --cov-config=worker/pyproject.toml --cov-report=html:coverage/python",
+    "test:python": "uv run --project worker --locked pytest tests/unit/worker",
+    "test:python:coverage": "uv run --project worker --locked pytest tests/unit/worker --cov=picpatch_worker --cov-report=term-missing --cov-config=worker/pyproject.toml --cov-report=html:coverage/python",
     "test:full": "npm test && vitest run --config vitest.live.config.ts",
     "example:worker": "tsx examples/worker-session.ts"
   },

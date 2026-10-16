@@ -7,13 +7,10 @@ import { inspectRuntime } from './inspection.ts';
 import { runInstaller } from './command.ts';
 import type { RuntimeOperationOptions, RuntimeSetupRequest, RuntimeSetupResult } from './types.ts';
 
-/** Explicit setup owns its interpreter and packages, but never acquires model weights. */
+/** Explicit setup installs only locked worker packages, never Python or model weights. */
 export async function setupRuntime(input: RuntimeSetupRequest, options: RuntimeOperationOptions = {}): Promise<RuntimeSetupResult> {
-  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(k => !['directory', 'pythonExecutable', 'uvExecutable', 'offline', 'cacheDirectory', 'inference'].includes(k))) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid runtime setup request.');
-  for (const path of [input.directory, input.uvExecutable]) absolutePath(path);
-  if (input.pythonExecutable !== undefined) absolutePath(input.pythonExecutable);
-  if (input.inference !== undefined && typeof input.inference !== 'boolean') throw new PicPatchUsageError('INVALID_REQUEST', 'inference must be a boolean.');
-  if (input.pythonExecutable === undefined && (process.platform !== 'darwin' || process.arch !== 'arm64')) throw new PicPatchUsageError('INVALID_REQUEST', 'Managed Python currently supports macOS arm64. Supply an interpreter on other platforms.');
+  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(k => !['directory', 'pythonExecutable', 'uvExecutable', 'offline', 'cacheDirectory'].includes(k))) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid runtime setup request.');
+  for (const path of [input.directory, input.pythonExecutable, input.uvExecutable]) absolutePath(path);
   if (input.cacheDirectory !== undefined) absolutePath(input.cacheDirectory);
   if (input.offline !== undefined && typeof input.offline !== 'boolean') throw new PicPatchUsageError('INVALID_REQUEST', 'offline must be a boolean.');
   validateOperation(options, ['timeoutMs']);
@@ -34,37 +31,11 @@ export async function setupRuntime(input: RuntimeSetupRequest, options: RuntimeO
     // Environment variables must not redirect writes or silently change the locked installation.
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(UV_|PYTHON|PIP_|VIRTUAL_ENV$)/i.test(key)));
     env.UV_PROJECT_ENVIRONMENT = environment;
-    env.UV_PYTHON_INSTALL_DIR = join(directory, 'python');
-    env.UV_PYTHON_BIN_DIR = join(directory, 'bin');
-    const deadline = Date.now() + budget;
-    const remaining = () => {
-      const value = deadline - Date.now();
-      if (value <= 0) throw new PicPatchRuntimeError('TIMEOUT', 'Runtime setup timed out.');
-      return value;
-    };
-    const common = ['--no-config', '--cache-dir', cache, ...(request.offline ? ['--offline'] : [])];
-    const managed = request.pythonExecutable === undefined;
-    if (managed) {
-      emitProgress(operation, { type: 'progress', verb: 'setupRuntime', stage: 'installing-python', message: 'Installing managed Python 3.15.0.' });
-      // Astral's standalone CPython distribution is used because python.org does not
-      // ship a relocatable build. uv owns archive verification against its catalogue,
-      // extraction and platform selection. No global shims or registry entries.
-      await runInstaller(request.uvExecutable, ['python', 'install', '3.15.0', '--no-bin', '--no-registry', ...common], directory, env, remaining(), operation.signal);
-    }
     emitProgress(operation, { type: 'progress', verb: 'setupRuntime', stage: 'installing', message: 'Installing locked worker dependencies.' });
-    await runInstaller(request.uvExecutable, ['sync', '--project', project, '--python', request.pythonExecutable ?? '3.15.0', ...(managed ? ['--managed-python'] : []), '--no-python-downloads', '--no-dev', '--no-install-project', '--locked', ...(request.inference ? ['--extra', 'inference'] : ['--no-build']), '--link-mode', 'copy', ...common], directory, env, remaining(), operation.signal);
+    await runInstaller(request.uvExecutable, ['sync', '--project', project, '--python', request.pythonExecutable, '--no-python-downloads', '--no-dev', '--no-install-project', '--locked', '--no-config', '--no-build', '--link-mode', 'copy', '--cache-dir', cache, ...(request.offline ? ['--offline'] : [])], directory, env, budget, operation.signal);
     checkSignal(operation.signal);
     emitProgress(operation, { type: 'progress', verb: 'setupRuntime', stage: 'checking', message: 'Checking the installed worker environment.' });
     const pythonExecutable = process.platform === 'win32' ? join(environment, 'Scripts', 'python.exe') : join(environment, 'bin', 'python');
-    if (managed) {
-      await runInstaller(pythonExecutable, ['-I', '-c',
-        'import pathlib,platform,sys; root=pathlib.Path(sys.argv[1]).resolve(); assert sys.version_info[:3] == (3,15,0); assert platform.machine() == "arm64"; assert pathlib.Path(sys.base_prefix).resolve().is_relative_to(root)',
-        env.UV_PYTHON_INSTALL_DIR], directory, env, remaining(), operation.signal);
-    }
-    if (request.inference) {
-      await runInstaller(pythonExecutable, ['-I', '-c', 'from mflux.models.flux2.variants import Flux2KleinEdit'], directory,
-        { ...env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' }, remaining(), operation.signal);
-    }
     const inspected = await inspectRuntime(pythonExecutable, { ...(operation.signal ? { signal: operation.signal } : {}) });
     checkSignal(operation.signal);
     return { ...inspected, directory: request.directory, dependencyLockSha256: createHash('sha256').update(lock).digest('hex') };
