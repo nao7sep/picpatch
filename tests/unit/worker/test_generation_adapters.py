@@ -1,14 +1,15 @@
 """Actual adapter mapping with only the outbound inference package substituted."""
-import sys
 from threading import Event
-from types import SimpleNamespace
 
 import pytest
-from picpatch_worker.backends import create_adapter, runtime
+from picpatch_worker.backends import create_adapter
+from mflux_double import fake_runtime
 from picpatch_worker.backends.errors import InvalidEditInput, Cancelled
 
 FAMILIES = [
     ('z-image-turbo', 'mflux.models.z_image.variants.z_image', 'ZImage', 'z_image_turbo'),
+    ('flux1-dev', 'mflux.models.flux.variants.txt2img.flux', 'Flux1', 'dev'),
+    ('flux1-krea-dev', 'mflux.models.flux.variants.txt2img.flux', 'Flux1', 'krea_dev'),
     ('flux1-schnell', 'mflux.models.flux.variants.txt2img.flux', 'Flux1', 'schnell'),
 ]
 
@@ -21,33 +22,6 @@ def family(request, tmp_path):
     return create_adapter(config), module, name, config_method
 
 
-def fake_runtime(monkeypatch, family, cancel=None):
-    adapter, module, name, config_method = family
-    calls = []
-    model_config = object()
-    class Image:
-        size = (32, 16)
-        def save(self, output, **kwargs):
-            assert kwargs == {'format': 'PNG'}
-            output.write(b'pixels')
-    class Pipeline:
-        def __init__(self, **kwargs):
-            calls.append(('load', kwargs))
-            self.callbacks = SimpleNamespace(register=lambda observer: setattr(self, 'observer', observer))
-        def generate_image(self, **kwargs):
-            calls.append(('generate', kwargs))
-            if cancel:
-                cancel.set()
-            self.observer.call_in_loop(t=0, config=SimpleNamespace(num_inference_steps=4))
-            return SimpleNamespace(image=Image())
-    monkeypatch.setattr(runtime, 'version', lambda _: '0.22.0')
-    monkeypatch.setitem(sys.modules, 'mflux.models.common.config', SimpleNamespace(
-        ModelConfig=SimpleNamespace(**{config_method: lambda: model_config})))
-    monkeypatch.setitem(sys.modules, module, SimpleNamespace(**{name: Pipeline}))
-    core = SimpleNamespace(synchronize=lambda: calls.append(('sync',)), clear_cache=lambda: calls.append(('clear',)))
-    monkeypatch.setitem(sys.modules, 'mlx', SimpleNamespace(core=core))
-    monkeypatch.setitem(sys.modules, 'mlx.core', core)
-    return calls, model_config
 
 
 def request_for(tmp_path):
@@ -61,7 +35,10 @@ def test_local_loading_generation_and_provenance(monkeypatch, family, tmp_path):
     events = []
     result = adapter.generate(request_for(tmp_path), Event(), events.append)
     assert calls[0] == ('load', {'model_config': config, 'model_path': str(tmp_path), 'quantize': 4})
-    assert calls[1] == ('generate', {'prompt': 'A blue bowl.', 'seed': 0, 'width': 32, 'height': 16})
+    expected = {'prompt': 'A blue bowl.', 'seed': 0, 'width': 32, 'height': 16}
+    if adapter.config['variant'] in {'flux1-dev', 'flux1-krea-dev'}:
+        expected.update(num_inference_steps=25, guidance=3.5)
+    assert calls[1] == ('generate', expected)
     assert result['references'] == [] and result['modelRevision'] == 'a' * 40
     assert result['runtime'] == {'name': 'mflux', 'version': '0.22.0'}
     assert {event['verb'] for event in events} == {'generate'}

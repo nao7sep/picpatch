@@ -49,7 +49,7 @@ export class ImageEditor implements Editor {
       checkCancellation(signal);
       emitProgress(options, { type: 'progress', verb: 'prompt' in request ? 'generate' : 'edit', stage: 'preparing', message: 'Preparing image operation.' });
       workspace = await ImageWorkspace.create(request, signal);
-      await workspace.prepare(signal, capabilities.inputGeometry);
+      await workspace.prepare(signal, capabilities.inputGeometry, capabilities.maskMode);
       const response = 'prompt' in workspace.workerRequest
         ? await this.backend.generate(workspace.workerRequest, options)
         : await this.backend.edit(workspace.workerRequest, options);

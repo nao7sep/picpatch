@@ -40,3 +40,25 @@ it('rejects output resizing and a mask that does not match the oriented source',
   try { await expect(mismatched.prepare(undefined, 'klein-reference')).rejects.toMatchObject({ code: 'INVALID_MASK' }); }
   finally { await mismatched.cleanup(); }
 });
+
+it('keeps native mask/source snapshots aligned while accepting an explicit output resize', async () => {
+  const work = await ImageWorkspace.create({ ...await fixture(33, 49, 6), size: { width: 64, height: 32 } });
+  try {
+    await work.prepare(undefined, undefined, 'native');
+    expect(work.workerRequest.size).toEqual({ width: 64, height: 32 });
+    expect(await sharp(work.workerRequest.sourceImage!).metadata()).toMatchObject({ width: 49, height: 33 });
+    expect(await sharp(work.workerRequest.maskImage!).metadata()).toMatchObject({ width: 49, height: 33, space: 'b-w' });
+  } finally { await work.cleanup(); }
+});
+it('defaults native output to source dimensions and rejects misaligned masks', async () => {
+  const request = await fixture(32, 48);
+  const work = await ImageWorkspace.create(request);
+  try {
+    await work.prepare(undefined, undefined, 'native');
+    expect(work.workerRequest.size).toEqual({ width: 32, height: 48 });
+  } finally { await work.cleanup(); }
+  await sharp(Buffer.alloc(16 * 16), { raw: { width: 16, height: 16, channels: 1 } }).toColourspace('b-w').png().toFile(request.maskImage);
+  const invalid = await ImageWorkspace.create(request);
+  try { await expect(invalid.prepare(undefined, undefined, 'native')).rejects.toMatchObject({ code: 'INVALID_MASK' }); }
+  finally { await invalid.cleanup(); }
+});

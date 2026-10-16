@@ -41,3 +41,35 @@ with Image.open(root / 'generated.png') as generated:
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 }, 45_000);
+
+it('uses installed Fill mask conditioning with white-to-edit polarity and aligned resizing', async () => {
+  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+  const config = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
+  const directory = await mkdtemp(join(tmpdir(), 'picpatch-fill-conditioning-'));
+  try {
+    const script = `from pathlib import Path
+from PIL import Image
+import mlx.core as mx
+from mflux.models.flux.variants.fill.mask_util import MaskUtil
+import sys
+root = Path(sys.argv[1])
+Image.new('RGB', (49, 33), (255, 0, 0)).save(root / 'source.png')
+class Encoder:
+    def encode(self, image):
+        self.input = image
+        return mx.zeros((1, 16, 2, 4))
+for color in (0, 255):
+    Image.new('L', (49, 33), color).save(root / 'mask.png')
+    encoder = Encoder()
+    latent = MaskUtil.create_masked_latents(encoder, 16, 32, root / 'source.png', root / 'mask.png')
+    mx.eval(latent)
+    assert encoder.input.shape == (1, 3, 16, 32)
+    assert bool(mx.all(encoder.input == 0)) == (color == 255)
+    assert latent.shape == (1, 2, 320)
+    assert bool(mx.all(latent[..., 64:] == color / 255))
+mx.synchronize()
+mx.clear_cache()`;
+    await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { timeout: 30_000,
+      env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}, 45_000);

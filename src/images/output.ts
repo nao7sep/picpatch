@@ -1,7 +1,7 @@
 import { basename, dirname, join } from 'node:path';
 import { chmod, link, lstat, mkdtemp, open, realpath, rm } from 'node:fs/promises';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
-import type { ImageRequest, EditResult, InputGeometry } from '../types.ts';
+import type { ImageRequest, EditResult, InputGeometry, ModelCapabilities } from '../types.ts';
 import type { GeometryPolicy } from './geometry.ts';
 import { checkCancellation, normalizeImage, prepareImage, snapshotImage } from './validation.ts';
 
@@ -39,7 +39,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     } catch (cause) { throw new PicPatchRuntimeError('OUTPUT_IO', 'Could not create private output storage.', { cause }); }
   }
 
-  async prepare(signal?: AbortSignal, policy?: GeometryPolicy): Promise<void> {
+  async prepare(signal?: AbortSignal, policy?: GeometryPolicy, maskMode: ModelCapabilities['maskMode'] = 'composite'): Promise<void> {
     if (!('instruction' in this.request) || !('instruction' in this.workerRequest)) { checkCancellation(signal); return; }
     let index = 0;
     const prepare = async (path: string, mask = false) => {
@@ -54,10 +54,10 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       if (!source || source.width !== source.geometry.orientedSize.width || source.height !== source.geometry.orientedSize.height) {
         throw new PicPatchUsageError('INVALID_MASK', 'Masked editing requires source dimensions that need no model resizing or cropping.');
       }
-      if (this.request.size && (this.request.size.width !== source.width || this.request.size.height !== source.height)) {
+      if (maskMode !== 'native' && this.request.size && (this.request.size.width !== source.width || this.request.size.height !== source.height)) {
         throw new PicPatchUsageError('INVALID_MASK', 'Masked output dimensions must match the oriented source.');
       }
-      this.workerRequest.size = { width: source.width, height: source.height };
+      this.workerRequest.size = this.request.size ?? { width: source.width, height: source.height };
       const mask = await prepare(this.request.maskImage, true);
       if (!source || mask.width !== source.width || mask.height !== source.height) {
         throw new PicPatchUsageError('INVALID_MASK', 'Mask dimensions must match the oriented source image.');

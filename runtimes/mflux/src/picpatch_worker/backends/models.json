@@ -78,5 +78,56 @@
       "text_encoder_2",
       "tokenizer_2"
     ]
+  },
+  {
+    "id": "flux1-dev",
+    "family": "flux1",
+    "config": "dev",
+    "defaults": {
+      "num_inference_steps": 25,
+      "guidance": 3.5
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer",
+      "text_encoder_2",
+      "tokenizer_2"
+    ]
+  },
+  {
+    "id": "flux1-krea-dev",
+    "family": "flux1",
+    "config": "krea_dev",
+    "defaults": {
+      "num_inference_steps": 25,
+      "guidance": 3.5
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer",
+      "text_encoder_2",
+      "tokenizer_2"
+    ]
+  },
+  {
+    "id": "flux1-fill-dev",
+    "family": "flux1-fill",
+    "config": "dev_fill",
+    "defaults": {
+      "num_inference_steps": 25,
+      "guidance": 30.0
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer",
+      "text_encoder_2",
+      "tokenizer_2"
+    ]
   }
 ]

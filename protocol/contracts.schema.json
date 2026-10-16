@@ -209,6 +209,10 @@
         "textToImage": {
           "type": "boolean",
           "description": "Explicit text-only generation support. Absence means unsupported."
+        },
+        "maskRequired": {
+          "type": "boolean",
+          "description": "Whether every edit requires a mask as well as its source image."
         }
       },
       "required": [
@@ -456,7 +460,10 @@
             "flux2-klein-base-4b",
             "flux2-klein-base-9b",
             "z-image-turbo",
-            "flux1-schnell"
+            "flux1-schnell",
+            "flux1-dev",
+            "flux1-krea-dev",
+            "flux1-fill-dev"
           ]
         },
         "directory": {

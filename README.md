@@ -10,7 +10,7 @@ Use `prepareModel(modelId, options)` and pass its returned `model` to `createEdi
 
 The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `runtimes/mflux/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. Install the optional inference extra through uv. The SDK catalog supplies the pinned manifest and adapter configuration; `prepareModel` verifies the bundle before returning it.
 
-The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Masked edits use final compositing. Explicit output dimensions must be multiples of 16; omitted dimensions use the source size for masked edits and 1024 by 1024 otherwise. Distilled variants use MFLUX's sampling defaults. Klein base variants use 50 steps and guidance 4, so they take substantially longer. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
+The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Klein masked edits use final compositing. Explicit output dimensions must be multiples of 16; omitted dimensions use the source size for masked edits and 1024 by 1024 otherwise. Distilled variants use MFLUX's sampling defaults. Klein base variants use 50 steps and guidance 4, so they take substantially longer. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
 
 Models are loaded and released for each operation, while the worker is reused. This avoids retaining unmeasured model memory between operations, at the cost of reload latency. Progress reports loading, conditioning/editing, denoising steps and saving. Pixel output is saved without prompt metadata or sidecars. Hugging Face and Transformers run offline; the worker additionally rejects Python socket connections and isolates both Python and native standard output from protocol frames. This is not a general sandbox for arbitrary native packages.
 
@@ -44,7 +44,7 @@ Preparation and readiness accept cancellation, progress and `timeoutMs`. Prepara
 
 ## Experimental external model families
 
-The selectable variants are FLUX.2 Klein 4B/9B and base 4B/9B for editing and generation, plus Z-Image Turbo and FLUX.1 Schnell for generation only. Klein variants share one family implementation; the runtime selects the appropriate architecture and sampling defaults. FLUX.1 Schnell and Z-Image reject edits, references and masks. FLUX.3 is not implemented.
+The selectable variants are FLUX.2 Klein 4B/9B and base 4B/9B for editing and generation, plus Z-Image Turbo and FLUX.1 Schnell, Dev and Krea Dev for generation only. FLUX.1 Fill Dev supports native masked editing. Klein variants share one family implementation; the runtime selects the appropriate architecture and sampling defaults. The generation-only variants reject edits, references and masks. FLUX.3 is not implemented.
 
 Only the pinned Klein 4B 4-bit bundle has real-weight inference evidence. Other selections have pipeline import and argument-mapping tests, not measured memory fit or quality evidence. Base sampling defaults follow the [upstream Klein example](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4B).
 
@@ -62,7 +62,7 @@ try {
 
 External preparation reads a complete MFLUX directory layout: transformer, VAE, text encoder and tokenizer directories (plus the second encoder/tokenizer for FLUX.1). It hashes their files, validates shard references and returns an in-memory manifest with a deterministic local revision. File links used by Hugging Face caches are supported; component directory links are rejected. It neither copies nor modifies the bundle, and never downloads. The result reports `locally-fingerprinted`, which does not authenticate an upstream checkpoint or prove tensor compatibility. Select the variant explicitly; names of folders are not architecture evidence. Use `inspectReadiness(python, prepared.model, { load: true })` for an actual load check, and `verifyModel` for later explicit verification. Keep the complete bundle unchanged during use. Standalone checkpoint files and arbitrary architectures are not supported.
 
-Shared MFLUX loading, progress, cancellation, output writing and memory cleanup live in `runtimes/mflux/src/picpatch_worker/backends/runtime.py`. `models.json` owns variant configuration and base defaults; `generation.py` handles text-only families, and `klein.py` owns Klein reference conditioning and composite masking.
+Shared MFLUX loading, progress, cancellation, output writing and memory cleanup live in `runtimes/mflux/src/picpatch_worker/backends/runtime.py`. `models.json` owns variant configuration and base defaults; `generation.py` handles text-only families, `klein.py` owns Klein reference conditioning and composite masking, and `fill.py` supplies native Fill conditioning.
 
 ## Caller defaults and diagnostics
 
@@ -116,9 +116,29 @@ Both verbs share one active operation per editor, safe PNG publication, cancella
 
 Pass `maskImage` with `sourceImage`, or add `--mask /absolute/mask.png` to the local-edit example. Klein generates a complete edit using the source and references; the mask is applied afterward and is not sent as an extra model reference. Describe the desired change in the instruction. The mask controls pixel replacement, not where the model directs its attention, so seams and instruction adherence still depend on generation quality.
 
-Use an opaque grayscale PNG matching the oriented source. Black copies the normalized source exactly, white copies the generated edit, and gray interpolates 8-bit sRGB channels and alpha with rounded integer values. No automatic feathering or linear-light blending is applied. Exact preservation refers to decoded, oriented sRGB pixels, not the original file bytes or color profile; originals remain untouched. An all-black mask still runs inference and returns the preserved source pixels.
+Use an opaque grayscale PNG matching the oriented source. With Klein, black copies the normalized source exactly, white copies the generated edit, and gray interpolates 8-bit sRGB channels and alpha with rounded integer values. No automatic feathering or linear-light blending is applied. Exact preservation refers to decoded, oriented sRGB pixels, not the original file bytes or color profile; originals remain untouched. An all-black mask still runs inference and returns the preserved source pixels.
 
 The first composite mode requires source width and height to be multiples of 16 and area at most 1,048,576 pixels, so no source pixels are lost to model resizing or cropping. Output size defaults to the oriented source size; an explicit or session-default size must match it. A mismatched mask, resized output or source requiring geometry changes fails with `INVALID_MASK`. References retain their independent geometry policy. Compositing runs inside the owned worker before the existing output validation and exclusive publication; cancellation never publishes a partial result.
+
+FLUX.1 Fill Dev (`flux1-fill-dev`) instead feeds the source and mask into denoising. Its capabilities report `maskMode: "native"`, `sourceImageRequired: true`, and `maskRequired: true`. White identifies the region to replace; black supplies context to keep, but native generation does not promise identical pixels outside the mask. There is no final composite. Fill requires both images and rejects reference groups and text-only generation.
+
+```ts
+const prepared = await prepareModel('flux1-fill-dev', { directory: '/absolute/fill-bundle' });
+const editor = createEditor({ model: prepared.model });
+try {
+  await editor.edit({
+    instruction: 'A blue ceramic bowl.',
+    sourceImage: '/absolute/source.png',
+    maskImage: '/absolute/mask.png',
+    size: { width: 512, height: 512 },
+    outputDirectory: '/absolute/outputs',
+  });
+} finally {
+  await editor.dispose();
+}
+```
+
+The native source and mask must match after orientation. Fill permits an explicit output size in multiples of 16; MFLUX resizes both conditioning images together to that size. Without a size override, source dimensions are used and must already be multiples of 16. Prepared-input geometry describes the normalized snapshots; output dimensions describe the runtime's requested resize. Fill uses 25 steps and guidance 30; Dev and Krea Dev generation use 25 steps and guidance 3.5, following the pinned MFLUX CLI defaults. These three variants have API/import coverage only, with no real-weight quality or memory-fit claim and no pinned downloads.
 
 ## Development
 

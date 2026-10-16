@@ -7,7 +7,7 @@ import { expect, it } from 'vitest';
 import { createEditor, inspectReadiness, listModels, type LocalEditingModel } from '../../src/index.ts';
 
 // These tests import the real installed family classes but never load synthetic weights.
-it.each(['z-image-turbo', 'flux1-schnell', 'flux2-klein-4b', 'flux2-klein-9b', 'flux2-klein-base-4b', 'flux2-klein-base-9b'] as const)('checks installed %s imports and rejects unsupported operations before image I/O', async adapter => {
+it.each(['flux1-dev', 'flux1-krea-dev', 'flux1-fill-dev', 'z-image-turbo', 'flux1-schnell', 'flux2-klein-4b', 'flux2-klein-9b', 'flux2-klein-base-4b', 'flux2-klein-base-9b'] as const)('checks installed %s imports and rejects unsupported operations before image I/O', async adapter => {
   const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
   const { pythonExecutable } = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-family-import-'));
@@ -21,10 +21,11 @@ it.each(['z-image-turbo', 'flux1-schnell', 'flux2-klein-4b', 'flux2-klein-9b', '
     await writeFile(join(directory, 'fixture.bin'), bytes);
     const readiness = await inspectReadiness(pythonExecutable, model);
     expect(readiness.runtime).toMatchObject({ status: 'imports-ready', version: '0.22.0' });
-    const editing = adapter.startsWith('flux2-klein');
-    expect(readiness.capabilities).toEqual([expect.objectContaining({ model: adapter, textToImage: true,
-      instructionEditing: editing, maskMode: editing ? 'composite' : 'none' })]);
-    if (!editing) await expect(editor.edit({ instruction: 'Use blue.', sourceImage: join(directory, 'absent.png'), outputPath: join(directory, 'edit.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+    const fill = adapter === 'flux1-fill-dev';
+    const editing = fill || adapter.startsWith('flux2-klein');
+    expect(readiness.capabilities).toEqual([expect.objectContaining({ model: adapter, textToImage: !fill,
+      instructionEditing: editing, maskMode: fill ? 'native' : editing ? 'composite' : 'none' })]);
+    if (!editing || fill) await expect(editor.edit({ instruction: 'Use blue.', sourceImage: join(directory, 'absent.png'), outputPath: join(directory, 'edit.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     await expect(editor.generate({ prompt: 'A bowl.', size: { width: 17, height: 32 }, outputPath: join(directory, 'generate.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     expect(await readdir(directory)).toEqual(['fixture.bin']);
     // An implemented experimental adapter is not a tested/acquirable catalog bundle.

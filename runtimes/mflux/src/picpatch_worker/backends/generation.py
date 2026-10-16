@@ -10,9 +10,9 @@ class GenerationAdapter(MfluxAdapter):
         if self.definition['family'] == 'z-image-turbo':
             from mflux.models.z_image.variants.z_image import ZImage
             return ModelConfig.z_image_turbo(), ZImage, mx
-        if self.definition['family'] == 'flux1-schnell':
+        if self.definition['family'] in {'flux1-schnell', 'flux1'}:
             from mflux.models.flux.variants.txt2img.flux import Flux1
-            return ModelConfig.schnell(), Flux1, mx
+            return getattr(ModelConfig, self.definition['config'])(), Flux1, mx
         raise InvalidEditInput('Unsupported MFLUX generation adapter.')
 
     @property

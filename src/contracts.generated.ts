@@ -86,6 +86,10 @@ export interface ModelCapabilities {
    * Explicit text-only generation support. Absence means unsupported.
    */
   textToImage?: boolean;
+  /**
+   * Whether every edit requires a mask as well as its source image.
+   */
+  maskRequired?: boolean;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -180,7 +184,10 @@ export interface LocalEditingModel {
     | "flux2-klein-base-4b"
     | "flux2-klein-base-9b"
     | "z-image-turbo"
-    | "flux1-schnell";
+    | "flux1-schnell"
+    | "flux1-dev"
+    | "flux1-krea-dev"
+    | "flux1-fill-dev";
   directory: string;
   manifest: ModelManifest;
   quantize?: 4 | 8;
