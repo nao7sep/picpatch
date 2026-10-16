@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { referenceWorkload } from '../../benchmarks/reference-workload.ts';
-import { createEditor, type EditorOptions } from '../../src/index.ts';
+import { createEditor, type EditorOptions, type DiagnosticEvent } from '../../src/index.ts';
 
 async function localOptions(): Promise<EditorOptions> {
   const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
@@ -18,25 +18,32 @@ async function localOptions(): Promise<EditorOptions> {
 
 it('edits grouped references and a source image sequentially through the offline public adapter', async () => {
   const options = await localOptions();
-  const editor = createEditor(options);
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-inference-'));
+  const editor = createEditor({ ...options, defaults: { size: { width: 256, height: 256 }, seed: 42, outputDirectory: directory } });
+  const paths: string[] = [];
+  const events: DiagnosticEvent[] = [];
   try {
     const images = [join(directory, 'red.png'), join(directory, 'blue.png')];
     await sharp({ create: { width: 256, height: 256, channels: 3, background: 'red' } }).png().toFile(images[0]!);
     await sharp({ create: { width: 256, height: 256, channels: 3, background: 'blue' } }).png().toFile(images[1]!);
     for (let index = 0; index < 2; index++) {
-      const result = await editor.edit({ model: options.model!.manifest.model,
+      const result = await editor.edit({
         instruction: 'Combine both colors into a simple striped image.',
-        ...(index === 1 ? { sourceImage: join(directory, 'edit-0.png') } : {}),
+        ...(index === 1 ? { sourceImage: paths[0]! } : {}),
         references: [{ id: 'colors', role: 'style', images: [images[0]!, images[1]!] }],
-        size: { width: 256, height: 256 }, seed: 42, outputPath: join(directory, `edit-${index}.png`) });
+      }, { onDiagnostic: event => events.push(event) });
+      paths.push(result.image.path);
       const metadata = await sharp(result.image.path).metadata();
       expect(metadata).toMatchObject({ format: 'png', width: 256, height: 256 });
       expect(result.runtime).toEqual({ name: 'mflux', version: '0.22.0' });
       expect(result.seed).toBe(42);
       expect(result.modelRevision).toBe(options.model!.manifest.source.revision);
       expect(result.references[0]?.images).toEqual(images);
+      expect(result.image.path).toMatch(/edit-[a-f0-9-]+\.png$/);
     }
+    expect(events.filter(event => event.stage === 'succeeded')).toHaveLength(2);
+    expect(new Set(events.map(event => event.operationId)).size).toBe(2);
+    expect(JSON.stringify(events)).not.toContain('Combine both colors');
   } finally {
     await editor.dispose();
     await rm(directory, { recursive: true, force: true });
@@ -82,7 +89,7 @@ it('prepares existing catalog weights and checks actual model loading without ac
   const { prepareModel, inspectReadiness } = await import('../../src/index.ts');
   const options = await localOptions();
   const prepared = await prepareModel(options.model!.manifest.model, { directory: options.model!.directory });
-  const readiness = await inspectReadiness(options.pythonExecutable, prepared.model, { load: true });
+  const readiness = await inspectReadiness(options.pythonExecutable!, prepared.model, { load: true });
   expect(prepared.integrity).toBe('matches-manifest');
   expect(readiness).toMatchObject({ files: 'present', integrity: 'not-verified', runtime: { status: 'load-ready', version: '0.22.0' } });
   expect(readiness.capabilities[0]?.maskMode).toBe('none');

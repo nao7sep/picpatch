@@ -1,3 +1,4 @@
+import { withDiagnostics } from '../diagnostics.ts';
 import { resolveStoragePaths } from '../paths.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { lstat, stat, realpath, opendir } from 'node:fs/promises';
@@ -69,7 +70,7 @@ async function inspect(path: string, options: ModelOperationOptions, verb: 'insp
 }
 
 /** Read-only inventory. Does not parse configurations, load weights, or start a worker. */
-export async function inspectModel(path: string, options: ModelOperationOptions = {}): Promise<ModelInspection> {
+async function inspectModelOperation(path: string, options: ModelOperationOptions = {}): Promise<ModelInspection> {
   validatePath(path); validateOptions(options); check(options);
   return withDeadline(options.signal, timeBudget(options.timeoutMs, 60_000), 'Model inspection timed out.', signal => {
     const operation = { ...options, signal };
@@ -78,7 +79,7 @@ export async function inspectModel(path: string, options: ModelOperationOptions 
 }
 
 /** Search selected roots, or the configured model directory; never scan home. */
-export async function discoverModels(roots?: string[], options: ModelOperationOptions = {}): Promise<ModelDiscovery> {
+async function discoverModelsOperation(roots?: string[], options: ModelOperationOptions = {}): Promise<ModelDiscovery> {
   const defaultRoot = roots === undefined;
   if (roots === undefined) roots = [resolveStoragePaths().modelsDirectory];
   if (!Array.isArray(roots) || roots.length === 0) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply at least one model search root.');
@@ -137,4 +138,12 @@ export async function discoverModels(roots?: string[], options: ModelOperationOp
       return { models: bundles.sort((a, b) => a.path.localeCompare(b.path)) };
     }, operation);
   });
+}
+
+export function inspectModel(path: string, options: ModelOperationOptions = {}): Promise<ModelInspection> {
+  return withDiagnostics('inspectModel', options, operation => inspectModelOperation(path, operation));
+}
+
+export function discoverModels(roots?: string[], options: ModelOperationOptions = {}): Promise<ModelDiscovery> {
+  return withDiagnostics('discoverModels', options, operation => discoverModelsOperation(roots, operation));
 }

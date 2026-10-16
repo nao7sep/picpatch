@@ -1,3 +1,4 @@
+import { withDiagnostics } from '../diagnostics.ts';
 import { chmod, lstat, mkdir, mkdtemp, open, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
@@ -36,7 +37,7 @@ async function syncDirectory(path: string): Promise<void> {
 }
 
 /** Explicit preparation only. Reuses and verifies files; never repairs existing bundles. */
-export async function prepareModel(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
+async function prepareModelOperation(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
   return prepareCatalogModel(catalogModel(id), options);
 }
 
@@ -57,7 +58,7 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
     return await withDeadline(options.signal, budget, 'Model preparation timed out.', async signal => {
       const operation = { ...options, signal };
       const verified = async (path: string) => {
-        const result = await verifyModel(path, entry.manifest, { signal, timeoutMs: budget, ...(options.onProgress ? { onProgress: options.onProgress } : {}) });
+        const result = await verifyModel(path, entry.manifest, { signal, timeoutMs: budget, onProgress: event => emitProgress(operation, event) });
         if (result.status !== 'matches-manifest') throw new PicPatchRuntimeError('MODEL_IO', 'Model files do not match the catalog. Existing files were preserved; choose a complete bundle or a new cache location.');
       };
       const result = (origin: PreparedModel['origin']): PreparedModel => ({ model: { adapter: entry.adapter, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });
@@ -113,4 +114,8 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
     if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError || cause instanceof PicPatchCancelledError) throw cause;
     throw new PicPatchRuntimeError('MODEL_IO', 'Could not prepare the model bundle.', { cause });
   }
+}
+
+export function prepareModel(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
+  return withDiagnostics('prepareModel', options, operation => prepareModelOperation(id, operation));
 }

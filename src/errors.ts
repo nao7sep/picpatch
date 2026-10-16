@@ -1,3 +1,4 @@
+import type { WorkerDiagnostic } from './diagnostics.ts';
 export class PicPatchUsageError extends Error {
   readonly category = 'usage';
   recoveryDirectory?: string;
@@ -10,6 +11,7 @@ export class PicPatchUsageError extends Error {
 }
 
 export class PicPatchRuntimeError extends Error {
+  diagnostic?: WorkerDiagnostic;
   readonly category = 'runtime';
   recoveryDirectory?: string;
   readonly code: 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'CALLBACK_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE' | 'IMAGE_IO' | 'INVALID_OUTPUT' | 'OUTPUT_IO' | 'CLEANUP_FAILED' | 'MODEL_IO';

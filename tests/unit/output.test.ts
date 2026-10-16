@@ -1,3 +1,4 @@
+import type { EditBackend as Editor } from '../../src/editor.ts';
 import { mkdtemp, rm, readFile, writeFile, readdir, symlink, link, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -5,7 +6,7 @@ import sharp from 'sharp';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ImageWorkspace } from '../../src/images/output.ts';
 import { ImageEditor } from '../../src/images/editor.ts';
-import { PicPatchCancelledError, PicPatchRuntimeError, type EditRequest, type EditResult, type Editor } from '../../src/index.ts';
+import { PicPatchCancelledError, PicPatchRuntimeError, type EditRequest, type EditResult } from '../../src/index.ts';
 let directory: string;
 let request: EditRequest;
 beforeEach(async () => {
@@ -124,4 +125,19 @@ describe('cleanup reporting', () => {
     try { await expect(editor.edit(request)).rejects.toMatchObject({ code: 'CLEANUP_FAILED', recoveryDirectory: expect.any(String), cause: expect.any(AggregateError) }); }
     finally { cleanup.mockRestore(); await editor.dispose(); }
   });
+});
+
+it('reserves edit admission before diagnostic callbacks and settles diagnostics after publication', async () => {
+  const editor = new ImageEditor(backend());
+  const events: import('../../src/index.ts').DiagnosticEvent[] = [];
+  let reentrant: Promise<unknown> | undefined;
+  await editor.edit(request, { onDiagnostic: event => {
+    events.push(event);
+    if (event.stage === 'started') reentrant = expect(editor.edit(request)).rejects.toMatchObject({ code: 'BUSY' });
+  } });
+  await reentrant;
+  expect(events[0]?.stage).toBe('started'); expect(events.at(-1)?.stage).toBe('succeeded');
+  expect(await readdir(directory)).toEqual(['out.png', 'source.png']);
+  await editor.dispose();
+  expect(events.at(-1)?.stage).toBe('succeeded');
 });

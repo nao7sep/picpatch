@@ -1,3 +1,4 @@
+import { withDiagnostics } from '../diagnostics.ts';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, realpath, stat, type FileHandle } from 'node:fs/promises';
@@ -125,7 +126,7 @@ async function verifyComponent(root: string, component: ModelComponent, manifest
   }
 }
 /** Matches caller-supplied pins; does not establish upstream trust or inference support. */
-export async function verifyModel(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<ModelVerification> {
+async function verifyModelOperation(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<ModelVerification> {
   absolutePath(path); validateOperation(options, ['timeoutMs']); const manifest = validateModelManifest(input);
   checkSignal(options.signal);
   const budget = timeBudget(options.timeoutMs, 600_000);
@@ -147,4 +148,8 @@ export async function verifyModel(path: string, input: ModelManifest, options: M
       throw new PicPatchRuntimeError('MODEL_IO', 'Could not verify the selected model files.', { cause });
     }
   });
+}
+
+export function verifyModel(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<ModelVerification> {
+  return withDiagnostics('verifyModel', options, operation => verifyModelOperation(path, input, operation));
 }

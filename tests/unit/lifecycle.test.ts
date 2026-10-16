@@ -279,3 +279,26 @@ it('uses a prepared model registration across edits without reading its componen
     expect(child.requests.filter(message => message.type === 'edit')).toHaveLength(2);
   } finally { await registered.dispose(); }
 });
+
+it('allows cancellation from progress without turning it into a callback failure', async () => {
+  const { editor, child } = setup(); const controller = new AbortController();
+  const base = child.onRequest;
+  child.onRequest = message => {
+    base(message);
+    if (message.type === 'edit') child.reply(message.id, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing' } });
+    if (message.type === 'cancel') {
+      child.reply(message.id, 'cancelAck', { targetId: message.targetId, accepted: true });
+      child.reply(message.targetId, 'error', { error: { code: 'CANCELLED', message: 'Cancelled' } });
+    }
+  };
+  await expect(editor.edit(request, { signal: controller.signal, onProgress: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  expect(child.signals).toEqual([]);
+  await editor.dispose();
+});
+it('preserves structured worker failure causes on the public runtime error', async () => {
+  const { editor, child } = setup();
+  const diagnostic = { phase: 'loading', reason: 'missing-package', causes: [{ kind: 'BackendUnavailable' }, { kind: 'ModuleNotFoundError' }] };
+  const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE', diagnostic });
+  await tick(); child.reply(2, 'error', { error: { code: 'BACKEND_UNAVAILABLE', message: 'Unavailable', diagnostic } });
+  await caught; await editor.dispose();
+});

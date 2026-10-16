@@ -1,3 +1,4 @@
+import type { WorkerDiagnostic } from '../diagnostics.ts';
 import { contractAjv } from '../contracts.ts';
 import { PicPatchRuntimeError } from '../errors.ts';
 import { validateEditRequest } from '../validation.ts';
@@ -12,7 +13,7 @@ export type WorkerRequest = Envelope<'shutdown'> | (Envelope<'hello'> & { model?
   (Envelope<'edit'> & { request: EditRequest }) | (Envelope<'cancel'> & { targetId: number });
 export type WorkerResponse = (Envelope<'ready'> & { workerVersion: string; models: ModelCapabilities[]; runtimeCheck?: RuntimeCheck }) |
   (Envelope<'progress'> & { event: ProgressEvent }) | (Envelope<'result'> & { result: EditResult }) |
-  (Envelope<'error'> & { error: { code: 'INVALID_REQUEST' | 'NOT_READY' | 'BACKEND_UNAVAILABLE' | 'BUSY' | 'CANCELLED' | 'RUNTIME_FAILURE'; message: string } }) |
+  (Envelope<'error'> & { error: { code: 'INVALID_REQUEST' | 'NOT_READY' | 'BACKEND_UNAVAILABLE' | 'BUSY' | 'CANCELLED' | 'RUNTIME_FAILURE'; message: string; diagnostic?: WorkerDiagnostic } }) |
   (Envelope<'cancelAck'> & { targetId: number; accepted: boolean }) | Envelope<'shutdownAck'>;
 contractAjv.addSchema(schema, 'worker.schema.json');
 const requestValid = contractAjv.compile<WorkerRequest>({ $ref: 'worker.schema.json#/definitions/Request' });

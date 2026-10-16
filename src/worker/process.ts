@@ -1,3 +1,4 @@
+import { emitProgress } from '../operations.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { ProtocolSession, type WorkerRequest, type WorkerResponse } from './protocol.ts';
@@ -60,8 +61,12 @@ export class WorkerProcess {
     try {
       this.child = this.spawn(this.launch);
       this.child.once('error', cause => this.fail(new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Could not run the worker.', { cause })));
-      this.child.once('exit', () => {
-        if (!this.failure && !this.shutdownAck) this.fail(new PicPatchRuntimeError('WORKER_EXITED', 'Worker exited unexpectedly.'));
+      this.child.once('exit', (code, signal) => {
+        if (!this.failure && !this.shutdownAck) {
+          const error = new PicPatchRuntimeError('WORKER_EXITED', 'Worker exited unexpectedly.');
+          error.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}) };
+          this.fail(error);
+        }
       });
       this.child.once('close', (code, signal) => {
         this.closed = true;
@@ -104,8 +109,7 @@ export class WorkerProcess {
         const response = this.protocol.receive(line);
         const pending = this.pending.get(response.id)!;
         if (response.type === 'progress') {
-          try { pending.onProgress?.(response.event); }
-          catch (cause) { throw new PicPatchRuntimeError('CALLBACK_FAILED', 'Progress callback failed.', { cause }); }
+          emitProgress(pending.onProgress ? { onProgress: pending.onProgress } : {}, response.event);
         } else {
           if (pending.request.type === 'hello' && response.type !== 'ready') throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker rejected its startup handshake.');
           if (response.type === 'result' && pending.request.type === 'edit') {

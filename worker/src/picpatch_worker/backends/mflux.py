@@ -17,7 +17,9 @@ class InvalidEditInput(Exception):
 
 
 class BackendUnavailable(Exception):
-    pass
+    def __init__(self, message, reason=None):
+        super().__init__(message)
+        self.reason = reason
 
 
 def check_cancelled(cancel: Event) -> None:
@@ -48,14 +50,14 @@ def load_pipeline(config: dict):
     os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1')
     directory = Path(config['directory'])
     if not directory.is_absolute() or not directory.is_dir():
-        raise BackendUnavailable('Supply an existing absolute local model directory.')
+        raise BackendUnavailable('Supply an existing absolute local model directory.', 'missing-directory')
     try:
         installed = version('mflux')
     except PackageNotFoundError as error:
-        raise BackendUnavailable('Install MFLUX 0.22.0 in the supplied worker environment.') from error
+        raise BackendUnavailable('Install MFLUX 0.22.0 in the supplied worker environment.', 'missing-package') from error
     # This adapter uses an inspected API contract, not a guess at future compatibility.
     if installed != '0.22.0':
-        raise BackendUnavailable('This adapter requires MFLUX 0.22.0.')
+        raise BackendUnavailable('This adapter requires MFLUX 0.22.0.', 'unsupported-version')
     ModelConfig, Flux2KleinEdit, mx = import_runtime()
     kwargs = {'model_config': ModelConfig.flux2_klein_4b(), 'model_path': str(directory)}
     if 'quantize' in config:

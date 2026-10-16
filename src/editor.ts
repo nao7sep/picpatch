@@ -1,3 +1,6 @@
+import { validateDefaults, type EditDefaults, type EditInput } from './defaults.ts';
+import { defaultPythonExecutable } from './worker/launch.ts';
+import { emitProgress, validateOperation } from './operations.ts';
 import { validateLocalEditingModel } from './models/verification.ts';
 import type { LocalEditingModel } from './contracts.generated.ts';
 import { ImageEditor } from './images/editor.ts';
@@ -10,12 +13,17 @@ import { WorkerProcess, type WorkerTimeouts } from './worker/process.ts';
 import type { WorkerResponse } from './worker/protocol.ts';
 
 export interface Editor {
+  edit(request: EditInput, options?: OperationOptions): Promise<EditResult>;
+  dispose(): Promise<void>;
+}
+export interface EditBackend {
   edit(request: EditRequest, options?: OperationOptions): Promise<EditResult>;
   dispose(): Promise<void>;
 }
 export interface EditorOptions {
   /** An existing interpreter with the worker's locked dependencies installed. */
-  pythonExecutable: string;
+  pythonExecutable?: string;
+  defaults?: EditDefaults;
   timeouts?: Partial<WorkerTimeouts>;
   /** Experimental offline adapter; the manifest pins caller-supplied files. */
   model?: LocalEditingModel;
@@ -23,11 +31,13 @@ export interface EditorOptions {
 const defaults = workerTimeouts;
 
 /** Creates a lazy editor. Does not install Python, packages, or models. */
-export function createEditor(options: EditorOptions): Editor {
-  if (!options || typeof options.pythonExecutable !== 'string' || !isAbsolute(options.pythonExecutable) || options.pythonExecutable.includes('\0')) {
+export function createEditor(options: EditorOptions = {}): Editor {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid editor options.');
+  const pythonExecutable = options.pythonExecutable === undefined ? defaultPythonExecutable() : options.pythonExecutable;
+  if (typeof pythonExecutable !== 'string' || !isAbsolute(pythonExecutable) || pythonExecutable.includes('\0')) {
     throw new PicPatchUsageError('INVALID_REQUEST', 'pythonExecutable must be an absolute interpreter path.');
   }
-  if (Object.keys(options).some(key => !['pythonExecutable', 'timeouts', 'model'].includes(key)) ||
+  if (Object.keys(options).some(key => !['pythonExecutable', 'timeouts', 'model', 'defaults'].includes(key)) ||
       (options.timeouts !== undefined && (typeof options.timeouts !== 'object' || options.timeouts === null || Array.isArray(options.timeouts)))) {
     throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid editor options.');
   }
@@ -41,19 +51,21 @@ export function createEditor(options: EditorOptions): Editor {
   if (options.model !== undefined) {
     model = validateLocalEditingModel(options.model);
   }
-  const worker = new WorkerProcess({ ...workerLaunch(options.pythonExecutable), ...(model ? { model } : {}) }, timeouts);
-  return new ImageEditor(new ProcessEditor(worker, model));
+  const worker = new WorkerProcess({ ...workerLaunch(pythonExecutable), ...(model ? { model } : {}) }, timeouts);
+  return new ImageEditor(new ProcessEditor(worker, model), validateDefaults(options.defaults), model?.manifest.model);
 }
 
 function responseError(response: Extract<WorkerResponse, { type: 'error' }>): Error {
   const { code, message } = response.error;
   if (code === 'CANCELLED') return new PicPatchCancelledError(message);
   if (code === 'INVALID_REQUEST' || code === 'BUSY') return new PicPatchUsageError(code, message);
-  return new PicPatchRuntimeError(code === 'NOT_READY' ? 'PROTOCOL_ERROR' : code, message);
+  const error = new PicPatchRuntimeError(code === 'NOT_READY' ? 'PROTOCOL_ERROR' : code, message);
+  if (response.error.diagnostic) error.diagnostic = response.error.diagnostic;
+  return error;
 }
 
 /** Internal seam shared by the public factory and model-free lifecycle tests. */
-export class ProcessEditor implements Editor {
+export class ProcessEditor implements EditBackend {
   private busy = false;
   private disposed = false;
   private disposal: Promise<void> | undefined;
@@ -65,12 +77,8 @@ export class ProcessEditor implements Editor {
     if (this.disposed) throw new PicPatchUsageError('DISPOSED', 'Editor has been disposed.');
     if (this.busy) throw new PicPatchUsageError('BUSY', 'An edit is already active on this editor.');
     const request = validateEditRequest(input);
-    if (!options || typeof options !== 'object' || Object.keys(options).some(key => !['signal', 'onProgress'].includes(key)) ||
-      (options.signal !== undefined && !(options.signal instanceof AbortSignal)) ||
-      (options.onProgress !== undefined && typeof options.onProgress !== 'function')) {
-      throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid operation options.');
-    }
-    const { signal, onProgress } = options;
+    validateOperation(options);
+    const { signal, ...progressOptions } = options;
     if (signal?.aborted) throw new PicPatchCancelledError();
     this.busy = true;
     const abortStartup = () => this.worker.abortStartup();
@@ -88,7 +96,7 @@ export class ProcessEditor implements Editor {
       const capabilities = ready.models.find(model => model.model === request.model);
       if (!capabilities) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The worker does not advertise the requested model.');
       validateEditRequest(request, capabilities);
-      const response = await this.worker.edit(request, onProgress, signal);
+      const response = await this.worker.edit(request, event => emitProgress(progressOptions, event), signal);
       if (response.type === 'error') throw responseError(response);
       if (response.type !== 'result') throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker returned no edit result.');
       return response.result;

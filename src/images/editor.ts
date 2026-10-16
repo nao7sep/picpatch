@@ -1,45 +1,45 @@
-import type { Editor } from '../editor.ts';
+import { resolveEditRequest, type EditDefaults, type EditInput } from '../defaults.ts';
+import { emitProgress, validateOperation } from '../operations.ts';
+import { withDiagnostics } from '../diagnostics.ts';
+import type { Editor, EditBackend } from '../editor.ts';
 import type { EditRequest, EditResult, OperationOptions } from '../types.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
-import { validateEditRequest } from '../validation.ts';
 import { checkCancellation } from './validation.ts';
 import { ImageWorkspace } from './output.ts';
 
 /** Coordinates files with the worker's actual settlement, including disposal. */
 export class ImageEditor implements Editor {
-  private readonly backend: Editor;
+  private readonly backend: EditBackend;
   private readonly lifetime = new AbortController();
   private active: Promise<EditResult> | undefined;
   private disposal: Promise<void> | undefined;
-  constructor(backend: Editor) { this.backend = backend; }
+  private readonly defaults: EditDefaults;
+  private readonly model: string | undefined;
+  constructor(backend: EditBackend, defaults: EditDefaults = {}, model?: string) { this.backend = backend; this.defaults = defaults; this.model = model; }
 
-  edit(input: EditRequest, options: OperationOptions = {}): Promise<EditResult> {
+  edit(input: EditInput, options: OperationOptions = {}): Promise<EditResult> {
     if (this.lifetime.signal.aborted) return Promise.reject(new PicPatchUsageError('DISPOSED', 'Editor has been disposed.'));
     if (this.active) return Promise.reject(new PicPatchUsageError('BUSY', 'An edit is already active on this editor.'));
     let request: EditRequest;
     try {
-      request = validateEditRequest(input);
-      if (!options || typeof options !== 'object' || Object.keys(options).some(key => !['signal', 'onProgress'].includes(key)) ||
-          (options.signal !== undefined && !(options.signal instanceof AbortSignal)) ||
-          (options.onProgress !== undefined && typeof options.onProgress !== 'function')) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid operation options.');
+      request = resolveEditRequest(input, this.defaults, this.model);
+      validateOperation(options);
     } catch (error) { return Promise.reject(error); }
     const signal = AbortSignal.any([this.lifetime.signal, ...(options.signal ? [options.signal] : [])]);
-    const onProgress = options.onProgress;
-    this.active = Promise.resolve().then(() => this.run(request, signal, onProgress)).finally(() => { this.active = undefined; });
+    this.active = Promise.resolve().then(() => withDiagnostics('edit', { ...options, signal }, operation => this.run(request, signal, operation))).finally(() => { this.active = undefined; });
     return this.active;
   }
 
-  private async run(request: EditRequest, signal: AbortSignal, onProgress: OperationOptions['onProgress']): Promise<EditResult> {
+  private async run(request: EditRequest, signal: AbortSignal, options: OperationOptions): Promise<EditResult> {
     let workspace: ImageWorkspace | undefined;
     let result: EditResult | undefined;
     let failure: unknown;
     try {
       checkCancellation(signal);
-      try { onProgress?.({ type: 'progress', verb: 'edit', stage: 'preparing', message: 'Validating and preparing input images.' }); }
-      catch (cause) { throw new PicPatchRuntimeError('CALLBACK_FAILED', 'Progress callback failed.', { cause }); }
+      emitProgress(options, { type: 'progress', verb: 'edit', stage: 'preparing', message: 'Validating and preparing input images.' });
       workspace = await ImageWorkspace.create(request, signal);
       await workspace.prepare(signal);
-      const response = await this.backend.edit(workspace.workerRequest, { signal, ...(onProgress ? { onProgress } : {}) });
+      const response = await this.backend.edit(workspace.workerRequest, options);
       result = await workspace.publish(response, signal);
     } catch (error) {
       failure = error;

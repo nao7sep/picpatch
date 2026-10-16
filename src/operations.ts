@@ -1,3 +1,4 @@
+import { diagnosticProgress, type DiagnosticOptions } from './diagnostics.ts';
 import { isAbsolute } from 'node:path';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from './errors.ts';
 
@@ -8,12 +9,13 @@ export function checkSignal(signal?: AbortSignal): void {
   if (signal?.aborted) throw new PicPatchCancelledError('The operation was cancelled.');
 }
 export function validateOperation(options: unknown, extraKeys: string[] = []): void {
-  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['signal', 'onProgress', ...extraKeys].includes(key))) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid operation options.');
-  const value = options as { signal?: unknown; onProgress?: unknown };
-  if ((value.signal !== undefined && !(value.signal instanceof AbortSignal)) || (value.onProgress !== undefined && typeof value.onProgress !== 'function')) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid cancellation signal or progress callback.');
+  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['signal', 'onProgress', 'onDiagnostic', ...extraKeys].includes(key))) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid operation options.');
+  const value = options as { signal?: unknown; onProgress?: unknown; onDiagnostic?: unknown };
+  if ((value.signal !== undefined && !(value.signal instanceof AbortSignal)) || (value.onProgress !== undefined && typeof value.onProgress !== 'function') || (value.onDiagnostic !== undefined && typeof value.onDiagnostic !== 'function')) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid cancellation signal or progress callback.');
 }
-export function emitProgress<T>(options: { signal?: AbortSignal; onProgress?: (event: T) => void }, event: T): void {
+export function emitProgress<T extends { stage: string }>(options: DiagnosticOptions & { signal?: AbortSignal; onProgress?: (event: T) => void }, event: T): void {
   checkSignal(options.signal);
+  diagnosticProgress(options, event);
   try { options.onProgress?.(event); }
   catch (cause) { throw new PicPatchRuntimeError('CALLBACK_FAILED', 'Progress callback failed.', { cause }); }
   checkSignal(options.signal);

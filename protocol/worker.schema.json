@@ -243,6 +243,9 @@
               "type": "string",
               "minLength": 1,
               "pattern": "\\S"
+            },
+            "diagnostic": {
+              "$ref": "#/definitions/Diagnostic"
             }
           },
           "required": [
@@ -371,6 +374,64 @@
       },
       "required": [
         "status"
+      ],
+      "additionalProperties": false
+    },
+    "Diagnostic": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "enum": [
+            "loading",
+            "editing",
+            "saving",
+            "worker"
+          ]
+        },
+        "causes": {
+          "type": "array",
+          "maxItems": 4,
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "BackendUnavailable",
+                  "ModuleNotFoundError",
+                  "FileNotFoundError",
+                  "PermissionError",
+                  "MemoryError",
+                  "ValueError",
+                  "OSError",
+                  "RuntimeError",
+                  "Exception",
+                  "ProcessExit"
+                ]
+              },
+              "errno": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4095
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reason": {
+          "enum": [
+            "missing-package",
+            "unsupported-version",
+            "missing-directory"
+          ]
+        }
+      },
+      "required": [
+        "phase",
+        "causes"
       ],
       "additionalProperties": false
     }

@@ -1,9 +1,28 @@
 """One active inference thread; the protocol reader remains responsive to cancellation."""
 from threading import Event, RLock, Thread
-import traceback
-import sys
 from .protocol import Protocol, ProtocolError
 from .backends.mflux import MfluxAdapter, Cancelled, BackendUnavailable, InvalidEditInput, check_runtime
+
+
+def diagnostic(error, phase):
+    """Allowlisted causal structure only: library text and frame locals can contain inputs."""
+    causes = []
+    seen = set()
+    current = error
+    kinds = (BackendUnavailable, ModuleNotFoundError, FileNotFoundError, PermissionError,
+             MemoryError, ValueError, OSError, RuntimeError)
+    while current is not None and id(current) not in seen and len(causes) < 4:
+        seen.add(id(current))
+        kind = next((item.__name__ for item in kinds if isinstance(current, item)), 'Exception')
+        cause = {'kind': kind}
+        if isinstance(current, OSError) and type(current.errno) is int and 0 <= current.errno <= 4095:
+            cause['errno'] = current.errno
+        causes.append(cause)
+        current = current.__cause__ or (None if current.__suppress_context__ else current.__context__)
+    result = {'phase': phase, 'causes': causes}
+    if isinstance(error, BackendUnavailable) and error.reason in {'missing-package', 'unsupported-version', 'missing-directory'}:
+        result['reason'] = error.reason
+    return result
 
 
 class Session:
@@ -69,23 +88,28 @@ class Session:
 
     def _edit(self, request):
         envelope = {'version': 1, 'id': request['id']}
+        phase = 'editing'
+
+        def progress(event):
+            nonlocal phase
+            if event['stage'] in {'loading', 'editing', 'saving'}:
+                phase = event['stage']
+            self.emit({**envelope, 'type': 'progress', 'event': event})
+
         try:
-            result = self.adapter.edit(request['request'], self.cancel,
-                                       lambda event: self.emit({**envelope, 'type': 'progress', 'event': event}))
+            result = self.adapter.edit(request['request'], self.cancel, progress)
             response = {**envelope, 'type': 'result', 'result': result}
         except Exception as error:
             # Authored protocol messages never echo prompts, private paths or library errors.
             if isinstance(error, Cancelled):
                 code, message = 'CANCELLED', 'Editing was cancelled.'
             elif isinstance(error, BackendUnavailable):
-                code, message = 'BACKEND_UNAVAILABLE', str(error)
+                code, message = 'BACKEND_UNAVAILABLE', 'The local inference runtime or model bundle is unavailable.'
             elif isinstance(error, InvalidEditInput):
                 code, message = 'INVALID_REQUEST', 'The model could not accept these editing inputs.'
             else:
                 code, message = 'RUNTIME_FAILURE', 'Local image editing failed; verify the runtime and model bundle.'
-            if not isinstance(error, Cancelled):
-                traceback.print_exception(error, file=sys.stderr)
-            response = {**envelope, 'type': 'error', 'error': {'code': code, 'message': message}}
+            response = {**envelope, 'type': 'error', 'error': {'code': code, 'message': message, 'diagnostic': diagnostic(error, phase)}}
         with self.lock:
             try:
                 self.emit(response)

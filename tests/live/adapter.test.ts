@@ -33,7 +33,7 @@ it('accepts a local registration then returns a missing-runtime failure over rea
       } } };
     editor = createEditor(options);
     await writeFile(join(directory, 'weights.safetensors'), bytes);
-    expect(await inspectReadiness(options.pythonExecutable, options.model!)).toMatchObject({ files: 'present', integrity: 'not-verified', runtime: { status: 'missing-package' } });
+    expect(await inspectReadiness(options.pythonExecutable!, options.model!)).toMatchObject({ files: 'present', integrity: 'not-verified', runtime: { status: 'missing-package' } });
     const sourceImage = join(directory, 'source.png');
     await sharp({ create: { width: 32, height: 32, channels: 3, background: 'red' } }).png().toFile(sourceImage);
     await expect(editor.edit({ model: 'test', instruction: 'Edit', sourceImage, outputPath: join(directory, 'output.png') })).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE' });

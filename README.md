@@ -6,7 +6,7 @@ The public editor validates and prepares image files, owns a persistent worker p
 
 ## Experimental local editing
 
-Supply `createEditor` with `model: { adapter: 'mflux-flux2-klein-4b', directory, manifest, quantize? }`. `directory` must be an existing absolute model bundle path; `manifest` uses the verification contract described below. Verify the bundle during preparation with `verifyModel` and require a `matches-manifest` result before using it. Edits do not re-hash model files. The pinned development preparation script performs this verification before publishing its configuration. Keep the directory immutable while editing: verification neither locks the bundle nor proves an incomplete manifest covers everything MFLUX reads. The request's `model` must equal `manifest.model`. The returned revision is the caller-supplied manifest revision, not an independently authenticated identity.
+Supply `createEditor` with `model: { adapter: 'mflux-flux2-klein-4b', directory, manifest, quantize? }`. `directory` must be an existing absolute model bundle path; `manifest` uses the verification contract described below. Verify the bundle during preparation with `verifyModel` and require a `matches-manifest` result before using it. Edits do not re-hash model files. The pinned development preparation script performs this verification before publishing its configuration. Keep the directory immutable while editing: verification neither locks the bundle nor proves an incomplete manifest covers everything MFLUX reads. The session supplies the request model by default; an explicitly different model is rejected before preparing images. The returned revision is the caller-supplied manifest revision, not an independently authenticated identity.
 
 The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. Install the optional inference extra through uv. The SDK catalog supplies the pinned manifest and adapter configuration; `prepareModel` verifies the bundle before returning it.
 
@@ -14,7 +14,7 @@ The adapter supplies the source image first, followed by reference groups and im
 
 Models are loaded and released for each edit, while the worker is reused. This avoids retaining unmeasured model memory between operations, at the cost of reload latency. Progress reports loading, conditioning/editing, denoising steps and saving. Pixel output is saved without prompt metadata or sidecars. Hugging Face and Transformers run offline; the worker additionally rejects Python socket connections and isolates both Python and native standard output from protocol frames. This is not a general sandbox for arbitrary native packages.
 
-Use `npx tsx examples/edit-local.ts /absolute/editor-options.json /absolute/edit-request.json` with a prepared interpreter, local bundle and existing input images. The example only uses supplied files; it never installs packages or downloads models.
+After preparing the worker environment and a local bundle, run `npx tsx examples/edit-local.ts --instruction "Change the background to a garden" --source /absolute/source.png --directory /absolute/model/bundle`. Add `--python /absolute/prepared/python` to select another uv environment. The example imports the SDK, verifies the chosen catalog bundle and saves a uniquely named PNG beside the source. It never installs packages or downloads models.
 
 ## Preparing models and checking readiness
 
@@ -30,7 +30,10 @@ const prepared = await prepareModel(choice.id);
 // Explicit acquisition: prepareModel(choice.id, { download: true }).
 const readiness = await inspectReadiness('/absolute/prepared/python', prepared.model);
 const editor = createEditor({ pythonExecutable: '/absolute/prepared/python', model: prepared.model });
-// Use editor.edit(...) with model: choice.id, then await editor.dispose().
+try {
+  const result = await editor.edit({ instruction: 'Change the background to a garden', sourceImage: '/absolute/source.png' });
+  console.log(result.image.path); // a new sibling PNG
+} finally { await editor.dispose(); }
 ```
 
 Preparation verifies every component, including cached or external bundles. Edits do not repeat that hashing. Downloads stream to private staging, verify the complete pinned revision, and publish it atomically. Existing invalid bundles are preserved and reported; preparation does not silently repair or replace them. Concurrent preparation can reuse a complete winner. Imports and read-only operations never download. The community distribution uses Apache-2.0 according to its pinned model card; runtime licensing is separate. Python and inference packages remain uv responsibilities.
@@ -38,6 +41,33 @@ Preparation verifies every component, including cached or external bundles. Edit
 `inspectReadiness` distinguishes file presence, integrity (`not-verified` by default), inference import/version status, and advertised capabilities. Use `{ verify: true }` for a fresh full integrity check or `{ load: true }` to load existing weights without generating an image. Loading may consume substantial memory and time; the worker exits and releases resources before the check resolves. Successful imports are not proof of successful loading, and successful loading is not a quality guarantee. Missing or wrong-size files, or corruption found by explicit verification, prevent a load check; missing packages, unsupported versions, import failures and load failures have distinct statuses. Process and I/O failures remain typed exceptions. Masks remain unsupported.
 
 Preparation and readiness accept cancellation, progress and `timeoutMs`. Preparation defaults to one hour; readiness defaults to thirty seconds for imports and ten minutes when hashing or loading. Active work settles before cleanup or rejection. A published bundle wins a cancellation race. Cleanup or durability warnings identify retained paths without invalidating a completed publication.
+
+## Caller defaults and diagnostics
+
+An editor accepts `defaults: { size?, seed?, outputDirectory? }`. Per-edit values override these; absent size and seed continue to use the adapter's defaults. The session model is inherited, and a conflicting explicit model is rejected. Returned results contain the actual seed, dimensions and model provenance. Explicit model registration remains available for advanced local configurations.
+
+An explicit `outputPath` wins over session destination settings. Otherwise PicPatch generates `edit-<UUID>.png` in the per-edit `outputDirectory`, the session's directory, or beside the authored source path, in that order. Reference-only compositions require a chosen destination. Directories must already exist; PicPatch never falls back to the working directory, creates an output directory implicitly, or overwrites an existing file. Input paths remain literal, including symlink paths.
+
+If `pythonExecutable` is omitted, the editor uses the worker project's standard uv environment (`worker/.venv`), respecting `UV_PROJECT_ENVIRONMENT` relative to the worker project. It does not search system Python, inspect another application's environment, install dependencies or download anything. Use an explicit interpreter for another prepared environment.
+
+Model and runtime operations and `editor.edit` accept `onDiagnostic` alongside `onProgress` and cancellation. Diagnostics report an invocation ID, UTC time, operation, progress stages and one terminal success, failure or cancellation after owned work settles. Calls rejected before edit admission do not emit a lifecycle. The sink is caller-owned; PicPatch creates no log files and prints nothing. Sink failures never change the primary outcome, and asynchronous sink work is not awaited. Keep callbacks brief; a blocking synchronous callback blocks its caller. Progress callbacks remain synchronous and throwing one fails with `CALLBACK_FAILED`.
+
+Diagnostic copies omit prompts, image data, paths, raw exception messages and stderr. They retain stable SDK error codes, selected I/O codes and bounded causal categories. Worker runtime errors also expose `error.diagnostic`, including failure phase, causal categories, known missing-runtime reasons or process-exit information. Python library messages and tracebacks are deliberately not forwarded because they can contain private inputs. The thrown local error keeps its original cause for the caller; the diagnostic sink receives only the safe projection.
+
+```ts
+await editor.edit({
+  instruction: 'Use these colors in the source image',
+  sourceImage: '/absolute/source.png',
+  references: [{ id: 'palette', role: 'style', images: ['/absolute/palette.png'] }],
+  outputDirectory: '/absolute/results',
+}, {
+  signal: controller.signal,
+  onProgress: event => updateProgress(event),
+  onDiagnostic: event => recordDiagnostic(event),
+});
+```
+
+The controller and sinks above belong to the caller. Use `verifyModel` for explicit integrity verification and `resolveStoragePaths` for data/model root overrides; output destinations are independent of those managed roots.
 
 ## Development
 
@@ -69,11 +99,11 @@ The private package resolves directly to TypeScript source. Consumers use a Type
 
 ## Editing contracts
 
-Call `validateEditRequest(request, capabilities?)` to validate metadata and obtain an independent copy. A request requires a model, nonblank instruction, absolute PNG output path, and either a source image or nonempty reference groups. Masks require a source image. Reference group IDs and normalized reference paths must be unique. Group and image order is preserved.
+Call `validateEditRequest(request, capabilities?)` to validate metadata and obtain an independent copy. The normalized `EditRequest` requires a model, nonblank instruction, absolute PNG output path, and either a source image or nonempty reference groups. Masks require a source image. Reference group IDs and normalized reference paths must be unique. Group and image order is preserved.
 
 Optional model capabilities describe supported reference roles, mask semantics, dimension constraints, and maximum grouped reference count (excluding the source image). Unsupported requests produce `PicPatchUsageError`; malformed capability reports produce `PicPatchRuntimeError`. Cancellation has a distinct `PicPatchCancelledError` type.
 
-`validateEditRequest` checks metadata only. `editor.edit` additionally opens and fully decodes single-frame PNG, JPEG, and WebP files by content. It rejects missing, malformed, animated, and unsupported images, and detects reference duplicates through symlink or hardlink aliases. Original files remain untouched. Results describe output dimensions, actual seed, model revision, runtime version, and the original ordered references.
+`editor.edit` accepts `EditInput`, resolving session defaults and output naming into a strict `EditRequest` before validation. `validateEditRequest` checks metadata only. `editor.edit` additionally opens and fully decodes single-frame PNG, JPEG, and WebP files by content. It rejects missing, malformed, animated, and unsupported images, and detects reference duplicates through symlink or hardlink aliases. Original files remain untouched. Results describe output dimensions, actual seed, model revision, runtime version, and the original ordered references.
 
 Preparation uses Sharp to apply EXIF orientation, convert image color to sRGB, strip metadata, and write private PNG copies. Masks must be opaque grayscale PNGs matching the oriented source dimensions; black preserves and white edits. The baseline preparation does not resize or crop. The experimental MFLUX adapter delegates reference conditioning to MFLUX: references above one megapixel are downscaled preserving aspect ratio, then center-cropped to multiples of 16 pixels. Very small or narrow references can be rejected. Native decoding has a 60-second processing budget; cancellation waits for an active native writer to settle before removing its files.
 
@@ -124,7 +154,7 @@ Runtime inspection accepts cancellation, progress callbacks and `timeoutMs` for 
 
 ## Editor lifecycle
 
-`createEditor({ pythonExecutable })` accepts the absolute path to an existing Python interpreter with the worker’s locked dependencies installed. Construction is lazy and performs no setup or downloads. The first `edit` prepares the inputs, starts the worker, and checks its advertised capabilities. Without a `model` option the worker advertises no models, so valid prepared requests fail with `UNSUPPORTED_CAPABILITY` and their temporary files are cleaned up.
+`createEditor({ pythonExecutable? })` accepts an optional absolute path to an existing Python interpreter with the worker’s locked dependencies installed. Construction is lazy and performs no setup or downloads. The first `edit` prepares the inputs, starts the worker, and checks its advertised capabilities. Without a `model` option the worker advertises no models, so valid prepared requests fail with `UNSUPPORTED_CAPABILITY` and their temporary files are cleaned up.
 
 ```ts
 import { createEditor } from 'picpatch';

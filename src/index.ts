@@ -20,3 +20,6 @@ export { prepareModel } from './models/preparation.ts';
 export type { PrepareModelOptions, PreparedModel } from './models/preparation.ts';
 export { inspectReadiness } from './runtime/readiness.ts';
 export type { ReadinessOptions, ModelReadiness } from './runtime/readiness.ts';
+
+export type { EditInput, EditDefaults } from './defaults.ts';
+export type { DiagnosticEvent, DiagnosticOptions, WorkerDiagnostic } from './diagnostics.ts';

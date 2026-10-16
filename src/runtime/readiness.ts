@@ -1,3 +1,5 @@
+import { withDiagnostics } from '../diagnostics.ts';
+import type { DiagnosticOptions } from '../diagnostics.ts';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { LocalEditingModel, ModelCapabilities } from '../contracts.generated.ts';
@@ -8,7 +10,7 @@ import { WorkerProcess } from '../worker/process.ts';
 import type { RuntimeCheck } from '../worker/protocol.ts';
 import { workerLaunch, workerTimeouts } from '../worker/launch.ts';
 
-export interface ReadinessOptions {
+export interface ReadinessOptions extends DiagnosticOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   verify?: boolean;
@@ -24,7 +26,7 @@ export interface ModelReadiness {
 }
 
 /** Presence, integrity, imports and load evidence remain separate. Never downloads. */
-export async function inspectReadiness(pythonExecutable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
+async function inspectReadinessOperation(pythonExecutable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
   absolutePath(pythonExecutable); validateOperation(options, ['timeoutMs', 'verify', 'load']);
   for (const value of [options.verify, options.load]) if (value !== undefined && typeof value !== 'boolean') throw new PicPatchUsageError('INVALID_REQUEST', 'Readiness switches must be booleans.');
   const model = validateLocalEditingModel(input);
@@ -63,4 +65,8 @@ export async function inspectReadiness(pythonExecutable: string, input: LocalEdi
       finally { signal.removeEventListener('abort', abort); }
     }
   });
+}
+
+export function inspectReadiness(pythonExecutable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
+  return withDiagnostics('inspectReadiness', options, operation => inspectReadinessOperation(pythonExecutable, input, operation));
 }
