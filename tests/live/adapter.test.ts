@@ -1,3 +1,4 @@
+import { testPython } from '../helpers/python.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
@@ -5,7 +6,6 @@ import { access, mkdtemp, writeFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { constants } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createEditor, setupRuntime, type Editor } from '../../src/index.ts';
@@ -24,7 +24,7 @@ it('verifies a local registration then returns a missing-runtime failure over re
     const runtimeDirectory = join(directory, 'runtime');
     const cacheDirectory = (await promisify(execFile)(uvExecutable, ['cache', 'dir'])).stdout.trim();
     const runtime = await setupRuntime({ directory: runtimeDirectory, uvExecutable, cacheDirectory,
-      pythonExecutable: fileURLToPath(new URL('../../worker/.venv/bin/python', import.meta.url)), offline: true });
+      pythonExecutable: testPython, offline: true });
     editor = createEditor({ pythonExecutable: runtime.pythonExecutable,
       model: { adapter: 'mflux-flux2-klein-4b', directory, manifest: {
         version: 1, model: 'test', source: { repository: 'test', revision: 'a'.repeat(40) },

@@ -1,3 +1,4 @@
+import { testPython } from '../helpers/python.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -5,12 +6,11 @@ import { access, readFile, mkdtemp, readdir, rm, writeFile, stat } from 'node:fs
 import { constants } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { inspectRuntime, setupRuntime, createEditor } from '../../src/index.ts';
 import { runInstaller } from '../../src/runtime/command.ts';
 const execute = promisify(execFile);
-const python = fileURLToPath(new URL('../../worker/.venv/bin/python', import.meta.url));
+const python = testPython;
 let directory: string;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-runtime-live-')); });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });

@@ -24,9 +24,20 @@ dev = [
 ]
 
 [project.optional-dependencies]
-inference = ["mflux==0.22.0"]
+# Direct declaration lets uv route this MFLUX dependency to its official index.
+inference = ["mflux==0.22.0", "torch>=2.13.0,<3.0"]
 
 # The inference extra is never installed by default; models are always supplied locally.
 
 [tool.coverage.run]
 data_file = "coverage/.coverage-python"
+
+# PyPI omits the macOS CPython 3.15 wheel shipped on PyTorch's official index.
+# Keep other packages and interpreter/platform combinations on PyPI.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'darwin' and python_version >= '3.15'" }]

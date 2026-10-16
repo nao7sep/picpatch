@@ -1,3 +1,4 @@
+import { testPython } from '../helpers/python.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -52,13 +53,13 @@ describe('real model-free worker processes', () => {
     expect(failure.code).not.toBe('TERMINATION_FAILED');
   });
   it('runs the bundled Python handshake and verifies process closure', async () => {
-    const python = fileURLToPath(new URL('../../worker/.venv/bin/python', import.meta.url));
+    const python = testPython;
     const editor = tracked({ executable: python, args: ['-u', '-m', 'picpatch_worker', '--protocol-dir', fileURLToPath(new URL('../../protocol/', import.meta.url))], cwd: fileURLToPath(new URL('../../worker/src/', import.meta.url)) });
     await expect(editor.edit(request)).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     await editor.dispose(); expect(children[0]!.exitCode).toBe(0);
   });
   it('exercises the public factory with the installed Python environment', async () => {
-    const editor = createEditor({ pythonExecutable: fileURLToPath(new URL('../../worker/.venv/bin/python', import.meta.url)) });
+    const editor = createEditor({ pythonExecutable: testPython });
     editors.push(editor);
     const directory = await mkdtemp(join(tmpdir(), 'picpatch-live-'));
     const source = join(directory, 'source.png');
