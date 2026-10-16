@@ -30,6 +30,21 @@ Temporary files are removed after their writers settle. Publication failures ret
 
 `protocol/contracts.schema.json` owns the payload shapes. Run `npm run contracts:generate` after changing it; the default test gate checks generated types for drift.
 
+## Local model inspection
+
+`inspectModel` inventories a caller-selected absolute file or directory. `discoverModels` searches explicit absolute roots recursively, grouping a directory with its nested components when it contains model configuration or weight filenames. It follows cached weight-file symlinks, skips nested directory symlinks and `.git`, and deduplicates aliases and overlapping bundles. There is no automatic home-directory scan.
+
+```ts
+import { inspectModel, discoverModels } from 'picpatch';
+
+const inventory = await discoverModels(['/absolute/path/to/local/models']);
+const details = await inspectModel('/absolute/path/to/local/model');
+```
+
+Both operations are read-only, accept `signal` and `onProgress` options, and need neither Python nor a network connection. They inspect file metadata without loading weights, parsing model configurations, hashing large files, or running model code. Missing locations and filesystem failures reject with `MODEL_IO`; a failed search does not return a deceptively complete partial list.
+
+Candidate detection is based on filenames, so unrelated files with weight-like names may appear. Results always report integrity as `not-verified` and compatibility as `unknown`. `unverified` means weight-named files are present; `incomplete` means an empty, partial, or missing linked file was observed; `unrecognized` means no weight-named files were found. These states do not prove bundle completeness, safe contents, upstream identity, supported editing capabilities, or readiness to load. Component manifests, shard-index validation, integrity verification and runtime compatibility checks remain future work. Inspection is a point-in-time inventory, not a lock against other processes changing files.
+
 ## Editor lifecycle
 
 `createEditor({ pythonExecutable })` accepts the absolute path to an existing Python interpreter with the worker’s locked dependencies installed. Construction is lazy and performs no setup or downloads. The first `edit` prepares the inputs, starts the worker, and checks its advertised capabilities. The current model-free worker advertises no models, so valid prepared requests fail with `UNSUPPORTED_CAPABILITY` and their temporary files are cleaned up.
@@ -74,7 +89,7 @@ The internal TypeScript `ProtocolSession` validates correlation and session orde
 
 ## Repository layout
 
-- `src/` contains the public SDK contracts, request validation, image preparation and output handling, worker integration, and reserved model modules.
+- `src/` contains the public SDK contracts, request validation, image preparation and output handling, worker integration, and local model inspection.
 - `worker/` contains the Python worker package and future MFLUX adapter.
 - `protocol/` defines shared editing payloads and the versioned worker wire contract.
 - `tests/` holds ordinary tests and small fixtures; `benchmarks/` will hold opt-in quality and performance experiments.
