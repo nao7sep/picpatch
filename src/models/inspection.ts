@@ -1,28 +1,14 @@
+import { absolutePath, checkSignal, emitProgress, validateOperation } from '../operations.ts';
 import { lstat, stat, realpath, opendir } from 'node:fs/promises';
 import { basename, extname, isAbsolute, join, normalize, relative, sep } from 'node:path';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
 import type { LocalModelFile, ModelDiscovery, ModelInspection, ModelIssue, ModelOperationOptions } from './types.ts';
 
-function validatePath(path: unknown): asserts path is string {
-  if (typeof path !== 'string' || !isAbsolute(path) || path.includes('\0')) {
-    throw new PicPatchUsageError('INVALID_REQUEST', 'Model locations must be absolute paths.');
-  }
-}
-function validateOptions(options: ModelOperationOptions): void {
-  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(k => !['signal', 'onProgress'].includes(k)) ||
-      (options.signal !== undefined && !(options.signal instanceof AbortSignal)) ||
-      (options.onProgress !== undefined && typeof options.onProgress !== 'function')) {
-    throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid model operation options.');
-  }
-}
-function check(options: ModelOperationOptions): void {
-  if (options.signal?.aborted) throw new PicPatchCancelledError();
-}
+const validatePath: typeof absolutePath = absolutePath;
+const validateOptions = validateOperation;
+function check(options: ModelOperationOptions): void { checkSignal(options.signal); }
 function progress(path: string, verb: 'inspectModel' | 'discoverModels', options: ModelOperationOptions): void {
-  check(options);
-  try { options.onProgress?.({ type: 'progress', verb, stage: 'inspecting', message: 'Inspecting local model files.', path }); }
-  catch (cause) { throw new PicPatchRuntimeError('CALLBACK_FAILED', 'Model progress callback failed.', { cause }); }
-  check(options);
+  emitProgress(options, { type: 'progress', verb, stage: 'inspecting', message: 'Inspecting local model files.', path });
 }
 /** Names identify candidates only; no file is deserialized or executed. */
 function kind(path: string): LocalModelFile['kind'] | undefined {

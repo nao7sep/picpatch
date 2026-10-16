@@ -20,8 +20,8 @@ export interface ModelIssue {
 }
 export interface ModelProgressEvent {
   type: 'progress';
-  verb: 'inspectModel' | 'discoverModels';
-  stage: 'inspecting';
+  verb: 'inspectModel' | 'discoverModels' | 'verifyModel';
+  stage: 'inspecting' | 'verifying';
   message: string;
   path: string;
 }
@@ -31,4 +31,23 @@ export interface ModelOperationOptions {
 }
 export interface ModelDiscovery {
   models: ModelInspection[];
+}
+
+export type { ModelManifest, ModelComponent } from '../contracts.generated.ts';
+export interface ModelVerification {
+  path: string;
+  manifest: import('../contracts.generated.ts').ModelManifest;
+  status: 'matches-manifest' | 'invalid';
+  compatibility: 'unknown';
+  components: VerifiedComponent[];
+}
+export interface VerifiedComponent {
+  path: string;
+  status: 'verified' | 'missing' | 'not-file' | 'path-escape' | 'size-mismatch' | 'digest-mismatch' | 'changed' | 'invalid-index';
+  sha256?: string;
+}
+
+export interface ModelVerificationOptions extends ModelOperationOptions {
+  /** Whole verification budget, default ten minutes; cancellation settles active reads first. */
+  timeoutMs?: number;
 }

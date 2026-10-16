@@ -107,3 +107,29 @@ export interface ProgressEvent {
   completed?: number;
   total?: number;
 }
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "ModelComponent".
+ */
+export interface ModelComponent {
+  path: string;
+  role: "weights" | "configuration" | "tokenizer" | "shard-index" | "asset";
+  bytes: number;
+  sha256: string;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "ModelManifest".
+ */
+export interface ModelManifest {
+  version: 1;
+  model: string;
+  source: {
+    repository: string;
+    revision: string;
+  };
+  /**
+   * @minItems 1
+   */
+  components: [ModelComponent, ...ModelComponent[]];
+}
