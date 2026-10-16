@@ -2,13 +2,13 @@
 
 PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, and masked edits.
 
-The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. Its mapping and process contracts are tested without weights; actual inference, image quality, GPU cancellation and memory fit on a 24 GB Mac remain unverified. No Python or model downloader is implemented.
+The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness, larger images and six-reference memory fit remain unverified. The SDK does not acquire Python or models automatically.
 
 ## Experimental local editing
 
 Supply `createEditor` with `model: { adapter: 'mflux-flux2-klein-4b', directory, manifest, quantize? }`. `directory` must be an existing absolute model bundle path; `manifest` uses the verification contract described below. Each edit hashes the declared components before starting inference. Keep the directory immutable while editing: verification neither locks the bundle nor proves an incomplete manifest covers everything MFLUX reads. The request's `model` must equal `manifest.model`. The returned revision is the caller-supplied manifest revision, not an independently authenticated identity.
 
-The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. `setupRuntime` still installs only the small model-free dependencies; inference installation and a trusted complete model catalog are not automated yet.
+The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `worker/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. `setupRuntime` still installs only the small model-free dependencies; general inference installation and a model catalog are not automated yet. The development test uses the pinned manifest in `tests/fixtures/klein-4b-4bit.manifest.json`.
 
 The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Masks are rejected. Explicit output dimensions must be multiples of 16; omitted dimensions use 1024 by 1024. MFLUX's distilled generation defaults apply. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
 
@@ -20,7 +20,19 @@ Use `npx tsx examples/edit-local.ts /absolute/editor-options.json /absolute/edit
 
 Use Node.js 24 or newer, npm, uv, and Python 3.12 or newer. Install the development dependencies with `npm ci`, then run `npm test`. This checks generated contracts, TypeScript source and examples, request validation, and TypeScript/Python protocol behavior. The Python test command installs the small locked validation and test dependencies, but will not download Python or models.
 
-The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It needs the existing `worker/.venv` created by the ordinary Python test setup and currently targets macOS/POSIX. The full gate also runs real inference and requires `PICPATCH_INFERENCE_CONFIG`, an absolute path to a JSON file containing editor options with a prepared inference interpreter and local model configuration. Missing prerequisites fail explicitly. No test downloads models. Runtime setup tests additionally need uv on PATH and the locked worker wheels in its cache; they create disposable environments with network access disabled and fail clearly if those prerequisites are missing. Live tests are type-checked by the ordinary gate.
+The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It needs the existing `worker/.venv` created by the ordinary Python test setup and currently targets macOS/POSIX. The full gate also runs real inference using `node_modules/.cache/picpatch-live/inference-config.json`, or an absolute editor-options JSON path supplied through `PICPATCH_INFERENCE_CONFIG`. Missing prerequisites fail explicitly. No test downloads models. Runtime setup tests additionally need uv on PATH and the locked worker wheels in its cache; they create disposable environments with network access disabled and fail clearly if those prerequisites are missing. Live tests are type-checked by the ordinary gate.
+
+To prepare the real-inference test after the development setup, run these commands from the repository root. The first installs the locked inference packages into a separate environment; the second explicitly downloads approximately 4.62 GB of pinned model files and verifies every component before publishing the local configuration. Both the environment and weights stay in the ignored test cache.
+
+```sh
+UV_PROJECT_ENVIRONMENT="$PWD/node_modules/.cache/picpatch-live/inference-runtime" \
+  uv sync --project worker --python "$PWD/worker/.venv/bin/python" \
+  --extra inference --no-dev --locked --no-python-downloads
+node_modules/.cache/picpatch-live/inference-runtime/bin/python scripts/prepare-inference.py
+npm run test:full
+```
+
+Use `scripts/prepare-inference.py --offline` through that same interpreter to rebuild the configuration from cached weights without network access. The preparation tool is an explicit development download command; the test itself never downloads models. Its pinned manifest covers the encoder, transformer, VAE and tokenizer files required by this checkpoint. The full gate checks sequential grouped-reference/source edits and cancellation after a denoising step using generated 256-pixel fixtures. It verifies artifacts, provenance and cleanup, not visual quality.
 
 Run `npm run example:request` to print an illustrative grouped-reference request. It does not read images, start a worker, or generate output. `npm run test:coverage` measures TypeScript behavioral coverage.
 
