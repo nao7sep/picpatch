@@ -30,6 +30,7 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
     if (!capabilitiesValid(capabilities)) throw new PicPatchRuntimeError('INVALID_CAPABILITIES', 'Worker returned invalid model capabilities.');
     const unsupported = (message: string): never => { throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', message); };
     if (capabilities.model !== request.model) unsupported('Capabilities do not describe the requested model.');
+    if (capabilities.sourceImageRequired && !request.sourceImage) unsupported('This model requires a source image.');
     if (!capabilities.instructionEditing) unsupported('This model does not support instruction editing.');
     if (request.maskImage && capabilities.maskMode === 'none') unsupported('This model does not support masks.');
     if (groups.some(group => !capabilities.referenceRoles.includes(group.role))) unsupported('This model does not support a requested reference role.');

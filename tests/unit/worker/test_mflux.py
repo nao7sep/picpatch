@@ -181,3 +181,36 @@ def test_runtime_readiness_load_releases_resources(monkeypatch, config):
         raise RuntimeError('private sentinel')
     monkeypatch.setattr(mflux, 'load_pipeline', fail)
     assert mflux.check_runtime(config, 'load') == {'status': 'load-failed', 'version': '0.22.0'}
+
+
+# Shared with TypeScript: metadata acceptance must agree with actual adapter mapping.
+import json
+CONTRACT = json.loads((Path(__file__).resolve().parents[2] / 'fixtures' / 'klein-contract.json').read_text())
+
+
+def test_capabilities_match_shared_contract(config):
+    adapter = mflux.MfluxAdapter(config)
+    assert adapter.capabilities == CONTRACT['capabilities']
+    changed = adapter.capabilities
+    changed['referenceRoles'].clear()
+    assert adapter.capabilities == CONTRACT['capabilities']
+
+
+@pytest.mark.parametrize('case', CONTRACT['cases'], ids=lambda case: case['name'])
+def test_shared_conditioning_reaches_runtime(monkeypatch, config, tmp_path, case):
+    calls = runtime(monkeypatch)
+    request = {**case['request'], 'outputPath': str(tmp_path / 'out.png')}
+    mflux.MfluxAdapter(config).edit(request, Event(), lambda event: None)
+    args = next(call[1] for call in calls if call[0] == 'generate')
+    assert args['image_paths'] == case['paths']
+    assert args['prompt'] == case['prompt']
+    expected_size = request.get('size', CONTRACT['capabilities']['defaultOutputSize'])
+    assert (args['width'], args['height']) == (expected_size['width'], expected_size['height'])
+
+
+def test_group_ids_are_quoted_and_instruction_is_preserved():
+    request = {'references': [{'id': 'shape"\nlabel', 'role': 'object', 'images': ['/shape.png']}],
+               'instruction': 'Keep this exact instruction.'}
+    _, prompt = mflux.conditioning(request)
+    assert 'group "shape\\"\\nlabel".' in prompt
+    assert prompt.endswith('\n\n' + request['instruction'])

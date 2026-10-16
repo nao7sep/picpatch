@@ -302,3 +302,19 @@ it('preserves structured worker failure causes on the public runtime error', asy
   await tick(); child.reply(2, 'error', { error: { code: 'BACKEND_UNAVAILABLE', message: 'Unavailable', diagnostic } });
   await caught; await editor.dispose();
 });
+
+it('cancels capability discovery before image preparation and closes the worker', async () => {
+  const { ImageEditor } = await import('../../src/images/editor.ts');
+  const { child, editor: backend } = setup();
+  child.onRequest = () => {};
+  const editor = new ImageEditor(backend);
+  const controller = new AbortController();
+  const editing = editor.edit(request, { signal: controller.signal });
+  const rejected = expect(editing).rejects.toMatchObject({ code: 'CANCELLED' });
+  await tick();
+  controller.abort();
+  await rejected;
+  await editor.dispose();
+  expect(child.closed).toBe(true);
+  expect(child.requests.map(message => message.type)).toEqual(['hello']);
+});

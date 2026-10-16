@@ -127,13 +127,15 @@ class MfluxAdapter:
     def capabilities(self) -> dict:
         return {'model': self.config['manifest']['model'], 'instructionEditing': True,
                 'referenceRoles': ['subject', 'object', 'style', 'background'],
-                'maskMode': 'none', 'size': {'widthMultiple': 16, 'heightMultiple': 16}}
+                'maskMode': 'none', 'size': {'widthMultiple': 16, 'heightMultiple': 16},
+                'sourceImageRequired': False, 'referenceConditioning': 'ordered-images-with-role-prompt',
+                'defaultOutputSize': {'width': 1024, 'height': 1024}}
 
     def edit(self, request: dict, cancel: Event, progress) -> dict:
         if request['model'] != self.capabilities['model']:
             raise InvalidEditInput('The requested model is not configured.')
         paths, prompt = conditioning(request)
-        size = request.get('size', {'width': 1024, 'height': 1024})
+        size = request.get('size', self.capabilities['defaultOutputSize'])
         if any(value < 16 or value % 16 for value in size.values()):
             raise InvalidEditInput('Output dimensions must be positive multiples of 16.')
         seed = request.get('seed')

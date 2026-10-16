@@ -40,3 +40,20 @@ it('accepts a local registration then returns a missing-runtime failure over rea
     expect((await readdir(directory)).sort()).toEqual(['runtime', 'source.png', 'weights.safetensors']);
   } finally { await editor?.dispose(); await rm(directory, { recursive: true, force: true }); }
 });
+
+it('uses the model-free handshake to reject masks and unsupported sizes before opening images', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'picpatch-capabilities-'));
+  const editor = createEditor({ pythonExecutable: testPython, model: {
+    adapter: 'mflux-flux2-klein-4b', directory, manifest: {
+      version: 1, model: 'fixture', source: { repository: 'fixture', revision: 'a'.repeat(40) },
+      components: [{ path: 'absent.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }],
+    },
+  } });
+  try {
+    const base = { instruction: 'Use blue.', sourceImage: join(directory, 'absent.png'), outputPath: join(directory, 'out.png') };
+    for (const change of [{ maskImage: join(directory, 'mask.png') }, { size: { width: 17, height: 32 } }]) {
+      await expect(editor.edit({ ...base, ...change })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+    }
+    expect(await readdir(directory)).toEqual([]);
+  } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
+});

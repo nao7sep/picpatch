@@ -17,6 +17,8 @@ export interface Editor {
   dispose(): Promise<void>;
 }
 export interface EditBackend {
+  /** Check advertised metadata before image I/O; does not load model weights. */
+  validate(request: EditRequest, options?: OperationOptions): Promise<void>;
   edit(request: EditRequest, options?: OperationOptions): Promise<EditResult>;
   dispose(): Promise<void>;
 }
@@ -81,26 +83,31 @@ export class ProcessEditor implements EditBackend {
     const { signal, ...progressOptions } = options;
     if (signal?.aborted) throw new PicPatchCancelledError();
     this.busy = true;
-    const abortStartup = () => this.worker.abortStartup();
-    signal?.addEventListener('abort', abortStartup, { once: true });
     try {
-      if (this.model) {
-        if (request.model !== this.model.manifest.model) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The editor is configured for a different model.');
-      }
-      let ready: WorkerResponse;
-      try { ready = await this.worker.start(); }
-      finally { signal?.removeEventListener('abort', abortStartup); }
-      if (this.disposed || signal?.aborted) throw new PicPatchCancelledError();
-      if (ready.type === 'error') throw responseError(ready);
-      if (ready.type !== 'ready') throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker did not complete its handshake.');
-      const capabilities = ready.models.find(model => model.model === request.model);
-      if (!capabilities) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The worker does not advertise the requested model.');
-      validateEditRequest(request, capabilities);
+      await this.validate(request, options);
       const response = await this.worker.edit(request, event => emitProgress(progressOptions, event), signal);
       if (response.type === 'error') throw responseError(response);
       if (response.type !== 'result') throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker returned no edit result.');
       return response.result;
-    } finally { signal?.removeEventListener('abort', abortStartup); this.busy = false; }
+    } finally { this.busy = false; }
+  }
+
+  async validate(request: EditRequest, options: OperationOptions = {}): Promise<void> {
+    if (this.disposed) throw new PicPatchUsageError('DISPOSED', 'Editor has been disposed.');
+    const { signal } = options;
+    if (signal?.aborted) throw new PicPatchCancelledError();
+    if (this.model && request.model !== this.model.manifest.model) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The editor is configured for a different model.');
+    const abortStartup = () => this.worker.abortStartup();
+    signal?.addEventListener('abort', abortStartup, { once: true });
+    let ready: WorkerResponse;
+    try { ready = await this.worker.start(); }
+    finally { signal?.removeEventListener('abort', abortStartup); }
+    if (this.disposed || signal?.aborted) throw new PicPatchCancelledError();
+    if (ready.type === 'error') throw responseError(ready);
+    if (ready.type !== 'ready') throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker did not complete its handshake.');
+    const capabilities = ready.models.find(model => model.model === request.model);
+    if (!capabilities) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The worker does not advertise the requested model.');
+    validateEditRequest(request, capabilities);
   }
 
   dispose(): Promise<void> {

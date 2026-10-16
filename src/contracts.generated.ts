@@ -58,6 +58,9 @@ export interface ModelCapabilities {
   model: string;
   instructionEditing: boolean;
   referenceRoles: ("subject" | "object" | "style" | "background")[];
+  /**
+   * Limit on grouped reference images, excluding the source. Absence means no declared limit, not unlimited hardware capacity.
+   */
   maxReferenceImages?: number;
   maskMode: "none" | "native" | "composite";
   size?: {
@@ -66,6 +69,15 @@ export interface ModelCapabilities {
     maxWidth?: number;
     maxHeight?: number;
   };
+  /**
+   * Whether this adapter requires a source image in addition to any references. Absence means unspecified.
+   */
+  sourceImageRequired?: boolean;
+  /**
+   * Source first, then groups and images in caller order. Group IDs and roles are prompt labels, not separate model controls or identity guarantees.
+   */
+  referenceConditioning?: "ordered-images-with-role-prompt";
+  defaultOutputSize?: ImageSize;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema

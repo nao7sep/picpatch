@@ -1,0 +1,114 @@
+{
+  "capabilities": {
+    "model": "local-klein",
+    "instructionEditing": true,
+    "referenceRoles": [
+      "subject",
+      "object",
+      "style",
+      "background"
+    ],
+    "maskMode": "none",
+    "size": {
+      "widthMultiple": 16,
+      "heightMultiple": 16
+    },
+    "sourceImageRequired": false,
+    "referenceConditioning": "ordered-images-with-role-prompt",
+    "defaultOutputSize": {
+      "width": 1024,
+      "height": 1024
+    }
+  },
+  "cases": [
+    {
+      "name": "source only",
+      "request": {
+        "model": "local-klein",
+        "instruction": "Use a blue background.",
+        "sourceImage": "/source.png",
+        "outputPath": "/out.png"
+      },
+      "paths": [
+        "/source.png"
+      ],
+      "prompt": "Image 1 is the source image to edit.\n\nUse a blue background."
+    },
+    {
+      "name": "references without source",
+      "request": {
+        "model": "local-klein",
+        "instruction": "Combine the shapes.",
+        "references": [
+          {
+            "id": "shapes",
+            "role": "object",
+            "images": [
+              "/square.png",
+              "/circle.png"
+            ]
+          }
+        ],
+        "outputPath": "/out.png"
+      },
+      "paths": [
+        "/square.png",
+        "/circle.png"
+      ],
+      "prompt": "Images 1, 2 are object references for group \"shapes\".\n\nCombine the shapes."
+    },
+    {
+      "name": "source and all grouped roles",
+      "request": {
+        "model": "local-klein",
+        "instruction": "Arrange the objects.",
+        "sourceImage": "/source.png",
+        "references": [
+          {
+            "id": "main",
+            "role": "subject",
+            "images": [
+              "/a.png",
+              "/b.png"
+            ]
+          },
+          {
+            "id": "shape",
+            "role": "object",
+            "images": [
+              "/c.png"
+            ]
+          },
+          {
+            "id": "palette",
+            "role": "style",
+            "images": [
+              "/d.png"
+            ]
+          },
+          {
+            "id": "scene",
+            "role": "background",
+            "images": [
+              "/e.png"
+            ]
+          }
+        ],
+        "outputPath": "/out.png",
+        "size": {
+          "width": 256,
+          "height": 512
+        }
+      },
+      "paths": [
+        "/source.png",
+        "/a.png",
+        "/b.png",
+        "/c.png",
+        "/d.png",
+        "/e.png"
+      ],
+      "prompt": "Image 1 is the source image to edit.\nImages 2, 3 are subject references for group \"main\".\nImages 4 are object references for group \"shape\".\nImages 5 are style references for group \"palette\".\nImages 6 are background references for group \"scene\".\n\nArrange the objects."
+    }
+  ]
+}

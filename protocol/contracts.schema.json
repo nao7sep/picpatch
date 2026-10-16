@@ -151,7 +151,8 @@
         "maxReferenceImages": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9007199254740991
+          "maximum": 9007199254740991,
+          "description": "Limit on grouped reference images, excluding the source. Absence means no declared limit, not unlimited hardware capacity."
         },
         "maskMode": {
           "enum": [
@@ -189,6 +190,17 @@
             "heightMultiple"
           ],
           "additionalProperties": false
+        },
+        "sourceImageRequired": {
+          "type": "boolean",
+          "description": "Whether this adapter requires a source image in addition to any references. Absence means unspecified."
+        },
+        "referenceConditioning": {
+          "const": "ordered-images-with-role-prompt",
+          "description": "Source first, then groups and images in caller order. Group IDs and roles are prompt labels, not separate model controls or identity guarantees."
+        },
+        "defaultOutputSize": {
+          "$ref": "#/definitions/ImageSize"
         }
       },
       "required": [

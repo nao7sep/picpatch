@@ -36,6 +36,8 @@ export class ImageEditor implements Editor {
     let failure: unknown;
     try {
       checkCancellation(signal);
+      await this.backend.validate(request, options);
+      checkCancellation(signal);
       emitProgress(options, { type: 'progress', verb: 'edit', stage: 'preparing', message: 'Validating and preparing input images.' });
       workspace = await ImageWorkspace.create(request, signal);
       await workspace.prepare(signal);
