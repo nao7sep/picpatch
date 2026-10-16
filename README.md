@@ -2,7 +2,7 @@
 
 PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, and masked edits.
 
-The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness, larger images and six-reference memory fit remain unverified. The SDK does not acquire Python or models automatically.
+The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness and larger-image memory limits remain unverified. The SDK does not acquire Python or models automatically.
 
 ## Experimental local editing
 
@@ -32,7 +32,9 @@ node_modules/.cache/picpatch-live/inference-runtime/bin/python scripts/prepare-i
 npm run test:full
 ```
 
-Use `scripts/prepare-inference.py --offline` through that same interpreter to rebuild the configuration from cached weights without network access. The preparation tool is an explicit development download command; the test itself never downloads models. Its pinned manifest covers the encoder, transformer, VAE and tokenizer files required by this checkpoint. The full gate checks sequential grouped-reference/source edits and cancellation after a denoising step using generated 256-pixel fixtures. It verifies artifacts, provenance and cleanup, not visual quality.
+Use `scripts/prepare-inference.py --offline` through that same interpreter to rebuild the configuration from cached weights without network access. The preparation tool is an explicit development download command; the test itself never downloads models. Its pinned manifest covers the encoder, transformer, VAE and tokenizer files required by this checkpoint. The full gate checks sequential grouped-reference/source edits, four and six references in two object groups, and cancellation after a denoising step using generated 256-pixel fixtures. It verifies artifacts, provenance and cleanup, not visual quality.
+
+For resource measurements on macOS, run `python3 benchmarks/measure.py` with the same prepared configuration. It performs six sequential edits alternating four and six synthetic object references, with 512-pixel inputs and 768-pixel outputs. It checks originals and output cleanup, samples process-tree physical footprint and resident memory, records system memory pressure and swap, and checks observed child-process exit. Results stay in ignored `benchmarks/results/`. Sampled peaks are lower bounds, process charges may overlap, and system pressure includes other applications. This is a workload benchmark, not a portrait-likeness comparison or a memory guarantee for larger inputs.
 
 Run `npm run example:request` to print an illustrative grouped-reference request. It does not read images, start a worker, or generate output. `npm run test:coverage` measures TypeScript behavioral coverage.
 
@@ -150,7 +152,7 @@ The internal TypeScript `ProtocolSession` validates correlation and session orde
 - `src/` contains the public SDK contracts, request validation, image preparation and output handling, worker integration, and local model inspection.
 - `worker/` contains the Python worker package and experimental MFLUX adapter.
 - `protocol/` defines shared editing payloads and the versioned worker wire contract.
-- `tests/` holds ordinary tests and small fixtures; `benchmarks/` will hold opt-in quality and performance experiments.
+- `tests/` holds ordinary tests and small fixtures; `benchmarks/` holds the opt-in local resource benchmark.
 - `examples/` contains source-consumed SDK examples; `scripts/` contains development tools.
 
 No installation hook downloads a runtime or model. Model weights are not included in this repository.

@@ -5,7 +5,8 @@
     "tests/**/*.ts",
     "examples/**/*.ts",
     "vitest.config.ts",
-    "vitest.live.config.ts"
+    "vitest.live.config.ts",
+    "benchmarks/**/*.ts"
   ],
   "exclude": [
     "node_modules"

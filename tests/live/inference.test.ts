@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
+import { referenceWorkload } from '../../benchmarks/reference-workload.ts';
 import { createEditor, type EditorOptions } from '../../src/index.ts';
 
 async function localOptions(): Promise<EditorOptions> {
@@ -67,3 +68,12 @@ it('cancels after a real denoising step and cleans unpublished output after work
     await rm(directory, { recursive: true, force: true });
   }
 }, 1_800_000);
+
+it('edits four and six grouped references in one session without changing originals or leaving private output', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'picpatch-references-'));
+  try {
+    await referenceWorkload(await localOptions(), directory, 256, 256, [4, 6]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 3_600_000);
