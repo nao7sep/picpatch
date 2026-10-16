@@ -62,15 +62,8 @@ export class WorkerProcess {
       });
       this.child.once('close', (code, signal) => {
         this.closed = true;
-        // A terminated group must not leave a descendant behind after its leader closes.
-        try {
-          if (process.platform !== 'win32' && this.child?.pid) this.signal('SIGKILL');
-          this.closeWait.resolve();
-        } catch (error) {
-          this.failure = error;
-          this.rejectPending(error);
-          this.closeWait.reject(error);
-        }
+        // Closure, not a successful signal, proves the owned worker has stopped.
+        this.closeWait.resolve();
         if (!this.failure && (!this.shutdownAck || this.remainder.length || code !== 0 || signal !== null)) {
           this.fail(new PicPatchRuntimeError('WORKER_EXITED', 'Worker exited before completing the session.'));
         }
@@ -209,13 +202,16 @@ export class WorkerProcess {
     if (this.stopping) return this.stopping;
     this.stopping = (async () => {
       if (!this.child || this.closed) return;
-      this.signal('SIGTERM');
+      let signalError: unknown;
+      // An exiting process can reject a signal before Node reports its close event.
+      // Keep ownership until close or the termination deadline, even if signalling fails.
+      try { this.signal('SIGTERM'); } catch (error) { signalError = error; }
       let forceTimer: ReturnType<typeof setTimeout> | undefined;
       let deadline: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([this.closeWait.promise, new Promise<never>((_, reject) => {
-          forceTimer = setTimeout(() => { try { this.signal('SIGKILL'); } catch (error) { reject(error); } }, this.timeouts.terminationMs);
-          deadline = setTimeout(() => reject(new PicPatchRuntimeError('TERMINATION_FAILED', 'Worker termination could not be confirmed.')), this.timeouts.terminationMs * 2);
+          forceTimer = setTimeout(() => { try { this.signal('SIGKILL'); } catch (error) { signalError = error; } }, this.timeouts.terminationMs);
+          deadline = setTimeout(() => reject(new PicPatchRuntimeError('TERMINATION_FAILED', 'Worker termination could not be confirmed.', signalError ? { cause: signalError } : undefined)), this.timeouts.terminationMs * 2);
         })]);
       } finally { clearTimeout(forceTimer); clearTimeout(deadline); }
     })();

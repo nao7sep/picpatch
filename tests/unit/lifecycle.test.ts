@@ -237,3 +237,28 @@ describe('settlement after deadlines', () => {
     child.close();
   });
 });
+
+describe('termination signal races', () => {
+  it('waits for close after the OS rejects a signal to an exiting worker', async () => {
+    vi.useFakeTimers(); const { editor, child } = setup();
+    child.kill = () => { throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' }); };
+    let settled = false;
+    const active = editor.edit(request);
+    void active.catch(() => { settled = true; });
+    const caught = expect(active).rejects.toMatchObject({ code: 'PROTOCOL_ERROR' });
+    await vi.advanceTimersByTimeAsync(0);
+    child.stdout.end();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(settled).toBe(false);
+    child.close(); await caught; await editor.dispose();
+  });
+  it('retains the signal failure as a cause if closure never arrives', async () => {
+    vi.useFakeTimers(); const { editor, child } = setup();
+    child.kill = () => { throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' }); };
+    const active = editor.edit(request);
+    const caught = expect(active).rejects.toMatchObject({ code: 'TERMINATION_FAILED', cause: { code: 'TERMINATION_FAILED', cause: { code: 'EPERM' } } });
+    await vi.advanceTimersByTimeAsync(120); await caught;
+    await expect(editor.dispose()).rejects.toMatchObject({ code: 'TERMINATION_FAILED' });
+    child.close();
+  });
+});

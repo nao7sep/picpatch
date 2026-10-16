@@ -43,7 +43,9 @@ describe('real model-free worker processes', () => {
   });
   it.each(['malformed', 'exit'])('cleans up after %s output', async mode => {
     const editor = fixtureEditor(mode);
-    await expect(editor.edit(request)).rejects.toMatchObject({ category: 'runtime' });
+    const failure = await editor.edit(request).catch(error => error);
+    expect(failure).toMatchObject({ category: 'runtime' });
+    expect(failure.code).not.toBe('TERMINATION_FAILED');
   });
   it('runs the bundled Python handshake and verifies process closure', async () => {
     const python = fileURLToPath(new URL('../../worker/.venv/bin/python', import.meta.url));
