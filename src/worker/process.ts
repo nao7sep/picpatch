@@ -1,0 +1,245 @@
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { ProtocolSession, type WorkerRequest, type WorkerResponse } from './protocol.ts';
+import { PicPatchCancelledError, PicPatchRuntimeError } from '../errors.ts';
+import type { ProgressEvent } from '../types.ts';
+
+export interface WorkerLaunch {
+  executable: string;
+  args: string[];
+  cwd: string;
+}
+export interface WorkerTimeouts {
+  startupMs: number;
+  editMs: number;
+  cancellationMs: number;
+  shutdownMs: number;
+  terminationMs: number;
+}
+export type SpawnWorker = (launch: WorkerLaunch) => ChildProcessWithoutNullStreams;
+const spawnWorker: SpawnWorker = launch => spawn(launch.executable, launch.args, {
+  cwd: launch.cwd, stdio: 'pipe', detached: process.platform !== 'win32',
+});
+interface Pending {
+  resolve: (response: WorkerResponse) => void;
+  reject: (error: unknown) => void;
+  timer: ReturnType<typeof setTimeout>;
+  onProgress?: (event: ProgressEvent) => void;
+  request: WorkerRequest;
+}
+
+/** Owns one process and its pipes until close, including after timeout or abort. */
+export class WorkerProcess {
+  private readonly protocol = new ProtocolSession();
+  private readonly pending = new Map<number, Pending>();
+  private child: ChildProcessWithoutNullStreams | undefined;
+  private nextId = 1;
+  private startup: Promise<WorkerResponse> | undefined;
+  private closing = false;
+  private shutdownAck = false;
+  private closed = false;
+  private failure: unknown;
+  private stopping: Promise<void> | undefined;
+  private readonly closeWait = Promise.withResolvers<void>();
+  private readonly decoder = new TextDecoder('utf-8', { fatal: true });
+  private remainder = '';
+  private readonly launch: WorkerLaunch;
+  private readonly timeouts: WorkerTimeouts;
+  private readonly spawn: SpawnWorker;
+
+  constructor(launch: WorkerLaunch, timeouts: WorkerTimeouts, spawnImpl: SpawnWorker = spawnWorker) {
+    this.launch = launch; this.timeouts = timeouts; this.spawn = spawnImpl;
+    void this.closeWait.promise.catch(() => {});
+  }
+
+  start(): Promise<WorkerResponse> {
+    if (this.startup) return this.startup;
+    if (this.failure || this.closing) return Promise.reject(this.failure ?? new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Worker is closed.'));
+    try {
+      this.child = this.spawn(this.launch);
+      this.child.once('error', cause => this.fail(new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Could not run the worker.', { cause })));
+      this.child.once('exit', () => {
+        if (!this.failure && !this.shutdownAck) this.fail(new PicPatchRuntimeError('WORKER_EXITED', 'Worker exited unexpectedly.'));
+      });
+      this.child.once('close', (code, signal) => {
+        this.closed = true;
+        // A terminated group must not leave a descendant behind after its leader closes.
+        try {
+          if (process.platform !== 'win32' && this.child?.pid) this.signal('SIGKILL');
+          this.closeWait.resolve();
+        } catch (error) {
+          this.failure = error;
+          this.rejectPending(error);
+          this.closeWait.reject(error);
+        }
+        if (!this.failure && (!this.shutdownAck || this.remainder.length || code !== 0 || signal !== null)) {
+          this.fail(new PicPatchRuntimeError('WORKER_EXITED', 'Worker exited before completing the session.'));
+        }
+      });
+      this.child.stdin.on('error', cause => this.fail(new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Worker input failed.', { cause })));
+      this.child.stdout.on('error', cause => this.fail(new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Worker output failed.', { cause })));
+      this.child.stderr.on('error', cause => this.fail(new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Worker diagnostics failed.', { cause })));
+      // Drain diagnostics without retaining private data or writing to the caller's streams.
+      this.child.stderr.resume();
+      this.child.stdout.on('data', (chunk: Buffer) => this.read(chunk));
+      this.child.stdout.once('end', () => {
+        try {
+          this.remainder += this.decoder.decode();
+          if (this.remainder.length || !this.shutdownAck) throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker output ended unexpectedly.');
+        } catch (cause) { this.fail(cause instanceof PicPatchRuntimeError ? cause : new PicPatchRuntimeError('PROTOCOL_ERROR', 'Invalid worker output.', { cause })); }
+      });
+      this.startup = this.request({ version: 1, id: this.nextId++, type: 'hello' }, this.timeouts.startupMs);
+    } catch (cause) {
+      this.closed = true;
+      this.closeWait.resolve();
+      this.failure = new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Could not start the worker.', { cause });
+      this.startup = Promise.reject(this.failure);
+    }
+    return this.startup;
+  }
+
+  private read(chunk: Buffer): void {
+    if (this.failure) return;
+    try {
+      this.remainder += this.decoder.decode(chunk, { stream: true });
+      let newline: number;
+      while (!this.failure && (newline = this.remainder.indexOf('\n')) !== -1) {
+        const line = this.remainder.slice(0, newline);
+        this.remainder = this.remainder.slice(newline + 1);
+        const response = this.protocol.receive(line);
+        const pending = this.pending.get(response.id)!;
+        if (response.type === 'progress') {
+          try { pending.onProgress?.(response.event); }
+          catch (cause) { throw new PicPatchRuntimeError('CALLBACK_FAILED', 'Progress callback failed.', { cause }); }
+        } else {
+          if (pending.request.type === 'hello' && response.type !== 'ready') throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker rejected its startup handshake.');
+          if (response.type === 'result' && pending.request.type === 'edit') {
+            const expected = pending.request.request;
+            const result = response.result;
+            if (result.model !== expected.model || result.image.path !== expected.outputPath ||
+                (expected.seed !== undefined && result.seed !== expected.seed) ||
+                result.references.length !== (expected.references ?? []).length ||
+                result.references.some((group, index) => {
+                  const wanted = expected.references?.[index];
+                  return !wanted || group.id !== wanted.id || group.role !== wanted.role ||
+                    group.images.length !== wanted.images.length || group.images.some((image, i) => image !== wanted.images[i]);
+                })) {
+              throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker result does not describe the requested edit.');
+            }
+          }
+          if (response.type === 'shutdownAck') this.shutdownAck = true;
+          clearTimeout(pending.timer);
+          this.pending.delete(response.id);
+          pending.resolve(response);
+        }
+      }
+    } catch (cause) {
+      this.fail(cause instanceof PicPatchRuntimeError ? cause : new PicPatchRuntimeError('PROTOCOL_ERROR', 'Invalid worker output.', { cause }));
+    }
+  }
+
+  private request(request: WorkerRequest, timeout: number, onProgress?: (event: ProgressEvent) => void, timeoutError?: Error): Promise<WorkerResponse> {
+    if (this.failure) return Promise.reject(this.failure);
+    const deferred = Promise.withResolvers<WorkerResponse>();
+    try {
+      const frame = this.protocol.send(request);
+      const timer = setTimeout(() => this.fail(timeoutError ?? new PicPatchRuntimeError('TIMEOUT', `Worker ${request.type} timed out.`)), timeout);
+      this.pending.set(request.id, { ...deferred, timer, request, ...(onProgress ? { onProgress } : {}) });
+      this.child!.stdin.write(frame, error => { if (error) this.fail(new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Could not send a worker request.', { cause: error })); });
+    } catch (error) {
+      if (this.pending.has(request.id)) this.fail(error);
+      else deferred.reject(error);
+    }
+    return deferred.promise;
+  }
+
+  async edit(request: Extract<WorkerRequest, { type: 'edit' }>['request'], onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal): Promise<WorkerResponse> {
+    const id = this.nextId++;
+    const result = this.request({ version: 1, id, type: 'edit', request }, this.timeouts.editMs, onProgress);
+    let cancellation: Promise<WorkerResponse> | undefined;
+    let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
+    const abort = () => {
+      if (cancellation || !this.pending.has(id)) return;
+      cancellation = this.request({ version: 1, id: this.nextId++, type: 'cancel', targetId: id }, this.timeouts.cancellationMs, undefined, new PicPatchCancelledError());
+      // The acknowledgement alone does not settle the edit or release the worker.
+      cancellationTimer = setTimeout(() => this.fail(new PicPatchCancelledError()), this.timeouts.cancellationMs);
+      void cancellation.catch(() => {});
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+    try {
+      const response = await result;
+      if (cancellation) {
+        try { await cancellation; }
+        catch (error) {
+          // A confirmed output remains a success after the transport is stopped.
+          if (response.type !== 'result' || (error instanceof PicPatchRuntimeError && error.code === 'TERMINATION_FAILED')) throw error;
+        }
+      }
+      return response;
+    } finally {
+      signal?.removeEventListener('abort', abort);
+      clearTimeout(cancellationTimer);
+    }
+  }
+
+  abortStartup(): void { this.fail(new PicPatchCancelledError()); }
+
+  private fail(error: unknown): void {
+    if (this.failure) return;
+    this.failure = error;
+    for (const pending of this.pending.values()) clearTimeout(pending.timer);
+    void this.stop().then(() => this.rejectPending(error), terminationError => this.rejectPending(terminationError));
+  }
+  private rejectPending(error: unknown): void {
+    for (const pending of this.pending.values()) pending.reject(error);
+    this.pending.clear();
+  }
+
+  private signal(signal: NodeJS.Signals): void {
+    if (!this.child) return;
+    try {
+      if (process.platform !== 'win32' && this.child.pid) process.kill(-this.child.pid, signal);
+      else if (!this.closed) this.child.kill(signal);
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw new PicPatchRuntimeError('TERMINATION_FAILED', 'Could not terminate the worker.', { cause });
+    }
+  }
+
+  private stop(): Promise<void> {
+    if (this.stopping) return this.stopping;
+    this.stopping = (async () => {
+      if (!this.child || this.closed) return;
+      this.signal('SIGTERM');
+      let forceTimer: ReturnType<typeof setTimeout> | undefined;
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([this.closeWait.promise, new Promise<never>((_, reject) => {
+          forceTimer = setTimeout(() => { try { this.signal('SIGKILL'); } catch (error) { reject(error); } }, this.timeouts.terminationMs);
+          deadline = setTimeout(() => reject(new PicPatchRuntimeError('TERMINATION_FAILED', 'Worker termination could not be confirmed.')), this.timeouts.terminationMs * 2);
+        })]);
+      } finally { clearTimeout(forceTimer); clearTimeout(deadline); }
+    })();
+    return this.stopping;
+  }
+
+  async dispose(): Promise<void> {
+    this.closing = true;
+    if (!this.child) return;
+    if (this.failure) { await this.stop(); return; }
+    if (this.pending.size) {
+      this.fail(new PicPatchCancelledError('Editor was disposed.'));
+      await this.stop();
+      return;
+    }
+    const response = await this.request({ version: 1, id: this.nextId++, type: 'shutdown' }, this.timeouts.shutdownMs);
+    if (response.type !== 'shutdownAck') { this.fail(new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker rejected shutdown.')); await this.stop(); throw this.failure; }
+    this.child.stdin.end();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([this.closeWait.promise, new Promise<void>(resolve => {
+        timer = setTimeout(() => { this.fail(new PicPatchRuntimeError('TIMEOUT', 'Worker did not exit after shutdown.')); resolve(); }, this.timeouts.shutdownMs);
+      })]);
+      if (this.failure) { await this.stop(); throw this.failure; }
+    } finally { clearTimeout(timer); }
+  }
+}
