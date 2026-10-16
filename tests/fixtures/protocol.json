@@ -327,5 +327,51 @@
         }
       }
     }
+  },
+  {
+    "name": "text-only generation request",
+    "kind": "Request",
+    "valid": true,
+    "message": {
+      "version": 1,
+      "id": 2,
+      "type": "generate",
+      "request": {
+        "model": "test",
+        "prompt": "A bowl.",
+        "outputPath": "/out.png"
+      }
+    }
+  },
+  {
+    "name": "generation rejects edit conditioning",
+    "kind": "Request",
+    "valid": false,
+    "message": {
+      "version": 1,
+      "id": 2,
+      "type": "generate",
+      "request": {
+        "model": "test",
+        "prompt": "A bowl.",
+        "outputPath": "/out.png",
+        "sourceImage": "/in.png"
+      }
+    }
+  },
+  {
+    "name": "generation requires a nonempty prompt",
+    "kind": "Request",
+    "valid": false,
+    "message": {
+      "version": 1,
+      "id": 2,
+      "type": "generate",
+      "request": {
+        "model": "test",
+        "prompt": " ",
+        "outputPath": "/out.png"
+      }
+    }
   }
 ]

@@ -1,8 +1,8 @@
 # PicPatch
 
-PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, and masked edits.
+PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, masked edits, and text-to-image generation.
 
-The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects grouped-reference editing to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness and larger-image memory limits remain unverified. The SDK does not acquire Python or models automatically. Explicit model preparation is available through the SDK.
+The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects editing and generation to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness and larger-image memory limits remain unverified. The SDK does not acquire Python or models automatically. Explicit model preparation is available through the SDK.
 
 ## Experimental local editing
 
@@ -12,7 +12,7 @@ The selected interpreter must already contain the worker dependencies and the op
 
 The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Masked edits use final compositing. Explicit output dimensions must be multiples of 16; omitted dimensions use the source size for masked edits and 1024 by 1024 otherwise. MFLUX's distilled generation defaults apply. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
 
-Models are loaded and released for each edit, while the worker is reused. This avoids retaining unmeasured model memory between operations, at the cost of reload latency. Progress reports loading, conditioning/editing, denoising steps and saving. Pixel output is saved without prompt metadata or sidecars. Hugging Face and Transformers run offline; the worker additionally rejects Python socket connections and isolates both Python and native standard output from protocol frames. This is not a general sandbox for arbitrary native packages.
+Models are loaded and released for each operation, while the worker is reused. This avoids retaining unmeasured model memory between operations, at the cost of reload latency. Progress reports loading, conditioning/editing, denoising steps and saving. Pixel output is saved without prompt metadata or sidecars. Hugging Face and Transformers run offline; the worker additionally rejects Python socket connections and isolates both Python and native standard output from protocol frames. This is not a general sandbox for arbitrary native packages.
 
 After preparing the worker environment and a local bundle, run `npx tsx examples/edit-local.ts --instruction "Change the background to a garden" --source /absolute/source.png --directory /absolute/model/bundle`. Add `--python /absolute/prepared/python` to select another uv environment. The example imports the SDK, verifies the chosen catalog bundle and saves a uniquely named PNG beside the source. It never installs packages or downloads models.
 
@@ -44,13 +44,13 @@ Preparation and readiness accept cancellation, progress and `timeoutMs`. Prepara
 
 ## Caller defaults and diagnostics
 
-An editor accepts `defaults: { size?, seed?, outputDirectory? }`. Per-edit values override these; absent size and seed continue to use the adapter's defaults. The session model is inherited, and a conflicting explicit model is rejected. Returned results contain the actual seed, dimensions and model provenance. Explicit model registration remains available for advanced local configurations.
+An editor accepts `defaults: { size?, seed?, outputDirectory? }`. Per-call values override these; absent size and seed continue to use the adapter's defaults. The session model is inherited, and a conflicting explicit model is rejected. Returned results contain the actual seed, dimensions and model provenance. Explicit model registration remains available for advanced local configurations.
 
 An explicit `outputPath` wins over session destination settings. Otherwise PicPatch generates `edit-<UUID>.png` in the per-edit `outputDirectory`, the session's directory, or beside the authored source path, in that order. Reference-only compositions require a chosen destination. Directories must already exist; PicPatch never falls back to the working directory, creates an output directory implicitly, or overwrites an existing file. Input paths remain literal, including symlink paths.
 
 If `pythonExecutable` is omitted, the editor uses the worker project's standard uv environment (`runtimes/mflux/.venv`), respecting `UV_PROJECT_ENVIRONMENT` relative to the worker project. It does not search system Python, inspect another application's environment, install dependencies or download anything. Use an explicit interpreter for another prepared environment.
 
-Model and runtime operations and `editor.edit` accept `onDiagnostic` alongside `onProgress` and cancellation. Diagnostics report an invocation ID, UTC time, operation, progress stages and one terminal success, failure or cancellation after owned work settles. Calls rejected before edit admission do not emit a lifecycle. The sink is caller-owned; PicPatch creates no log files and prints nothing. Sink failures never change the primary outcome, and asynchronous sink work is not awaited. Keep callbacks brief; a blocking synchronous callback blocks its caller. Progress callbacks remain synchronous and throwing one fails with `CALLBACK_FAILED`.
+Model and runtime operations, `editor.edit`, and `editor.generate` accept `onDiagnostic` alongside `onProgress` and cancellation. Diagnostics report an invocation ID, UTC time, operation, progress stages and one terminal success, failure or cancellation after owned work settles. Calls rejected before operation admission do not emit a lifecycle. The sink is caller-owned; PicPatch creates no log files and prints nothing. Sink failures never change the primary outcome, and asynchronous sink work is not awaited. Keep callbacks brief; a blocking synchronous callback blocks its caller. Progress callbacks remain synchronous and throwing one fails with `CALLBACK_FAILED`.
 
 Diagnostic copies omit prompts, image data, paths, raw exception messages and stderr. They retain stable SDK error codes, selected I/O codes and bounded causal categories. Worker runtime errors also expose `error.diagnostic`, including failure phase, causal categories, known missing-runtime reasons or process-exit information. Python library messages and tracebacks are deliberately not forwarded because they can contain private inputs. The thrown local error keeps its original cause for the caller; the diagnostic sink receives only the safe projection.
 
@@ -69,6 +69,27 @@ await editor.edit({
 
 The controller and sinks above belong to the caller. Use `verifyModel` for explicit integrity verification and `resolveStoragePaths` for data/model root overrides; output destinations are independent of those managed roots.
 
+## Text-to-image generation
+
+The same editor generates images using the installed Klein bundle. No source or reference image is needed. Check `textToImage` in readiness capabilities when choosing a model; generation is supported only when explicitly advertised.
+
+```ts
+const generated = await editor.generate({
+  prompt: 'A blue ceramic bowl on a white table',
+  size: { width: 512, height: 512 },
+  seed: 42,
+  outputDirectory: '/absolute/results',
+});
+const edited = await editor.edit({
+  instruction: 'Make the bowl green',
+  sourceImage: generated.image.path,
+});
+```
+
+Generation inherits the editor's model, size, seed and output-directory defaults. Supply an output path or a per-call/session output directory; generated filenames use `generate-<UUID>.png`. It returns the same artifact and provenance fields as editing, with empty references and input geometry. Generation rejects editing fields such as source images and masks. Use `edit` for image-conditioned work.
+
+Both verbs share one active operation per editor, safe PNG publication, cancellation and diagnostics. Generation progress uses `verb: "generate"` and the `generating` denoising stage. `timeouts.generateMs` bounds generation independently of `editMs`, with the same thirty-minute default. The worker and weights are reused across verb choices without a second environment or model download; model objects are released after each operation.
+
 ## Masked editing
 
 Pass `maskImage` with `sourceImage`, or add `--mask /absolute/mask.png` to the local-edit example. Klein generates a complete edit using the source and references; the mask is applied afterward and is not sent as an extra model reference. Describe the desired change in the instruction. The mask controls pixel replacement, not where the model directs its attention, so seams and instruction adherence still depend on generation quality.
@@ -81,7 +102,7 @@ The first composite mode requires source width and height to be multiples of 16 
 
 Use Node.js 24 or newer, npm, and uv. The worker lock targets macOS arm64. The worker declares Python 3.15 (`>=3.15,<3.16`) in `runtimes/mflux/pyproject.toml`; uv selects a compatible interpreter and downloads one if needed. Run `uv sync --project runtimes/mflux --locked` to prepare the worker environment. Install the development dependencies with `npm ci`, then run `npm test`. This checks generated contracts, TypeScript source and examples, request validation, and TypeScript/Python protocol behavior. The Python test command lets uv prepare Python and the small locked validation and test dependencies; it never downloads models.
 
-The ordinary suite uses simulated process streams and small generated images in temporary directories, and checks package-name imports and read-only consumer operations under isolated storage roots. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It uses `runtimes/mflux/.venv` by default, or the environment selected by `UV_PROJECT_ENVIRONMENT` (relative paths resolve from `runtimes/mflux/`), and currently targets macOS/POSIX. The full gate exercises catalog preparation, readiness, sequential editing, provenance, output collision protection and disposal with existing weights. It also tests explicit acquisition and cancellation against a tiny local HTTP fixture. Real inference uses `node_modules/.cache/picpatch-live/inference-config.json`, or an absolute editor-options JSON path supplied through `PICPATCH_INFERENCE_CONFIG`. Missing prerequisites fail explicitly. No test downloads models. The missing-backend test needs uv on PATH and cached worker wheels to create an isolated model-free environment offline. Live tests are type-checked by the ordinary gate.
+The ordinary suite uses simulated process streams and small generated images in temporary directories, and checks package-name imports and read-only consumer operations under isolated storage roots. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It uses `runtimes/mflux/.venv` by default, or the environment selected by `UV_PROJECT_ENVIRONMENT` (relative paths resolve from `runtimes/mflux/`), and currently targets macOS/POSIX. The full gate exercises catalog preparation, readiness, text-only generation, generation-to-edit reuse, sequential editing, provenance, output collision protection and disposal with existing weights. It also tests explicit acquisition and cancellation against a tiny local HTTP fixture. Real inference uses `node_modules/.cache/picpatch-live/inference-config.json`, or an absolute editor-options JSON path supplied through `PICPATCH_INFERENCE_CONFIG`. Missing prerequisites fail explicitly. No test downloads models. The missing-backend test needs uv on PATH and cached worker wheels to create an isolated model-free environment offline. Live tests are type-checked by the ordinary gate.
 
 To prepare the real-inference test after the development setup, run these commands from the repository root. The first installs the locked inference packages into a separate environment; the second explicitly downloads approximately 4.62 GB of pinned model files and verifies every component before publishing the local configuration. The runtime and test configuration stay in the ignored test cache; new model acquisitions use the configured model store. Existing external bundles can be reused without copying.
 

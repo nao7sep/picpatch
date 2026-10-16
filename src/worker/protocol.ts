@@ -1,8 +1,8 @@
 import type { WorkerDiagnostic } from '../diagnostics.ts';
 import { contractAjv } from '../contracts.ts';
 import { PicPatchRuntimeError } from '../errors.ts';
-import { validateEditRequest } from '../validation.ts';
-import type { EditRequest, EditResult, ModelCapabilities, ProgressEvent } from '../types.ts';
+import { validateEditRequest, validateGenerateRequest } from '../validation.ts';
+import type { GenerateRequest, EditRequest, EditResult, ModelCapabilities, ProgressEvent } from '../types.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
 import schema from '../../protocol/worker.schema.json' with { type: 'json' };
 
@@ -10,7 +10,7 @@ export interface RuntimeCheck { status: 'imports-ready' | 'load-ready' | 'missin
 
 type Envelope<T extends string> = { version: 1; id: number; type: T };
 export type WorkerRequest = Envelope<'shutdown'> | (Envelope<'hello'> & { model?: LocalEditingModel; runtimeCheck?: 'imports' | 'load' }) |
-  (Envelope<'edit'> & { request: EditRequest }) | (Envelope<'cancel'> & { targetId: number });
+  (Envelope<'generate'> & { request: GenerateRequest }) | (Envelope<'edit'> & { request: EditRequest }) | (Envelope<'cancel'> & { targetId: number });
 export type WorkerResponse = (Envelope<'ready'> & { workerVersion: string; models: ModelCapabilities[]; runtimeCheck?: RuntimeCheck }) |
   (Envelope<'progress'> & { event: ProgressEvent }) | (Envelope<'result'> & { result: EditResult }) |
   (Envelope<'error'> & { error: { code: 'INVALID_REQUEST' | 'NOT_READY' | 'BACKEND_UNAVAILABLE' | 'BUSY' | 'CANCELLED' | 'RUNTIME_FAILURE'; message: string; diagnostic?: WorkerDiagnostic } }) |
@@ -22,6 +22,7 @@ function fail(message: string): never { throw new PicPatchRuntimeError('PROTOCOL
 
 export function validateRequest(value: unknown): asserts value is WorkerRequest {
   if (!requestValid(value)) fail('Invalid worker request or unsupported protocol version.');
+  if (value.type === 'generate') validateGenerateRequest(value.request);
   if (value.type === 'edit') validateEditRequest(value.request);
 }
 export function validateResponse(value: unknown): asserts value is WorkerResponse {
@@ -54,8 +55,8 @@ export class ProtocolSession {
     if (request.id <= this.lastId) fail('Request IDs must increase within a session.');
     if (this.state === 'closed' || this.state === 'closing') fail('Session is closing or closed.');
     if (request.type === 'hello' ? this.state !== 'new' : this.state !== 'ready') fail('Handshake must complete before other requests.');
-    if (request.type === 'edit' && [...this.pending.values()].some(item => item.type === 'edit')) fail('An edit is already pending.');
-    if (request.type === 'cancel' && this.pending.get(request.targetId)?.type !== 'edit') fail('Cancellation must target a pending edit.');
+    if ((request.type === 'edit' || request.type === 'generate') && [...this.pending.values()].some(item => item.type === 'edit' || item.type === 'generate')) fail('An image operation is already pending.');
+    if (request.type === 'cancel' && !['edit', 'generate'].includes(this.pending.get(request.targetId)?.type ?? '')) fail('Cancellation must target a pending image operation.');
     if (request.type === 'shutdown' && this.pending.size !== 0) fail('Settle outstanding operations before shutdown.');
     if (request.type === 'hello') this.state = 'starting';
     if (request.type === 'shutdown') this.state = 'closing';
@@ -68,9 +69,10 @@ export class ProtocolSession {
     const response = decodeResponse(line);
     const request = this.pending.get(response.id);
     if (!request) return fail('Response has no pending request.');
-    const expected = { hello: ['ready'], edit: ['progress', 'result'], cancel: ['cancelAck'], shutdown: ['shutdownAck'] };
+    const expected = { hello: ['ready'], edit: ['progress', 'result'], generate: ['progress', 'result'], cancel: ['cancelAck'], shutdown: ['shutdownAck'] };
     if (response.type !== 'error' && !expected[request.type].includes(response.type)) fail('Response does not match the request operation.');
     if (response.type === 'cancelAck' && request.type === 'cancel' && response.targetId !== request.targetId) fail('Cancellation acknowledgement targets the wrong edit.');
+    if (response.type === 'progress' && response.event.verb !== request.type) fail('Progress does not match the requested operation.');
     if (response.type !== 'progress') this.pending.delete(response.id);
     if (request.type === 'hello') this.state = response.type === 'ready' ? 'ready' : 'closed';
     if (request.type === 'shutdown') this.state = 'closed';

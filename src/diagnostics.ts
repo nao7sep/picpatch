@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from './errors.ts';
 
 export interface WorkerDiagnostic {
-  phase: 'loading' | 'editing' | 'saving' | 'worker';
+  phase: 'loading' | 'generating' | 'editing' | 'saving' | 'worker';
   causes: { kind: 'BackendUnavailable' | 'ModuleNotFoundError' | 'FileNotFoundError' | 'PermissionError' | 'MemoryError' | 'ValueError' | 'OSError' | 'RuntimeError' | 'Exception' | 'ProcessExit'; errno?: number }[];
   reason?: 'missing-package' | 'unsupported-version' | 'missing-directory';
   exitCode?: number;

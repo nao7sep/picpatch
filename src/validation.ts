@@ -1,9 +1,10 @@
 import { extname, isAbsolute, resolve } from 'node:path';
 import { contractValidator } from './contracts.ts';
 import { PicPatchRuntimeError, PicPatchUsageError } from './errors.ts';
-import type { EditRequest, ModelCapabilities } from './types.ts';
+import type { GenerateRequest, EditRequest, ImageSize, ModelCapabilities } from './types.ts';
 
 const requestValid = contractValidator<EditRequest>('EditRequest');
+const generationValid = contractValidator<GenerateRequest>('GenerateRequest');
 const capabilitiesValid = contractValidator<ModelCapabilities>('ModelCapabilities');
 
 /** Validate metadata only; opening images and reserving output happens at execution. */
@@ -35,12 +36,31 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
     if (request.maskImage && capabilities.maskMode === 'none') unsupported('This model does not support masks.');
     if (groups.some(group => !capabilities.referenceRoles.includes(group.role))) unsupported('This model does not support a requested reference role.');
     if (capabilities.maxReferenceImages !== undefined && references.length > capabilities.maxReferenceImages) unsupported('The reference count exceeds this model’s supported limit.');
-    const size = request.size;
-    const limits = capabilities.size;
-    if (size && limits && (size.width % limits.widthMultiple !== 0 || size.height % limits.heightMultiple !== 0 ||
-      (limits.maxWidth !== undefined && size.width > limits.maxWidth) || (limits.maxHeight !== undefined && size.height > limits.maxHeight))) {
-      unsupported('The requested dimensions are unsupported by this model.');
+    validateSize(request.size, capabilities);
+  }
+  return request;
+}
+
+function validateSize(size: ImageSize | undefined, capabilities: ModelCapabilities): void {
+  const limits = capabilities.size;
+  if (size && limits && (size.width % limits.widthMultiple !== 0 || size.height % limits.heightMultiple !== 0 ||
+    (limits.maxWidth !== undefined && size.width > limits.maxWidth) || (limits.maxHeight !== undefined && size.height > limits.maxHeight))) {
+    throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The requested dimensions are unsupported by this model.');
+  }
+}
+
+export function validateGenerateRequest(input: unknown, capabilities?: ModelCapabilities): GenerateRequest {
+  if (!generationValid(input)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid generation request: check prompt, output, numeric bounds, and unknown fields.');
+  const request = structuredClone(input);
+  if (!isAbsolute(request.outputPath) || extname(request.outputPath).toLowerCase() !== '.png') {
+    throw new PicPatchUsageError('INVALID_REQUEST', 'Output must be an absolute path with a .png extension.');
+  }
+  if (capabilities) {
+    if (!capabilitiesValid(capabilities)) throw new PicPatchRuntimeError('INVALID_CAPABILITIES', 'Worker returned invalid model capabilities.');
+    if (capabilities.model !== request.model || capabilities.textToImage !== true) {
+      throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'This model does not advertise text-to-image generation.');
     }
+    validateSize(request.size, capabilities);
   }
   return request;
 }

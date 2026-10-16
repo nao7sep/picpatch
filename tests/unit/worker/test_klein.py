@@ -40,8 +40,9 @@ def runtime(monkeypatch, cancel=None, failure=None):
             if failure:
                 raise failure
             return SimpleNamespace(image=Image())
-    def load(config):
+    def load(config, operation="edit"):
         calls.append(('load', config))
+        calls.append(('operation', operation))
         return Pipeline(), '0.22.0', SimpleNamespace(synchronize=lambda: calls.append(('sync',)), clear_cache=lambda: calls.append(('clear',)))
     monkeypatch.setattr(klein, 'load_pipeline', load)
     return calls
@@ -130,7 +131,8 @@ def test_missing_directory_never_imports(monkeypatch, config):
 
 
 @pytest.mark.parametrize('quantize', [None, 4, 8])
-def test_local_loader_passes_only_explicit_options(monkeypatch, config, quantize):
+@pytest.mark.parametrize('operation', ['edit', 'generate'])
+def test_local_loader_passes_only_explicit_options(monkeypatch, config, quantize, operation):
     import sys
     calls = []
     for key in ['HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE', 'HF_HUB_DISABLE_TELEMETRY']:
@@ -140,13 +142,14 @@ def test_local_loader_passes_only_explicit_options(monkeypatch, config, quantize
     monkeypatch.setitem(sys.modules, 'mflux.models.common.config', SimpleNamespace(
         ModelConfig=SimpleNamespace(flux2_klein_4b=lambda: model_config)))
     monkeypatch.setitem(sys.modules, 'mflux.models.flux2.variants', SimpleNamespace(
-        Flux2KleinEdit=lambda **kwargs: calls.append(kwargs) or 'pipeline'))
+        Flux2KleinEdit=lambda **kwargs: calls.append(kwargs) or 'edit',
+        Flux2Klein=lambda **kwargs: calls.append(kwargs) or 'generate'))
     core = object()
     monkeypatch.setitem(sys.modules, 'mlx', SimpleNamespace(core=core))
     monkeypatch.setitem(sys.modules, 'mlx.core', core)
     if quantize:
         config['quantize'] = quantize
-    assert klein.load_pipeline(config) == ('pipeline', '0.22.0', core)
+    assert klein.load_pipeline(config, operation) == (operation, '0.22.0', core)
     assert calls == [{'model_config': model_config, 'model_path': config['directory'],
                       **({'quantize': quantize} if quantize else {})}]
 
@@ -236,3 +239,19 @@ def test_adapter_selection_is_explicit(config):
     assert isinstance(create_adapter(config), klein.KleinAdapter)
     with pytest.raises(InvalidEditInput):
         create_adapter({**config, 'adapter': 'unknown'})
+
+
+def test_generation_has_no_image_conditioning(monkeypatch, config, tmp_path):
+    calls = runtime(monkeypatch)
+    events = []
+    request = {'model': 'local-klein', 'prompt': 'A blue ceramic bowl.',
+               'outputPath': str(tmp_path / 'generated.png'), 'seed': 0,
+               'size': {'width': 512, 'height': 256}}
+    result = klein.KleinAdapter(config).generate(request, Event(), events.append)
+    args = next(call[1] for call in calls if call[0] == 'generate')
+    assert args == {'seed': 0, 'prompt': request['prompt'], 'width': 512, 'height': 256}
+    assert ('operation', 'generate') in calls
+    assert result['references'] == [] and result['seed'] == 0
+    assert {event['verb'] for event in events} == {'generate'}
+    assert [event['stage'] for event in events] == ['loading', 'generating', 'generating', 'saving']
+    assert calls[-1] == ('clear',)

@@ -49,7 +49,7 @@ def composite_mask(generated, request):
         return Image.composite(generated.convert('RGBA'), source.convert('RGBA'), mask)
 
 
-def load_pipeline(config: dict):
+def load_pipeline(config: dict, operation="edit"):
     # Set before importing HF/Transformers: these libraries cache environment settings.
     os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1')
     directory = Path(config['directory'])
@@ -62,18 +62,23 @@ def load_pipeline(config: dict):
     # This adapter uses an inspected API contract, not a guess at future compatibility.
     if installed != '0.22.0':
         raise BackendUnavailable('This adapter requires MFLUX 0.22.0.', 'unsupported-version')
-    ModelConfig, Flux2KleinEdit, mx = import_runtime()
+    ModelConfig, pipeline_class, mx = import_runtime(operation)
     kwargs = {'model_config': ModelConfig.flux2_klein_4b(), 'model_path': str(directory)}
     if 'quantize' in config:
         kwargs['quantize'] = config['quantize']
-    return Flux2KleinEdit(**kwargs), installed, mx
+    return pipeline_class(**kwargs), installed, mx
 
 
-def import_runtime():
+def import_runtime(operation="edit"):
     from mflux.models.common.config import ModelConfig
     from mflux.models.flux2.variants import Flux2KleinEdit
+    if operation == "generate":
+        from mflux.models.flux2.variants import Flux2Klein
+        pipeline_class = Flux2Klein
+    else:
+        pipeline_class = Flux2KleinEdit
     import mlx.core as mx
-    return ModelConfig, Flux2KleinEdit, mx
+    return ModelConfig, pipeline_class, mx
 
 
 def check_runtime(config: dict, mode: str) -> dict:
@@ -108,16 +113,17 @@ def check_runtime(config: dict, mode: str) -> dict:
 
 
 class StepObserver:
-    def __init__(self, cancel: Event, emit):
+    def __init__(self, cancel: Event, emit, stage="editing"):
         self.cancel = cancel
         self.emit = emit
+        self.stage = stage
 
     def call_before_loop(self, **kwargs):
         check_cancelled(self.cancel)
 
     def call_in_loop(self, t, config, **kwargs):
         check_cancelled(self.cancel)
-        self.emit('editing', 'Denoising image.', int(t) + 1, int(config.num_inference_steps))
+        self.emit(self.stage, 'Denoising image.', int(t) + 1, int(config.num_inference_steps))
 
     def call_after_loop(self, **kwargs):
         check_cancelled(self.cancel)
@@ -132,16 +138,22 @@ class KleinAdapter:
 
     @property
     def capabilities(self) -> dict:
-        return {'model': self.config['manifest']['model'], 'instructionEditing': True,
+        return {'model': self.config['manifest']['model'], 'instructionEditing': True, 'textToImage': True,
                 'referenceRoles': ['subject', 'object', 'style', 'background'],
                 'maskMode': 'composite', 'size': {'widthMultiple': 16, 'heightMultiple': 16},
                 'sourceImageRequired': False, 'referenceConditioning': 'ordered-images-with-role-prompt',
                 'defaultOutputSize': {'width': 1024, 'height': 1024}, 'inputGeometry': 'klein-reference'}
 
     def edit(self, request: dict, cancel: Event, progress) -> dict:
+        paths, prompt = conditioning(request)
+        return self._run(request, cancel, progress, 'edit', prompt, {'image_paths': paths})
+
+    def generate(self, request: dict, cancel: Event, progress) -> dict:
+        return self._run(request, cancel, progress, 'generate', request['prompt'], {})
+
+    def _run(self, request, cancel, progress, operation, prompt, conditioning_args):
         if request['model'] != self.capabilities['model']:
             raise InvalidEditInput('The requested model is not configured.')
-        paths, prompt = conditioning(request)
         size = request.get('size', self.capabilities['defaultOutputSize'])
         if any(value < 16 or value % 16 for value in size.values()):
             raise InvalidEditInput('Output dimensions must be positive multiples of 16.')
@@ -150,7 +162,7 @@ class KleinAdapter:
             seed = secrets.randbits(32)
 
         def emit(stage, message, completed=None, total=None):
-            event = {'type': 'progress', 'verb': 'edit', 'stage': stage, 'message': message}
+            event = {'type': 'progress', 'verb': operation, 'stage': stage, 'message': message}
             if completed is not None:
                 event.update(completed=completed, total=total)
             progress(event)
@@ -158,15 +170,16 @@ class KleinAdapter:
         pipeline = generated = image = mx = None
         try:
             check_cancelled(cancel)
-            emit('loading', 'Loading local editing model.')
-            pipeline, runtime_version, mx = load_pipeline(self.config)
+            emit('loading', 'Loading local image model.')
+            pipeline, runtime_version, mx = load_pipeline(self.config, operation)
             check_cancelled(cancel)
-            pipeline.callbacks.register(StepObserver(cancel, emit))
-            emit('editing', 'Conditioning references and editing image.')
-            generated = pipeline.generate_image(seed=seed, prompt=prompt, image_paths=paths, **size)
+            stage = "editing" if operation == "edit" else "generating"
+            pipeline.callbacks.register(StepObserver(cancel, emit, stage))
+            emit(stage, 'Running image inference.')
+            generated = pipeline.generate_image(seed=seed, prompt=prompt, **conditioning_args, **size)
             mx.synchronize()
             check_cancelled(cancel)
-            emit('saving', 'Writing edited image.')
+            emit('saving', 'Writing image.')
             image = composite_mask(generated.image, request)
             check_cancelled(cancel)
             # Save pixels only, without MFLUX sidecars, prompt metadata or filename rewriting.

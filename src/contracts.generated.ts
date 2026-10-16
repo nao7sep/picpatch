@@ -82,6 +82,10 @@ export interface ModelCapabilities {
    * Aspect-preserving downscale to 1024 squared pixels, then center crop to multiples of 16. Applies to source and references.
    */
   inputGeometry?: "klein-reference";
+  /**
+   * Explicit text-only generation support. Absence means unsupported.
+   */
+  textToImage?: boolean;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -133,8 +137,8 @@ export interface InputGeometry {
  */
 export interface ProgressEvent {
   type: "progress";
-  verb: "edit";
-  stage: "preparing" | "loading" | "editing" | "saving";
+  verb: "edit" | "generate";
+  stage: "preparing" | "loading" | "editing" | "saving" | "generating";
   message: string;
   completed?: number;
   total?: number;
@@ -174,4 +178,15 @@ export interface LocalEditingModel {
   directory: string;
   manifest: ModelManifest;
   quantize?: 4 | 8;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "GenerateRequest".
+ */
+export interface GenerateRequest {
+  model: string;
+  outputPath: string;
+  seed?: number;
+  size?: ImageSize;
+  prompt: string;
 }

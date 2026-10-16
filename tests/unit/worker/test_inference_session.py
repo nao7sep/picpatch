@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 from threading import Event
 
@@ -6,7 +7,8 @@ from picpatch_worker.session import Session
 from picpatch_worker.backends.errors import Cancelled
 
 
-def test_cancel_ack_keeps_active_until_producer_settles():
+@pytest.mark.parametrize("verb", ["edit", "generate"])
+def test_cancel_ack_keeps_active_until_producer_settles(verb):
     entered, release = Event(), Event()
     replies = []
     class Backend:
@@ -15,12 +17,16 @@ def test_cancel_ack_keeps_active_until_producer_settles():
             assert release.wait(2)
             assert cancel.is_set()
             raise Cancelled()
+        generate = edit
     protocol = Protocol(Path(__file__).resolve().parents[3] / 'protocol')
     session = Session(protocol, replies.append)
     session.handle({'version': 1, 'id': 1, 'type': 'hello'})
     session.adapter = Backend()
     edit = {'version': 1, 'id': 2, 'type': 'edit', 'request': {
         'model': 'test', 'instruction': 'edit', 'sourceImage': '/in.png', 'outputPath': '/out.png'}}
+    if verb == 'generate':
+        edit['type'] = 'generate'
+        edit['request'] = {'model': 'test', 'prompt': 'A bowl.', 'outputPath': '/out.png'}
     try:
         assert session.handle(edit) is None
         assert entered.wait(2)

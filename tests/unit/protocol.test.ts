@@ -61,3 +61,16 @@ describe('worker protocol', () => {
     }
   });
 });
+
+it('correlates generation, blocks mixed concurrent work, and cancels generation by ID', () => {
+  const session = started();
+  session.send({ version: 1, id: 2, type: 'generate', request: { model: 'test', prompt: 'A bowl.', outputPath: '/out.png' } });
+  expect(() => session.send({ ...edit, id: 3 })).toThrow();
+  expect(() => session.receive(JSON.stringify(progress))).toThrow();
+  session.receive(JSON.stringify({ ...progress, event: { ...progress.event, verb: 'generate', stage: 'generating' } }));
+  session.send({ version: 1, id: 3, type: 'cancel', targetId: 2 });
+  session.receive(JSON.stringify({ version: 1, id: 3, type: 'cancelAck', targetId: 2, accepted: true }));
+  expect(() => session.send({ ...edit, id: 4 })).toThrow();
+  session.receive(JSON.stringify({ ...error, error: { code: 'CANCELLED', message: 'Cancelled' } }));
+  session.send({ ...edit, id: 4 });
+});

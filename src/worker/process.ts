@@ -15,11 +15,12 @@ export interface WorkerLaunch {
 export interface WorkerTimeouts {
   startupMs: number;
   editMs: number;
+  generateMs?: number;
   cancellationMs: number;
   shutdownMs: number;
   terminationMs: number;
 }
-export const workerTimeouts: WorkerTimeouts = { startupMs: 30_000, editMs: 1_800_000, cancellationMs: 5_000, shutdownMs: 5_000, terminationMs: 2_000 };
+export const workerTimeouts: WorkerTimeouts = { startupMs: 30_000, editMs: 1_800_000, generateMs: 1_800_000, cancellationMs: 5_000, shutdownMs: 5_000, terminationMs: 2_000 };
 export type SpawnWorker = (launch: WorkerLaunch) => ChildProcessWithoutNullStreams;
 const spawnWorker: SpawnWorker = launch => spawn(launch.executable, launch.args, {
   cwd: launch.cwd, stdio: 'pipe', detached: process.platform !== 'win32',
@@ -113,18 +114,19 @@ export class WorkerProcess {
           emitProgress(pending.onProgress ? { onProgress: pending.onProgress } : {}, response.event);
         } else {
           if (pending.request.type === 'hello' && response.type !== 'ready') throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker rejected its startup handshake.');
-          if (response.type === 'result' && pending.request.type === 'edit') {
+          if (response.type === 'result' && (pending.request.type === 'edit' || pending.request.type === 'generate')) {
             const expected = pending.request.request;
             const result = response.result;
+            const references = 'instruction' in expected ? expected.references ?? [] : [];
             if (result.model !== expected.model || result.image.path !== expected.outputPath ||
                 (expected.seed !== undefined && result.seed !== expected.seed) ||
-                result.references.length !== (expected.references ?? []).length ||
+                result.references.length !== references.length ||
                 result.references.some((group, index) => {
-                  const wanted = expected.references?.[index];
+                  const wanted = references[index];
                   return !wanted || group.id !== wanted.id || group.role !== wanted.role ||
                     group.images.length !== wanted.images.length || group.images.some((image, i) => image !== wanted.images[i]);
                 })) {
-              throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker result does not describe the requested edit.');
+              throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker result does not describe the requested operation.');
             }
           }
           if (response.type === 'shutdownAck') this.shutdownAck = true;
@@ -154,8 +156,17 @@ export class WorkerProcess {
   }
 
   async edit(request: Extract<WorkerRequest, { type: 'edit' }>['request'], onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal): Promise<WorkerResponse> {
-    const id = this.nextId++;
-    const result = this.request({ version: 1, id, type: 'edit', request }, this.timeouts.editMs, onProgress);
+    return this.execute({ version: 1, id: this.nextId++, type: 'edit', request }, onProgress, signal);
+  }
+
+  generate(request: Extract<WorkerRequest, { type: 'generate' }>['request'], onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal): Promise<WorkerResponse> {
+    return this.execute({ version: 1, id: this.nextId++, type: 'generate', request }, onProgress, signal);
+  }
+
+  private async execute(request: Extract<WorkerRequest, { type: 'edit' | 'generate' }>, onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal): Promise<WorkerResponse> {
+    const id = request.id;
+    const timeout = request.type === 'generate' ? this.timeouts.generateMs ?? this.timeouts.editMs : this.timeouts.editMs;
+    const result = this.request(request, timeout, onProgress);
     let cancellation: Promise<WorkerResponse> | undefined;
     let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
     const abort = () => {

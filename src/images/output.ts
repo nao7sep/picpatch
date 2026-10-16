@@ -1,24 +1,24 @@
 import { basename, dirname, join } from 'node:path';
 import { chmod, link, lstat, mkdtemp, open, realpath, rm } from 'node:fs/promises';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
-import type { EditRequest, EditResult, InputGeometry } from '../types.ts';
+import type { ImageRequest, EditResult, InputGeometry } from '../types.ts';
 import type { GeometryPolicy } from './geometry.ts';
 import { checkCancellation, normalizeImage, prepareImage, snapshotImage } from './validation.ts';
 
 /** An operation owns only this private directory, never the caller's source/output files. */
-export class ImageWorkspace {
+export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   readonly directory: string;
-  readonly workerRequest: EditRequest;
-  private readonly request: EditRequest;
+  readonly workerRequest: T & Pick<ImageRequest, 'size'>;
+  private readonly request: T;
   private readonly destination: string;
   private retain = false;
   private readonly geometry: InputGeometry[] = [];
-  private constructor(directory: string, destination: string, request: EditRequest) {
+  private constructor(directory: string, destination: string, request: T) {
     this.directory = directory; this.destination = destination; this.request = request;
     this.workerRequest = { ...structuredClone(request), outputPath: join(directory, 'worker.png') };
   }
 
-  static async create(request: EditRequest, signal?: AbortSignal): Promise<ImageWorkspace> {
+  static async create<T extends ImageRequest>(request: T, signal?: AbortSignal): Promise<ImageWorkspace<T>> {
     checkCancellation(signal);
     let parent: string;
     try { parent = await realpath(dirname(request.outputPath)); }
@@ -40,6 +40,7 @@ export class ImageWorkspace {
   }
 
   async prepare(signal?: AbortSignal, policy?: GeometryPolicy): Promise<void> {
+    if (!('instruction' in this.request) || !('instruction' in this.workerRequest)) { checkCancellation(signal); return; }
     let index = 0;
     const prepare = async (path: string, mask = false) => {
       const stem = join(this.directory, `input-${index++}`);
@@ -107,13 +108,13 @@ export class ImageWorkspace {
       if (cause instanceof PicPatchCancelledError) throw cause;
       this.retain = true;
       const error = (cause as NodeJS.ErrnoException).code === 'EEXIST'
-        ? new PicPatchUsageError('OUTPUT_CONFLICT', 'Output appeared during the edit; the completed image was retained.', { cause })
+        ? new PicPatchUsageError('OUTPUT_CONFLICT', 'Output appeared during the operation; the completed image was retained.', { cause })
         : new PicPatchRuntimeError('OUTPUT_IO', 'Could not publish atomically; the completed image was retained.', { cause });
       error.recoveryDirectory = this.directory;
       throw error;
     }
     // Publication is the commit point. A later abort must not disguise a saved result.
-    return { ...result, image: { ...result.image, path: this.request.outputPath }, references: structuredClone(this.request.references ?? []), inputGeometry: structuredClone(this.geometry) };
+    return { ...result, image: { ...result.image, path: this.request.outputPath }, references: structuredClone('instruction' in this.request ? this.request.references ?? [] : []), inputGeometry: structuredClone(this.geometry) };
   }
 
   preserve(): void { this.retain = true; }

@@ -9,7 +9,7 @@ import type { WorkerRequest } from '../../src/worker/protocol.ts';
 
 const timeouts: WorkerTimeouts = { startupMs: 100, editMs: 100, cancellationMs: 20, shutdownMs: 20, terminationMs: 10 };
 const request: EditRequest = { model: 'test', instruction: 'Edit', sourceImage: '/in.png', outputPath: '/out.png', seed: 1 };
-const capabilities = { model: 'test', instructionEditing: true, referenceRoles: ['subject'], maskMode: 'none' };
+const capabilities = { model: 'test', instructionEditing: true, textToImage: true, referenceRoles: ['subject'], maskMode: 'none' };
 const tick = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 
 class FakeWorker extends EventEmitter {
@@ -120,9 +120,9 @@ describe('owned worker lifecycle', () => {
     controller.abort(); await caught; expect(child.closed).toBe(true);
     expect(child.requests.map(message => message.type)).toEqual(['hello']); await editor.dispose();
   });
-  it.each(['startup', 'edit'])('times out %s without releasing a live worker', async phase => {
+  it.each(['startup', 'edit', 'generate'])('times out %s without releasing a live worker', async phase => {
     vi.useFakeTimers(); const { editor, child } = setup(); if (phase === 'startup') child.onRequest = () => {};
-    const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'TIMEOUT' });
+    const active = phase === 'generate' ? editor.generate({ model: 'test', prompt: 'A bowl.', outputPath: '/out.png' }) : editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'TIMEOUT' });
     await vi.advanceTimersByTimeAsync(100); await caught; expect(child.closed).toBe(true); await editor.dispose();
   });
   it.each(['bad JSON\n', '{"version":1,"id":99,"type":"shutdownAck"}\n'])('closes after invalid output: %s', async output => {
@@ -317,4 +317,12 @@ it('cancels capability discovery before image preparation and closes the worker'
   await editor.dispose();
   expect(child.closed).toBe(true);
   expect(child.requests.map(message => message.type)).toEqual(['hello']);
+});
+
+it('rejects generation results with mismatched provenance and stops the worker', async () => {
+  const { editor, child } = setup();
+  const active = editor.generate({ model: 'test', prompt: 'A bowl.', outputPath: '/out.png', seed: 2 });
+  const caught = expect(active).rejects.toMatchObject({ code: 'PROTOCOL_ERROR' });
+  await tick(); child.result(2); await caught;
+  expect(child.closed).toBe(true); await editor.dispose();
 });

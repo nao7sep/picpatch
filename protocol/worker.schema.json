@@ -330,6 +330,9 @@
         },
         {
           "$ref": "#/definitions/Shutdown"
+        },
+        {
+          "$ref": "#/definitions/Generate"
         }
       ]
     },
@@ -385,7 +388,8 @@
             "loading",
             "editing",
             "saving",
-            "worker"
+            "worker",
+            "generating"
           ]
         },
         "causes": {
@@ -432,6 +436,32 @@
       "required": [
         "phase",
         "causes"
+      ],
+      "additionalProperties": false
+    },
+    "Generate": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "generate"
+        },
+        "request": {
+          "$ref": "contracts.schema.json#/definitions/GenerateRequest"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type",
+        "request"
       ],
       "additionalProperties": false
     }

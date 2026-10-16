@@ -1,9 +1,9 @@
-import { resolveEditRequest, type EditDefaults, type EditInput } from '../defaults.ts';
+import { resolveGenerateRequest, resolveEditRequest, type GenerateInput, type EditDefaults, type EditInput } from '../defaults.ts';
 import { emitProgress, validateOperation } from '../operations.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import type { Editor } from '../client.ts';
 import type { EditBackend } from './backend.ts';
-import type { EditRequest, EditResult, OperationOptions } from '../types.ts';
+import type { ImageRequest, EditResult, OperationOptions } from '../types.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
 import { checkCancellation } from '../images/validation.ts';
 import { ImageWorkspace } from '../images/output.ts';
@@ -19,19 +19,27 @@ export class ImageEditor implements Editor {
   constructor(backend: EditBackend, defaults: EditDefaults = {}, model?: string) { this.backend = backend; this.defaults = defaults; this.model = model; }
 
   edit(input: EditInput, options: OperationOptions = {}): Promise<EditResult> {
+    return this.submit(() => resolveEditRequest(input, this.defaults, this.model), options);
+  }
+
+  generate(input: GenerateInput, options: OperationOptions = {}): Promise<EditResult> {
+    return this.submit(() => resolveGenerateRequest(input, this.defaults, this.model), options);
+  }
+
+  private submit(resolve: () => ImageRequest, options: OperationOptions): Promise<EditResult> {
     if (this.lifetime.signal.aborted) return Promise.reject(new PicPatchUsageError('DISPOSED', 'Editor has been disposed.'));
-    if (this.active) return Promise.reject(new PicPatchUsageError('BUSY', 'An edit is already active on this editor.'));
-    let request: EditRequest;
+    if (this.active) return Promise.reject(new PicPatchUsageError('BUSY', 'An operation is already active on this editor.'));
+    let request: ImageRequest;
     try {
-      request = resolveEditRequest(input, this.defaults, this.model);
+      request = resolve();
       validateOperation(options);
     } catch (error) { return Promise.reject(error); }
     const signal = AbortSignal.any([this.lifetime.signal, ...(options.signal ? [options.signal] : [])]);
-    this.active = Promise.resolve().then(() => withDiagnostics('edit', { ...options, signal }, operation => this.run(request, signal, operation))).finally(() => { this.active = undefined; });
+    this.active = Promise.resolve().then(() => withDiagnostics('prompt' in request ? 'generate' : 'edit', { ...options, signal }, operation => this.run(request, signal, operation))).finally(() => { this.active = undefined; });
     return this.active;
   }
 
-  private async run(request: EditRequest, signal: AbortSignal, options: OperationOptions): Promise<EditResult> {
+  private async run(request: ImageRequest, signal: AbortSignal, options: OperationOptions): Promise<EditResult> {
     let workspace: ImageWorkspace | undefined;
     let result: EditResult | undefined;
     let failure: unknown;
@@ -39,10 +47,12 @@ export class ImageEditor implements Editor {
       checkCancellation(signal);
       const capabilities = await this.backend.validate(request, options);
       checkCancellation(signal);
-      emitProgress(options, { type: 'progress', verb: 'edit', stage: 'preparing', message: 'Validating and preparing input images.' });
+      emitProgress(options, { type: 'progress', verb: 'prompt' in request ? 'generate' : 'edit', stage: 'preparing', message: 'Preparing image operation.' });
       workspace = await ImageWorkspace.create(request, signal);
       await workspace.prepare(signal, capabilities.inputGeometry);
-      const response = await this.backend.edit(workspace.workerRequest, options);
+      const response = 'prompt' in workspace.workerRequest
+        ? await this.backend.generate(workspace.workerRequest, options)
+        : await this.backend.edit(workspace.workerRequest, options);
       result = await workspace.publish(response, signal);
     } catch (error) {
       failure = error;
@@ -55,7 +65,7 @@ export class ImageEditor implements Editor {
     catch (cause) {
       if (result) result.cleanupWarning = { directory: workspace!.directory, message: 'Output was saved, but private temporary files could not be removed.' };
       else {
-        const error = new PicPatchRuntimeError('CLEANUP_FAILED', 'Edit failed and private temporary files could not be removed.', { cause: new AggregateError([failure, cause]) });
+        const error = new PicPatchRuntimeError('CLEANUP_FAILED', 'Operation failed and private temporary files could not be removed.', { cause: new AggregateError([failure, cause]) });
         error.recoveryDirectory = workspace!.directory;
         failure = error;
       }

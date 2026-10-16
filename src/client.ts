@@ -1,4 +1,4 @@
-import { validateDefaults, type EditDefaults, type EditInput } from './defaults.ts';
+import { validateDefaults, type EditDefaults, type GenerateInput, type EditInput } from './defaults.ts';
 import { defaultPythonExecutable, workerLaunch } from './backends/mflux/launch.ts';
 import { validateLocalEditingModel } from './models/verification.ts';
 import type { LocalEditingModel } from './contracts.generated.ts';
@@ -10,6 +10,7 @@ import { WorkerProcess, workerTimeouts, type WorkerTimeouts } from './worker/pro
 import { ProcessEditor } from './execution/worker-backend.ts';
 
 export interface Editor {
+  generate(request: GenerateInput, options?: OperationOptions): Promise<EditResult>;
   edit(request: EditInput, options?: OperationOptions): Promise<EditResult>;
   dispose(): Promise<void>;
 }

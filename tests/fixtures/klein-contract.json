@@ -19,7 +19,8 @@
       "width": 1024,
       "height": 1024
     },
-    "inputGeometry": "klein-reference"
+    "inputGeometry": "klein-reference",
+    "textToImage": true
   },
   "cases": [
     {

@@ -158,3 +158,30 @@ it('edits through a mask while preserving every black-mask source pixel', async 
     expect((await readdir(directory)).filter(name => name.startsWith('.picpatch-'))).toEqual([]);
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
 }, 1_800_000);
+
+
+it('generates from text, edits that result in the same session, and cancels generation at a real step', async () => {
+  const options = await localOptions();
+  const directory = await mkdtemp(join(tmpdir(), 'picpatch-generation-'));
+  const editor = createEditor({ ...options, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
+  const events: DiagnosticEvent[] = [];
+  try {
+    const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.' }, { onDiagnostic: event => events.push(event) });
+    expect(generated).toMatchObject({ references: [], inputGeometry: [], seed: 42, runtime: { name: 'mflux', version: '0.22.0' } });
+    expect(generated.image.path).toMatch(/generate-[a-f0-9-]+\.png$/);
+    expect(await sharp(generated.image.path).metadata()).toMatchObject({ format: 'png', width: 256, height: 256 });
+    const edited = await editor.edit({ instruction: 'Make the bowl green.', sourceImage: generated.image.path });
+    expect(await sharp(edited.image.path).metadata()).toMatchObject({ width: 256, height: 256 });
+    const controller = new AbortController(); let sawStep = false;
+    await expect(editor.generate({ prompt: 'A yellow ceramic bowl.', outputPath: join(directory, 'cancelled.png') }, {
+      signal: controller.signal,
+      onProgress: event => { if (event.stage === 'generating' && event.completed !== undefined) { sawStep = true; controller.abort(); } },
+    })).rejects.toMatchObject({ code: 'CANCELLED' });
+    expect(sawStep).toBe(true);
+    await editor.dispose();
+    expect(await readdir(directory)).toHaveLength(2);
+    expect(events.every(event => event.verb === 'generate')).toBe(true);
+    expect(events.at(-1)?.stage).toBe('succeeded');
+    expect(JSON.stringify(events)).not.toContain('ceramic');
+  } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
+}, 600_000);

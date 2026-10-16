@@ -205,6 +205,10 @@
         "inputGeometry": {
           "const": "klein-reference",
           "description": "Aspect-preserving downscale to 1024 squared pixels, then center crop to multiples of 16. Applies to source and references."
+        },
+        "textToImage": {
+          "type": "boolean",
+          "description": "Explicit text-only generation support. Absence means unsupported."
         }
       },
       "required": [
@@ -326,14 +330,18 @@
           "const": "progress"
         },
         "verb": {
-          "const": "edit"
+          "enum": [
+            "edit",
+            "generate"
+          ]
         },
         "stage": {
           "enum": [
             "preparing",
             "loading",
             "editing",
-            "saving"
+            "saving",
+            "generating"
           ]
         },
         "message": {
@@ -510,6 +518,40 @@
         "scaledSize",
         "preparedSize",
         "crop"
+      ],
+      "additionalProperties": false
+    },
+    "GenerateRequest": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000]+$"
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "size": {
+          "$ref": "#/definitions/ImageSize"
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "model",
+        "prompt",
+        "outputPath"
       ],
       "additionalProperties": false
     }

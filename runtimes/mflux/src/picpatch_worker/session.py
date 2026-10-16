@@ -69,7 +69,7 @@ class Session:
             return error('NOT_READY', 'Complete the handshake first.')
         if kind == 'shutdown':
             if self.active is not None:
-                return error('BUSY', 'Settle the active edit before shutdown.')
+                return error('BUSY', 'Settle the active operation before shutdown.')
             self.closed = True
             return {**envelope, 'type': 'shutdownAck'}
         if kind == 'cancel':
@@ -78,38 +78,39 @@ class Session:
                 self.cancel.set()
             return {**envelope, 'type': 'cancelAck', 'targetId': request['targetId'], 'accepted': accepted}
         if self.active is not None:
-            return error('BUSY', 'An edit is already active.')
+            return error('BUSY', 'An operation is already active.')
         if self.adapter is None or self.emit is None:
-            return error('BACKEND_UNAVAILABLE', 'No editing backend is installed in this worker.')
+            return error('BACKEND_UNAVAILABLE', 'No image backend is installed in this worker.')
         self.active = request['id']
         self.cancel = Event()
-        self.thread = Thread(target=self._edit, args=(request,), daemon=False)
+        self.thread = Thread(target=self._run, args=(request,), daemon=False)
         self.thread.start()
         return None
 
-    def _edit(self, request):
+    def _run(self, request):
         envelope = {'version': 1, 'id': request['id']}
-        phase = 'editing'
+        phase = 'generating' if request['type'] == 'generate' else 'editing'
 
         def progress(event):
             nonlocal phase
-            if event['stage'] in {'loading', 'editing', 'saving'}:
+            if event['stage'] in {'loading', 'editing', 'generating', 'saving'}:
                 phase = event['stage']
             self.emit({**envelope, 'type': 'progress', 'event': event})
 
         try:
-            result = self.adapter.edit(request['request'], self.cancel, progress)
+            operation = self.adapter.generate if request['type'] == 'generate' else self.adapter.edit
+            result = operation(request['request'], self.cancel, progress)
             response = {**envelope, 'type': 'result', 'result': result}
         except Exception as error:
             # Authored protocol messages never echo prompts, private paths or library errors.
             if isinstance(error, Cancelled):
-                code, message = 'CANCELLED', 'Editing was cancelled.'
+                code, message = 'CANCELLED', 'Image operation was cancelled.'
             elif isinstance(error, BackendUnavailable):
                 code, message = 'BACKEND_UNAVAILABLE', 'The local inference runtime or model bundle is unavailable.'
             elif isinstance(error, InvalidEditInput):
-                code, message = 'INVALID_REQUEST', 'The model could not accept these editing inputs.'
+                code, message = 'INVALID_REQUEST', 'The model could not accept these image inputs.'
             else:
-                code, message = 'RUNTIME_FAILURE', 'Local image editing failed; verify the runtime and model bundle.'
+                code, message = 'RUNTIME_FAILURE', 'Local image operation failed; verify the runtime and model bundle.'
             response = {**envelope, 'type': 'error', 'error': {'code': code, 'message': message, 'diagnostic': diagnostic(error, phase)}}
         with self.lock:
             try:

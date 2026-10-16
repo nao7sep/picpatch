@@ -22,7 +22,7 @@ function result(request: EditRequest): EditResult {
 async function render(request: EditRequest) { await sharp(request.sourceImage!).png().toFile(request.outputPath); return result(request); }
 async function workspace() { const work = await ImageWorkspace.create(request); await work.prepare(); return work; }
 async function leftovers() { return (await readdir(directory)).filter(name => name.startsWith('.picpatch-')); }
-function backend(edit: Editor['edit'] = render): Editor { return { validate: async () => ({ model: 'test', instructionEditing: true, referenceRoles: [], maskMode: 'native' }), edit, dispose: async () => {} }; }
+function backend(edit: Editor['edit'] = render): Editor { return { generate: async () => { throw new Error('Unused generation boundary'); }, validate: async () => ({ model: 'test', instructionEditing: true, referenceRoles: [], maskMode: 'native' }), edit, dispose: async () => {} }; }
 
 describe('safe image publication', () => {
   it('publishes a verified complete PNG, restores caller paths and cleans private data', async () => {
