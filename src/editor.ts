@@ -1,6 +1,6 @@
 import { ImageEditor } from './images/editor.ts';
 import { isAbsolute } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { workerLaunch, workerTimeouts } from './worker/launch.ts';
 import type { EditRequest, EditResult, OperationOptions } from './types.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from './errors.ts';
 import { validateEditRequest } from './validation.ts';
@@ -16,7 +16,7 @@ export interface EditorOptions {
   pythonExecutable: string;
   timeouts?: Partial<WorkerTimeouts>;
 }
-const defaults: WorkerTimeouts = { startupMs: 30_000, editMs: 1_800_000, cancellationMs: 5_000, shutdownMs: 5_000, terminationMs: 2_000 };
+const defaults = workerTimeouts;
 
 /** Creates a lazy editor. Does not install Python, packages, or models. */
 export function createEditor(options: EditorOptions): Editor {
@@ -33,11 +33,7 @@ export function createEditor(options: EditorOptions): Editor {
       throw new PicPatchUsageError('INVALID_REQUEST', 'Timeouts must be positive whole milliseconds within the timer range.');
     }
   }
-  const worker = new WorkerProcess({
-    executable: options.pythonExecutable,
-    args: ['-u', '-m', 'picpatch_worker', '--protocol-dir', fileURLToPath(new URL('../protocol/', import.meta.url))],
-    cwd: fileURLToPath(new URL('../worker/src/', import.meta.url)),
-  }, timeouts);
+  const worker = new WorkerProcess(workerLaunch(options.pythonExecutable), timeouts);
   return new ImageEditor(new ProcessEditor(worker));
 }
 

@@ -2,17 +2,17 @@
 
 PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, and masked edits.
 
-The SDK exports typed editing contracts, categorized errors, and runtime request validation, but cannot edit images yet. The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. No runtime installer, model downloader, or inference backend is implemented. MFLUX is the first runtime candidate for an Apple Silicon Mac with 24 GB of unified memory; it is not installed by this scaffold.
+The SDK exports typed editing contracts, categorized errors, and runtime request validation, but cannot edit images yet. The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. Explicit setup can install the locked model-free worker dependencies into a new environment using existing Python and uv executables. No Python downloader, model downloader, or inference backend is implemented. MFLUX is the first runtime candidate for an Apple Silicon Mac with 24 GB of unified memory; it is not installed by this scaffold.
 
 ## Development
 
 Use Node.js 24 or newer, npm, uv, and Python 3.12 or newer. Install the development dependencies with `npm ci`, then run `npm test`. This checks generated contracts, TypeScript source and examples, request validation, and TypeScript/Python protocol behavior. The Python test command installs the small locked validation and test dependencies, but will not download Python or models.
 
-The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It needs the existing `worker/.venv` created by the ordinary Python test setup and currently targets macOS/POSIX. These tests perform no inference and download no models. Live tests are type-checked by the ordinary gate.
+The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It needs the existing `worker/.venv` created by the ordinary Python test setup and currently targets macOS/POSIX. These tests perform no inference and download no models. Runtime setup tests additionally need uv on PATH and the locked worker wheels in its cache; they create disposable environments with network access disabled and fail clearly if those prerequisites are missing. Live tests are type-checked by the ordinary gate.
 
 Run `npm run example:request` to print an illustrative grouped-reference request. It does not read images, start a worker, or generate output. `npm run test:coverage` measures TypeScript behavioral coverage.
 
-The private package resolves directly to TypeScript source. Consumers use a TypeScript-capable runner or bundler; no SDK build step is required. The worker’s `pyproject.toml` and `uv.lock` describe an internal package with JSON Schema validation and no inference dependencies. Automatic worker environment setup and packaging remain planned work.
+The private package resolves directly to TypeScript source. Consumers use a TypeScript-capable runner or bundler; no SDK build step is required. The worker’s `pyproject.toml` and `uv.lock` describe an internal package with JSON Schema validation and no inference dependencies. Worker setup is explicit; bundling or acquiring Python and inference-runtime packaging remain planned work.
 
 ## Editing contracts
 
@@ -52,6 +52,32 @@ Candidate detection is based on filenames, so unrelated files with weight-like n
 `verifyModel(directory, manifest, options?)` checks every declared file, streams its hash, detects changes while reading, and validates that shard-index mappings name weights in the manifest. File symlinks can point to shared cache blobs; directory symlinks cannot redirect verification outside the selected root. Unsafe or conflicting manifest paths are rejected before reading files. Verification never imports weights or executes model code.
 
 A `matches-manifest` result means the declared files matched the supplied pins at verification time. It does not authenticate those pins, prove the manifest lists every component an adapter needs, or establish editing support; compatibility remains `unknown`. Missing files, mismatches and invalid indexes return an `invalid` result with component-level statuses. Filesystem failures throw `MODEL_IO`. Cancellation and progress use the same options as inspection; verification also accepts `timeoutMs`, defaulting to ten minutes. Active reads settle before cancellation or timeout is reported. No files are repaired, deleted, installed, or downloaded.
+
+## Worker environment setup
+
+`inspectRuntime(pythonExecutable, options?)` starts the bundled worker, checks its handshake, and waits for shutdown. It returns `worker-ready` plus the worker version and advertised model capabilities. This proves that the selected interpreter can run the worker, not that it matches the dependency lock or supports any image model. Inspection installs nothing and disables Python bytecode writes and user-site/Python-environment overrides.
+
+`setupRuntime(request, options?)` explicitly creates an isolated environment in an unused absolute directory. Supply existing absolute Python and uv executable paths; the directory's parent must exist. Setup installs only the worker's locked non-development Python packages, permits prebuilt wheels only, and never downloads Python or model weights. Network package installation is allowed only by calling setup; use `offline: true` to forbid it too. An optional `cacheDirectory` can reuse an existing uv cache for offline setup.
+
+```ts
+import { setupRuntime, createEditor } from 'picpatch';
+
+const runtime = await setupRuntime({
+  directory: '/absolute/path/to/unused-runtime-directory',
+  pythonExecutable: '/absolute/path/to/python',
+  uvExecutable: '/absolute/path/to/uv',
+});
+const editor = createEditor({ pythonExecutable: runtime.pythonExecutable });
+try {
+  // Use the editor once an editing backend is available.
+} finally {
+  await editor.dispose();
+}
+```
+
+Setup confirms readiness through the actual worker handshake before returning the interpreter path and dependency-lock digest. Existing directories are never replaced; reuse a returned interpreter through `inspectRuntime` or `createEditor`. The environment stays at its final path because Python environments are not relocatable. Its directory is private and incomplete until setup returns; only the call result establishes successful setup. Keep the base Python installation and this SDK checkout available: this is source-consumed worker setup, not a bundled standalone runtime.
+
+Both runtime operations accept cancellation and structured progress. `timeoutMs` bounds installer execution (five minutes by default) or inspection startup (thirty seconds by default); worker shutdown and forced termination have separate bounded budgets. Setup waits for subprocess closure before removing its own failed or cancelled environment. Unconfirmed termination retains that directory and reports `recoveryDirectory`. No existing environment is repaired or deleted. Runtime subprocess ownership targets macOS/POSIX; Windows descendant termination remains unsupported.
 
 ## Editor lifecycle
 
