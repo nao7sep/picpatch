@@ -6,11 +6,11 @@ The public editor validates and prepares image files, owns a persistent worker p
 
 ## Experimental local editing
 
-Supply `createEditor` with `model: { adapter: 'mflux-flux2-klein-4b', directory, manifest, quantize? }`. `directory` must be an existing absolute model bundle path; `manifest` uses the verification contract described below. Verify the bundle during preparation with `verifyModel` and require a `matches-manifest` result before using it. Edits do not re-hash model files. The pinned development preparation script performs this verification before publishing its configuration. Keep the directory immutable while editing: verification neither locks the bundle nor proves an incomplete manifest covers everything MFLUX reads. The session supplies the request model by default; an explicitly different model is rejected before preparing images. The returned revision is the caller-supplied manifest revision, not an independently authenticated identity.
+Use `prepareModel(modelId, options)` and pass its returned `model` to `createEditor`. Both pinned bundles and compatible external bundles follow this flow; no Python class or handwritten manifest is needed. Advanced registrations use `{ variant, directory, manifest, quantize? }`, where `variant` selects the checkpoint architecture and defaults. Keep the bundle immutable while editing: verification is a point-in-time check, not a lock. Edits do not re-hash model files. The session supplies the request model by default and rejects a conflicting explicit model.
 
 The selected interpreter must already contain the worker dependencies and the optional `inference` extra from `runtimes/mflux/pyproject.toml`. Installing that extra downloads substantial runtime packages, but no model weights. Use a separate environment from the ordinary test environment. Install the optional inference extra through uv. The SDK catalog supplies the pinned manifest and adapter configuration; `prepareModel` verifies the bundle before returning it.
 
-The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Masked edits use final compositing. Explicit output dimensions must be multiples of 16; omitted dimensions use the source size for masked edits and 1024 by 1024 otherwise. MFLUX's distilled generation defaults apply. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
+The adapter supplies the source image first, followed by reference groups and images in caller order. It adds image ordinals, roles and group IDs to the instruction. Multiple pictures per person are preserved as separate references; this does not guarantee likeness or teach the model a new identity. Masked edits use final compositing. Explicit output dimensions must be multiples of 16; omitted dimensions use the source size for masked edits and 1024 by 1024 otherwise. Distilled variants use MFLUX's sampling defaults. Klein base variants use 50 steps and guidance 4, so they take substantially longer. Optional `quantize` accepts 4 or 8; omit it to use the checkpoint's configuration.
 
 Models are loaded and released for each operation, while the worker is reused. This avoids retaining unmeasured model memory between operations, at the cost of reload latency. Progress reports loading, conditioning/editing, denoising steps and saving. Pixel output is saved without prompt metadata or sidecars. Hugging Face and Transformers run offline; the worker additionally rejects Python socket connections and isolates both Python and native standard output from protocol frames. This is not a general sandbox for arbitrary native packages.
 
@@ -18,7 +18,7 @@ After preparing the worker environment and a local bundle, run `npx tsx examples
 
 ## Preparing models and checking readiness
 
-`listModels()` returns independent catalog entries with immutable component pins, total download bytes, source and license links, tested runtime requirements and experimental status. The first entry is the community 4-bit Klein bundle (about 4.62 GB); the catalog's `downloadBytes` is the precise size. It is not a claim that arbitrary checkpoints or portrait-quality workflows are supported. External bundles can be registered explicitly with a manifest and an implemented adapter, without joining the catalog. This is not an arbitrary-model importer: architecture, encoders, weight layout and quantization must match the adapter. A smaller tested variant does not establish support for every larger variant in that family; untested compatible bundles remain caller experiments.
+`listModels()` returns independent selections distinguished by `acquisition` and `evidence`. A `pinned` entry includes immutable component hashes, total download bytes, source/license links and `inference-tested` evidence. The first entry remains the community 4-bit Klein bundle (about 4.62 GB). An `external` entry has `api-tested` evidence and requires a caller-owned directory; it has no download option. All entries remain experimental. Evidence applies to the selected configuration, not every quantization or larger model in its family.
 
 ```ts
 import { listModels, prepareModel, inspectReadiness, createEditor } from 'picpatch';
@@ -44,13 +44,25 @@ Preparation and readiness accept cancellation, progress and `timeoutMs`. Prepara
 
 ## Experimental external model families
 
-Alongside Klein, the worker implements text-only generation adapters for Z-Image Turbo (`mflux-z-image-turbo`) and FLUX.1 Schnell (`mflux-flux1-schnell`). They use the same MFLUX 0.22.0 environment and `editor.generate` API. Both advertise generation only: instruction editing, references and masks are rejected before image preparation. Output dimensions must be multiples of 16; omitted dimensions use 1024 by 1024, and upstream sampling defaults apply.
+The selectable variants are FLUX.2 Klein 4B/9B and base 4B/9B for editing and generation, plus Z-Image Turbo and FLUX.1 Schnell for generation only. Klein variants share one family implementation; the runtime selects the appropriate architecture and sampling defaults. FLUX.1 Schnell and Z-Image reject edits, references and masks. FLUX.3 is not implemented.
 
-These adapters have import and API-mapping checks, but have not been tested with real weights on the target Mac. They are not entries in `listModels()` and cannot be downloaded through `prepareModel`. Neither successful imports nor 4-bit configuration establishes that a complete pipeline fits in memory or produces good results.
+Only the pinned Klein 4B 4-bit bundle has real-weight inference evidence. Other selections have pipeline import and argument-mapping tests, not measured memory fit or quality evidence. Base sampling defaults follow the [upstream Klein example](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4B).
 
-To try an existing compatible bundle, verify its complete manifest with `verifyModel`, then supply `createEditor` with `{ model: { adapter, directory, manifest, quantize? } }` and a prepared interpreter. The bundle must include the selected family's transformer, encoders, VAE, tokenizers and configuration in MFLUX's expected layout; a standalone checkpoint is insufficient. `quantize` accepts 4 or 8, or can be omitted for the bundle's configuration. `inspectReadiness` checks the selected family's imports and optionally loads its weights. All execution remains offline; missing components fail rather than triggering acquisition.
+```ts
+const prepared = await prepareModel('flux2-klein-9b', {
+  directory: '/absolute/existing/mflux-bundle',
+});
+const editor = createEditor({ model: prepared.model });
+try {
+  await editor.generate({ prompt: 'A blue ceramic bowl.', outputDirectory: '/absolute/outputs' });
+} finally {
+  await editor.dispose();
+}
+```
 
-Shared MFLUX loading, progress, cancellation, output writing and memory cleanup live in `runtimes/mflux/src/picpatch_worker/backends/runtime.py`. Families sharing the generation API use `generation.py`; `klein.py` owns Klein's reference conditioning, pipeline selection and composite masking.
+External preparation reads a complete MFLUX directory layout: transformer, VAE, text encoder and tokenizer directories (plus the second encoder/tokenizer for FLUX.1). It hashes their files, validates shard references and returns an in-memory manifest with a deterministic local revision. File links used by Hugging Face caches are supported; component directory links are rejected. It neither copies nor modifies the bundle, and never downloads. The result reports `locally-fingerprinted`, which does not authenticate an upstream checkpoint or prove tensor compatibility. Select the variant explicitly; names of folders are not architecture evidence. Use `inspectReadiness(python, prepared.model, { load: true })` for an actual load check, and `verifyModel` for later explicit verification. Keep the complete bundle unchanged during use. Standalone checkpoint files and arbitrary architectures are not supported.
+
+Shared MFLUX loading, progress, cancellation, output writing and memory cleanup live in `runtimes/mflux/src/picpatch_worker/backends/runtime.py`. `models.json` owns variant configuration and base defaults; `generation.py` handles text-only families, and `klein.py` owns Klein reference conditioning and composite masking.
 
 ## Caller defaults and diagnostics
 

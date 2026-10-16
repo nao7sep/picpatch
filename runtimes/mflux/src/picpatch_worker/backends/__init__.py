@@ -2,11 +2,13 @@
 from .klein import KleinAdapter
 from .generation import GenerationAdapter
 from .errors import InvalidEditInput
+from .runtime import MODEL_DEFINITIONS
 
 
 def create_adapter(config):
-    if config['adapter'] == 'mflux-flux2-klein-4b':
+    definition = MODEL_DEFINITIONS.get(config.get('variant'))
+    if definition is None:
+        raise InvalidEditInput('Unsupported model variant.')
+    if definition['family'] == 'flux2-klein':
         return KleinAdapter(config)
-    if config['adapter'] in {'mflux-z-image-turbo', 'mflux-flux1-schnell'}:
-        return GenerationAdapter(config)
-    raise InvalidEditInput('Unsupported MFLUX model adapter.')
+    return GenerationAdapter(config)

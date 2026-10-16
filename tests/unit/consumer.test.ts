@@ -44,7 +44,7 @@ it('inspects and verifies an external fixture without modifying it or loading in
   expect((await sdk.discoverModels([external])).models).toHaveLength(1);
   expect((await sdk.verifyModel(external, manifest)).status).toBe('matches-manifest');
   const readiness = await sdk.inspectReadiness(join(directory, 'absent-python'), {
-    adapter: 'mflux-flux2-klein-4b', directory: join(directory, 'missing'), manifest,
+    variant: 'flux2-klein-4b', directory: join(directory, 'missing'), manifest,
   }, { verify: true, load: true });
   expect(readiness).toMatchObject({ files: 'incomplete', integrity: 'invalid', runtime: { status: 'not-checked' } });
   expect(await readFile(path)).toEqual(bytes);

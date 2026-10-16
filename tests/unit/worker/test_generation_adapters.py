@@ -8,15 +8,15 @@ from picpatch_worker.backends import create_adapter, runtime
 from picpatch_worker.backends.errors import InvalidEditInput, Cancelled
 
 FAMILIES = [
-    ('mflux-z-image-turbo', 'mflux.models.z_image.variants.z_image', 'ZImage', 'z_image_turbo'),
-    ('mflux-flux1-schnell', 'mflux.models.flux.variants.txt2img.flux', 'Flux1', 'schnell'),
+    ('z-image-turbo', 'mflux.models.z_image.variants.z_image', 'ZImage', 'z_image_turbo'),
+    ('flux1-schnell', 'mflux.models.flux.variants.txt2img.flux', 'Flux1', 'schnell'),
 ]
 
 
 @pytest.fixture(params=FAMILIES, ids=lambda item: item[0])
 def family(request, tmp_path):
     adapter, module, name, config_method = request.param
-    config = {'adapter': adapter, 'directory': str(tmp_path), 'quantize': 4,
+    config = {'variant': adapter, 'directory': str(tmp_path), 'quantize': 4,
               'manifest': {'model': 'external', 'source': {'revision': 'a' * 40}}}
     return create_adapter(config), module, name, config_method
 

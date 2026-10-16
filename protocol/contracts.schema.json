@@ -449,11 +449,14 @@
     "LocalEditingModel": {
       "type": "object",
       "properties": {
-        "adapter": {
+        "variant": {
           "enum": [
-            "mflux-flux2-klein-4b",
-            "mflux-z-image-turbo",
-            "mflux-flux1-schnell"
+            "flux2-klein-4b",
+            "flux2-klein-9b",
+            "flux2-klein-base-4b",
+            "flux2-klein-base-9b",
+            "z-image-turbo",
+            "flux1-schnell"
           ]
         },
         "directory": {
@@ -471,7 +474,7 @@
         }
       },
       "required": [
-        "adapter",
+        "variant",
         "directory",
         "manifest"
       ],

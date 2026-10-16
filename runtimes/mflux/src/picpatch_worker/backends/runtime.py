@@ -1,5 +1,6 @@
 """Shared offline MFLUX loading, inference settlement and pixel-only output."""
 import gc
+import json
 from importlib.metadata import version, PackageNotFoundError
 import os
 from pathlib import Path
@@ -32,9 +33,16 @@ class StepObserver:
         check_cancelled(self.cancel)
 
 
+MODEL_DEFINITIONS = {item['id']: item for item in json.loads((Path(__file__).with_name('models.json')).read_text())}
+
+
 class MfluxAdapter:
     def __init__(self, config: dict):
         self.config = config
+        try:
+            self.definition = MODEL_DEFINITIONS[config['variant']]
+        except KeyError as error:
+            raise InvalidEditInput('Unsupported model variant.') from error
 
     def load_pipeline(self, operation="generate"):
         # Set before importing HF/Transformers: these libraries cache environment settings.
@@ -119,7 +127,7 @@ class MfluxAdapter:
             stage = "editing" if operation == "edit" else "generating"
             pipeline.callbacks.register(StepObserver(cancel, emit, stage))
             emit(stage, 'Running image inference.')
-            generated = pipeline.generate_image(seed=seed, prompt=prompt, **conditioning_args, **size)
+            generated = pipeline.generate_image(seed=seed, prompt=prompt, **self.definition['defaults'], **conditioning_args, **size)
             mx.synchronize()
             check_cancelled(cancel)
             emit('saving', 'Writing image.')

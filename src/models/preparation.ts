@@ -6,6 +6,7 @@ import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation,
 import { resolveStoragePaths, type StorageOptions } from '../paths.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
 import { catalogModel, type CatalogModel } from './catalog.ts';
+import { prepareExternalModel } from './external.ts';
 import { downloadFile } from './download.ts';
 import { validateModelManifest, verifyModel } from './verification.ts';
 import type { ModelOperationOptions } from './types.ts';
@@ -20,7 +21,7 @@ export interface PrepareModelOptions extends ModelOperationOptions {
 export interface PreparedModel {
   model: LocalEditingModel;
   origin: 'external' | 'cache' | 'download';
-  integrity: 'matches-manifest';
+  integrity: 'matches-manifest' | 'locally-fingerprinted';
   cleanupWarning?: { directory: string; message: string };
 }
 async function exists(path: string): Promise<boolean> {
@@ -38,7 +39,8 @@ async function syncDirectory(path: string): Promise<void> {
 
 /** Explicit preparation only. Reuses and verifies files; never repairs existing bundles. */
 async function prepareModelOperation(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
-  return prepareCatalogModel(catalogModel(id), options);
+  const entry = catalogModel(id);
+  return entry.acquisition === 'pinned' ? prepareCatalogModel(entry, options) : prepareExternalModel(entry, options);
 }
 
 /** Internal catalog/transport boundary used with tiny fixture bundles in acquisition tests. */
@@ -61,7 +63,7 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
         const result = await verifyModel(path, entry.manifest, { signal, timeoutMs: budget, onProgress: event => emitProgress(operation, event) });
         if (result.status !== 'matches-manifest') throw new PicPatchRuntimeError('MODEL_IO', 'Model files do not match the catalog. Existing files were preserved; choose a complete bundle or a new cache location.');
       };
-      const result = (origin: PreparedModel['origin']): PreparedModel => ({ model: { adapter: entry.adapter, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });
+      const result = (origin: PreparedModel['origin']): PreparedModel => ({ model: { variant: entry.variant, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });
       if (await exists(directory)) { await verified(directory); return result(options.directory ? 'external' : 'cache'); }
       checkSignal(signal);
       if (options.directory || !options.download) throw new PicPatchRuntimeError('MODEL_IO', 'Model bundle is missing. Supply a local directory or explicitly enable download.');

@@ -27,7 +27,7 @@ it('accepts a local registration then returns a missing-runtime failure over rea
       '--no-python-downloads', '--no-dev', '--no-install-project', '--locked', '--no-build', '--offline',
       '--cache-dir', cacheDirectory], { env: { ...process.env, UV_PROJECT_ENVIRONMENT: runtimeDirectory }, timeout: 30_000 });
     const options: EditorOptions = { pythonExecutable: join(runtimeDirectory, 'bin/python'),
-      model: { adapter: 'mflux-flux2-klein-4b', directory, manifest: {
+      model: { variant: 'flux2-klein-4b', directory, manifest: {
         version: 1, model: 'test', source: { repository: 'test', revision: 'a'.repeat(40) },
         components: [{ path: 'weights.safetensors', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
       } } };
@@ -44,7 +44,7 @@ it('accepts a local registration then returns a missing-runtime failure over rea
 it('uses the model-free handshake to reject unsupported sizes before opening images', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-capabilities-'));
   const editor = createEditor({ pythonExecutable: testPython, model: {
-    adapter: 'mflux-flux2-klein-4b', directory, manifest: {
+    variant: 'flux2-klein-4b', directory, manifest: {
       version: 1, model: 'fixture', source: { repository: 'fixture', revision: 'a'.repeat(40) },
       components: [{ path: 'absent.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }],
     },

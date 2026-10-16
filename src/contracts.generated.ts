@@ -174,7 +174,13 @@ export interface ModelManifest {
  * via the `definition` "LocalEditingModel".
  */
 export interface LocalEditingModel {
-  adapter: "mflux-flux2-klein-4b" | "mflux-z-image-turbo" | "mflux-flux1-schnell";
+  variant:
+    | "flux2-klein-4b"
+    | "flux2-klein-9b"
+    | "flux2-klein-base-4b"
+    | "flux2-klein-base-9b"
+    | "z-image-turbo"
+    | "flux1-schnell";
   directory: string;
   manifest: ModelManifest;
   quantize?: 4 | 8;

@@ -1,4 +1,4 @@
-"""FLUX.2 Klein 4B conditioning and composite-mask behavior."""
+"""FLUX.2 Klein family conditioning and composite-mask behavior."""
 import json
 from threading import Event
 from .errors import InvalidEditInput
@@ -43,7 +43,7 @@ class KleinAdapter(MfluxAdapter):
         from mflux.models.common.config import ModelConfig
         from mflux.models.flux2.variants import Flux2Klein, Flux2KleinEdit
         import mlx.core as mx
-        return ModelConfig.flux2_klein_4b(), Flux2KleinEdit if operation == 'edit' else Flux2Klein, mx
+        return getattr(ModelConfig, self.definition['config'])(), Flux2KleinEdit if operation == 'edit' else Flux2Klein, mx
 
     def transform_output(self, image, request):
         return composite_mask(image, request)

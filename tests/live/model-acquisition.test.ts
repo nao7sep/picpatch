@@ -22,7 +22,7 @@ it.each([false, true])('acquires a tiny HTTP fixture through the production stre
   // Route the outbound request locally without adding a public insecure URL override.
   const transport = globalThis.fetch;
   const fetcher: typeof fetch = (_url, options) => transport(`http://127.0.0.1:${address.port}/fixture`, options);
-  const entry: CatalogModel = { ...listModels()[0]!, id: 'fixture', manifest: {
+  const entry: CatalogModel = { ...listModels().find(model => model.acquisition === 'pinned')!, id: 'fixture', manifest: {
     version: 1 as const, model: 'fixture', source: { repository: 'fixture', revision: 'b'.repeat(40) },
     components: [{ path: 'weights.safetensors', role: 'weights' as const, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
   } };

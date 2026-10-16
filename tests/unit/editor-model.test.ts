@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { createEditor, type LocalEditingModel } from '../../src/index.ts';
 import { ProtocolSession } from '../../src/worker/protocol.ts';
 const model: LocalEditingModel = {
-  adapter: 'mflux-flux2-klein-4b', directory: '/models/klein',
+  variant: 'flux2-klein-4b', directory: '/models/klein',
   manifest: { version: 1, model: 'klein', source: { repository: 'local', revision: 'a'.repeat(40) },
     components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] },
 };
@@ -10,7 +10,7 @@ it.each(['relative', '/models/\0bad'])('rejects invalid local model directory %s
   expect(() => createEditor({ pythonExecutable: '/python', model: { ...model, directory } })).toThrow();
 });
 it('rejects unsupported adapters and invalid manifests without spawning', () => {
-  expect(() => createEditor({ pythonExecutable: '/python', model: { ...model, adapter: 'unknown' } as unknown as LocalEditingModel })).toThrow();
+  expect(() => createEditor({ pythonExecutable: '/python', model: { ...model, variant: 'unknown' } as unknown as LocalEditingModel })).toThrow();
   expect(() => createEditor({ pythonExecutable: '/python', model: { ...model, manifest: { ...model.manifest, components: [{ path: '../weights', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } } })).toThrow();
 });
 it('validates a model registration through the shared handshake schema', () => {

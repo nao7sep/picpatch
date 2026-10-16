@@ -1,0 +1,82 @@
+[
+  {
+    "id": "flux2-klein-4b",
+    "family": "flux2-klein",
+    "config": "flux2_klein_4b",
+    "defaults": {},
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ]
+  },
+  {
+    "id": "flux2-klein-9b",
+    "family": "flux2-klein",
+    "config": "flux2_klein_9b",
+    "defaults": {},
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ]
+  },
+  {
+    "id": "flux2-klein-base-4b",
+    "family": "flux2-klein",
+    "config": "flux2_klein_base_4b",
+    "defaults": {
+      "num_inference_steps": 50,
+      "guidance": 4.0
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ]
+  },
+  {
+    "id": "flux2-klein-base-9b",
+    "family": "flux2-klein",
+    "config": "flux2_klein_base_9b",
+    "defaults": {
+      "num_inference_steps": 50,
+      "guidance": 4.0
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ]
+  },
+  {
+    "id": "z-image-turbo",
+    "family": "z-image-turbo",
+    "config": "z_image_turbo",
+    "defaults": {},
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ]
+  },
+  {
+    "id": "flux1-schnell",
+    "family": "flux1-schnell",
+    "config": "schnell",
+    "defaults": {},
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer",
+      "text_encoder_2",
+      "tokenizer_2"
+    ]
+  }
+]

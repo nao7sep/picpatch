@@ -10,7 +10,7 @@ from picpatch_worker.backends.errors import Cancelled, BackendUnavailable
 
 @pytest.fixture
 def config(tmp_path):
-    return {'adapter': 'mflux-flux2-klein-4b', 'directory': str(tmp_path), 'manifest': {
+    return {'variant': 'flux2-klein-4b', 'directory': str(tmp_path), 'manifest': {
         'version': 1, 'model': 'local-klein', 'source': {'repository': 'local', 'revision': 'a' * 40},
         'components': [{'path': 'weight.safetensors', 'role': 'weights', 'bytes': 1, 'sha256': 'a' * 64}]}}
 
@@ -240,7 +240,7 @@ def test_adapter_selection_is_explicit(config):
     from picpatch_worker.backends.errors import InvalidEditInput
     assert isinstance(create_adapter(config), klein.KleinAdapter)
     with pytest.raises(InvalidEditInput):
-        create_adapter({**config, 'adapter': 'unknown'})
+        create_adapter({**config, 'variant': 'unknown'})
 
 
 def test_generation_has_no_image_conditioning(monkeypatch, config, tmp_path):
@@ -257,3 +257,33 @@ def test_generation_has_no_image_conditioning(monkeypatch, config, tmp_path):
     assert {event['verb'] for event in events} == {'generate'}
     assert [event['stage'] for event in events] == ['loading', 'generating', 'generating', 'saving']
     assert calls[-1] == ('clear',)
+
+
+@pytest.mark.parametrize('variant,method,base', [
+    ('flux2-klein-4b', 'flux2_klein_4b', False),
+    ('flux2-klein-9b', 'flux2_klein_9b', False),
+    ('flux2-klein-base-4b', 'flux2_klein_base_4b', True),
+    ('flux2-klein-base-9b', 'flux2_klein_base_9b', True),
+])
+@pytest.mark.parametrize('operation', ['generate', 'edit'])
+def test_variant_pipeline_and_sampling_defaults(monkeypatch, config, request_data, variant, method, base, operation):
+    import sys
+    from picpatch_worker.backends import create_adapter
+    config['variant'] = variant
+    selected = object()
+    generate_class, edit_class, core = object(), object(), object()
+    monkeypatch.setitem(sys.modules, 'mflux.models.common.config', SimpleNamespace(ModelConfig=SimpleNamespace(**{method: lambda: selected})))
+    monkeypatch.setitem(sys.modules, 'mflux.models.flux2.variants', SimpleNamespace(Flux2Klein=generate_class, Flux2KleinEdit=edit_class))
+    monkeypatch.setitem(sys.modules, 'mlx', SimpleNamespace(core=core))
+    monkeypatch.setitem(sys.modules, 'mlx.core', core)
+    adapter = create_adapter(config)
+    assert adapter.import_pipeline(operation) == (selected, edit_class if operation == 'edit' else generate_class, core)
+    calls = runtime(monkeypatch)
+    request_data['prompt'] = 'A blue bowl.'
+    getattr(adapter, operation)(request_data, Event(), lambda event: None)
+    args = next(call[1] for call in calls if call[0] == 'generate')
+    if base:
+        assert args['num_inference_steps'] == 50 and args['guidance'] == 4.0
+    else:
+        assert 'num_inference_steps' not in args and 'guidance' not in args
+    assert ('image_paths' in args) == (operation == 'edit')

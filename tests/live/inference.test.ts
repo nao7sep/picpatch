@@ -163,7 +163,9 @@ it('edits through a mask while preserving every black-mask source pixel', async 
 it('generates from text, edits that result in the same session, and cancels generation at a real step', async () => {
   const options = await localOptions();
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-generation-'));
-  const editor = createEditor({ ...options, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
+  const prepared = await prepareModel('flux2-klein-4b', { directory: options.model!.directory });
+  expect(prepared.integrity).toBe('locally-fingerprinted');
+  const editor = createEditor({ ...options, model: prepared.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
   const events: DiagnosticEvent[] = [];
   try {
     const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.' }, { onDiagnostic: event => events.push(event) });

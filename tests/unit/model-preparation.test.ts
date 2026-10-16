@@ -15,7 +15,7 @@ beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-prepare-'));
   vi.stubEnv('PICPATCH_DATA_DIR', join(directory, 'data'));
   vi.stubEnv('PICPATCH_MODELS_DIR', join(directory, 'models'));
-  entry = { ...listModels()[0]!, id: 'fixture', downloadBytes: bytes.length, manifest: {
+  entry = { ...listModels().find(model => model.acquisition === 'pinned')!, id: 'fixture', downloadBytes: bytes.length, manifest: {
     version: 1, model: 'fixture', source: { repository: 'test/fixture', revision: 'a'.repeat(40) },
     components: [{ path: 'weights.safetensors', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
   } };
@@ -24,14 +24,14 @@ afterEach(async () => { vi.unstubAllEnvs(); await rm(directory, { recursive: tru
 const source = (): typeof fetch => vi.fn(async () => new Response(bytes, { headers: { 'content-length': String(bytes.length) } }));
 
 it('lists independent immutable pins, source, license, runtime and total size', () => {
-  const model = listModels()[0]!;
+  const model = listModels().find(model => model.acquisition === 'pinned')!;
   expect(model.downloadBytes).toBe(model.manifest.components.reduce((sum, c) => sum + c.bytes, 0));
   expect(model).toMatchObject({ status: 'experimental', license: { id: 'Apache-2.0' }, runtime: { version: '0.22.0' } });
   model.manifest.components.length = 0;
-  expect(listModels()[0]!.manifest.components.length).toBeGreaterThan(0);
+  expect(listModels().find(model => model.acquisition === 'pinned')!.manifest.components.length).toBeGreaterThan(0);
 });
 it('requires explicit acquisition and rejects unknown catalog IDs without creating storage', async () => {
-  await expect(prepareModel(listModels()[0]!.id)).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareModel(listModels().find(model => model.acquisition === 'pinned')!.id)).rejects.toMatchObject({ code: 'MODEL_IO' });
   await expect(prepareModel('unknown', { download: true })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   expect(await readdir(directory)).toEqual([]);
 });
@@ -81,16 +81,16 @@ it('allows concurrent equivalent preparations and preserves one complete winner'
 it('rejects unsafe manifests and external acquisition before writing', async () => {
   entry.manifest.components[0]!.path = '../escape';
   await expect(prepareCatalogModel(entry, { download: true }, source())).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
-  await expect(prepareModel(listModels()[0]!.id, { download: true, directory })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(prepareModel(listModels().find(model => model.acquisition === 'pinned')!.id, { download: true, directory })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });
 it('reports incomplete files separately and avoids starting a worker', async () => {
-  const model = { adapter: entry.adapter, directory, manifest: entry.manifest };
+  const model = { variant: entry.variant, directory, manifest: entry.manifest };
   expect(await inspectReadiness('/unused/python', model, { verify: true })).toEqual({ files: 'incomplete', integrity: 'invalid', runtime: { status: 'not-checked' }, capabilities: [] });
   await writeFile(join(directory, 'weights.safetensors'), 'x'.repeat(bytes.length));
   expect(await inspectReadiness('/unused/python', model, { verify: true })).toMatchObject({ files: 'present', integrity: 'invalid', runtime: { status: 'not-checked' } });
 });
 it('validates readiness switches and pre-cancellation before reads', async () => {
-  const model = { adapter: entry.adapter, directory, manifest: entry.manifest };
+  const model = { variant: entry.variant, directory, manifest: entry.manifest };
   await expect(inspectReadiness('/unused', model, { load: 'yes' } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   await expect(inspectReadiness('/unused', model, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
 });
