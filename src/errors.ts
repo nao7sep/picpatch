@@ -1,7 +1,8 @@
 export class PicPatchUsageError extends Error {
   readonly category = 'usage';
-  readonly code: 'INVALID_REQUEST' | 'UNSUPPORTED_CAPABILITY' | 'OUTPUT_CONFLICT' | 'BUSY' | 'DISPOSED';
-  constructor(code: 'INVALID_REQUEST' | 'UNSUPPORTED_CAPABILITY' | 'OUTPUT_CONFLICT' | 'BUSY' | 'DISPOSED', message: string, options?: ErrorOptions) {
+  recoveryDirectory?: string;
+  readonly code: 'INVALID_REQUEST' | 'UNSUPPORTED_CAPABILITY' | 'OUTPUT_CONFLICT' | 'BUSY' | 'DISPOSED' | 'INVALID_IMAGE' | 'INVALID_MASK';
+  constructor(code: 'INVALID_REQUEST' | 'UNSUPPORTED_CAPABILITY' | 'OUTPUT_CONFLICT' | 'BUSY' | 'DISPOSED' | 'INVALID_IMAGE' | 'INVALID_MASK', message: string, options?: ErrorOptions) {
     super(message, options);
     this.code = code;
     this.name = 'PicPatchUsageError';
@@ -10,8 +11,9 @@ export class PicPatchUsageError extends Error {
 
 export class PicPatchRuntimeError extends Error {
   readonly category = 'runtime';
-  readonly code: 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'CALLBACK_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE';
-  constructor(code: 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'CALLBACK_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE', message: string, options?: ErrorOptions) {
+  recoveryDirectory?: string;
+  readonly code: 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'CALLBACK_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE' | 'IMAGE_IO' | 'INVALID_OUTPUT' | 'OUTPUT_IO' | 'CLEANUP_FAILED';
+  constructor(code: 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'CALLBACK_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE' | 'IMAGE_IO' | 'INVALID_OUTPUT' | 'OUTPUT_IO' | 'CLEANUP_FAILED', message: string, options?: ErrorOptions) {
     super(message, options);
     this.code = code;
     this.name = 'PicPatchRuntimeError';

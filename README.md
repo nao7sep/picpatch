@@ -2,13 +2,13 @@
 
 PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, and masked edits.
 
-The SDK exports typed editing contracts, categorized errors, and runtime request validation, but cannot edit images yet. The public editor owns a persistent worker process. No runtime installer, model downloader, or inference backend is implemented. MFLUX is the first runtime candidate for an Apple Silicon Mac with 24 GB of unified memory; it is not installed by this scaffold.
+The SDK exports typed editing contracts, categorized errors, and runtime request validation, but cannot edit images yet. The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. No runtime installer, model downloader, or inference backend is implemented. MFLUX is the first runtime candidate for an Apple Silicon Mac with 24 GB of unified memory; it is not installed by this scaffold.
 
 ## Development
 
 Use Node.js 24 or newer, npm, uv, and Python 3.12 or newer. Install the development dependencies with `npm ci`, then run `npm test`. This checks generated contracts, TypeScript source and examples, request validation, and TypeScript/Python protocol behavior. The Python test command installs the small locked validation and test dependencies, but will not download Python or models.
 
-The ordinary suite uses simulated process streams. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It needs the existing `worker/.venv` created by the ordinary Python test setup and currently targets macOS/POSIX. These tests perform no inference and download no models. Live tests are type-checked by the ordinary gate.
+The ordinary suite uses simulated process streams and small generated images in temporary directories. `npm run test:full` additionally launches lightweight subprocess fixtures and the bundled Python worker, verifies reuse and termination, and exercises the public factory. It needs the existing `worker/.venv` created by the ordinary Python test setup and currently targets macOS/POSIX. These tests perform no inference and download no models. Live tests are type-checked by the ordinary gate.
 
 Run `npm run example:request` to print an illustrative grouped-reference request. It does not read images, start a worker, or generate output. `npm run test:coverage` measures TypeScript behavioral coverage.
 
@@ -20,13 +20,19 @@ Call `validateEditRequest(request, capabilities?)` to validate metadata and obta
 
 Optional model capabilities describe supported reference roles, mask semantics, dimension constraints, and maximum grouped reference count (excluding the source image). Unsupported requests produce `PicPatchUsageError`; malformed capability reports produce `PicPatchRuntimeError`. Cancellation has a distinct `PicPatchCancelledError` type.
 
-Validation does not open files or establish filesystem identity. Execution must reject existing output destinations, including aliases of inputs, and publish without overwriting. Results describe the output dimensions, actual seed, model revision, runtime version, and ordered references. File decoding, publication, and result production are not implemented yet.
+`validateEditRequest` checks metadata only. `editor.edit` additionally opens and fully decodes single-frame PNG, JPEG, and WebP files by content. It rejects missing, malformed, animated, and unsupported images, and detects reference duplicates through symlink or hardlink aliases. Original files remain untouched. Results describe output dimensions, actual seed, model revision, runtime version, and the original ordered references.
+
+Preparation uses Sharp to apply EXIF orientation, convert image color to sRGB, strip metadata, and write private PNG copies. Masks must be opaque grayscale PNGs matching the oriented source dimensions; black preserves and white edits. No resizing, cropping, or model-specific preprocessing is implemented yet. Native decoding has a 60-second processing budget; cancellation waits for an active native writer to settle before removing its files.
+
+The output directory must already exist. Each edit owns a private temporary directory there; the worker receives only prepared paths and a private output path. Publication fully decodes the worker’s PNG, checks dimensions, syncs the completed file, then uses an exclusive atomic hard link. Existing destinations, including symlinks and hardlinks, are never overwritten—even if another writer creates the destination during an edit. The destination filesystem must support hard links; there is no non-atomic fallback.
+
+Temporary files are removed after their writers settle. Publication failures retain the completed image and expose `error.recoveryDirectory`; unconfirmed worker termination also retains the workspace. Inspect and remove retained directories when safe; automatic recovery is not implemented. If an output was saved but temporary cleanup failed, the successful result includes `cleanupWarning` with the directory to remove. Cancellation after atomic publication cannot turn a saved result into failure.
 
 `protocol/contracts.schema.json` owns the payload shapes. Run `npm run contracts:generate` after changing it; the default test gate checks generated types for drift.
 
 ## Editor lifecycle
 
-`createEditor({ pythonExecutable })` accepts the absolute path to an existing Python interpreter with the worker’s locked dependencies installed. Construction is lazy and performs no setup or downloads. The first `edit` starts the worker and checks its advertised capabilities. The current model-free worker advertises no models, so edits fail with `UNSUPPORTED_CAPABILITY` before any image is opened.
+`createEditor({ pythonExecutable })` accepts the absolute path to an existing Python interpreter with the worker’s locked dependencies installed. Construction is lazy and performs no setup or downloads. The first `edit` prepares the inputs, starts the worker, and checks its advertised capabilities. The current model-free worker advertises no models, so valid prepared requests fail with `UNSUPPORTED_CAPABILITY` and their temporary files are cleaned up.
 
 ```ts
 import { createEditor } from 'picpatch';
@@ -44,13 +50,13 @@ try {
 }
 ```
 
-`abortController` and `updateProgress` above belong to the caller. Run `npm run example:worker -- /absolute/path/to/python` for a model-free startup example. The SDK invokes the interpreter directly, without a shell or an installer, and drains worker diagnostics without forwarding private data to the caller’s stdout or stderr.
+`abortController` and `updateProgress` above belong to the caller. Run `npm run example:worker -- /absolute/path/to/python /absolute/path/to/source.png /absolute/path/to/unused-output.png` for a model-free preparation and startup example. The SDK invokes the interpreter directly, without a shell or an installer, and drains worker diagnostics without forwarding private data to the caller’s stdout or stderr.
 
 An editor retains one worker across sequential calls. Overlapping calls reject with `BUSY`; disposal permanently prevents new edits. `dispose()` is idempotent and waits for process closure, cancelling active work if necessary. Callers must dispose their editors before exiting. Failed workers are not silently restarted and edits are never retried; create a new editor after resolving a runtime failure.
 
-Cancellation before startup does no work. During startup it terminates the worker; during an edit it requests cancellation and waits for the terminal outcome. Unresponsive workers are terminated before the operation settles. A confirmed successful result wins a cancellation race. A throwing synchronous progress callback produces `CALLBACK_FAILED` and stops its worker. Progress callbacks should be synchronous.
+An already-cancelled edit does no work. Cancellation during preparation waits for the active file operation to settle. During startup it terminates the worker; during an edit it requests cancellation and waits for the terminal outcome. Unresponsive workers are terminated before the operation settles. A published output wins a cancellation race; a worker result still undergoing output validation can be cancelled. A throwing synchronous progress callback produces `CALLBACK_FAILED` and stops its worker. Progress callbacks should be synchronous.
 
-Optional `timeouts` on `createEditor` override `startupMs` (30 seconds), `editMs` (30 minutes), `cancellationMs` (5 seconds), `shutdownMs` (5 seconds), and `terminationMs` (2 seconds). These are transport defaults, not measured model performance promises. Shutdown bounds both acknowledgement and subsequent exit. Termination first sends SIGTERM, then SIGKILL after `terminationMs`, with another `terminationMs` to confirm closure. Timeouts report `TIMEOUT`; cancelled edits report `PicPatchCancelledError`. If closure cannot be confirmed, `TERMINATION_FAILED` reports that uncertainty and the editor cannot be reused. No output files are deleted on timeout or cancellation; artifact ownership and publication remain inference-layer work.
+Optional `timeouts` on `createEditor` override `startupMs` (30 seconds), `editMs` (30 minutes), `cancellationMs` (5 seconds), `shutdownMs` (5 seconds), and `terminationMs` (2 seconds). These are transport defaults, not measured model performance promises. Shutdown bounds both acknowledgement and subsequent exit. Termination first sends SIGTERM, then SIGKILL after `terminationMs`, with another `terminationMs` to confirm closure. Timeouts report `TIMEOUT`; cancelled edits report `PicPatchCancelledError`. If closure cannot be confirmed, `TERMINATION_FAILED` reports that uncertainty and the editor cannot be reused. Caller-owned files are never deleted. Private artifacts are cleaned up only after their writers settle; uncertain worker termination retains the workspace and reports its recovery directory.
 
 The lifecycle targets macOS. POSIX workers use an owned process group for termination. On Windows only the direct child is terminated; descendant cleanup is not yet supported there. Workers must not daemonize or launch detached descendants. Abrupt termination of the host is outside the explicit disposal guarantee.
 
@@ -68,7 +74,7 @@ The internal TypeScript `ProtocolSession` validates correlation and session orde
 
 ## Repository layout
 
-- `src/` contains the public SDK contracts, request validation, and reserved image, model, and worker integration modules.
+- `src/` contains the public SDK contracts, request validation, image preparation and output handling, worker integration, and reserved model modules.
 - `worker/` contains the Python worker package and future MFLUX adapter.
 - `protocol/` defines shared editing payloads and the versioned worker wire contract.
 - `tests/` holds ordinary tests and small fixtures; `benchmarks/` will hold opt-in quality and performance experiments.

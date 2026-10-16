@@ -90,6 +90,10 @@ export interface EditResult {
   };
   seed: number;
   references: ReferenceGroup[];
+  cleanupWarning?: {
+    directory: string;
+    message: string;
+  };
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema

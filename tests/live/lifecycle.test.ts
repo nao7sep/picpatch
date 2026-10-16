@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import sharp from 'sharp';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -56,8 +60,16 @@ describe('real model-free worker processes', () => {
   it('exercises the public factory with the installed Python environment', async () => {
     const editor = createEditor({ pythonExecutable: fileURLToPath(new URL('../../worker/.venv/bin/python', import.meta.url)) });
     editors.push(editor);
-    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
-    await editor.dispose();
-    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'DISPOSED' });
+    const directory = await mkdtemp(join(tmpdir(), 'picpatch-live-'));
+    const source = join(directory, 'source.png');
+    try {
+      await sharp({ create: { width: 4, height: 3, channels: 3, background: 'white' } }).png().toFile(source);
+      await expect(editor.edit({ ...request, sourceImage: source, outputPath: join(directory, 'out.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+      await editor.dispose();
+      await expect(editor.edit(request)).rejects.toMatchObject({ code: 'DISPOSED' });
+    } finally {
+      await editor.dispose();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

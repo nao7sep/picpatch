@@ -1,3 +1,4 @@
+import { ImageEditor } from './images/editor.ts';
 import { isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { EditRequest, EditResult, OperationOptions } from './types.ts';
@@ -37,7 +38,7 @@ export function createEditor(options: EditorOptions): Editor {
     args: ['-u', '-m', 'picpatch_worker', '--protocol-dir', fileURLToPath(new URL('../protocol/', import.meta.url))],
     cwd: fileURLToPath(new URL('../worker/src/', import.meta.url)),
   }, timeouts);
-  return new ProcessEditor(worker);
+  return new ImageEditor(new ProcessEditor(worker));
 }
 
 function responseError(response: Extract<WorkerResponse, { type: 'error' }>): Error {
