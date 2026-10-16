@@ -1,0 +1,61 @@
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { afterEach, describe, expect, it } from 'vitest';
+import { createEditor, type Editor, type EditRequest } from '../../src/index.ts';
+import { ProcessEditor } from '../../src/editor.ts';
+import { WorkerProcess, type WorkerLaunch } from '../../src/worker/process.ts';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const fixture = fileURLToPath(new URL('../fixtures/lifecycle-worker.ts', import.meta.url));
+const request: EditRequest = { model: 'test', instruction: 'Edit', sourceImage: '/in.png', outputPath: '/out.png', seed: 1 };
+const editors: Editor[] = [];
+const children: ChildProcessWithoutNullStreams[] = [];
+function tracked(launch: WorkerLaunch): Editor {
+  const worker = new WorkerProcess(launch, { startupMs: 5_000, editMs: 5_000, cancellationMs: 100, shutdownMs: 1_000, terminationMs: 100 }, config => {
+    const child = spawn(config.executable, config.args, { cwd: config.cwd, stdio: 'pipe', detached: process.platform !== 'win32' });
+    children.push(child); return child;
+  });
+  const editor = new ProcessEditor(worker); editors.push(editor); return editor;
+}
+function fixtureEditor(mode = 'normal') { return tracked({ executable: process.execPath, args: [fixture, mode], cwd: root }); }
+
+afterEach(async () => {
+  await Promise.allSettled(editors.splice(0).map(editor => editor.dispose()));
+  for (const child of children.splice(0)) {
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+    if (child.pid) expect(() => process.kill(child.pid!, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+  }
+});
+
+describe('real model-free worker processes', () => {
+  it('reuses one process and confirms it exits on disposal', async () => {
+    const editor = fixtureEditor();
+    expect((await editor.edit(request)).seed).toBe(1);
+    expect((await editor.edit(request)).seed).toBe(1);
+    expect(children).toHaveLength(1);
+    await editor.dispose();
+    expect(children[0]!.exitCode).toBe(0);
+  });
+  it('forcibly closes a worker that ignores cancellation and SIGTERM', async () => {
+    const editor = fixtureEditor('ignore-cancel'); const controller = new AbortController();
+    await expect(editor.edit(request, { signal: controller.signal, onProgress: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+    expect(children[0]!.signalCode).toBe('SIGKILL');
+  });
+  it.each(['malformed', 'exit'])('cleans up after %s output', async mode => {
+    const editor = fixtureEditor(mode);
+    await expect(editor.edit(request)).rejects.toMatchObject({ category: 'runtime' });
+  });
+  it('runs the bundled Python handshake and verifies process closure', async () => {
+    const python = fileURLToPath(new URL('../../worker/.venv/bin/python', import.meta.url));
+    const editor = tracked({ executable: python, args: ['-u', '-m', 'picpatch_worker', '--protocol-dir', fileURLToPath(new URL('../../protocol/', import.meta.url))], cwd: fileURLToPath(new URL('../../worker/src/', import.meta.url)) });
+    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+    await editor.dispose(); expect(children[0]!.exitCode).toBe(0);
+  });
+  it('exercises the public factory with the installed Python environment', async () => {
+    const editor = createEditor({ pythonExecutable: fileURLToPath(new URL('../../worker/.venv/bin/python', import.meta.url)) });
+    editors.push(editor);
+    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+    await editor.dispose();
+    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'DISPOSED' });
+  });
+});
