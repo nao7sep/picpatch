@@ -2,6 +2,8 @@ PicPatch
 Copyright (C) 2026 Yoshinao Inoguchi
 Project license: GPL-3.0-or-later; see LICENSE.
 
-This source scaffold does not vendor or bundle third-party inference code,
-model weights, or a Python runtime. Development dependencies are obtained
-separately through npm and retain their upstream licenses.
+This source repository does not vendor or bundle third-party inference code,
+model weights, or a Python runtime. Runtime validation and development
+dependencies are obtained separately through npm and uv and retain their
+upstream licenses. Dependency versions and license metadata are recorded
+in the package manifests and lockfiles.

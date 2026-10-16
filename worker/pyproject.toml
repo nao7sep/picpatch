@@ -5,13 +5,25 @@ build-backend = "hatchling.build"
 [project]
 name = "picpatch-worker"
 version = "0.0.0"
-description = "Internal inference worker scaffold for PicPatch"
+description = "Internal image editing worker for PicPatch"
 requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
 authors = [{ name = "Yoshinao Inoguchi", email = "yoshinao@inoguchi.com" }]
-dependencies = []
+dependencies = [
+    "jsonschema>=4.23,<5",
+    "referencing>=0.37,<1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/picpatch_worker"]
 
-# The scaffold has no inference dependencies.
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+]
+
+# No inference dependencies or model acquisition hooks.
+
+[tool.coverage.run]
+data_file = "coverage/.coverage-python"

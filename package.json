@@ -17,11 +17,13 @@
   "author": "Yoshinao Inoguchi <yoshinao@inoguchi.com>",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
-    "test": "npm run contracts:check && npm run typecheck && vitest run",
+    "test": "npm run contracts:check && npm run typecheck && vitest run && npm run test:python",
     "test:coverage": "npm run contracts:check && npm run typecheck && vitest run --coverage",
     "example:request": "tsx examples/edit-request.ts",
     "contracts:generate": "node scripts/generate-contracts.mjs",
-    "contracts:check": "node scripts/generate-contracts.mjs --check"
+    "contracts:check": "node scripts/generate-contracts.mjs --check",
+    "test:python": "uv run --project worker --locked --no-python-downloads pytest tests/unit/worker",
+    "test:python:coverage": "uv run --project worker --locked --no-python-downloads pytest tests/unit/worker --cov=picpatch_worker --cov-report=term-missing --cov-config=worker/pyproject.toml --cov-report=html:coverage/python"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

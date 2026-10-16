@@ -1,6 +1,339 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "PicPatch worker protocol (reserved)",
-  "description": "No wire messages are supported in the scaffold. Replace this rejecting schema when the transport contract is implemented.",
-  "not": {}
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkerMessage",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/Request"
+    },
+    {
+      "$ref": "#/definitions/Response"
+    }
+  ],
+  "definitions": {
+    "Hello": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "hello"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "Edit": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "edit"
+        },
+        "request": {
+          "$ref": "contracts.schema.json#/definitions/EditRequest"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "Cancel": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "cancel"
+        },
+        "targetId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type",
+        "targetId"
+      ],
+      "additionalProperties": false
+    },
+    "Shutdown": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "shutdown"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "Ready": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "ready"
+        },
+        "workerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "contracts.schema.json#/definitions/ModelCapabilities"
+          }
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type",
+        "workerVersion",
+        "models"
+      ],
+      "additionalProperties": false
+    },
+    "Progress": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "progress"
+        },
+        "event": {
+          "$ref": "contracts.schema.json#/definitions/ProgressEvent"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type",
+        "event"
+      ],
+      "additionalProperties": false
+    },
+    "Result": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "result"
+        },
+        "result": {
+          "$ref": "contracts.schema.json#/definitions/EditResult"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "Error": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "error"
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_REQUEST",
+                "NOT_READY",
+                "BACKEND_UNAVAILABLE",
+                "BUSY",
+                "CANCELLED",
+                "RUNTIME_FAILURE"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "CancelAck": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "cancelAck"
+        },
+        "targetId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "accepted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type",
+        "targetId",
+        "accepted"
+      ],
+      "additionalProperties": false
+    },
+    "ShutdownAck": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "shutdownAck"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "Request": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/Hello"
+        },
+        {
+          "$ref": "#/definitions/Edit"
+        },
+        {
+          "$ref": "#/definitions/Cancel"
+        },
+        {
+          "$ref": "#/definitions/Shutdown"
+        }
+      ]
+    },
+    "Response": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/Ready"
+        },
+        {
+          "$ref": "#/definitions/Progress"
+        },
+        {
+          "$ref": "#/definitions/Result"
+        },
+        {
+          "$ref": "#/definitions/Error"
+        },
+        {
+          "$ref": "#/definitions/CancelAck"
+        },
+        {
+          "$ref": "#/definitions/ShutdownAck"
+        }
+      ]
+    }
+  }
 }

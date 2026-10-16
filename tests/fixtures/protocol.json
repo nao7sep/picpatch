@@ -1,0 +1,243 @@
+[
+  {
+    "name": "hello",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "hello"
+    },
+    "valid": true
+  },
+  {
+    "name": "edit",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "edit",
+      "request": {
+        "model": "test",
+        "instruction": "Combine 日本語\nsecond line",
+        "references": [
+          {
+            "id": "a",
+            "role": "subject",
+            "images": [
+              "/a.png",
+              "/b.png"
+            ]
+          }
+        ],
+        "outputPath": "/out.png",
+        "seed": 0
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "cancel",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "cancel",
+      "targetId": 2
+    },
+    "valid": true
+  },
+  {
+    "name": "shutdown",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "shutdown"
+    },
+    "valid": true
+  },
+  {
+    "name": "ready",
+    "kind": "Response",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "ready",
+      "workerVersion": "test",
+      "models": []
+    },
+    "valid": true
+  },
+  {
+    "name": "progress",
+    "kind": "Response",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "progress",
+      "event": {
+        "type": "progress",
+        "verb": "edit",
+        "stage": "editing",
+        "message": "Editing"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "result",
+    "kind": "Response",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "result",
+      "result": {
+        "image": {
+          "path": "/out.png",
+          "mimeType": "image/png",
+          "size": {
+            "width": 64,
+            "height": 64
+          }
+        },
+        "model": "test",
+        "modelRevision": "abc123",
+        "runtime": {
+          "name": "test",
+          "version": "1"
+        },
+        "seed": 0,
+        "references": [
+          {
+            "id": "a",
+            "role": "subject",
+            "images": [
+              "/a.png",
+              "/b.png"
+            ]
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "error",
+    "kind": "Response",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "error",
+      "error": {
+        "code": "BACKEND_UNAVAILABLE",
+        "message": "Unavailable"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "cancelAck",
+    "kind": "Response",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "cancelAck",
+      "targetId": 2,
+      "accepted": false
+    },
+    "valid": true
+  },
+  {
+    "name": "shutdownAck",
+    "kind": "Response",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "shutdownAck"
+    },
+    "valid": true
+  },
+  {
+    "name": "unknown version",
+    "kind": "Request",
+    "message": {
+      "version": 2,
+      "id": 1,
+      "type": "hello"
+    },
+    "valid": false
+  },
+  {
+    "name": "boolean id",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": true,
+      "type": "hello"
+    },
+    "valid": false
+  },
+  {
+    "name": "unknown field",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "hello",
+      "extra": 1
+    },
+    "valid": false
+  },
+  {
+    "name": "mask without source",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "edit",
+      "request": {
+        "model": "test",
+        "instruction": "Combine 日本語\nsecond line",
+        "references": [
+          {
+            "id": "a",
+            "role": "subject",
+            "images": [
+              "/a.png",
+              "/b.png"
+            ]
+          }
+        ],
+        "outputPath": "/out.png",
+        "seed": 0,
+        "maskImage": "/mask.png"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "no conditioning",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": 1,
+      "type": "edit",
+      "request": {
+        "model": "test",
+        "instruction": "Edit",
+        "outputPath": "/out.png"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "unsafe ID",
+    "kind": "Request",
+    "message": {
+      "version": 1,
+      "id": 9007199254740992,
+      "type": "hello"
+    },
+    "valid": false
+  }
+]
