@@ -197,3 +197,20 @@ it('generates from text, edits that result in the same session, and cancels gene
     expect(JSON.stringify(events)).not.toContain('ceramic');
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
 }, 600_000);
+
+it('outpaints an asymmetric canvas while preserving normalized source pixels including alpha', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'picpatch-outpaint-inference-'));
+  const editor = createEditor(await localOptions());
+  const sourceImage = join(directory, 'source.png');
+  try {
+    await sharp({ create: { width: 37, height: 29, channels: 4, background: { r: 150, g: 80, b: 30, alpha: 0.5 } } }).png().toFile(sourceImage);
+    const original = await sharp(sourceImage).ensureAlpha().raw().toBuffer();
+    const result = await editor.edit({ instruction: 'Extend the plain background around the color swatch.', sourceImage,
+      outpaint: { size: { width: 256, height: 256 }, left: 81, top: 93 }, parameters: { steps: 2 }, seed: 42, outputPath: join(directory, 'out.png') });
+    expect(result.outpaint).toEqual({ size: { width: 256, height: 256 }, left: 81, top: 93, sourceSize: { width: 37, height: 29 } });
+    const preserved = await sharp(result.image.path).extract({ left: 81, top: 93, width: 37, height: 29 }).ensureAlpha().raw().toBuffer();
+    expect(preserved).toEqual(original);
+    expect((await sharp(result.image.path).metadata())).toMatchObject({ width: 256, height: 256 });
+    expect((await readdir(directory)).sort()).toEqual(['out.png', 'source.png']);
+  } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
+}, 600_000);

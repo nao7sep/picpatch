@@ -1,3 +1,4 @@
+import { inputGeometry } from './images/geometry.ts';
 import { resolveParameters } from './parameters.ts';
 import { extname, isAbsolute, resolve } from 'node:path';
 import { contractValidator } from './contracts.ts';
@@ -12,6 +13,10 @@ const capabilitiesValid = contractValidator<ModelCapabilities>('ModelCapabilitie
 export function validateEditRequest(input: unknown, capabilities?: ModelCapabilities): EditRequest {
   if (!requestValid(input)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid edit request: check required fields, image conditioning, numeric bounds, and unknown fields.');
   const request = structuredClone(input);
+  if (request.outpaint) {
+    if (request.maskImage) throw new PicPatchUsageError('INVALID_REQUEST', 'Outpainting creates its own mask; omit maskImage.');
+    if (request.size && (request.size.width !== request.outpaint.size.width || request.size.height !== request.outpaint.size.height)) throw new PicPatchUsageError('INVALID_REQUEST', 'Output size must match the outpaint canvas.');
+  }
   const groups = request.references ?? [];
   if (new Set(groups.map(group => group.id)).size !== groups.length) {
     throw new PicPatchUsageError('INVALID_REQUEST', 'Reference group IDs must be unique.');
@@ -33,12 +38,19 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
     const unsupported = (message: string): never => { throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', message); };
     if (capabilities.model !== request.model) unsupported('Capabilities do not describe the requested model.');
     if (capabilities.sourceImageRequired && !request.sourceImage) unsupported('This model requires a source image.');
-    if (capabilities.maskRequired && !request.maskImage) unsupported('This model requires a mask image.');
+    if (capabilities.maskRequired && !request.maskImage && !request.outpaint) unsupported('This model requires a mask image.');
     if (!capabilities.instructionEditing) unsupported('This model does not support instruction editing.');
     if (request.maskImage && capabilities.maskMode === 'none') unsupported('This model does not support masks.');
     if (groups.some(group => !capabilities.referenceRoles.includes(group.role))) unsupported('This model does not support a requested reference role.');
     if (capabilities.maxReferenceImages !== undefined && references.length > capabilities.maxReferenceImages) unsupported('The reference count exceeds this model’s supported limit.');
     if (capabilities.maxConditioningImages !== undefined && references.length + (request.sourceImage ? 1 : 0) > capabilities.maxConditioningImages) unsupported('The total source and reference count exceeds this model’s supported limit.');
+    if (request.outpaint) {
+      if (!capabilities.outpainting || capabilities.maskMode === 'none') unsupported('This model does not support outpainting.');
+      validateSize(request.outpaint.size, capabilities);
+      const canvas = request.outpaint.size;
+      const geometry = inputGeometry(canvas.width, canvas.height, 1, capabilities.inputGeometry);
+      if (geometry.preparedSize.width !== canvas.width || geometry.preparedSize.height !== canvas.height) unsupported('Outpaint canvas must not require model cropping or downscaling.');
+    }
     resolveParameters(request.parameters, capabilities);
     validateSize(request.size, capabilities);
   }

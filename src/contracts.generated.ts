@@ -30,6 +30,7 @@ export interface EditRequestContract {
   size?: ImageSize;
   parameters?: SamplingParameters;
   sidecar?: SidecarOptions;
+  outpaint?: OutpaintCanvas;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -78,6 +79,15 @@ export interface SidecarOptions {
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "OutpaintCanvas".
+ */
+export interface OutpaintCanvas {
+  size: ImageSize;
+  left: number;
+  top: number;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
  * via the `definition` "EditRequest".
  */
 export interface EditRequest {
@@ -94,6 +104,7 @@ export interface EditRequest {
   size?: ImageSize;
   parameters?: SamplingParameters;
   sidecar?: SidecarOptions;
+  outpaint?: OutpaintCanvas;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -140,6 +151,10 @@ export interface ModelCapabilities {
    */
   maxConditioningImages?: number;
   parameters?: ParameterCapabilities;
+  /**
+   * SDK canvas expansion through this model mask workflow; preservation follows maskMode.
+   */
+  outpainting?: boolean;
 }
 /**
  * Absent controls are unsupported. Descriptors apply to every advertised operation of this model.
@@ -219,6 +234,7 @@ export interface EditResult {
   inputGeometry?: InputGeometry[];
   effectiveParameters: SamplingParameters;
   sidecar?: SidecarOutcome;
+  outpaint?: OutpaintGeometry;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -234,6 +250,16 @@ export interface InputGeometry {
     left: number;
     top: number;
   };
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "OutpaintGeometry".
+ */
+export interface OutpaintGeometry {
+  size: ImageSize;
+  left: number;
+  top: number;
+  sourceSize: ImageSize;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -389,4 +415,5 @@ export interface ArtifactRecord {
      */
     maskImage?: string;
   };
+  outpaint?: OutpaintGeometry;
 }

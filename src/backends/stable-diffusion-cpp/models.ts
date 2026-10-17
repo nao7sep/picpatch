@@ -7,7 +7,7 @@ export function isNativeVariant(variant: string): boolean { return (nativeVarian
 export function nativeCapabilities(variant: string, model: string = variant): ModelCapabilities {
   const masked = variant.endsWith('-inpaint');
   const dimension = variant.startsWith('sdxl') ? 1024 : 512;
-  return { model, textToImage: !masked, instructionEditing: true, sourceImageRequired: true, maskRequired: masked,
+  return { model, textToImage: !masked, instructionEditing: true, sourceImageRequired: true, maskRequired: masked, outpainting: masked,
     referenceRoles: [], maxReferenceImages: 0, maskMode: masked ? 'native' : 'none',
     size: { widthMultiple: 8, heightMultiple: 8, maxWidth: 2147483640, maxHeight: 2147483640 }, defaultOutputSize: { width: dimension, height: dimension },
     parameters: { steps: { default: 20, minimum: 1, maximum: 2147483647, integer: true },

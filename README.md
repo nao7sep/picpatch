@@ -97,6 +97,14 @@ Variation requires one source and rejects masks and grouped references. Omitted 
 
 `inspectReadiness(nativeExecutable, model)` checks file presence and the executable revision, returning `executable-ready`, not load evidence. The native CLI has no load-only readiness operation, so `load: true` is unsupported. Each inference owns one child process through closure, including forced cancellation. Progress reports operation stages rather than parsing native log messages into denoising events. Private prompts are passed through files in the owned workspace; native image metadata is disabled and diagnostics are drained without forwarding. Prompt-embedded LoRA loading is rejected. Existing cleanup and retained-recovery-directory rules apply to those private files too.
 
+## Outpainting
+
+Models advertising `capabilities.outpainting` accept `edit({ instruction, sourceImage, outpaint: { size: { width, height }, left, top }, outputPath })`. The SDK places the oriented, normalized source at those nonnegative offsets without resizing it, fills added canvas with opaque neutral gray, and creates a black-source/white-extension mask. Omit `maskImage`: outpainting creates its own. The canvas must contain the entire source, add pixels on at least one side, satisfy model dimensions, and require no model cropping/downscaling. An explicit or session-default `size` must equal the canvas size. References retain their usual model-specific handling.
+
+Klein uses final compositing: normalized source pixels, including alpha, remain exact inside their placed rectangle. Transparent source pixels are preserved, not treated as holes to generate. Its canvas must fit the existing composite geometry limit. Native-mask models condition inference with the generated mask and do not promise exact source-pixel preservation. The existing evidence labels still apply; a valid canvas does not establish natural seams or likeness. Native Fill and SD/SDXL paths remain without real-weight validation here.
+
+Results include `outpaint` with canvas size, source placement and oriented source size. `inputGeometry` continues to describe original input normalization; generated canvas/mask paths are private. Sidecars retain this path-free canvas geometry. See [the executable outpaint example](examples/outpaint.ts). Outpainting reuses the existing cancellation, publication and cleanup behavior and does not modify the original file.
+
 ## Artifact sidecars
 
 Both `edit` and `generate` accept `sidecar: {}` to save a versioned JSON record at `<outputPath>.json` alongside the PNG. No sidecar is written by default. The record includes the operation, actual seed, effective sampling controls, model revision, runtime, output dimensions, and the final PNG's byte count and SHA-256. `ArtifactRecord` is the public record type; `result.sidecar` reports its path and `saved` or `failed` status. See [the executable sidecar example](examples/artifact-sidecar.ts).

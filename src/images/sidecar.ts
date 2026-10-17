@@ -17,6 +17,7 @@ export async function publishSidecar(request: ImageRequest, result: EditResult, 
     const record: ArtifactRecord = {
       version: 1, operation: 'prompt' in request ? 'generate' : 'edit', inputsIncluded,
       image: { filename: basename(result.image.path), mimeType: result.image.mimeType, size: result.image.size }, sha256: hash.digest('hex'), bytes,
+      ...(result.outpaint ? { outpaint: result.outpaint } : {}),
       model: result.model, modelRevision: result.modelRevision, runtime: result.runtime, seed: result.seed,
       effectiveParameters: inputsIncluded ? result.effectiveParameters : parameters,
       ...(inputsIncluded ? { inputs: 'prompt' in request ? { prompt: request.prompt } : {

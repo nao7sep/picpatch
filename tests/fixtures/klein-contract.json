@@ -38,7 +38,8 @@
         "default": 1,
         "minimum": 0
       }
-    }
+    },
+    "outpainting": true
   },
   "cases": [
     {

@@ -28,3 +28,5 @@ export type { DiagnosticEvent, DiagnosticOptions, WorkerDiagnostic } from './dia
 export type { SamplingParameters, ParameterCapabilities } from './contracts.generated.ts';
 
 export type { ArtifactRecord, SidecarOptions, SidecarOutcome } from './contracts.generated.ts';
+
+export type { OutpaintCanvas, OutpaintGeometry } from './contracts.generated.ts';

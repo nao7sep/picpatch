@@ -1,3 +1,4 @@
+import { prepareOutpaint } from './outpaint.ts';
 import { publishSidecar } from './sidecar.ts';
 import { basename, dirname, join } from 'node:path';
 import { chmod, link, lstat, mkdtemp, open, realpath, rm } from 'node:fs/promises';
@@ -14,6 +15,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   private readonly destination: string;
   private retain = false;
   private readonly geometry: InputGeometry[] = [];
+  private outpaint: EditResult['outpaint'];
   private constructor(directory: string, destination: string, request: T) {
     this.directory = directory; this.destination = destination; this.request = request;
     this.workerRequest = { ...structuredClone(request), outputPath: join(directory, 'worker.png') };
@@ -47,14 +49,22 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   async prepare(signal?: AbortSignal, policy?: GeometryPolicy, maskMode: ModelCapabilities['maskMode'] = 'composite'): Promise<void> {
     if (!('instruction' in this.request) || !('instruction' in this.workerRequest)) { checkCancellation(signal); return; }
     let index = 0;
-    const prepare = async (path: string, mask = false) => {
+    const prepare = async (path: string, mask = false, preserveSize = false) => {
       const stem = join(this.directory, `input-${index++}`);
-      const image = await prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal, mask ? undefined : policy);
+      const image = await prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal, mask || preserveSize ? undefined : policy);
       this.geometry.push({ path, ...image.geometry });
       return image;
     };
-    const source = this.request.sourceImage ? await prepare(this.request.sourceImage) : undefined;
+    const source = this.request.sourceImage ? await prepare(this.request.sourceImage, false, this.request.outpaint !== undefined) : undefined;
     if (source) this.workerRequest.sourceImage = source.path;
+    if (this.request.outpaint && source) {
+      const prepared = await prepareOutpaint(source, this.request.outpaint, this.directory, signal);
+      this.workerRequest.sourceImage = prepared.sourceImage;
+      this.workerRequest.maskImage = prepared.maskImage;
+      this.workerRequest.size = this.request.outpaint.size;
+      delete this.workerRequest.outpaint;
+      this.outpaint = { ...this.request.outpaint, sourceSize: { width: source.width, height: source.height } };
+    }
     if (this.request.maskImage) {
       if (!source || source.width !== source.geometry.orientedSize.width || source.height !== source.geometry.orientedSize.height) {
         throw new PicPatchUsageError('INVALID_MASK', 'Masked editing requires source dimensions that need no model resizing or cropping.');
@@ -119,8 +129,9 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       throw error;
     }
     // Publication is the commit point. A later abort must not disguise a saved result.
-    const { sidecar: _runtimeSidecar, ...response } = result;
+    const { sidecar: _runtimeSidecar, outpaint: _runtimeCanvas, ...response } = result;
     const saved: EditResult = { ...response, image: { ...result.image, path: this.request.outputPath }, references: structuredClone('instruction' in this.request ? this.request.references ?? [] : []), inputGeometry: structuredClone(this.geometry) };
+    if (this.outpaint) saved.outpaint = structuredClone(this.outpaint);
     if (this.request.sidecar) saved.sidecar = await publishSidecar(this.request, saved, complete, `${this.destination}.json`, this.directory);
     return saved;
   }

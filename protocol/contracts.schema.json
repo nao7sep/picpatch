@@ -105,6 +105,9 @@
         },
         "sidecar": {
           "$ref": "#/definitions/SidecarOptions"
+        },
+        "outpaint": {
+          "$ref": "#/definitions/OutpaintCanvas"
         }
       },
       "required": [
@@ -127,6 +130,9 @@
       ],
       "dependencies": {
         "maskImage": [
+          "sourceImage"
+        ],
+        "outpaint": [
           "sourceImage"
         ]
       }
@@ -228,6 +234,10 @@
         },
         "parameters": {
           "$ref": "#/definitions/ParameterCapabilities"
+        },
+        "outpainting": {
+          "type": "boolean",
+          "description": "SDK canvas expansion through this model mask workflow; preservation follows maskMode."
         }
       },
       "required": [
@@ -336,6 +346,9 @@
         },
         "sidecar": {
           "$ref": "#/definitions/SidecarOutcome"
+        },
+        "outpaint": {
+          "$ref": "#/definitions/OutpaintGeometry"
         }
       },
       "required": [
@@ -1033,6 +1046,9 @@
           },
           "required": [],
           "additionalProperties": false
+        },
+        "outpaint": {
+          "$ref": "#/definitions/OutpaintGeometry"
         }
       },
       "required": [
@@ -1047,6 +1063,58 @@
         "runtime",
         "seed",
         "effectiveParameters"
+      ],
+      "additionalProperties": false
+    },
+    "OutpaintCanvas": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "$ref": "#/definitions/ImageSize"
+        },
+        "left": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "top": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "size",
+        "left",
+        "top"
+      ],
+      "additionalProperties": false
+    },
+    "OutpaintGeometry": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "$ref": "#/definitions/ImageSize"
+        },
+        "left": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "top": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sourceSize": {
+          "$ref": "#/definitions/ImageSize"
+        }
+      },
+      "required": [
+        "size",
+        "left",
+        "top",
+        "sourceSize"
       ],
       "additionalProperties": false
     }
