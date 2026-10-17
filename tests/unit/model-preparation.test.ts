@@ -127,3 +127,12 @@ it('bounds a stalled body and closes its reader before reporting timeout', async
     expect(vi.getTimerCount()).toBe(0);
   } finally { vi.useRealTimers(); }
 });
+
+it('pins Base 9B separately with its architecture, license and undistilled defaults', () => {
+  const selected = listModels().find(model => model.id === 'flux2-klein-base-9b-4bit')!;
+  expect(selected).toMatchObject({ acquisition: 'pinned', variant: 'flux2-klein-base-9b', license: { id: 'flux-non-commercial-license' },
+    capabilities: { instructionEditing: true, textToImage: true, parameters: { steps: { default: 50 }, guidance: { default: 4 } } } });
+  if (selected.acquisition !== 'pinned') throw new Error('Expected a pinned bundle');
+  expect(selected.downloadBytes).toBe(9_541_191_203);
+  expect(selected.manifest.source.repository).toBe('AITRADER/FLUX2-klein-base-9B-mlx-4bit');
+});
