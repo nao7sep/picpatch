@@ -39,5 +39,16 @@
     "ajv": "^8.20.0",
     "sharp": "^0.35.5",
     "stream-json": "^3.7.0"
-  }
+  },
+  "files": [
+    "src/",
+    "protocol/*.json",
+    "runtimes/mflux/pyproject.toml",
+    "runtimes/mflux/uv.lock",
+    "runtimes/mflux/.python-version",
+    "runtimes/mflux/src/**/*.py",
+    "runtimes/mflux/src/**/*.json",
+    "runtimes/stable-diffusion-cpp/README.md",
+    "runtimes/mflux/README.md"
+  ]
 }

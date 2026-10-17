@@ -62,10 +62,11 @@ export class WorkerProcess {
     if (this.failure || this.closing) return Promise.reject(this.failure ?? new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Worker is closed.'));
     try {
       this.child = this.spawn(this.launch);
-      this.child.once('error', cause => this.fail(new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Could not run the worker.', { cause })));
+      this.child.once('error', cause => this.fail(new PicPatchRuntimeError('WORKER_UNAVAILABLE', 'Could not run the worker. Check the prepared Python interpreter and packaged worker resources.', { cause })));
       this.child.once('exit', (code, signal) => {
         if (!this.failure && !this.shutdownAck) {
-          const error = new PicPatchRuntimeError('WORKER_EXITED', 'Worker exited unexpectedly.');
+          const starting = [...this.pending.values()].some(pending => pending.request.type === 'hello');
+          const error = new PicPatchRuntimeError('WORKER_EXITED', starting ? 'Worker exited before its handshake. Check the prepared Python dependencies and packaged worker resources.' : 'Worker exited unexpectedly.');
           error.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}) };
           this.fail(error);
         }
@@ -87,7 +88,10 @@ export class WorkerProcess {
       this.child.stdout.once('end', () => {
         try {
           this.remainder += this.decoder.decode();
-          if (this.remainder.length || !this.shutdownAck) throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker output ended unexpectedly.');
+          if (this.remainder.length || !this.shutdownAck) {
+            const starting = [...this.pending.values()].some(pending => pending.request.type === 'hello');
+            throw new PicPatchRuntimeError('PROTOCOL_ERROR', starting ? 'Worker output ended before its handshake. Check the prepared Python dependencies and packaged worker resources.' : 'Worker output ended unexpectedly.');
+          }
         } catch (cause) { this.fail(cause instanceof PicPatchRuntimeError ? cause : new PicPatchRuntimeError('PROTOCOL_ERROR', 'Invalid worker output.', { cause })); }
       });
       this.startup = this.request({ version: 1, id: this.nextId++, type: 'hello', ...(this.launch.model ? { model: this.launch.model } : {}), ...(this.launch.runtimeCheck ? { runtimeCheck: this.launch.runtimeCheck } : {}) }, this.timeouts.startupMs);
