@@ -2,7 +2,7 @@ import { appendFile, open } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { arch, cpus, platform, release, totalmem } from 'node:os';
 import { performance } from 'node:perf_hooks';
-import { createEditor, PicPatchUsageError, PicPatchCancelledError, type EditorOptions, type EditInput, type GenerateInput, type EditResult } from 'picpatch';
+import { createEditor, PicPatchUsageError, PicPatchCancelledError, type EditorOptions, type EditInput, type GenerateInput, type EditResult, type ProgressEvent } from 'picpatch';
 
 export type ComparisonOperation = { operation: 'generate'; request: Omit<GenerateInput, 'sidecar'> } |
   { operation: 'edit'; request: Omit<EditInput, 'sidecar'>; sourceFromPrevious?: boolean };
@@ -48,9 +48,16 @@ export async function compare(cases: ComparisonCase[], report: string, signal?: 
           if (!signal?.aborted && !(operation.operation === 'edit' && operation.sourceFromPrevious && !previous)) {
             try {
               editor ??= createEditor(entry.options);
+              let stage: string | undefined;
+              const operationOptions = { ...(signal ? { signal } : {}), onProgress: (progress: ProgressEvent) => {
+                if (stage !== progress.stage) {
+                  stage = progress.stage;
+                  event({ kind: 'phase', index: record.measurementIndex, stage, elapsedSeconds: (performance.now() - started) / 1000 });
+                }
+              } };
               const result = operation.operation === 'generate'
-                ? await editor.generate({ ...operation.request, sidecar: {} }, { ...(signal ? { signal } : {}) })
-                : await editor.edit({ ...operation.request, ...(operation.sourceFromPrevious ? { sourceImage: previous!.image.path } : {}), sidecar: {} }, { ...(signal ? { signal } : {}) });
+                ? await editor.generate({ ...operation.request, sidecar: {} }, operationOptions)
+                : await editor.edit({ ...operation.request, ...(operation.sourceFromPrevious ? { sourceImage: previous!.image.path } : {}), sidecar: {} }, operationOptions);
               previous = result;
               const { negativePrompt: _private, ...parameters } = result.effectiveParameters;
               Object.assign(record, { outcome: 'completed', model: result.model, modelRevision: result.modelRevision, runtime: result.runtime, seed: result.seed, parameters,

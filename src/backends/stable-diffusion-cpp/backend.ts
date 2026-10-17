@@ -59,7 +59,8 @@ export class NativeBackend implements EditBackend {
     }
     checkSignal(options.signal);
     const args = ['--model', join(this.model.directory, this.model.checkpoint!), '--prompt-file', 'prompt.txt', '--negative-prompt-file', 'negative.txt',
-      '--output', basename(request.outputPath), '--disable-image-metadata', '--log-level', 'error', '--batch-count', '1',
+      // The pinned Metal GROUP_NORM kernel corrupts batched CFG (upstream issue #2149).
+      '--batched-cfg', 'off', '--output', basename(request.outputPath), '--disable-image-metadata', '--log-level', 'error', '--batch-count', '1',
       '--width', String(size.width), '--height', String(size.height), '--seed', String(seed),
       '--steps', String(effectiveParameters.steps), '--cfg-scale', String(effectiveParameters.guidance),
       '--sampling-method', effectiveParameters.sampler!, '--scheduler', effectiveParameters.scheduler!, '--lora-model-dir', directory];
@@ -80,7 +81,9 @@ export class NativeBackend implements EditBackend {
         // Upstream selects V2 by substring in the passed path, even parent directories.
         // A fixed relative alias selects V1 without copying multi-GB weights.
         await symlink(join(this.model.directory, this.model.photoMaker), join(directory, 'photomaker-v1.safetensors'));
-        args.push('--photo-maker', 'photomaker-v1.safetensors', '--pm-id-images-dir', photos, '--pm-style-strength', String(effectiveParameters.identityStyleStrength));
+        // Metal cannot perform the pinned runtime's in-place F16 LoRA merge.
+        // Apply PhotoMaker's required LoRA during inference instead.
+        args.push('--lora-apply-mode', 'at_runtime', '--photo-maker', 'photomaker-v1.safetensors', '--pm-id-images-dir', photos, '--pm-style-strength', String(effectiveParameters.identityStyleStrength));
       } catch (cause) {
         checkSignal(options.signal);
         throw new PicPatchRuntimeError('IMAGE_IO', 'Could not prepare private identity inputs.', { cause });

@@ -50,11 +50,15 @@ export class NativeProcess {
         // Capture only bounded help/version output. Inference output may contain private text.
         child.stdout.on('data', (chunk: Buffer) => { if (capture && output.length < 8192) output = Buffer.concat([output, chunk.subarray(0, 8192 - output.length)]); });
         child.stderr.resume();
-        child.once('close', code => {
+        child.once('close', (code, signal) => {
           closed = true; clearTimeout(deadline); clearTimeout(escalation); clearTimeout(termination);
           combined.removeEventListener('abort', abort);
           if (failure) reject(failure);
-          else if (code !== 0) reject(new PicPatchRuntimeError('RUNTIME_FAILURE', 'Native runtime did not complete successfully.'));
+          else if (code !== 0) {
+            const error = new PicPatchRuntimeError('RUNTIME_FAILURE', 'Native runtime did not complete successfully.');
+            error.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}) };
+            reject(error);
+          }
           else resolve(output.toString('utf8'));
         });
         if (combined.aborted) abort();

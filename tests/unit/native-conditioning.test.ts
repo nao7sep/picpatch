@@ -54,6 +54,7 @@ it('keeps one pooled identity distinct from appearance and prompt groups', () =>
   for (const extra of [{ sourceImage: '/source.png' }, { instruction: 'A portrait without a placeholder.' }, { instruction: '{person} and {person}' }, { instruction: '{person} img' }, { references: [...request.references, { ...request.references[0], id: 'other', images: ['/c.png'] }] }, { parameters: { identityStyleStrength: 101 } }]) {
     expect(() => validateEditRequest({ ...request, ...extra }, caps)).toThrow();
   }
+  expect(() => validateEditRequest({ ...request, instruction: 'A portrait of {img}.', references: [{ ...request.references[0], id: 'img' }] }, caps)).not.toThrow();
   const klein = listModels().find(item => item.id === 'flux2-klein-4b')!.capabilities;
   expect(() => validateEditRequest({ ...request, model: klein.model }, klein)).toThrow();
   const appearance = listModels().find(item => item.id === 'sd15-ip-adapter')!.capabilities;

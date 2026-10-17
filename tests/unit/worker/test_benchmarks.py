@@ -14,6 +14,7 @@ def test_unsampled_comparison_is_unknown_not_zero():
     assert result['peakFootprintBytes'] is None
     assert result['resourceStatus'] == 'not-measured'
     assert result['stages'][0]['sampleCount'] == 0
+    assert result['stages'][0]['stage'] == 'operation'
 
 
 def test_pressure_is_reported_separately_from_completion():

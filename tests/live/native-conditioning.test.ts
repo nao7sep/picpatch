@@ -23,8 +23,10 @@ it.each(['sdxl-photomaker-v1', 'sd15-ip-adapter', 'sdxl-ip-adapter-plus'])('maps
 const fs = require('node:fs'); const path = require('node:path'); const args = process.argv.slice(2);
 if(args.includes('--help')) { console.log('stable-diffusion.cpp version fixture, commit ${nativeRevision}'); process.exit(0); }
 const value = name => args[args.indexOf(name)+1]; const prompt = fs.readFileSync(value('--prompt-file'),'utf8');
+if (value('--batched-cfg') !== 'off') process.exit(10);
 if (args.includes('--init-img') || args.includes('--mask') || args.includes('--strength') || !args.includes('--disable-image-metadata')) process.exit(5);
 if (${identity}) {
+ if (value('--lora-apply-mode') !== 'at_runtime') process.exit(11);
  if (value('--photo-maker') !== 'photomaker-v1.safetensors' || !fs.existsSync(value('--photo-maker')) || value('--pm-style-strength') !== '15' || prompt !== 'A portrait of man img.') process.exit(6);
  const dir = value('--pm-id-images-dir'); const names = fs.readdirSync(dir).sort();
  if (names.length !== 12 || !dir.startsWith(process.cwd())) process.exit(7);

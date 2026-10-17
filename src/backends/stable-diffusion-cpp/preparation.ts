@@ -10,7 +10,7 @@ import { validateLocalEditingModel, validateModelManifest } from '../../models/v
 import type { LocalEditingModel, ModelComponent } from '../../contracts.generated.ts';
 import type { PrepareModelOptions, PreparedModel } from '../../models/preparation.ts';
 
-/** Explicit caller file selection; preparation proves byte identity, not architecture. */
+/** Explicit caller selection, byte fingerprints and recognized conditioning metadata; loading remains separate. */
 export async function prepareNativeModel(variant: LocalEditingModel['variant'], options: PrepareModelOptions): Promise<PreparedModel> {
   validateOperation(options, ['timeoutMs', 'directory', 'download', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision']);
   if (!options.directory || !options.checkpoint || (options.download !== undefined && options.download !== false)) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply a local directory and relative checkpoint; native variants have no downloads.');
@@ -18,7 +18,7 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
   const directory = options.directory;
   const assets = { checkpoint: options.checkpoint, ...(options.vae ? { vae: options.vae } : {}), ...(options.photoMaker ? { photoMaker: options.photoMaker } : {}), ...(options.ipAdapter ? { ipAdapter: options.ipAdapter } : {}), ...(options.clipVision ? { clipVision: options.clipVision } : {}) };
   const selected = [options.checkpoint, ...[options.vae, options.photoMaker, options.ipAdapter, options.clipVision].filter(value => value !== undefined)];
-  if (new Set(selected).size !== selected.length) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint and VAE must be distinct files.');
+  if (new Set(selected).size !== selected.length) throw new PicPatchUsageError('INVALID_REQUEST', 'Selected native assets must be distinct files.');
   for (const path of selected) {
     if (typeof path !== 'string' || !['.safetensors', '.gguf'].includes(extname(path).toLowerCase())) throw new PicPatchUsageError('INVALID_REQUEST', 'Native weights must be safetensors or GGUF files.');
   }

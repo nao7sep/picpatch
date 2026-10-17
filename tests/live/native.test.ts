@@ -47,7 +47,7 @@ it('runs native generation and masked editing through public preparation, pipes 
         expect(result.effectiveParameters).toMatchObject({ steps: variant === 'sdxl' ? 3 : 20, guidance: 7, sampler: 'euler_a', scheduler: 'discrete' });
         expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
         if (variant === 'sdxl') {
-          await expect(editor.generate({ prompt: 'fail' })).rejects.toMatchObject({ code: 'RUNTIME_FAILURE' });
+          await expect(editor.generate({ prompt: 'fail' })).rejects.toMatchObject({ code: 'RUNTIME_FAILURE', diagnostic: { phase: 'worker', exitCode: 2, causes: [{ kind: 'ProcessExit' }] } });
           await expect(editor.generate({ prompt: 'malformed' })).rejects.toMatchObject({ code: 'INVALID_OUTPUT' });
           await expect(editor.generate({ prompt: '<lora:unknown:1>' })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
           await expect(editor.generate({ prompt: 'Blue', outputPath: result.image.path })).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT' });

@@ -61,7 +61,7 @@ def summarize(samples, phases):
         stages = []
         for left, right in zip(transitions, transitions[1:]):
             window = [sample for sample in active if left['time'] <= sample['time'] < right['time']]
-            stages.append({'stage': left.get('stage', 'preparation'),
+            stages.append({'stage': left.get('stage', 'preparation' if len(transitions) > 2 else 'operation'),
                            'seconds': right.get('elapsedSeconds', end['seconds']) - left.get('elapsedSeconds', 0),
                            'sampleCount': len(window),
                            'peakFootprintBytes': max((sample['footprintBytes'] for sample in window), default=None),

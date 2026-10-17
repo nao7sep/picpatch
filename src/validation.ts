@@ -58,7 +58,7 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
       if (conditioning === 'pooled-identity') {
         if (group.conditioning !== 'identity' || !group.className) unsupported('Identity conditioning requires an identity group and className.');
         const placeholder = `{${group.id}}`;
-        if (request.instruction.split(placeholder).length !== 2 || /\bimg\b/i.test(request.instruction)) unsupported('Use the identity group placeholder exactly once; the SDK supplies the native trigger word.');
+        if (request.instruction.split(placeholder).length !== 2 || /\bimg\b/i.test(request.instruction.replace(placeholder, ''))) unsupported('Use the identity group placeholder exactly once; the SDK supplies the native trigger word.');
       } else if (group.conditioning !== 'appearance' || group.className) unsupported('Appearance conditioning requires an appearance group without an identity class.');
     } else if (groups.some(group => (group.conditioning !== undefined && group.conditioning !== 'prompt') || group.className !== undefined)) unsupported('This model supports prompt grouping, not dedicated identity or appearance conditioning.');
     resolveParameters(request.parameters, capabilities);
