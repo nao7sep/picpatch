@@ -486,7 +486,11 @@
             "ernie-image-turbo",
             "qwen-image",
             "qwen-image-edit-2511",
-            "qwen-image-2.1"
+            "qwen-image-2.1",
+            "sd15",
+            "sdxl",
+            "sd15-inpaint",
+            "sdxl-inpaint"
           ]
         },
         "directory": {
@@ -501,6 +505,16 @@
             4,
             8
           ]
+        },
+        "checkpoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Native checkpoint path relative to the prepared model directory."
+        },
+        "vae": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional native VAE path relative to the prepared model directory."
         }
       },
       "required": [
@@ -613,6 +627,15 @@
         "scheduler": {
           "type": "string",
           "minLength": 1
+        },
+        "sampler": {
+          "type": "string",
+          "minLength": 1
+        },
+        "strength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "additionalProperties": false
@@ -699,6 +722,49 @@
               "type": "number"
             }
           },
+          "additionalProperties": false
+        },
+        "sampler": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "string"
+            },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "default",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        "strength": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "number"
+            },
+            "minimum": {
+              "type": "number"
+            },
+            "maximum": {
+              "type": "number"
+            },
+            "integer": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "default",
+            "minimum"
+          ],
           "additionalProperties": false
         }
       },

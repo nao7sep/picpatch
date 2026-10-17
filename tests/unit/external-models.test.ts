@@ -19,7 +19,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
 
-it.each(listModels().filter(model => model.acquisition === 'external').map(model => model.id))('prepares %s with no handwritten manifest or bundle writes', async id => {
+it.each(listModels().filter(model => model.acquisition === 'external' && model.runtime.name === 'mflux').map(model => model.id))('prepares %s with no handwritten manifest or bundle writes', async id => {
   const before = await readdir(directory, { recursive: true });
   const prepared = await prepareModel(id, { directory });
   expect(prepared).toMatchObject({ origin: 'external', integrity: 'locally-fingerprinted', model: { variant: id, directory, manifest: { model: id, source: { repository: 'local' } } } });

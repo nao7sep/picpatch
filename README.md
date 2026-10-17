@@ -2,7 +2,7 @@
 
 PicPatch is a headless SDK being developed for local AI image editing: instruction-based changes, grouped reference images, masked edits, and text-to-image generation.
 
-The public editor validates and prepares image files, owns a persistent worker process, and safely publishes completed outputs. An experimental offline adapter connects editing and generation to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness and larger-image memory limits remain unverified. The SDK does not acquire Python or models automatically. Explicit model preparation is available through the SDK.
+The public editor validates and prepares image files, owns inference processes, and safely publishes completed outputs. An experimental offline adapter connects editing and generation to MFLUX 0.22.0 and FLUX.2 Klein 4B on Apple Silicon. The real-inference gate exercises the pinned 4-bit bundle through the public SDK. Portrait likeness and larger-image memory limits remain unverified. The SDK does not acquire Python or models automatically. Explicit model preparation is available through the SDK.
 
 ## Experimental local editing
 
@@ -18,7 +18,7 @@ After preparing the worker environment and a local bundle, run `npx tsx examples
 
 ## Preparing models and checking readiness
 
-`listModels()` returns independent selections distinguished by `acquisition` and `evidence`. A `pinned` entry includes immutable component hashes, total download bytes, source/license links and `inference-tested` evidence. The first entry remains the community 4-bit Klein bundle (about 4.62 GB). An `external` entry has `api-tested` evidence and requires a caller-owned directory; it has no download option. All entries remain experimental. Evidence applies to the selected configuration, not every quantization or larger model in its family.
+`listModels()` returns independent selections distinguished by `acquisition` and `evidence`. A `pinned` entry includes immutable component hashes, total download bytes, source/license links and `inference-tested` evidence. The first entry remains the community 4-bit Klein bundle (about 4.62 GB). An `external` entry requires caller-owned files and has no download option. MFLUX entries have `api-tested` evidence; native CLI entries have `source-audited` evidence until an actual executable and weights are validated. All entries remain experimental. Evidence applies to the selected configuration, not every quantization or larger model in its family.
 
 ```ts
 import { listModels, prepareModel, inspectReadiness, createEditor } from 'picpatch';
@@ -72,11 +72,32 @@ Qwen-Image generation and Qwen-Image Edit 2511 are separate checkpoint selection
 
 Qwen 2.1 Base (`qwen-image-2.1`) supports both verbs through the complete reference-capable pipeline, at 40 steps with guidance 1. It accepts up to ten conditioning images total, including the source, and output dimensions divisible by 32. PNG output preserves RGBA. Preparation requires transformer, VAE and text-encoder weights with their component configurations, plus the processor/tokenizer assets; a text-only export that omits the vision tower is insufficient. Actual tensor completeness is checked by runtime loading. These adapters leave reference resizing to Qwen and do not apply Klein geometry. Masks are not exposed: Qwen's sampler preservation differs from trained Fill conditioning. Official Qwen 2.1 Turbo is not yet selectable because its checkpoint-defined sampling schedule is not exposed by the pinned runtime. All Qwen selections are experimental and have no real-weight PicPatch validation or pinned downloads yet.
 
+## Native checkpoint generation and inpainting
+
+Experimental `sd15`, `sdxl`, `sd15-inpaint` and `sdxl-inpaint` selections use a caller-prepared `sd-cli` executable directly, without Python. They are labeled `source-audited`: public preparation, argument mapping, process ownership and publication have fixture-based coverage, but native binary execution and real-weight quality are not yet validated. Use the audited stable-diffusion.cpp revision `68285df319457e2d79310b48513e4ba1bf8ebe9a`; the SDK checks its reported build revision and never installs or downloads it.
+
+Supply a self-contained safetensors or GGUF checkpoint containing the required model/text-encoder components, optionally with a separate VAE. Paths are relative to `directory`. Preparation fingerprints exactly those files, preserves them in place, and rejects directory indirection and undeclared weights. It does not infer or prove the checkpoint architecture: choose the matching variant, and use dedicated trained inpaint weights for an inpaint selection. Split diffusion-only exports are not supported by this selection path.
+
+```ts
+const prepared = await prepareModel('sdxl', {
+  directory: '/absolute/models', checkpoint: 'custom.safetensors', vae: 'vae.safetensors',
+});
+const editor = createEditor({ model: prepared.model, nativeExecutable: '/absolute/sd-cli' });
+try {
+  const result = await editor.generate({ prompt: 'A blue ceramic bowl', outputPath: '/absolute/result.png' });
+  console.log(result.image.path);
+} finally { await editor.dispose(); }
+```
+
+Generation uses 20 steps, guidance 7, Euler ancestral sampling and the discrete schedule by default; effective results report `sampler` as well as the other sampling controls. Inpaint variants instead require `sourceImage` and `maskImage` through `edit`, use fixed strength 1, and reject generation and grouped references. Output dimensions are multiples of eight. The native engine resizes source/mask conditioning to the requested canvas and rounds grayscale mask values to binary; native masks do not promise exact outside-region pixel preservation. Ordinary image-to-image variation, PhotoMaker and IP-Adapter are not exposed yet.
+
+`inspectReadiness(nativeExecutable, model)` checks file presence and the executable revision, returning `executable-ready`, not load evidence. The native CLI has no load-only readiness operation, so `load: true` is unsupported. Each inference owns one child process through closure, including forced cancellation. Progress reports operation stages rather than parsing native log messages into denoising events. Private prompts are passed through files in the owned workspace; native image metadata is disabled and diagnostics are drained without forwarding. Prompt-embedded LoRA loading is rejected. Existing cleanup and retained-recovery-directory rules apply to those private files too.
+
 ## Sampling controls and capability discovery
 
 Each `listModels()` entry includes `capabilities`, also returned by runtime readiness. These describe generation/editing support, source/mask requirements, reference roles and limits, geometry, and `parameters`. An absent parameter descriptor means unsupported. Numeric descriptors carry defaults and bounds; scheduler descriptors carry an explicit allowed list. These are implementation capabilities, not proof of model quality or real-weight validation; check the entry's separate evidence field.
 
-Both `generate` and `edit` accept `parameters: { steps?, guidance?, negativePrompt?, scheduler? }`. Set session-wide values in `defaults.parameters`; per-call values override individual fields, while omitted fields retain session or model defaults. Unsupported controls and combinations fail before image preparation or model loading. `result.effectiveParameters` reports resolved supported controls, including defaults. A returned negative prompt is caller content; it is never copied to diagnostics or files automatically.
+Both `generate` and `edit` accept `parameters: { steps?, guidance?, negativePrompt?, scheduler?, sampler?, strength? }`. Set session-wide values in `defaults.parameters`; per-call values override individual fields, while omitted fields retain session or model defaults. Unsupported controls and combinations fail before image preparation or model loading. `result.effectiveParameters` reports resolved supported controls, including defaults. A returned negative prompt is caller content; it is never copied to diagnostics or files automatically.
 
 Scheduler selection is restricted to each adapter's verified default schedule for now; arbitrary runtime scheduler names and external classes are rejected. FLUX.1 negative prompts and Schnell/Z-Image Turbo guidance are not exposed because these pipelines do not apply those controls. Z-Image Base and ERNIE negative prompts require guidance above 1. Qwen 2.1 requires guidance at least 1, and guidance above 1 requires an explicit negative prompt (which may be empty); a negative prompt at guidance 1 is rejected because it would be ignored. Qwen pipelines require at least two steps because the pinned linear scheduler produces non-finite values at one step. These restrictions are available in the descriptors so generic scripts can validate combinations without model-name branches.
 

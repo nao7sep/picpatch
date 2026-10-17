@@ -7,16 +7,18 @@ export function resolveParameters(parameters: SamplingParameters = {}, capabilit
   const effective: SamplingParameters = {};
   const unsupported = (): never => { throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The requested sampling parameters are unsupported by this model.'); };
   for (const key of Object.keys(parameters) as (keyof SamplingParameters)[]) if (!supported[key]) unsupported();
-  for (const key of ['steps', 'guidance'] as const) {
+  for (const key of ['steps', 'guidance', 'strength'] as const) {
     const descriptor = supported[key];
     if (!descriptor) continue;
     const value = parameters[key] ?? descriptor.default;
     if (!Number.isFinite(value) || value < descriptor.minimum || (descriptor.maximum !== undefined && value > descriptor.maximum) || (descriptor.integer && !Number.isSafeInteger(value))) unsupported();
     effective[key] = value;
   }
-  if (supported.scheduler) {
-    effective.scheduler = parameters.scheduler ?? supported.scheduler.default;
-    if (!supported.scheduler.values.includes(effective.scheduler)) unsupported();
+  for (const key of ['scheduler', 'sampler'] as const) {
+    const descriptor = supported[key];
+    if (!descriptor) continue;
+    effective[key] = parameters[key] ?? descriptor.default;
+    if (!descriptor.values.includes(effective[key])) unsupported();
   }
   const negative = supported.negativePrompt;
   if (negative) {

@@ -10,7 +10,7 @@ import { modelDefinition, type ExternalModel } from './variants.ts';
 import { validateModelManifest, verifyModel } from './verification.ts';
 
 /** Fingerprint a caller-selected MFLUX bundle. This records bytes, not upstream authenticity. */
-export async function prepareExternalModel(entry: ExternalModel, options: PrepareModelOptions): Promise<PreparedModel> {
+export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'variant'>, options: PrepareModelOptions): Promise<PreparedModel> {
   validateOperation(options, ['timeoutMs', 'directory', 'download', 'storage']);
   if (options.download !== undefined && typeof options.download !== 'boolean') throw new PicPatchUsageError('INVALID_REQUEST', 'download must be a boolean.');
   if (!options.directory || options.download) throw new PicPatchUsageError('INVALID_REQUEST', 'This variant requires a local directory and does not offer downloads.');

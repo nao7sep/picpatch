@@ -1,3 +1,4 @@
+import { prepareNativeModel } from '../backends/stable-diffusion-cpp/preparation.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import { chmod, lstat, mkdir, mkdtemp, open, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -14,6 +15,9 @@ import type { ModelOperationOptions } from './types.ts';
 export interface PrepareModelOptions extends ModelOperationOptions {
   /** Use an external bundle in place, with no copying or acquisition. */
   directory?: string;
+  /** Native checkpoint and optional VAE paths relative to directory. */
+  checkpoint?: string;
+  vae?: string;
   /** Explicit opt-in for a missing catalog bundle; false by default. */
   download?: boolean;
   storage?: StorageOptions;
@@ -40,6 +44,7 @@ async function syncDirectory(path: string): Promise<void> {
 /** Explicit preparation only. Reuses and verifies files; never repairs existing bundles. */
 async function prepareModelOperation(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
   const entry = catalogModel(id);
+  if (entry.runtime.name === 'stable-diffusion.cpp') return prepareNativeModel(entry.variant, options);
   return entry.acquisition === 'pinned' ? prepareCatalogModel(entry, options) : prepareExternalModel(entry, options);
 }
 

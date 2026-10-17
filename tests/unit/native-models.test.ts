@@ -1,0 +1,57 @@
+import { mkdtemp, writeFile, readdir, rm, symlink, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, expect, it } from 'vitest';
+import { createEditor, listModels, prepareModel, verifyModel, validateGenerateRequest, validateEditRequest } from '../../src/index.ts';
+
+let directory: string;
+beforeEach(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'picpatch-native-model-'));
+  await writeFile(join(directory, 'custom.safetensors'), 'synthetic checkpoint');
+  await writeFile(join(directory, 'vae.gguf'), 'synthetic vae');
+});
+afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
+
+it.each(['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint'])('prepares explicit %s files without copying, installing or claiming inference evidence', async id => {
+  const before = await readdir(directory);
+  const options = { directory, checkpoint: 'custom.safetensors', vae: 'vae.gguf' };
+  const prepared = await prepareModel(id, options);
+  expect(prepared.model).toMatchObject({ variant: id, checkpoint: options.checkpoint, vae: options.vae });
+  expect(prepared.integrity).toBe('locally-fingerprinted');
+  expect((await verifyModel(directory, prepared.model.manifest)).status).toBe('matches-manifest');
+  expect((await prepareModel(id, options)).model.manifest).toEqual(prepared.model.manifest);
+  expect(await readdir(directory)).toEqual(before);
+  expect(listModels().find(item => item.id === id)).toMatchObject({ evidence: 'source-audited', acquisition: 'external' });
+  await writeFile(join(directory, 'vae.gguf'), 'replacement');
+  expect((await prepareModel(id, options)).model.manifest.source.revision).not.toBe(prepared.model.manifest.source.revision);
+});
+
+it('rejects implicit acquisition, ambiguous files and bad registration before execution', async () => {
+  for (const extra of [{}, { checkpoint: '../custom.safetensors' }, { checkpoint: 'custom.ckpt' }, { checkpoint: 'custom.safetensors', vae: 'custom.safetensors' }, { checkpoint: 'custom.safetensors', download: true }]) {
+    await expect(prepareModel('sdxl', { directory, ...extra })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  }
+  const { model } = await prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors' });
+  expect(() => createEditor({ model })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+  expect(() => createEditor({ model: { ...model, quantize: 4 }, nativeExecutable: '/sd-cli' })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+  expect(() => createEditor({ model: { ...model, checkpoint: 'undeclared.safetensors' }, nativeExecutable: '/sd-cli' })).toThrow();
+  const editor = createEditor({ model, nativeExecutable: '/missing/sd-cli' });
+  await editor.dispose();
+});
+
+it('cancels preparation and rejects directory indirection without mutating external files', async () => {
+  const controller = new AbortController();
+  await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors', signal: controller.signal, onProgress: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await mkdir(join(directory, 'actual'));
+  await writeFile(join(directory, 'actual/weights.gguf'), 'test');
+  await symlink(join(directory, 'actual'), join(directory, 'linked'));
+  await expect(prepareModel('sdxl', { directory, checkpoint: 'linked/weights.gguf' })).rejects.toMatchObject({ code: 'MODEL_IO' });
+});
+
+it('distinguishes base generation from dedicated inpaint before image I/O', () => {
+  const base = listModels().find(m => m.id === 'sdxl')!.capabilities;
+  const mask = listModels().find(m => m.id === 'sdxl-inpaint')!.capabilities;
+  expect(() => validateGenerateRequest({ model: base.model, prompt: 'Blue', outputPath: '/out.png' }, base)).not.toThrow();
+  expect(() => validateEditRequest({ model: base.model, instruction: 'Blue', sourceImage: '/in.png', outputPath: '/out.png' }, base)).toThrow();
+  expect(() => validateEditRequest({ model: mask.model, instruction: 'Blue', sourceImage: '/in.png', outputPath: '/out.png' }, mask)).toThrow();
+  expect(() => validateEditRequest({ model: mask.model, instruction: 'Blue', sourceImage: '/in.png', maskImage: '/mask.png', outputPath: '/out.png', parameters: { strength: 0.5 } }, mask)).toThrow();
+});

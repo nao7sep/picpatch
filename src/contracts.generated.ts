@@ -43,6 +43,8 @@ export interface SamplingParameters {
   guidance?: number;
   negativePrompt?: string;
   scheduler?: string;
+  sampler?: string;
+  strength?: number;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -138,6 +140,19 @@ export interface ParameterCapabilities {
     default?: string;
     requiresGuidanceAbove?: number;
     requiredForGuidanceAbove?: number;
+  };
+  sampler?: {
+    default: string;
+    /**
+     * @minItems 1
+     */
+    values: [string, ...string[]];
+  };
+  strength?: {
+    default: number;
+    minimum: number;
+    maximum?: number;
+    integer?: boolean;
   };
 }
 /**
@@ -244,10 +259,22 @@ export interface LocalEditingModel {
     | "ernie-image-turbo"
     | "qwen-image"
     | "qwen-image-edit-2511"
-    | "qwen-image-2.1";
+    | "qwen-image-2.1"
+    | "sd15"
+    | "sdxl"
+    | "sd15-inpaint"
+    | "sdxl-inpaint";
   directory: string;
   manifest: ModelManifest;
   quantize?: 4 | 8;
+  /**
+   * Native checkpoint path relative to the prepared model directory.
+   */
+  checkpoint?: string;
+  /**
+   * Optional native VAE path relative to the prepared model directory.
+   */
+  vae?: string;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema

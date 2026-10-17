@@ -1,3 +1,4 @@
+import { isNativeVariant } from '../backends/stable-diffusion-cpp/models.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -39,6 +40,13 @@ export function validateModelManifest(input: unknown): ModelManifest {
 export function validateLocalEditingModel(input: unknown): LocalEditingModel {
   if (!contractValidator<LocalEditingModel>('LocalEditingModel')(input)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid local editing model configuration.');
   absolutePath(input.directory);
+  if (isNativeVariant(input.variant)) {
+    if (!input.checkpoint || input.quantize !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Native models require a checkpoint and use checkpoint-owned quantization.');
+    for (const path of [input.checkpoint, input.vae].filter(value => value !== undefined)) {
+      if (!input.manifest.components.some(component => component.path === path && component.role === 'weights')) throw new PicPatchUsageError('INVALID_REQUEST', 'Native model files must be declared manifest weights.');
+    }
+  } else if (input.checkpoint !== undefined || input.vae !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
+
   return { ...structuredClone(input), manifest: validateModelManifest(input.manifest) };
 }
 function inside(root: string, path: string): boolean {

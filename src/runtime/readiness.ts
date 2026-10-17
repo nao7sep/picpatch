@@ -1,3 +1,5 @@
+import { NativeBackend } from '../backends/stable-diffusion-cpp/backend.ts';
+import { isNativeVariant, nativeCapabilities, nativeRevision } from '../backends/stable-diffusion-cpp/models.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import type { DiagnosticOptions } from '../diagnostics.ts';
 import { stat } from 'node:fs/promises';
@@ -22,13 +24,13 @@ export interface ReadinessOptions extends DiagnosticOptions {
 export interface ModelReadiness {
   files: 'present' | 'incomplete';
   integrity: 'not-verified' | 'matches-manifest' | 'invalid';
-  runtime: RuntimeCheck | { status: 'not-checked' };
+  runtime: RuntimeCheck | { status: 'not-checked' | 'executable-ready'; version?: string };
   capabilities: ModelCapabilities[];
 }
 
 /** Presence, integrity, imports and load evidence remain separate. Never downloads. */
-async function inspectReadinessOperation(pythonExecutable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
-  absolutePath(pythonExecutable); validateOperation(options, ['timeoutMs', 'verify', 'load']);
+async function inspectReadinessOperation(executable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
+  absolutePath(executable); validateOperation(options, ['timeoutMs', 'verify', 'load']);
   for (const value of [options.verify, options.load]) if (value !== undefined && typeof value !== 'boolean') throw new PicPatchUsageError('INVALID_REQUEST', 'Readiness switches must be booleans.');
   const model = validateLocalEditingModel(input);
   const budget = timeBudget(options.timeoutMs, options.load || options.verify ? 600_000 : 30_000);
@@ -51,8 +53,17 @@ async function inspectReadinessOperation(pythonExecutable: string, input: LocalE
     if (options.verify && files === 'present') integrity = (await verifyModel(model.directory, model.manifest, { signal, timeoutMs: budget })).status;
     if (options.verify && files === 'incomplete') integrity = 'invalid';
     if (files === 'incomplete' || integrity === 'invalid') return { files, integrity, runtime: { status: 'not-checked' }, capabilities: [] };
+    if (isNativeVariant(model.variant)) {
+      if (options.load) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The native CLI has no load-only readiness operation.');
+      emitProgress(operation, { type: 'progress', verb: 'inspectReadiness', stage: 'runtime', message: 'Checking the native runtime executable.' });
+      const backend = new NativeBackend(executable, model, { ...workerTimeouts, startupMs: budget });
+      try {
+        await backend.inspect(signal);
+        return { files, integrity, runtime: { status: 'executable-ready', version: nativeRevision }, capabilities: [nativeCapabilities(model.variant, model.manifest.model)] };
+      } finally { await backend.dispose(); }
+    }
     emitProgress(operation, { type: 'progress', verb: 'inspectReadiness', stage: 'runtime', message: options.load ? 'Loading the local model for a readiness check.' : 'Checking inference runtime imports.' });
-    const worker = new WorkerProcess({ ...workerLaunch(pythonExecutable), model, runtimeCheck: options.load ? 'load' : 'imports' }, { ...workerTimeouts, startupMs: budget });
+    const worker = new WorkerProcess({ ...workerLaunch(executable), model, runtimeCheck: options.load ? 'load' : 'imports' }, { ...workerTimeouts, startupMs: budget });
     const abort = () => worker.abortStartup();
     signal.addEventListener('abort', abort, { once: true });
     try {
@@ -68,6 +79,6 @@ async function inspectReadinessOperation(pythonExecutable: string, input: LocalE
   });
 }
 
-export function inspectReadiness(pythonExecutable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
-  return withDiagnostics('inspectReadiness', options, operation => inspectReadinessOperation(pythonExecutable, input, operation));
+export function inspectReadiness(executable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
+  return withDiagnostics('inspectReadiness', options, operation => inspectReadinessOperation(executable, input, operation));
 }
