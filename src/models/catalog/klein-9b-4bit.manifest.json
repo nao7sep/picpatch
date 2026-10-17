@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "model": "flux2-klein-9b-4bit",
+  "source": {
+    "repository": "AITRADER/FLUX2-klein-9B-mlx-4bit",
+    "revision": "614a0a82fc19beacba53009b005a95042135f839"
+  },
+  "components": [
+    {
+      "path": "text_encoder/0.safetensors",
+      "role": "weights",
+      "bytes": 2138739328,
+      "sha256": "9fa860c6716774d4338fbc79779f0bf4f9ee6fd09667e2b10055d00ce70619fe"
+    },
+    {
+      "path": "text_encoder/1.safetensors",
+      "role": "weights",
+      "bytes": 2119029339,
+      "sha256": "6502259c864f64f59e4ef2e62286d4b50191a8d4bec80434ed005dfb0430eb44"
+    },
+    {
+      "path": "text_encoder/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 51332,
+      "sha256": "574772c4e6d9348850443d0a1240a2d539583e795b402c2ab30086d9897e5276"
+    },
+    {
+      "path": "tokenizer/chat_template.jinja",
+      "role": "tokenizer",
+      "bytes": 4168,
+      "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+    },
+    {
+      "path": "tokenizer/tokenizer.json",
+      "role": "tokenizer",
+      "bytes": 11422650,
+      "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506"
+    },
+    {
+      "path": "tokenizer/tokenizer_config.json",
+      "role": "tokenizer",
+      "bytes": 703,
+      "sha256": "12d954e6dd43cefa344345292406442871ea7f3237065d2f068f6a0402f92bf6"
+    },
+    {
+      "path": "transformer/0.safetensors",
+      "role": "weights",
+      "bytes": 2143173598,
+      "sha256": "70a0a31ae9fb8e5670e13c183befcc28ecbbe8c44064d19c3b932daede4d6d0b"
+    },
+    {
+      "path": "transformer/1.safetensors",
+      "role": "weights",
+      "bytes": 2085643450,
+      "sha256": "2e672a13fdcfedb708ce1d2d638b035a6aeb5cfae5c768539c0b5f473c1ae9d4"
+    },
+    {
+      "path": "transformer/2.safetensors",
+      "role": "weights",
+      "bytes": 877997066,
+      "sha256": "09f2f7fefe061b60801f0474a0e14643a84f2c216acf469724b84473b87f9d3d"
+    },
+    {
+      "path": "transformer/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 37369,
+      "sha256": "6d78bcecef0d6d25632f09e6c7e64de24f89ffe927f7cdb3f2dbe58ff50bba44"
+    },
+    {
+      "path": "vae/0.safetensors",
+      "role": "weights",
+      "bytes": 165107912,
+      "sha256": "cf2e489f78bd25bb37309b583fd16ad5c6c7a2448597334890efe80ab6a4c7b3"
+    },
+    {
+      "path": "vae/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 17547,
+      "sha256": "dbe90a3d8e6faf35107899281a6492ed52c434126c18d4087aa582097380cd6e"
+    }
+  ]
+}

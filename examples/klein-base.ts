@@ -10,8 +10,9 @@ const output = resolve(destination);
 await mkdir(output, { recursive: true });
 // Full-resolution Base inference can exceed the SDK's ordinary operation deadline.
 const editor = createEditor({ ...options, timeouts: { ...options.timeouts, generateMs: 7_200_000, editMs: 7_200_000 } });
+const started = performance.now();
 const onProgress = (event: { stage: string; completed?: number; total?: number }) => {
-  console.log(event.stage, event.completed ?? '', event.total ?? '');
+  console.log(((performance.now() - started) / 1000).toFixed(3), event.stage, event.completed ?? '', event.total ?? '');
 };
 try {
   const generated = await editor.generate({

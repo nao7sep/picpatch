@@ -128,11 +128,11 @@ it('bounds a stalled body and closes its reader before reporting timeout', async
   } finally { vi.useRealTimers(); }
 });
 
-it('pins Base 9B separately with its architecture, license and undistilled defaults', () => {
-  const selected = listModels().find(model => model.id === 'flux2-klein-base-9b-4bit')!;
-  expect(selected).toMatchObject({ acquisition: 'pinned', variant: 'flux2-klein-base-9b', license: { id: 'flux-non-commercial-license' },
-    capabilities: { instructionEditing: true, textToImage: true, parameters: { steps: { default: 50 }, guidance: { default: 4 } } } });
+it.each([['flux2-klein-base-9b', 50, 4, 9_541_191_203, 'AITRADER/FLUX2-klein-base-9B-mlx-4bit'], ['flux2-klein-9b', 4, 1, 9541224462, 'AITRADER/FLUX2-klein-9B-mlx-4bit']] as const)('pins %s with its architecture, license and sampling defaults', (variant, steps, guidance, bytes, repository) => {
+  const selected = listModels().find(model => model.id === `${variant}-4bit`)!;
+  expect(selected).toMatchObject({ acquisition: 'pinned', variant, license: { id: 'flux-non-commercial-license' },
+    capabilities: { instructionEditing: true, textToImage: true, parameters: { steps: { default: steps }, guidance: { default: guidance } } } });
   if (selected.acquisition !== 'pinned') throw new Error('Expected a pinned bundle');
-  expect(selected.downloadBytes).toBe(9_541_191_203);
-  expect(selected.manifest.source.repository).toBe('AITRADER/FLUX2-klein-base-9B-mlx-4bit');
+  expect(selected.downloadBytes).toBe(bytes);
+  expect(selected.manifest.source.repository).toBe(repository);
 });
