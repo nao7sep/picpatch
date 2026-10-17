@@ -134,7 +134,10 @@ export interface ModelCapabilities {
    * Limit on grouped reference images, excluding the source. Absence means no declared limit, not unlimited hardware capacity.
    */
   maxReferenceImages?: number;
-  maskMode: "none" | "native" | "composite";
+  /**
+   * none: unsupported; native: trained mask conditioning; composite: output-only blending; latent-composite: source latent blending plus final pixel compositing.
+   */
+  maskMode: "none" | "native" | "composite" | "latent-composite";
   size?: {
     widthMultiple: number;
     heightMultiple: number;

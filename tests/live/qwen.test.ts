@@ -75,7 +75,26 @@ for variant in ('qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1'):
     with Image.open(output) as saved:
         assert saved.mode == 'RGBA' and saved.getpixel((0, 0)) == (128, 128, 128, 128)
         assert saved.info == {}
-assert sorted(p.suffix for p in root.iterdir()) == ['.png'] * 4
+from mflux.models.qwen21.variants.edit.qwen_image_21_edit import QwenImage21Edit
+from mflux.models.qwen21.model.qwen21_text_encoder.grounding import QwenImage21Grounding
+source = root / 'aligned.png'
+mask = root / 'mask.png'
+Image.new('RGBA', (64, 32), (17, 81, 143, 63)).save(source)
+m = Image.new('L', (64, 32), 255)
+m.paste(0, (0, 0, 32, 32))
+m.putpixel((32, 0), 128)
+m.save(mask)
+resolved = QwenImage21Edit._resolve_mask(None, str(mask), None, Image.open(source), 64, 32)
+assert resolved.getpixel((0, 0)) == 0 and resolved.getpixel((32, 0)) == 128
+latent = QwenImage21Grounding.to_latent_mask(resolved, 2, 4)
+assert latent.min() == 0 and latent.max() == 1
+output = root / 'masked.png'
+with patch.object(adapter, 'import_pipeline', return_value=(model_config, Pipeline, mx)):
+    adapter.edit({**request, 'instruction': 'Use blue.', 'sourceImage': str(source), 'maskImage': str(mask), 'outputPath': str(output)}, Event(), lambda _: None)
+with Image.open(output) as saved:
+    assert saved.getpixel((0, 0)) == (17, 81, 143, 63)
+    assert saved.getpixel((32, 0)) == (128, 128, 128, 128)
+assert sorted(p.suffix for p in root.iterdir()) == ['.png'] * 7
 mx.synchronize()
 mx.clear_cache()`;
     await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { timeout: 30_000,

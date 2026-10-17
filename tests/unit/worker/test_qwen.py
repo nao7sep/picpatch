@@ -43,7 +43,7 @@ def test_order_defaults_and_full_precision_loading(monkeypatch, family, tmp_path
     assert result['references'] == request['references'] and result['seed'] == 0
     assert calls[-2:] == [('sync',), ('clear',)]
     assert 'inputGeometry' not in adapter.capabilities
-    assert adapter.capabilities['maskMode'] == 'none'
+    assert adapter.capabilities['maskMode'] == ('latent-composite' if adapter.config['variant'] == 'qwen-image-2.1' else 'none')
 
 
 def test_reference_only_edit(monkeypatch, family, tmp_path):
@@ -54,7 +54,7 @@ def test_reference_only_edit(monkeypatch, family, tmp_path):
     assert calls[1][1]['image_paths'] == ['/a.png', '/b.png', '/c.png']
 
 
-@pytest.mark.parametrize('change', [{'maskImage': '/mask.png'}, {'sourceImage': None, 'references': []},
+@pytest.mark.parametrize('change', [{'maskImage': '/mask.png', 'sourceImage': None}, {'sourceImage': None, 'references': []},
                                     {'size': {'width': 17, 'height': 32}}])
 def test_invalid_edit_never_loads(monkeypatch, family, tmp_path, change):
     calls, _ = fake_runtime(monkeypatch, family)

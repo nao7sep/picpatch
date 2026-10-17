@@ -797,7 +797,7 @@
         "style",
         "background"
       ],
-      "maskMode": "none",
+      "maskMode": "latent-composite",
       "size": {
         "widthMultiple": 32,
         "heightMultiple": 32
@@ -830,7 +830,8 @@
           "requiresGuidanceAbove": 1,
           "requiredForGuidanceAbove": 1
         }
-      }
+      },
+      "outpainting": true
     }
   }
 ]

@@ -187,8 +187,10 @@
           "enum": [
             "none",
             "native",
-            "composite"
-          ]
+            "composite",
+            "latent-composite"
+          ],
+          "description": "none: unsupported; native: trained mask conditioning; composite: output-only blending; latent-composite: source latent blending plus final pixel compositing."
         },
         "size": {
           "type": "object",

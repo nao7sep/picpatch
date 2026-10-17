@@ -62,3 +62,16 @@ it('defaults native output to source dimensions and rejects misaligned masks', a
   try { await expect(invalid.prepare(undefined, undefined, 'native')).rejects.toMatchObject({ code: 'INVALID_MASK' }); }
   finally { await invalid.cleanup(); }
 });
+
+it('keeps latent-composite masks aligned and rejects output resizing', async () => {
+  const request = await fixture(32, 64, 6);
+  const work = await ImageWorkspace.create(request);
+  try {
+    await work.prepare(undefined, undefined, 'latent-composite');
+    expect(work.workerRequest.size).toEqual({ width: 64, height: 32 });
+    expect(await sharp(work.workerRequest.maskImage!).toColourspace('b-w').raw().toBuffer()).toEqual(Buffer.alloc(64 * 32, 128));
+  } finally { await work.cleanup(); }
+  const resized = await ImageWorkspace.create({ ...request, size: { width: 64, height: 64 } });
+  try { await expect(resized.prepare(undefined, undefined, 'latent-composite')).rejects.toMatchObject({ code: 'INVALID_MASK' }); }
+  finally { await resized.cleanup(); }
+});
