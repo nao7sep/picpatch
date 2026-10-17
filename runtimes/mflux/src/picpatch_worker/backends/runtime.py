@@ -11,6 +11,7 @@ from threading import Event
 
 
 from .errors import Cancelled, InvalidEditInput, BackendUnavailable
+from .loras import validate_selection, lora_kwargs, lora_provenance, validate_loaded_loras
 
 
 def check_cancelled(cancel: Event) -> None:
@@ -40,8 +41,9 @@ MODEL_DEFINITIONS = {item['id']: item for item in json.loads((Path(__file__).wit
 
 class MfluxAdapter:
     def __init__(self, config: dict):
-        if 'loras' in config or 'controlNet' in config:
+        if 'controlNet' in config:
             raise InvalidEditInput('This runtime does not support these auxiliary assets.')
+        validate_selection(config)
         self.config = config
         try:
             self.definition = MODEL_DEFINITIONS[config['variant']]
@@ -100,11 +102,23 @@ class MfluxAdapter:
         # This adapter uses an inspected API contract, not a guess at future compatibility.
         if installed != '0.22.0':
             raise BackendUnavailable('This adapter requires MFLUX 0.22.0.', 'unsupported-version')
+        auxiliary = lora_kwargs(self.config, self.definition['family'])
         model_config, pipeline_class, mx = self.import_pipeline(operation)
-        kwargs = {'model_config': model_config, 'model_path': str(directory)}
+        kwargs = {'model_config': model_config, 'model_path': str(directory), **auxiliary}
         if 'quantize' in self.config:
             kwargs['quantize'] = self.config['quantize']
-        return pipeline_class(**kwargs), installed, mx
+        pipeline = None
+        try:
+            pipeline = pipeline_class(**kwargs)
+            if auxiliary:
+                validate_loaded_loras(pipeline)
+            return pipeline, installed, mx
+        except Exception:
+            mx.synchronize()
+            pipeline = None
+            gc.collect()
+            mx.clear_cache()
+            raise
 
     def inspect_runtime(self, mode: str) -> dict:
         """Authored status only: never forward arbitrary package exception text."""
@@ -188,7 +202,8 @@ class MfluxAdapter:
                               'size': {'width': width, 'height': height}},
                     'model': request['model'], 'modelRevision': self.config['manifest']['source']['revision'],
                     'runtime': {'name': 'mflux', 'version': runtime_version}, 'seed': seed,
-                    'references': request.get('references', []), 'effectiveParameters': effective}
+                    'references': request.get('references', []), 'effectiveParameters': effective,
+                    **({'loras': lora_provenance(self.config)} if self.config.get('loras') else {})}
         finally:
             # No model retention until measured memory behavior justifies it. Synchronize
             # GPU producers before reporting terminal settlement or releasing private files.

@@ -109,9 +109,25 @@ Conditioned selections currently require safetensors assets. Preparation checks 
 
 ## Local LoRAs
 
-Native SD1.5/SDXL selections accept `prepareModel(id, { directory, checkpoint, loras: [{ path, scale? }] })`. Paths are relative to the model directory; scale defaults to one and may be zero or negative. Each selected safetensors file is fingerprinted with the checkpoint. Preparation checks every UNet low-rank target and up/down dimension against that checkpoint before hashing large files. Original SD names and supported Kohya/Diffusers block aliases are accepted. Unknown targets, text-encoder adapters, DoRA, LyCORIS and GGUF checkpoint combinations are rejected rather than partly applied. MFLUX LoRA loading is not exposed yet.
+Native SD1.5/SDXL selections accept `prepareModel(id, { directory, checkpoint, loras: [{ path, scale? }] })`. Paths are relative to the model directory; scale defaults to one and may be zero or negative. Each selected safetensors file is fingerprinted with the checkpoint. Preparation checks every UNet low-rank target and up/down dimension against that checkpoint before hashing large files. Original SD names and supported Kohya/Diffusers block aliases are accepted. Unknown targets, text-encoder adapters, DoRA, LyCORIS and GGUF checkpoint combinations are rejected rather than partly applied.
 
 The native backend applies LoRAs at runtime, without modifying checkpoint or adapter files. Prepared registrations carry the chosen scales; create a new editor with a different `model.loras` scale selection to compare strengths without hashing the same assets again. Result and sidecar `loras` entries contain filenames, content hashes and effective scales. Native prompt tags remain prohibited in caller prompts; PicPatch supplies private aliases internally. The live gate uses small deterministic untrained adapters against real SD checkpoints to check application and scale behavior; this is not evidence of a particular trained style's quality.
+
+MFLUX selections use the same preparation option, without `checkpoint`:
+
+```ts
+const prepared = await prepareModel('flux2-klein-4b-4bit', {
+  directory: '/absolute/model-bundle',
+  loras: [{ path: 'adapters/style.safetensors', scale: 0.8 }],
+});
+const editor = createEditor({ model: prepared.model, pythonExecutable: '/absolute/runtime/bin/python' });
+// Use editor.generate(...) or editor.edit(...) as supported by the selected model.
+// Dispose the editor when finished.
+```
+
+Local adapters live under the selected bundle directory; file symlinks can share existing weights. Preparation fingerprints each adapter and checks paired two-dimensional `lora_A`/`lora_B` or `lora_down`/`lora_up` tensors, optionally ending in `.weight`, and scalar alpha. It returns a combined local manifest; the base catalog files still undergo their pinned verification. Preparation does not require Python or load models. The worker checks family-specific names against MFLUX mappings and validates dimensions against the loaded layers; use `inspectReadiness(..., { load: true })` for that stronger check before inference.
+
+MFLUX receives explicit local paths and scales with baking disabled, preserving updates on quantized models without rewriting files. Every tensor must match the selected family's mapping; partial application with silently ignored tensors is rejected. DoRA, LoKr/LyCORIS, direct weight deltas and text-encoder adapters remain outside this contract. Installed API coverage includes all exposed MFLUX families; real quantized Klein generation/editing uses a deterministic untrained adapter to verify application, scales and provenance. Other families and trained-style quality still require real-weight evaluation.
 
 ## Structural conditioning
 

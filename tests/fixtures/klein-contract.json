@@ -39,7 +39,10 @@
         "minimum": 0
       }
     },
-    "outpainting": true
+    "outpainting": true,
+    "loraFormats": [
+      "mflux-lora-safetensors"
+    ]
   },
   "cases": [
     {

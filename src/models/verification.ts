@@ -40,6 +40,8 @@ export function validateModelManifest(input: unknown): ModelManifest {
 export function validateLocalEditingModel(input: unknown): LocalEditingModel {
   if (!contractValidator<LocalEditingModel>('LocalEditingModel')(input)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid local editing model configuration.');
   absolutePath(input.directory);
+  const loraPaths = input.loras?.map(lora => lora.path) ?? [];
+  if (new Set(loraPaths.map(path => path.toLowerCase())).size !== loraPaths.length || loraPaths.some(path => !path.toLowerCase().endsWith('.safetensors') || !input.manifest.components.some(component => component.path === path && component.role === 'weights'))) throw new PicPatchUsageError('INVALID_REQUEST', 'LoRAs must be distinct declared safetensors weights.');
   if (isNativeVariant(input.variant)) {
     if (!input.checkpoint || input.quantize !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Native models require a checkpoint and use checkpoint-owned quantization.');
     const identity = input.variant === 'sdxl-photomaker-v1';
@@ -47,12 +49,10 @@ export function validateLocalEditingModel(input: unknown): LocalEditingModel {
     if (identity !== (input.photoMaker !== undefined) || appearance !== (input.ipAdapter !== undefined) || appearance !== (input.clipVision !== undefined)) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply exactly the auxiliary assets required by the selected native conditioning method.');
     if (input.loras && !input.checkpoint.toLowerCase().endsWith('.safetensors')) throw new PicPatchUsageError('INVALID_REQUEST', 'LoRA compatibility checks require a safetensors checkpoint.');
     if (input.controlNet && (input.variant !== 'sd15' || !input.checkpoint.toLowerCase().endsWith('.safetensors') || !input.controlNet.path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchUsageError('INVALID_REQUEST', 'ControlNet currently requires an SD1.5 base safetensors checkpoint and Canny safetensors asset.');
-    const loraPaths = input.loras?.map(lora => lora.path) ?? [];
-    if (new Set(loraPaths.map(path => path.toLowerCase())).size !== loraPaths.length || loraPaths.some(path => !path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchUsageError('INVALID_REQUEST', 'LoRAs must be distinct safetensors files.');
     for (const path of [...loraPaths, input.controlNet?.path, input.checkpoint, input.vae, input.photoMaker, input.ipAdapter, input.clipVision].filter(value => value !== undefined)) {
       if (!input.manifest.components.some(component => component.path === path && component.role === 'weights')) throw new PicPatchUsageError('INVALID_REQUEST', 'Native model files must be declared manifest weights.');
     }
-  } else if (input.controlNet !== undefined || input.loras !== undefined || input.checkpoint !== undefined || input.vae !== undefined || input.photoMaker !== undefined || input.ipAdapter !== undefined || input.clipVision !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
+  } else if (input.controlNet !== undefined || input.checkpoint !== undefined || input.vae !== undefined || input.photoMaker !== undefined || input.ipAdapter !== undefined || input.clipVision !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
 
   return { ...structuredClone(input), manifest: validateModelManifest(input.manifest) };
 }

@@ -1,3 +1,4 @@
+import { attachMfluxLoras, validateMfluxLoras } from '../backends/mflux/loras.ts';
 import { prepareNativeModel } from '../backends/stable-diffusion-cpp/preparation.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import { chmod, lstat, mkdir, mkdtemp, open, rename, rm } from 'node:fs/promises';
@@ -23,7 +24,7 @@ export interface PrepareModelOptions extends ModelOperationOptions {
   clipVision?: string;
   /** Local structural conditioning asset, relative to directory. */
   controlNet?: import('../contracts.generated.ts').LocalControlNet;
-  /** Local UNet LoRAs, relative to directory. Scale defaults to one. */
+  /** Local LoRAs, relative to directory. Scale defaults to one. */
   loras?: import('../contracts.generated.ts').LocalLora[];
   /** Explicit opt-in for a missing catalog bundle; false by default. */
   download?: boolean;
@@ -52,6 +53,21 @@ async function syncDirectory(path: string): Promise<void> {
 async function prepareModelOperation(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
   const entry = catalogModel(id);
   if (entry.runtime.name === 'stable-diffusion.cpp') return prepareNativeModel(entry.variant, options);
+  if (options.loras !== undefined) {
+    validateMfluxLoras(options.loras);
+    const loras = structuredClone(options.loras);
+    const { loras: _selected, ...baseOptions } = options;
+    return withDeadline(options.signal, timeBudget(options.timeoutMs, 3_600_000), 'Model and LoRA preparation timed out.', async signal => {
+      const operation = { ...baseOptions, signal };
+      const prepared = entry.acquisition === 'pinned' ? await prepareCatalogModel(entry, operation) : await prepareExternalModel(entry, operation);
+      try { return await attachMfluxLoras(prepared, loras, operation); }
+      catch (cause) {
+        checkSignal(signal);
+        if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError) throw cause;
+        throw new PicPatchRuntimeError('MODEL_IO', 'Could not prepare local LoRA weights.', { cause });
+      }
+    });
+  }
   return entry.acquisition === 'pinned' ? prepareCatalogModel(entry, options) : prepareExternalModel(entry, options);
 }
 

@@ -30,8 +30,8 @@ it.each(['wrong-width', 'missing-up', 'unknown-target', 'text-encoder', 'rank-mi
 it.each([null, [], [{ path: '../outside.safetensors' }], [{ path: 'a.safetensors', scale: Infinity }], [{ path: 'a.gguf' }], [{ path: 'a.safetensors' }, { path: 'a.safetensors' }]])('rejects malformed selections without model IO', async loras => {
   await expect(prepareModel('sd15', { directory, checkpoint: 'base.safetensors', loras: loras as never })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });
-it('rejects LoRA registrations on unsupported runtimes', () => {
-  expect(() => createEditor({ model: { variant: 'flux2-klein-4b', directory, loras: [{ path: 'style.safetensors' }], manifest: { version: 1, model: 'fixture', source: { repository: 'local', revision: 'a'.repeat(64) }, components: [{ path: 'style.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } } })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+it('rejects undeclared LoRA registrations', () => {
+  expect(() => createEditor({ model: { variant: 'flux2-klein-4b', directory, loras: [{ path: 'undeclared.safetensors' }], manifest: { version: 1, model: 'fixture', source: { repository: 'local', revision: 'a'.repeat(64) }, components: [{ path: 'style.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } } })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
 });
 it.each([
   ['input_blocks.4.0.in_layers.2', 'down_blocks_1_resnets_0_conv1'],

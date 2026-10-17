@@ -182,7 +182,7 @@ export interface ModelCapabilities {
    * SDK canvas expansion through this model mask workflow; preservation follows maskMode.
    */
   outpainting?: boolean;
-  loraFormats?: "sd-unet-safetensors"[];
+  loraFormats?: ("sd-unet-safetensors" | "mflux-lora-safetensors")[];
   controlKinds?: "canny"[];
 }
 /**

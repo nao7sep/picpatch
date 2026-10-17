@@ -268,7 +268,8 @@
           "type": "array",
           "items": {
             "enum": [
-              "sd-unet-safetensors"
+              "sd-unet-safetensors",
+              "mflux-lora-safetensors"
             ]
           },
           "uniqueItems": true
