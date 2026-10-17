@@ -42,10 +42,13 @@ export function validateLocalEditingModel(input: unknown): LocalEditingModel {
   absolutePath(input.directory);
   if (isNativeVariant(input.variant)) {
     if (!input.checkpoint || input.quantize !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Native models require a checkpoint and use checkpoint-owned quantization.');
-    for (const path of [input.checkpoint, input.vae].filter(value => value !== undefined)) {
+    const identity = input.variant === 'sdxl-photomaker-v1';
+    const appearance = input.variant.includes('-ip-adapter');
+    if (identity !== (input.photoMaker !== undefined) || appearance !== (input.ipAdapter !== undefined) || appearance !== (input.clipVision !== undefined)) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply exactly the auxiliary assets required by the selected native conditioning method.');
+    for (const path of [input.checkpoint, input.vae, input.photoMaker, input.ipAdapter, input.clipVision].filter(value => value !== undefined)) {
       if (!input.manifest.components.some(component => component.path === path && component.role === 'weights')) throw new PicPatchUsageError('INVALID_REQUEST', 'Native model files must be declared manifest weights.');
     }
-  } else if (input.checkpoint !== undefined || input.vae !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
+  } else if (input.checkpoint !== undefined || input.vae !== undefined || input.photoMaker !== undefined || input.ipAdapter !== undefined || input.clipVision !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
 
   return { ...structuredClone(input), manifest: validateModelManifest(input.manifest) };
 }

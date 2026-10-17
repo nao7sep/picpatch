@@ -6,10 +6,10 @@ export function resolveParameters(parameters: SamplingParameters = {}, capabilit
   const supported = capabilities.parameters ?? {};
   const effective: SamplingParameters = {};
   const unsupported = (): never => { throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The requested sampling parameters are unsupported by this model.'); };
-  for (const key of Object.keys(parameters) as (keyof SamplingParameters)[]) if (!supported[key] || (key === 'strength' && operation !== 'edit')) unsupported();
-  for (const key of ['steps', 'guidance', 'strength'] as const) {
+  for (const key of Object.keys(parameters) as (keyof SamplingParameters)[]) if (!supported[key] || (['strength', 'identityStyleStrength', 'appearanceStrength'].includes(key) && operation !== 'edit')) unsupported();
+  for (const key of ['steps', 'guidance', 'strength', 'identityStyleStrength', 'appearanceStrength'] as const) {
     const descriptor = supported[key];
-    if (key === 'strength' && operation !== 'edit') continue;
+    if (['strength', 'identityStyleStrength', 'appearanceStrength'].includes(key) && operation !== 'edit') continue;
     if (!descriptor) continue;
     const value = parameters[key] ?? descriptor.default;
     if (!Number.isFinite(value) || value < descriptor.minimum || (descriptor.maximum !== undefined && value > descriptor.maximum) || (descriptor.integer && !Number.isSafeInteger(value))) unsupported();

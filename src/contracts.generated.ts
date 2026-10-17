@@ -43,6 +43,14 @@ export interface ReferenceGroup {
    * @minItems 1
    */
   images: [string, ...string[]];
+  /**
+   * Omitted means prompt grouping; dedicated conditioning requires a compatible prepared selection.
+   */
+  conditioning?: "prompt" | "identity" | "appearance";
+  /**
+   * PhotoMaker identity class replacing the instruction placeholder {group-id}.
+   */
+  className?: "man" | "woman" | "girl" | "boy";
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -66,6 +74,14 @@ export interface SamplingParameters {
    * Edit-only denoising strength. Lower values retain more source influence; zero still encodes/decodes and is not a pixel-preserving no-op. Unsupported for generation.
    */
   strength?: number;
+  /**
+   * Edit-only conditioning control for the corresponding advertised method.
+   */
+  identityStyleStrength?: number;
+  /**
+   * Edit-only conditioning control for the corresponding advertised method.
+   */
+  appearanceStrength?: number;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -129,10 +145,7 @@ export interface ModelCapabilities {
    * Whether this adapter requires a source image in addition to any references. Absence means unspecified.
    */
   sourceImageRequired?: boolean;
-  /**
-   * Source first, then groups and images in caller order. Group IDs and roles are prompt labels, not separate model controls or identity guarantees.
-   */
-  referenceConditioning?: "ordered-images-with-role-prompt";
+  referenceConditioning?: "ordered-images-with-role-prompt" | "pooled-identity" | "appearance-embedding";
   defaultOutputSize?: ImageSize;
   /**
    * Aspect-preserving downscale to 1024 squared pixels, then center crop to multiples of 16. Applies to source and references.
@@ -203,6 +216,24 @@ export interface ParameterCapabilities {
     maximum?: number;
     integer?: boolean;
   };
+  /**
+   * Edit-only conditioning control; unsupported unless advertised.
+   */
+  identityStyleStrength?: {
+    default: number;
+    minimum: number;
+    maximum?: number;
+    integer?: boolean;
+  };
+  /**
+   * Edit-only conditioning control; unsupported unless advertised.
+   */
+  appearanceStrength?: {
+    default: number;
+    minimum: number;
+    maximum?: number;
+    integer?: boolean;
+  };
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -235,6 +266,7 @@ export interface EditResult {
   effectiveParameters: SamplingParameters;
   sidecar?: SidecarOutcome;
   outpaint?: OutpaintGeometry;
+  conditioning?: ConditioningProvenance;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -260,6 +292,18 @@ export interface OutpaintGeometry {
   left: number;
   top: number;
   sourceSize: ImageSize;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "ConditioningProvenance".
+ */
+export interface ConditioningProvenance {
+  method: "photomaker-v1" | "ip-adapter" | "ip-adapter-plus";
+  assets: {
+    role: "photoMaker" | "ipAdapter" | "clipVision";
+    filename: string;
+    sha256: string;
+  }[];
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -324,7 +368,12 @@ export interface LocalEditingModel {
     | "sd15"
     | "sdxl"
     | "sd15-inpaint"
-    | "sdxl-inpaint";
+    | "sdxl-inpaint"
+    | "sdxl-photomaker-v1"
+    | "sd15-ip-adapter"
+    | "sdxl-ip-adapter"
+    | "sd15-ip-adapter-plus"
+    | "sdxl-ip-adapter-plus";
   directory: string;
   manifest: ModelManifest;
   quantize?: 4 | 8;
@@ -336,6 +385,18 @@ export interface LocalEditingModel {
    * Optional native VAE path relative to the prepared model directory.
    */
   vae?: string;
+  /**
+   * Prepared native auxiliary weight path relative to the model directory.
+   */
+  photoMaker?: string;
+  /**
+   * Prepared native auxiliary weight path relative to the model directory.
+   */
+  ipAdapter?: string;
+  /**
+   * Prepared native auxiliary weight path relative to the model directory.
+   */
+  clipVision?: string;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -388,6 +449,14 @@ export interface ArtifactRecord {
        * Items: Filename only, without directory information.
        */
       images: [string, ...string[]];
+      /**
+       * Omitted means prompt grouping; dedicated conditioning requires a compatible prepared selection.
+       */
+      conditioning?: "prompt" | "identity" | "appearance";
+      /**
+       * PhotoMaker identity class replacing the instruction placeholder {group-id}.
+       */
+      className?: "man" | "woman" | "girl" | "boy";
     }[];
     /**
      * Path-free input geometry in source, mask, then reference order.
@@ -416,4 +485,5 @@ export interface ArtifactRecord {
     maskImage?: string;
   };
   outpaint?: OutpaintGeometry;
+  conditioning?: ConditioningProvenance;
 }

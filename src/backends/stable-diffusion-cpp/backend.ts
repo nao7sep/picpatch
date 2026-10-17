@@ -1,5 +1,6 @@
+import { inspectConditioningAssets } from './assets.ts';
 import { randomInt } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, mkdir, copyFile, symlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import type { EditBackend } from '../../execution/backend.ts';
 import type { LocalEditingModel, ModelCapabilities } from '../../contracts.generated.ts';
@@ -22,6 +23,7 @@ export class NativeBackend implements EditBackend {
   }
   async inspect(signal?: AbortSignal): Promise<void> {
     if (this.checked) { checkSignal(signal); return; }
+    await inspectConditioningAssets(this.model, signal);
     const help = await this.process.run(['--help'], this.model.directory, this.timeouts.startupMs, signal, true);
     // Short hashes are how the upstream build stamps sd_commit(). Do not accept arbitrary binaries.
     const match = /^stable-diffusion\.cpp version [^\r\n]+, commit ([a-f0-9]{7,40})(?:\s|$)/m.exec(help);
@@ -43,7 +45,9 @@ export class NativeBackend implements EditBackend {
     const seed = request.seed ?? randomInt(0x1_0000_0000);
     const size = request.size ?? capabilities.defaultOutputSize!;
     const directory = dirname(request.outputPath);
-    const prompt = 'prompt' in request ? request.prompt : request.instruction;
+    let prompt = 'prompt' in request ? request.prompt : request.instruction;
+    const group = 'instruction' in request ? request.references?.[0] : undefined;
+    if (this.model.photoMaker && group) prompt = prompt.replace(`{${group.id}}`, `${group.className} img`);
     // Keep private text out of process arguments and disable native PNG metadata.
     try {
       await writeFile(join(directory, 'prompt.txt'), prompt, { flag: 'wx', mode: 0o600 });
@@ -60,16 +64,38 @@ export class NativeBackend implements EditBackend {
       '--steps', String(effectiveParameters.steps), '--cfg-scale', String(effectiveParameters.guidance),
       '--sampling-method', effectiveParameters.sampler!, '--scheduler', effectiveParameters.scheduler!, '--lora-model-dir', directory];
     if (this.model.vae) args.push('--vae', join(this.model.directory, this.model.vae));
-    if ('instruction' in request) {
+    if ('instruction' in request && request.sourceImage) {
       args.push('--init-img', request.sourceImage!, '--strength', String(effectiveParameters.strength));
       if (request.maskImage) args.push('--mask', request.maskImage);
+    }
+    if (this.model.photoMaker && group) {
+      try {
+        const photos = join(directory, 'identity');
+        await mkdir(photos, { mode: 0o700 });
+        const digits = String(group.images.length).length;
+        for (const [index, path] of group.images.entries()) {
+          checkSignal(options.signal);
+          await copyFile(path, join(photos, `${String(index).padStart(digits, '0')}.png`));
+        }
+        // Upstream selects V2 by substring in the passed path, even parent directories.
+        // A fixed relative alias selects V1 without copying multi-GB weights.
+        await symlink(join(this.model.directory, this.model.photoMaker), join(directory, 'photomaker-v1.safetensors'));
+        args.push('--photo-maker', 'photomaker-v1.safetensors', '--pm-id-images-dir', photos, '--pm-style-strength', String(effectiveParameters.identityStyleStrength));
+      } catch (cause) {
+        checkSignal(options.signal);
+        throw new PicPatchRuntimeError('IMAGE_IO', 'Could not prepare private identity inputs.', { cause });
+      }
+    } else if (this.model.ipAdapter && group) {
+      args.push('--ip-adapter', join(this.model.directory, this.model.ipAdapter), '--clip_vision', join(this.model.directory, this.model.clipVision!), '--ip-adapter-image', group.images[0], '--ip-adapter-strength', String(effectiveParameters.appearanceStrength));
     }
     const verb = 'prompt' in request ? 'generate' : 'edit';
     emitProgress(options, { type: 'progress', verb, stage: verb === 'generate' ? 'generating' : 'editing', message: 'Running native image inference.' });
     await this.process.run(args, directory, verb === 'generate' ? this.timeouts.generateMs ?? this.timeouts.editMs : this.timeouts.editMs, options.signal);
     emitProgress(options, { type: 'progress', verb, stage: 'saving', message: 'Validating native image output.' });
     return { model: request.model, modelRevision: this.model.manifest.source.revision, runtime: { name: 'stable-diffusion.cpp', version: nativeRevision },
-      seed, effectiveParameters, image: { path: request.outputPath, mimeType: 'image/png', size }, references: [] };
+      seed, effectiveParameters,
+      ...(this.model.photoMaker || this.model.ipAdapter ? { conditioning: { method: this.model.photoMaker ? 'photomaker-v1' as const : this.model.variant.endsWith('-plus') ? 'ip-adapter-plus' as const : 'ip-adapter' as const, assets: (['photoMaker', 'ipAdapter', 'clipVision'] as const).flatMap(role => this.model[role] ? [{ role, filename: basename(this.model[role]!), sha256: this.model.manifest.components.find(component => component.path === this.model[role])!.sha256 }] : []) } } : {}),
+      image: { path: request.outputPath, mimeType: 'image/png', size }, references: [] };
   }
   dispose(): Promise<void> { return this.process.dispose(); }
 }

@@ -1,20 +1,23 @@
+import { inspectConditioningAssets } from './assets.ts';
+import type { BigIntStats } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, realpath, stat } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../../operations.ts';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../../errors.ts';
-import { validateLocalEditingModel, validateModelManifest, verifyModel } from '../../models/verification.ts';
+import { validateLocalEditingModel, validateModelManifest } from '../../models/verification.ts';
 import type { LocalEditingModel, ModelComponent } from '../../contracts.generated.ts';
 import type { PrepareModelOptions, PreparedModel } from '../../models/preparation.ts';
 
 /** Explicit caller file selection; preparation proves byte identity, not architecture. */
 export async function prepareNativeModel(variant: LocalEditingModel['variant'], options: PrepareModelOptions): Promise<PreparedModel> {
-  validateOperation(options, ['timeoutMs', 'directory', 'download', 'checkpoint', 'vae']);
+  validateOperation(options, ['timeoutMs', 'directory', 'download', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision']);
   if (!options.directory || !options.checkpoint || (options.download !== undefined && options.download !== false)) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply a local directory and relative checkpoint; native variants have no downloads.');
   absolutePath(options.directory);
   const directory = options.directory;
-  const selected = [options.checkpoint, ...(options.vae === undefined ? [] : [options.vae])];
+  const assets = { checkpoint: options.checkpoint, ...(options.vae ? { vae: options.vae } : {}), ...(options.photoMaker ? { photoMaker: options.photoMaker } : {}), ...(options.ipAdapter ? { ipAdapter: options.ipAdapter } : {}), ...(options.clipVision ? { clipVision: options.clipVision } : {}) };
+  const selected = [options.checkpoint, ...[options.vae, options.photoMaker, options.ipAdapter, options.clipVision].filter(value => value !== undefined)];
   if (new Set(selected).size !== selected.length) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint and VAE must be distinct files.');
   for (const path of selected) {
     if (typeof path !== 'string' || !['.safetensors', '.gguf'].includes(extname(path).toLowerCase())) throw new PicPatchUsageError('INVALID_REQUEST', 'Native weights must be safetensors or GGUF files.');
@@ -26,6 +29,10 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
     try {
       const root = await realpath(directory);
       const components: ModelComponent[] = [];
+      const snapshots = new Map<string, BigIntStats>();
+      const provisional = validateLocalEditingModel({ variant, directory: root, ...assets, manifest: { version: 1, model: variant, source: { repository: 'local', revision: '0'.repeat(64) }, components: selected.map(path => ({ path, role: 'weights', bytes: 1, sha256: '0'.repeat(64) })) } });
+      // Check compatibility before hashing multi-GB assets; repeat headers under final snapshots below.
+      await inspectConditioningAssets(provisional, signal);
       for (const path of selected) {
         checkSignal(signal);
         const target = join(root, path);
@@ -45,14 +52,25 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
           }
           const after = await file.stat({ bigint: true }); const current = await stat(target, { bigint: true });
           if (position !== Number(before.size) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.ino !== current.ino || before.dev !== current.dev) throw new PicPatchRuntimeError('MODEL_IO', 'Native weights changed during preparation.');
+          snapshots.set(path, after);
           components.push({ path, role: 'weights', bytes: position, sha256: hash.digest('hex') });
         } finally { await file.close(); }
       }
       const revision = createHash('sha256').update(JSON.stringify({ variant, components })).digest('hex');
       const manifest = validateModelManifest({ version: 1, model: variant, source: { repository: 'local', revision }, components });
-      const verification = await verifyModel(directory, manifest, { signal, timeoutMs: timeBudget(options.timeoutMs, 3_600_000) });
-      if (verification.status !== 'matches-manifest') throw new PicPatchRuntimeError('MODEL_IO', 'Native weights changed or escape the selected directory.');
-      return { model: validateLocalEditingModel({ variant, directory, manifest, checkpoint: options.checkpoint, ...(options.vae ? { vae: options.vae } : {}) }), origin: 'external', integrity: 'locally-fingerprinted' };
+      const model = validateLocalEditingModel({ variant, directory, manifest, ...assets });
+      await inspectConditioningAssets({ ...model, directory: root }, signal);
+      // The hashing read already checks file identity and mutation. Recheck every earlier file
+      // after callbacks/header inspection, rather than reading all weights a second time.
+      if (await realpath(directory) !== root) throw new PicPatchRuntimeError('MODEL_IO', 'Model directory changed during preparation.');
+      for (const [path, before] of snapshots) {
+        checkSignal(signal);
+        const target = join(root, path);
+        if (await realpath(dirname(target)) !== dirname(target)) throw new PicPatchRuntimeError('MODEL_IO', 'Native component directories changed during preparation.');
+        const after = await stat(target, { bigint: true });
+        if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new PicPatchRuntimeError('MODEL_IO', 'Native weights changed during preparation.');
+      }
+      return { model, origin: 'external', integrity: 'locally-fingerprinted' };
     } catch (cause) {
       checkSignal(signal);
       if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError || cause instanceof PicPatchCancelledError) throw cause;

@@ -18,6 +18,9 @@ export interface PrepareModelOptions extends ModelOperationOptions {
   /** Native checkpoint and optional VAE paths relative to directory. */
   checkpoint?: string;
   vae?: string;
+  photoMaker?: string;
+  ipAdapter?: string;
+  clipVision?: string;
   /** Explicit opt-in for a missing catalog bundle; false by default. */
   download?: boolean;
   storage?: StorageOptions;

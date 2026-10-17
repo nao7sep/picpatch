@@ -51,6 +51,16 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
       const geometry = inputGeometry(canvas.width, canvas.height, 1, capabilities.inputGeometry);
       if (geometry.preparedSize.width !== canvas.width || geometry.preparedSize.height !== canvas.height) unsupported('Outpaint canvas must not require model cropping or downscaling.');
     }
+    const conditioning = capabilities.referenceConditioning;
+    if (conditioning === 'pooled-identity' || conditioning === 'appearance-embedding') {
+      if (request.sourceImage || request.maskImage || request.outpaint || groups.length !== 1) unsupported('Dedicated reference conditioning requires exactly one group and no source or mask.');
+      const group = groups[0]!;
+      if (conditioning === 'pooled-identity') {
+        if (group.conditioning !== 'identity' || !group.className) unsupported('Identity conditioning requires an identity group and className.');
+        const placeholder = `{${group.id}}`;
+        if (request.instruction.split(placeholder).length !== 2 || /\bimg\b/i.test(request.instruction)) unsupported('Use the identity group placeholder exactly once; the SDK supplies the native trigger word.');
+      } else if (group.conditioning !== 'appearance' || group.className) unsupported('Appearance conditioning requires an appearance group without an identity class.');
+    } else if (groups.some(group => (group.conditioning !== undefined && group.conditioning !== 'prompt') || group.className !== undefined)) unsupported('This model supports prompt grouping, not dedicated identity or appearance conditioning.');
     resolveParameters(request.parameters, capabilities);
     validateSize(request.size, capabilities);
   }
