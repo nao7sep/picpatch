@@ -21,6 +21,12 @@ def composite_mask(generated, request):
 
 
 class KleinAdapter(MfluxAdapter):
+    def configure_pipeline(self, pipeline):
+        from mflux.callbacks.instances.memory_saver import MemorySaver
+        # Each operation owns a fresh single-image pipeline. Encoders are dead after
+        # prompt encoding, and the transformer is dead before VAE decoding.
+        pipeline.callbacks.register(MemorySaver(model=pipeline, keep_transformer=False))
+
     def import_pipeline(self, operation):
         from mflux.models.common.config import ModelConfig
         from mflux.models.flux2.variants import Flux2Klein, Flux2KleinEdit

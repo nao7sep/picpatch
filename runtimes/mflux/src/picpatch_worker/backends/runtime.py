@@ -89,6 +89,9 @@ class MfluxAdapter:
         kwargs = {**self.definition['defaults'], **{names[key]: value for key, value in supplied.items()}}
         return kwargs, effective
 
+    def configure_pipeline(self, pipeline):
+        pass
+
     def load_pipeline(self, operation="generate"):
         # Set before importing HF/Transformers: these libraries cache environment settings.
         os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1')
@@ -112,6 +115,7 @@ class MfluxAdapter:
             pipeline = pipeline_class(**kwargs)
             if auxiliary:
                 validate_loaded_loras(pipeline)
+            self.configure_pipeline(pipeline)
             return pipeline, installed, mx
         except Exception:
             mx.synchronize()

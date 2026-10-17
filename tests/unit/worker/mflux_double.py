@@ -7,6 +7,7 @@ from picpatch_worker.backends import runtime
 def fake_runtime(monkeypatch, family, cancel=None):
     adapter, module, name, config_method = family
     calls = []
+    monkeypatch.setitem(sys.modules, 'mflux.callbacks.instances.memory_saver', SimpleNamespace(MemorySaver=lambda **kwargs: object()))
     model_config = object()
     class Image:
         size = (32, 16)

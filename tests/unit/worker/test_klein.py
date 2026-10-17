@@ -143,15 +143,20 @@ def test_local_loader_passes_only_explicit_options(monkeypatch, config, quantize
     model_config = object()
     monkeypatch.setitem(sys.modules, 'mflux.models.common.config', SimpleNamespace(
         ModelConfig=SimpleNamespace(flux2_klein_4b=lambda: model_config)))
+    registered = []
+    pipelines = {name: SimpleNamespace(callbacks=SimpleNamespace(register=registered.append)) for name in ('edit', 'generate')}
+    monkeypatch.setitem(sys.modules, 'mflux.callbacks.instances.memory_saver', SimpleNamespace(
+        MemorySaver=lambda **kwargs: kwargs))
     monkeypatch.setitem(sys.modules, 'mflux.models.flux2.variants', SimpleNamespace(
-        Flux2KleinEdit=lambda **kwargs: calls.append(kwargs) or 'edit',
-        Flux2Klein=lambda **kwargs: calls.append(kwargs) or 'generate'))
+        Flux2KleinEdit=lambda **kwargs: calls.append(kwargs) or pipelines['edit'],
+        Flux2Klein=lambda **kwargs: calls.append(kwargs) or pipelines['generate']))
     core = object()
     monkeypatch.setitem(sys.modules, 'mlx', SimpleNamespace(core=core))
     monkeypatch.setitem(sys.modules, 'mlx.core', core)
     if quantize:
         config['quantize'] = quantize
-    assert klein.KleinAdapter(config).load_pipeline(operation) == (operation, '0.22.0', core)
+    assert klein.KleinAdapter(config).load_pipeline(operation) == (pipelines[operation], '0.22.0', core)
+    assert registered == [{'model': pipelines[operation], 'keep_transformer': False}]
     assert calls == [{'model_config': model_config, 'model_path': config['directory'],
                       **({'quantize': quantize} if quantize else {})}]
 
