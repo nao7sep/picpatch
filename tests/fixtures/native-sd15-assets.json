@@ -1,0 +1,21 @@
+[
+  {
+    "variant": "sd15",
+    "repository": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+    "revision": "451f4fe16113bff5a5d2269ed5ad43b0592e9a14",
+    "path": "v1-5-pruned-emaonly.safetensors",
+    "bytes": 4265146304,
+    "sha256": "6ce0161689b3853acaa03779ec93eafe75a02f4ced659bee03f50797806fa2fa",
+    "license": "creativeml-openrail-m"
+  },
+  {
+    "variant": "sd15-inpaint",
+    "repository": "webui/stable-diffusion-inpainting",
+    "revision": "c510a603e876bb6dbf72ba7abeab428d3f5104d0",
+    "path": "sd-v1-5-inpainting.safetensors",
+    "bytes": 4265203873,
+    "sha256": "0ec8f8585b104417a8c34a9fbcc1e922a70b8c15490ec4553087f01c8cf33673",
+    "license": "creativeml-openrail-m",
+    "originalRepository": "stable-diffusion-v1-5/stable-diffusion-inpainting"
+  }
+]
