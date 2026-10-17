@@ -17,13 +17,15 @@ export async function publishSidecar(request: ImageRequest, result: EditResult, 
     const record: ArtifactRecord = {
       version: 1, operation: 'prompt' in request ? 'generate' : 'edit', inputsIncluded,
       image: { filename: basename(result.image.path), mimeType: result.image.mimeType, size: result.image.size }, sha256: hash.digest('hex'), bytes,
+      ...(result.control ? { control: result.control } : {}),
       ...(result.loras ? { loras: result.loras } : {}),
       ...(result.conditioning ? { conditioning: result.conditioning } : {}),
       ...(result.outpaint ? { outpaint: result.outpaint } : {}),
       model: result.model, modelRevision: result.modelRevision, runtime: result.runtime, seed: result.seed,
       effectiveParameters: inputsIncluded ? result.effectiveParameters : parameters,
-      ...(inputsIncluded ? { inputs: 'prompt' in request ? { prompt: request.prompt } : {
+      ...(inputsIncluded ? { inputs: 'prompt' in request ? { prompt: request.prompt, ...(request.control ? { controlImage: basename(request.control.image), geometry: (result.inputGeometry ?? []).map(({ path, ...geometry }) => ({ ...geometry, filename: basename(path) })) } : {}) } : {
         instruction: request.instruction,
+        ...(request.control ? { controlImage: basename(request.control.image) } : {}),
         ...(request.sourceImage ? { sourceImage: basename(request.sourceImage) } : {}),
         ...(request.maskImage ? { maskImage: basename(request.maskImage) } : {}),
         references: result.references.map(group => ({ id: group.id, role: group.role, ...(group.conditioning ? { conditioning: group.conditioning } : {}), ...(group.className ? { className: group.className } : {}), images: [basename(group.images[0]), ...group.images.slice(1).map(path => basename(path))] })),

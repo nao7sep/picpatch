@@ -12,13 +12,13 @@ import type { PrepareModelOptions, PreparedModel } from '../../models/preparatio
 
 /** Explicit caller selection, byte fingerprints and recognized conditioning metadata; loading remains separate. */
 export async function prepareNativeModel(variant: LocalEditingModel['variant'], options: PrepareModelOptions): Promise<PreparedModel> {
-  validateOperation(options, ['timeoutMs', 'directory', 'download', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'loras']);
+  validateOperation(options, ['timeoutMs', 'directory', 'download', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'loras', 'controlNet']);
   if (!options.directory || !options.checkpoint || (options.download !== undefined && options.download !== false)) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply a local directory and relative checkpoint; native variants have no downloads.');
   absolutePath(options.directory);
   const directory = options.directory;
   if (options.loras !== undefined && (!Array.isArray(options.loras) || options.loras.length === 0)) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply a nonempty LoRA array.');
-  const assets = { ...(options.loras !== undefined ? { loras: options.loras } : {}), checkpoint: options.checkpoint, ...(options.vae ? { vae: options.vae } : {}), ...(options.photoMaker ? { photoMaker: options.photoMaker } : {}), ...(options.ipAdapter ? { ipAdapter: options.ipAdapter } : {}), ...(options.clipVision ? { clipVision: options.clipVision } : {}) };
-  const selected = [options.checkpoint, ...(options.loras ?? []).map(lora => lora?.path), ...[options.vae, options.photoMaker, options.ipAdapter, options.clipVision].filter(value => value !== undefined)];
+  const assets = { ...(options.controlNet !== undefined ? { controlNet: options.controlNet } : {}), ...(options.loras !== undefined ? { loras: options.loras } : {}), checkpoint: options.checkpoint, ...(options.vae ? { vae: options.vae } : {}), ...(options.photoMaker ? { photoMaker: options.photoMaker } : {}), ...(options.ipAdapter ? { ipAdapter: options.ipAdapter } : {}), ...(options.clipVision ? { clipVision: options.clipVision } : {}) };
+  const selected = [options.checkpoint, ...(options.controlNet !== undefined ? [options.controlNet?.path] : []), ...(options.loras ?? []).map(lora => lora?.path), ...[options.vae, options.photoMaker, options.ipAdapter, options.clipVision].filter(value => value !== undefined)];
   if (new Set(selected).size !== selected.length) throw new PicPatchUsageError('INVALID_REQUEST', 'Selected native assets must be distinct files.');
   for (const path of selected) {
     if (typeof path !== 'string' || !['.safetensors', '.gguf'].includes(extname(path).toLowerCase())) throw new PicPatchUsageError('INVALID_REQUEST', 'Native weights must be safetensors or GGUF files.');

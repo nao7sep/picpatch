@@ -34,6 +34,7 @@ export class NativeBackend implements EditBackend {
     const capabilities = nativeCapabilities(this.model.variant, this.model.manifest.model);
     if (/<lora:/i.test('prompt' in request ? request.prompt : request.instruction)) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'Prompt-embedded LoRA loading is unsupported; use prepareModel loras.');
     if ('prompt' in request) validateGenerateRequest(request, capabilities); else validateEditRequest(request, capabilities);
+    if (request.control && (!this.model.controlNet || request.control.kind !== this.model.controlNet.kind)) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'Prepare the matching ControlNet asset before supplying a control map.');
     await this.inspect(options.signal);
     return capabilities;
   }
@@ -71,6 +72,7 @@ export class NativeBackend implements EditBackend {
       '--steps', String(effectiveParameters.steps), '--cfg-scale', String(effectiveParameters.guidance),
       '--sampling-method', effectiveParameters.sampler!, '--scheduler', effectiveParameters.scheduler!, '--lora-model-dir', directory];
     if (this.model.loras) args.push('--lora-apply-mode', 'at_runtime');
+    if (request.control) args.push('--control-net', join(this.model.directory, this.model.controlNet!.path), '--control-image', request.control.image, '--control-strength', String(request.control.strength ?? 0.9));
     if (this.model.vae) args.push('--vae', join(this.model.directory, this.model.vae));
     if ('instruction' in request && request.sourceImage) {
       args.push('--init-img', request.sourceImage!, '--strength', String(effectiveParameters.strength));
@@ -104,6 +106,7 @@ export class NativeBackend implements EditBackend {
     emitProgress(options, { type: 'progress', verb, stage: 'saving', message: 'Validating native image output.' });
     return { model: request.model, modelRevision: this.model.manifest.source.revision, runtime: { name: 'stable-diffusion.cpp', version: nativeRevision },
       seed, effectiveParameters,
+      ...(request.control ? { control: { kind: request.control.kind, strength: request.control.strength ?? 0.9, asset: { filename: basename(this.model.controlNet!.path), sha256: this.model.manifest.components.find(component => component.path === this.model.controlNet!.path)!.sha256 } } } : {}),
       ...(this.model.loras ? { loras: this.model.loras.map(lora => ({ filename: basename(lora.path), scale: lora.scale ?? 1, sha256: this.model.manifest.components.find(component => component.path === lora.path)!.sha256 })) } : {}),
       ...(this.model.photoMaker || this.model.ipAdapter ? { conditioning: { method: this.model.photoMaker ? 'photomaker-v1' as const : this.model.variant.endsWith('-plus') ? 'ip-adapter-plus' as const : 'ip-adapter' as const, assets: (['photoMaker', 'ipAdapter', 'clipVision'] as const).flatMap(role => this.model[role] ? [{ role, filename: basename(this.model[role]!), sha256: this.model.manifest.components.find(component => component.path === this.model[role])!.sha256 }] : []) } } : {}),
       image: { path: request.outputPath, mimeType: 'image/png', size }, references: [] };

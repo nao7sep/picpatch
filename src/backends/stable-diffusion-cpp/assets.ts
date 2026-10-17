@@ -49,6 +49,17 @@ async function inspectAssets(model: LocalEditingModel, signal?: AbortSignal): Pr
       throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint tensor metadata does not match the selected SD architecture and base/inpaint variant. Supply a conventional complete checkpoint; component-only exports are unsupported.');
     }
   }
+  if (model.controlNet) {
+    const data = await header(join(model.directory, model.controlNet.path), signal);
+    const control = Object.fromEntries(Object.entries(data).map(([key, value]) => [key.replace(/^control_model\./, ''), value]));
+    if (!shape(control, 'input_blocks.0.0.weight', [320, 4, 3, 3]) ||
+      !shape(control, 'input_hint_block.0.weight', [16, 3, 3, 3]) ||
+      !shape(control, 'zero_convs.0.0.weight', [320, 320, 1, 1]) ||
+      !shape(control, 'middle_block_out.0.weight', [1280, 1280, 1, 1]) ||
+      !shape(control, 'input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight', [320, 768])) incompatible();
+    // Shapes establish SD1.5 ControlNet architecture; callers explicitly select
+    // the map kind, which cannot be inferred from equal-shaped trained weights.
+  }
   // GGUF architecture remains an explicit caller selection, checked by runtime loading.
   if (!conditioned) return;
   if (model.photoMaker) {

@@ -34,3 +34,13 @@ export async function nativeCheckpoint(path: string, variant: string): Promise<v
     'model.diffusion_model.input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight': [320, variant.startsWith('sdxl') ? 2048 : 768],
   });
 }
+
+export function controlNetShapes(context = 768): Record<string, number[]> {
+  return Object.fromEntries(Object.entries({
+    'input_blocks.0.0.weight': [320, 4, 3, 3],
+    'input_hint_block.0.weight': [16, 3, 3, 3],
+    'zero_convs.0.0.weight': [320, 320, 1, 1],
+    'middle_block_out.0.weight': [1280, 1280, 1, 1],
+    'input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight': [320, context],
+  }).map(([key, value]) => [`control_model.${key}`, value]));
+}

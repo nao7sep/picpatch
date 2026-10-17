@@ -21,6 +21,8 @@ export interface ComparisonRecord {
   seed?: number;
   parameters?: EditResult['effectiveParameters'];
   conditioning?: EditResult['conditioning'];
+  loras?: EditResult['loras'];
+  control?: EditResult['control'];
   image?: string;
   sidecar?: string;
   sidecarStatus?: 'saved' | 'failed';
@@ -62,6 +64,7 @@ export async function compare(cases: ComparisonCase[], report: string, signal?: 
               const { negativePrompt: _private, ...parameters } = result.effectiveParameters;
               Object.assign(record, { outcome: 'completed', model: result.model, modelRevision: result.modelRevision, runtime: result.runtime, seed: result.seed, parameters,
                 image: basename(result.image.path), ...(result.sidecar ? { sidecarStatus: result.sidecar.status } : {}), ...(result.conditioning ? { conditioning: result.conditioning } : {}),
+                ...(result.loras ? { loras: result.loras } : {}), ...(result.control ? { control: result.control } : {}),
                 ...(result.sidecar?.status === 'saved' ? { sidecar: basename(result.sidecar.path) } : {}) });
             } catch (error) {
               previous = undefined;

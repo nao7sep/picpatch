@@ -37,3 +37,13 @@ def test_overrides_reach_inference_and_results_and_invalid_controls_never_load(m
         with pytest.raises(InvalidEditInput):
             adapter.generate({**request, 'parameters': parameters}, Event(), lambda event: None)
         assert calls == []
+
+
+def test_native_auxiliary_inputs_are_not_silently_ignored():
+    config = {'variant': 'flux2-klein-4b', 'manifest': {'model': 'klein'}}
+    for field in ('loras', 'controlNet'):
+        with pytest.raises(InvalidEditInput):
+            create_adapter({**config, field: []})
+    adapter = create_adapter(config)
+    with pytest.raises(InvalidEditInput):
+        adapter.sampling({'control': {'kind': 'canny', 'image': '/map.png'}})

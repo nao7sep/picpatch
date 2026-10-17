@@ -21,6 +21,8 @@ export interface PrepareModelOptions extends ModelOperationOptions {
   photoMaker?: string;
   ipAdapter?: string;
   clipVision?: string;
+  /** Local structural conditioning asset, relative to directory. */
+  controlNet?: import('../contracts.generated.ts').LocalControlNet;
   /** Local UNet LoRAs, relative to directory. Scale defaults to one. */
   loras?: import('../contracts.generated.ts').LocalLora[];
   /** Explicit opt-in for a missing catalog bundle; false by default. */

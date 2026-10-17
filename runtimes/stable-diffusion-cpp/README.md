@@ -30,11 +30,14 @@ Set `PICPATCH_NATIVE_INFERENCE_CONFIG` to an absolute JSON path, or save this co
   "ipAdapter": "ip-adapter_sdxl_vit-h.safetensors",
   "ipAdapterPlus": "ip-adapter-plus_sdxl_vit-h.safetensors",
   "sd15Checkpoint": "v1-5-pruned-emaonly.safetensors",
-  "sd15InpaintCheckpoint": "sd-v1-5-inpainting.safetensors"
+  "sd15InpaintCheckpoint": "sd-v1-5-inpainting.safetensors",
+  "controlNet": "control_v11p_sd15_canny_fp16.safetensors"
 }
 ```
 
 The [SD1.5 fixture](../../tests/fixtures/native-sd15-assets.json) additionally pins the complete base checkpoint and a conventional inpaint safetensors conversion under CreativeML OpenRAIL-M, totaling about 8.6 GB. These contain the text encoder and VAE; no component conversion is required. Prepare the exact files separately, under the same model directory.
+
+The SD1.5 fixture also pins a 723 MB FP16 Canny ControlNet conversion from `comfyanonymous/ControlNet-v1-1_fp16_safetensors`, derived from `lllyasviel/ControlNet-v1-1` under its OpenRAIL terms. The gate checks real control-map generation, source variation, LoRA composition and filename-only provenance. Synthetic untrained LoRAs are created temporarily for SD1.5/SDXL application and scale tests; these establish execution, not trained-style quality.
 
 Run `npm run test:full` after preparing both native and MFLUX prerequisites. The native test covers generation, repeated variation at zero/intermediate/full strength, loading cancellation, two-photo identity pooling, classic/Plus appearance conditioning, output provenance and cleanup. Small canvases and short schedules verify execution, not portrait quality or a general memory guarantee. The SD1.5 lane covers generation, variation, trained inpainting with black/white and 127/128 masks, non-square source resizing, outpainting and cancellation. Trained SDXL inpaint checkpoints still require separate real-weight evaluation.
 

@@ -1,3 +1,4 @@
+import { prepareControl } from './control.ts';
 import { prepareOutpaint } from './outpaint.ts';
 import { publishSidecar } from './sidecar.ts';
 import { basename, dirname, join } from 'node:path';
@@ -46,7 +47,15 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     } catch (cause) { throw new PicPatchRuntimeError('OUTPUT_IO', 'Could not create private output storage.', { cause }); }
   }
 
-  async prepare(signal?: AbortSignal, policy?: GeometryPolicy, maskMode: ModelCapabilities['maskMode'] = 'composite'): Promise<void> {
+  async prepare(signal?: AbortSignal, policy?: GeometryPolicy, maskMode: ModelCapabilities['maskMode'] = 'composite', defaultSize?: ModelCapabilities['defaultOutputSize']): Promise<void> {
+    if (this.request.control) {
+      const size = this.request.size ?? defaultSize;
+      if (!size) throw new PicPatchUsageError('INVALID_REQUEST', 'Control maps require output dimensions.');
+      const prepared = await prepareControl(this.request.control.image, this.directory, size, signal);
+      this.workerRequest.control = { ...this.request.control, image: prepared.path };
+      this.workerRequest.size = size;
+      this.geometry.push({ path: this.request.control.image, ...prepared.geometry });
+    }
     if (!('instruction' in this.request) || !('instruction' in this.workerRequest)) { checkCancellation(signal); return; }
     let index = 0;
     const prepare = async (path: string, mask = false, preserveSize = false) => {

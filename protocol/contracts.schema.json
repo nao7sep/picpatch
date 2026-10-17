@@ -125,6 +125,9 @@
         },
         "outpaint": {
           "$ref": "#/definitions/OutpaintCanvas"
+        },
+        "control": {
+          "$ref": "#/definitions/StructuralControl"
         }
       },
       "required": [
@@ -269,6 +272,15 @@
             ]
           },
           "uniqueItems": true
+        },
+        "controlKinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "canny"
+            ]
+          },
+          "uniqueItems": true
         }
       },
       "required": [
@@ -389,6 +401,9 @@
           "items": {
             "$ref": "#/definitions/LoraProvenance"
           }
+        },
+        "control": {
+          "$ref": "#/definitions/ControlProvenance"
         }
       },
       "required": [
@@ -601,6 +616,9 @@
           "items": {
             "$ref": "#/definitions/LocalLora"
           }
+        },
+        "controlNet": {
+          "$ref": "#/definitions/LocalControlNet"
         }
       },
       "required": [
@@ -689,6 +707,9 @@
         },
         "sidecar": {
           "$ref": "#/definitions/SidecarOptions"
+        },
+        "control": {
+          "$ref": "#/definitions/StructuralControl"
         }
       },
       "required": [
@@ -1177,7 +1198,7 @@
                 ],
                 "additionalProperties": false
               },
-              "description": "Path-free input geometry in source, mask, then reference order."
+              "description": "Path-free input geometry; control map precedes source, mask and references when present."
             },
             "sourceImage": {
               "type": "string",
@@ -1187,6 +1208,10 @@
             "maskImage": {
               "type": "string",
               "minLength": 1,
+              "description": "Filename only, without directory information."
+            },
+            "controlImage": {
+              "type": "string",
               "description": "Filename only, without directory information."
             }
           },
@@ -1204,6 +1229,9 @@
           "items": {
             "$ref": "#/definitions/LoraProvenance"
           }
+        },
+        "control": {
+          "$ref": "#/definitions/ControlProvenance"
         }
       },
       "required": [
@@ -1357,6 +1385,88 @@
         "filename",
         "sha256",
         "scale"
+      ],
+      "additionalProperties": false
+    },
+    "LocalControlNet": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000]+$"
+        },
+        "kind": {
+          "enum": [
+            "canny"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "StructuralControl": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000]+$"
+        },
+        "kind": {
+          "enum": [
+            "canny"
+          ]
+        },
+        "strength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3.4028234663852886e+38
+        }
+      },
+      "required": [
+        "image",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "ControlProvenance": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "canny"
+          ]
+        },
+        "strength": {
+          "type": "number",
+          "minimum": 0
+        },
+        "asset": {
+          "type": "object",
+          "properties": {
+            "filename": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "filename",
+            "sha256"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "strength",
+        "asset"
       ],
       "additionalProperties": false
     }

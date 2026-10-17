@@ -113,6 +113,30 @@ Native SD1.5/SDXL selections accept `prepareModel(id, { directory, checkpoint, l
 
 The native backend applies LoRAs at runtime, without modifying checkpoint or adapter files. Prepared registrations carry the chosen scales; create a new editor with a different `model.loras` scale selection to compare strengths without hashing the same assets again. Result and sidecar `loras` entries contain filenames, content hashes and effective scales. Native prompt tags remain prohibited in caller prompts; PicPatch supplies private aliases internally. The live gate uses small deterministic untrained adapters against real SD checkpoints to check application and scale behavior; this is not evidence of a particular trained style's quality.
 
+## Structural conditioning
+
+The native `sd15` selection accepts a local Canny ControlNet safetensors asset. Prepare it with the base checkpoint, then supply an edge map to either generation or source editing:
+
+```ts
+const prepared = await prepareModel('sd15', {
+  directory: '/absolute/models', checkpoint: 'base.safetensors',
+  controlNet: { kind: 'canny', path: 'canny.safetensors' },
+});
+const editor = createEditor({ model: prepared.model, nativeExecutable: '/absolute/sd-cli' });
+try {
+  await editor.generate({
+    prompt: 'A ceramic tile.', outputPath: '/absolute/output/tile.png',
+    size: { width: 512, height: 512 },
+    control: { kind: 'canny', image: '/absolute/inputs/edges.png', strength: 0.9 },
+    sidecar: {},
+  });
+} finally { await editor.dispose(); }
+```
+
+Maps must be single-frame PNGs without an alpha channel. Grayscale and RGB maps are accepted; PicPatch orients and converts a private copy to RGB, but never resizes or crops the map. Its oriented dimensions must match the output size (including the model default when size is omitted). Create edges in output coordinates yourself; there is no automatic edge detector. `strength` defaults to 0.9, accepts nonnegative values, and is separate from source denoising strength. A prepared control asset is only loaded when a request supplies `control`.
+
+Preparation fingerprints the asset and checks conventional SD1.5 ControlNet tensor metadata. `kind` is your assertion about the asset's training: equal-shaped weights cannot reveal whether they were trained for edges or depth. Use compatible Canny weights. Native UNet LoRAs can be combined with this workflow. SDXL, dedicated inpaint, identity/appearance pipelines, depth, pose and multiple simultaneous maps are not supported by this contract yet. Results and sidecars report effective control strength and the asset filename/content hash; the input map filename and geometry are included only with `sidecar.includeInputs`.
+
 ## Outpainting
 
 Models advertising `capabilities.outpainting` accept `edit({ instruction, sourceImage, outpaint: { size: { width, height }, left, top }, outputPath })`. The SDK places the oriented, normalized source at those nonnegative offsets without resizing it, fills added canvas with opaque neutral gray, and creates a black-source/white-extension mask. Omit `maskImage`: outpainting creates its own. The canvas must contain the entire source, add pixels on at least one side, satisfy model dimensions, and require no model cropping/downscaling. An explicit or session-default `size` must equal the canvas size. References retain their usual model-specific handling.

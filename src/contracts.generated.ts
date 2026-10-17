@@ -31,6 +31,7 @@ export interface EditRequestContract {
   parameters?: SamplingParameters;
   sidecar?: SidecarOptions;
   outpaint?: OutpaintCanvas;
+  control?: StructuralControl;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -104,6 +105,15 @@ export interface OutpaintCanvas {
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "StructuralControl".
+ */
+export interface StructuralControl {
+  image: string;
+  kind: "canny";
+  strength?: number;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
  * via the `definition` "EditRequest".
  */
 export interface EditRequest {
@@ -121,6 +131,7 @@ export interface EditRequest {
   parameters?: SamplingParameters;
   sidecar?: SidecarOptions;
   outpaint?: OutpaintCanvas;
+  control?: StructuralControl;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -172,6 +183,7 @@ export interface ModelCapabilities {
    */
   outpainting?: boolean;
   loraFormats?: "sd-unet-safetensors"[];
+  controlKinds?: "canny"[];
 }
 /**
  * Absent controls are unsupported. Descriptors apply to every advertised operation of this model.
@@ -276,6 +288,7 @@ export interface EditResult {
   outpaint?: OutpaintGeometry;
   conditioning?: ConditioningProvenance;
   loras?: LoraProvenance[];
+  control?: ControlProvenance;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -322,6 +335,18 @@ export interface LoraProvenance {
   filename: string;
   sha256: string;
   scale: number;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "ControlProvenance".
+ */
+export interface ControlProvenance {
+  kind: "canny";
+  strength: number;
+  asset: {
+    filename: string;
+    sha256: string;
+  };
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -419,6 +444,7 @@ export interface LocalEditingModel {
    * @minItems 1
    */
   loras?: [LocalLora, ...LocalLora[]];
+  controlNet?: LocalControlNet;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -427,6 +453,14 @@ export interface LocalEditingModel {
 export interface LocalLora {
   path: string;
   scale?: number;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "LocalControlNet".
+ */
+export interface LocalControlNet {
+  path: string;
+  kind: "canny";
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -440,6 +474,7 @@ export interface GenerateRequest {
   prompt: string;
   parameters?: SamplingParameters;
   sidecar?: SidecarOptions;
+  control?: StructuralControl;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -489,7 +524,7 @@ export interface ArtifactRecord {
       className?: "man" | "woman" | "girl" | "boy";
     }[];
     /**
-     * Path-free input geometry in source, mask, then reference order.
+     * Path-free input geometry; control map precedes source, mask and references when present.
      */
     geometry?: {
       originalSize: ImageSize;
@@ -513,8 +548,13 @@ export interface ArtifactRecord {
      * Filename only, without directory information.
      */
     maskImage?: string;
+    /**
+     * Filename only, without directory information.
+     */
+    controlImage?: string;
   };
   outpaint?: OutpaintGeometry;
   conditioning?: ConditioningProvenance;
   loras?: LoraProvenance[];
+  control?: ControlProvenance;
 }

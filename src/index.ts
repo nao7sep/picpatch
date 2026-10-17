@@ -32,3 +32,4 @@ export type { ArtifactRecord, SidecarOptions, SidecarOutcome, ConditioningProven
 export type { OutpaintCanvas, OutpaintGeometry } from './contracts.generated.ts';
 
 export type { LocalLora, LoraProvenance } from './contracts.generated.ts';
+export type { LocalControlNet, StructuralControl, ControlProvenance } from './contracts.generated.ts';

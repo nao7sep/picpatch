@@ -40,6 +40,8 @@ MODEL_DEFINITIONS = {item['id']: item for item in json.loads((Path(__file__).wit
 
 class MfluxAdapter:
     def __init__(self, config: dict):
+        if 'loras' in config or 'controlNet' in config:
+            raise InvalidEditInput('This runtime does not support these auxiliary assets.')
         self.config = config
         try:
             self.definition = MODEL_DEFINITIONS[config['variant']]
@@ -51,6 +53,8 @@ class MfluxAdapter:
         return {**copy.deepcopy(self.definition['capabilities']), 'model': self.config['manifest']['model']}
 
     def sampling(self, request, operation="edit"):
+        if 'control' in request:
+            raise InvalidEditInput('This runtime does not support structural control.')
         supported = self.capabilities['parameters']
         supplied = request.get('parameters', {})
         if not isinstance(supplied, dict) or any(key not in supported for key in supplied):

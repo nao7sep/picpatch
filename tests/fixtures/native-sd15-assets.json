@@ -17,5 +17,15 @@
     "sha256": "0ec8f8585b104417a8c34a9fbcc1e922a70b8c15490ec4553087f01c8cf33673",
     "license": "creativeml-openrail-m",
     "originalRepository": "stable-diffusion-v1-5/stable-diffusion-inpainting"
+  },
+  {
+    "variant": "sd15-canny-controlnet",
+    "repository": "comfyanonymous/ControlNet-v1-1_fp16_safetensors",
+    "revision": "ab830a51c5c573a5b85bfdbaa3ae0ab7e1baf5f7",
+    "path": "control_v11p_sd15_canny_fp16.safetensors",
+    "bytes": 722601100,
+    "sha256": "8932b66e15aae835b3490dbf989f56c253104cee08a88bf21283762f557c9f10",
+    "license": "openrail",
+    "originalRepository": "lllyasviel/ControlNet-v1-1"
   }
 ]
