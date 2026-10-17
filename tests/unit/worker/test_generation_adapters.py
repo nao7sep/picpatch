@@ -7,6 +7,7 @@ from mflux_double import fake_runtime
 from picpatch_worker.backends.errors import InvalidEditInput, Cancelled
 
 FAMILIES = [
+    ('qwen-image', 'mflux.models.qwen.variants.txt2img.qwen_image', 'QwenImage', 'qwen_image'),
     ('z-image', 'mflux.models.z_image.variants.z_image', 'ZImage', 'z_image'),
     ('ernie-image', 'mflux.models.ernie_image.variants.txt2img.ernie_image', 'ErnieImage', 'ernie_image'),
     ('ernie-image-turbo', 'mflux.models.ernie_image.variants.txt2img.ernie_image', 'ErnieImage', 'ernie_image_turbo'),
@@ -45,6 +46,8 @@ def test_local_loading_generation_and_provenance(monkeypatch, family, tmp_path):
         expected.update(num_inference_steps=50, guidance=4.0)
     if adapter.config['variant'] == 'ernie-image-turbo':
         expected.update(num_inference_steps=8, guidance=1.0)
+    if adapter.config['variant'] == 'qwen-image':
+        expected.update(num_inference_steps=20, guidance=4.0)
     assert calls[1] == ('generate', expected)
     assert result['references'] == [] and result['modelRevision'] == 'a' * 40
     assert result['runtime'] == {'name': 'mflux', 'version': '0.22.0'}

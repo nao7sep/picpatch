@@ -37,6 +37,7 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
     if (request.maskImage && capabilities.maskMode === 'none') unsupported('This model does not support masks.');
     if (groups.some(group => !capabilities.referenceRoles.includes(group.role))) unsupported('This model does not support a requested reference role.');
     if (capabilities.maxReferenceImages !== undefined && references.length > capabilities.maxReferenceImages) unsupported('The reference count exceeds this model’s supported limit.');
+    if (capabilities.maxConditioningImages !== undefined && references.length + (request.sourceImage ? 1 : 0) > capabilities.maxConditioningImages) unsupported('The total source and reference count exceeds this model’s supported limit.');
     validateSize(request.size, capabilities);
   }
   return request;

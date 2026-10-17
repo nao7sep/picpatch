@@ -48,7 +48,7 @@ export async function prepareExternalModel(entry: ExternalModel, options: Prepar
             const after = await file.stat({ bigint: true });
             const current = await stat(join(root, name), { bigint: true });
             if (position !== Number(before.size) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.ino !== current.ino || before.dev !== current.dev) throw new PicPatchRuntimeError('MODEL_IO', 'A model component changed during preparation.');
-            const role = name.endsWith('.safetensors') ? 'weights' : name.endsWith('.index.json') ? 'shard-index' : relative.startsWith('tokenizer') ? 'tokenizer' : 'configuration';
+            const role = name.endsWith('.safetensors') ? 'weights' : name.endsWith('.index.json') ? 'shard-index' : (relative.startsWith('tokenizer') || relative === 'processor') ? 'tokenizer' : 'configuration';
             components.push({ path: name, role, bytes: position, sha256: hash.digest('hex') });
           } finally { await file.close(); }
         }
@@ -57,7 +57,10 @@ export async function prepareExternalModel(entry: ExternalModel, options: Prepar
         if (await realpath(join(root, part)) !== join(root, part)) throw new PicPatchRuntimeError('MODEL_IO', 'Model component directories must not be symbolic links.');
         await visit(part);
         const files = components.filter(c => c.path.startsWith(`${part}/`));
-        if (!files.length || (!part.startsWith('tokenizer') && !files.some(c => c.role === 'weights'))) throw new PicPatchRuntimeError('MODEL_IO', 'The selected variant requires a complete MFLUX bundle.');
+        if (!files.length || (!part.startsWith('tokenizer') && part !== 'processor' && !files.some(c => c.role === 'weights'))) throw new PicPatchRuntimeError('MODEL_IO', 'The selected variant requires a complete MFLUX bundle.');
+      }
+      for (const required of definition.requiredFiles ?? []) {
+        if (!components.some(component => component.path === required)) throw new PicPatchRuntimeError('MODEL_IO', 'The selected variant requires complete component and processor configuration files.');
       }
       const revision = createHash('sha256').update(JSON.stringify({ variant: entry.variant, components })).digest('hex');
       const manifest: ModelManifest = validateModelManifest({ version: 1, model: entry.id, source: { repository: 'local', revision }, components });

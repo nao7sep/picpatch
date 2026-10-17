@@ -7,6 +7,9 @@ class GenerationAdapter(MfluxAdapter):
     def import_pipeline(self, operation):
         from mflux.models.common.config import ModelConfig
         import mlx.core as mx
+        if self.definition['family'] == 'qwen-image':
+            from mflux.models.qwen.variants.txt2img.qwen_image import QwenImage
+            return getattr(ModelConfig, self.definition['config'])(), QwenImage, mx
         if self.definition['family'] == 'z-image':
             from mflux.models.z_image.variants.z_image import ZImage
             return getattr(ModelConfig, self.definition['config'])(), ZImage, mx

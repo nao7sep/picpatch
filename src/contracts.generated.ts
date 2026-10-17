@@ -90,6 +90,10 @@ export interface ModelCapabilities {
    * Whether every edit requires a mask as well as its source image.
    */
   maskRequired?: boolean;
+  /**
+   * Limit on all conditioning images together: source plus grouped references. Masks are excluded.
+   */
+  maxConditioningImages?: number;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -191,7 +195,10 @@ export interface LocalEditingModel {
     | "flux1-kontext-dev"
     | "z-image"
     | "ernie-image"
-    | "ernie-image-turbo";
+    | "ernie-image-turbo"
+    | "qwen-image"
+    | "qwen-image-edit-2511"
+    | "qwen-image-2.1";
   directory: string;
   manifest: ModelManifest;
   quantize?: 4 | 8;

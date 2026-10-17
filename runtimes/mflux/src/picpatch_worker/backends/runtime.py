@@ -106,8 +106,10 @@ class MfluxAdapter:
         if request['model'] != self.capabilities['model']:
             raise InvalidEditInput('The requested model is not configured.')
         size = request.get('size', self.capabilities['defaultOutputSize'])
-        if any(value < 16 or value % 16 for value in size.values()):
-            raise InvalidEditInput('Output dimensions must be positive multiples of 16.')
+        limits = self.capabilities['size']
+        if any(size[axis] < limits[axis + 'Multiple'] or size[axis] % limits[axis + 'Multiple']
+               for axis in ('width', 'height')):
+            raise InvalidEditInput('Output dimensions must match the model geometry.')
         seed = request.get('seed')
         if seed is None:
             seed = secrets.randbits(32)

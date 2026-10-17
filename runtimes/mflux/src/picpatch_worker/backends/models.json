@@ -191,5 +191,58 @@
       "text_encoder",
       "tokenizer"
     ]
+  },
+  {
+    "id": "qwen-image",
+    "family": "qwen-image",
+    "config": "qwen_image",
+    "defaults": {
+      "num_inference_steps": 20,
+      "guidance": 4.0
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ]
+  },
+  {
+    "id": "qwen-image-edit-2511",
+    "family": "qwen-edit",
+    "config": "qwen_image_edit_2511",
+    "defaults": {
+      "num_inference_steps": 20,
+      "guidance": 4.0
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ]
+  },
+  {
+    "id": "qwen-image-2.1",
+    "family": "qwen21",
+    "config": "qwen_image_21",
+    "defaults": {
+      "num_inference_steps": 40,
+      "guidance": 1.0
+    },
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "processor"
+    ],
+    "requiredFiles": [
+      "transformer/config.json",
+      "vae/config.json",
+      "text_encoder/config.json",
+      "processor/tokenizer.json",
+      "processor/tokenizer_config.json",
+      "processor/preprocessor_config.json"
+    ]
   }
 ]

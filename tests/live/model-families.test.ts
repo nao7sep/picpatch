@@ -7,7 +7,7 @@ import { expect, it } from 'vitest';
 import { createEditor, inspectReadiness, listModels, type LocalEditingModel } from '../../src/index.ts';
 
 // These tests import the real installed family classes but never load synthetic weights.
-it.each(['flux1-kontext-dev', 'z-image', 'ernie-image', 'ernie-image-turbo', 'flux1-dev', 'flux1-krea-dev', 'flux1-fill-dev', 'z-image-turbo', 'flux1-schnell', 'flux2-klein-4b', 'flux2-klein-9b', 'flux2-klein-base-4b', 'flux2-klein-base-9b'] as const)('checks installed %s imports and rejects unsupported operations before image I/O', async adapter => {
+it.each(['qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1', 'flux1-kontext-dev', 'z-image', 'ernie-image', 'ernie-image-turbo', 'flux1-dev', 'flux1-krea-dev', 'flux1-fill-dev', 'z-image-turbo', 'flux1-schnell', 'flux2-klein-4b', 'flux2-klein-9b', 'flux2-klein-base-4b', 'flux2-klein-base-9b'] as const)('checks installed %s imports and rejects unsupported operations before image I/O', async adapter => {
   const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
   const { pythonExecutable } = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-family-import-'));
@@ -23,8 +23,10 @@ it.each(['flux1-kontext-dev', 'z-image', 'ernie-image', 'ernie-image-turbo', 'fl
     expect(readiness.runtime).toMatchObject({ status: 'imports-ready', version: '0.22.0' });
     const fill = adapter === 'flux1-fill-dev';
     const kontext = adapter === 'flux1-kontext-dev';
-    const editing = fill || kontext || adapter.startsWith('flux2-klein');
-    expect(readiness.capabilities).toEqual([expect.objectContaining({ model: adapter, textToImage: !fill && !kontext,
+    const qwenEdit = adapter === 'qwen-image-edit-2511';
+    const qwen21 = adapter.startsWith('qwen-image-2.1');
+    const editing = qwenEdit || qwen21 || fill || kontext || adapter.startsWith('flux2-klein');
+    expect(readiness.capabilities).toEqual([expect.objectContaining({ model: adapter, textToImage: !fill && !kontext && !qwenEdit,
       instructionEditing: editing, maskMode: fill ? 'native' : adapter.startsWith('flux2-klein') ? 'composite' : 'none' })]);
     if (kontext) await expect(editor.edit({ instruction: 'Use blue.', references: [{ id: 'subject', role: 'subject', images: [join(directory, 'absent.png')] }], outputPath: join(directory, 'edit.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     if (!editing || fill) await expect(editor.edit({ instruction: 'Use blue.', sourceImage: join(directory, 'absent.png'), outputPath: join(directory, 'edit.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });

@@ -7,9 +7,14 @@ import { listModels, prepareModel, verifyModel } from '../../src/index.ts';
 let directory: string;
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-external-'));
-  for (const name of ['transformer', 'vae', 'text_encoder', 'text_encoder_2', 'tokenizer', 'tokenizer_2']) {
+  for (const name of ['transformer', 'vae', 'text_encoder', 'text_encoder_2', 'tokenizer', 'tokenizer_2', 'processor']) {
     await mkdir(join(directory, name));
-    await writeFile(join(directory, name, name.startsWith('tokenizer') ? 'tokenizer.json' : '0.safetensors'), 'fixture');
+    if (['transformer', 'vae', 'text_encoder'].includes(name)) await writeFile(join(directory, name, 'config.json'), '{}');
+    if (name === 'processor') {
+      await writeFile(join(directory, name, 'tokenizer_config.json'), '{}');
+      await writeFile(join(directory, name, 'preprocessor_config.json'), '{}');
+    }
+    await writeFile(join(directory, name, (name.startsWith('tokenizer') || name === 'processor') ? 'tokenizer.json' : '0.safetensors'), 'fixture');
   }
 });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
@@ -47,4 +52,20 @@ it('rejects directory links and special paths, while accepting HF-style file lin
   await expect(prepareModel('flux2-klein-4b', { directory })).resolves.toMatchObject({ integrity: 'locally-fingerprinted' });
   await symlink(join(directory, 'transformer'), join(directory, 'vae/nested'));
   await expect(prepareModel('flux2-klein-4b', { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+});
+
+it.each(['processor/preprocessor_config.json', 'processor/tokenizer.json', 'text_encoder/config.json', 'vae/config.json', 'transformer/config.json'])('rejects incomplete Qwen 2.1 bundles missing %s', async path => {
+  await rm(join(directory, path));
+  await expect(prepareModel('qwen-image-2.1', { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+});
+it('includes processor assets as tokenizer data without requiring processor weights', async () => {
+  const prepared = await prepareModel('qwen-image-2.1', { directory });
+  const processor = prepared.model.manifest.components.filter(component => component.path.startsWith('processor/'));
+  expect(processor).toHaveLength(3);
+  expect(processor.every(component => component.role === 'tokenizer')).toBe(true);
+});
+
+it('does not advertise Turbo without checkpoint-specific scheduler support', async () => {
+  expect(listModels().some(model => model.id === 'qwen-image-2.1-turbo')).toBe(false);
+  await expect(prepareModel('qwen-image-2.1-turbo', { directory })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });
