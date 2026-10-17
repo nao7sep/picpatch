@@ -72,7 +72,7 @@ export interface SamplingParameters {
  */
 export interface SidecarOptions {
   /**
-   * Explicitly retain prompt/instruction, negative prompt and original input paths. False by default.
+   * Explicitly retain prompt/instruction, negative prompt and path-free input descriptions. False by default.
    */
   includeInputs?: boolean;
 }
@@ -332,7 +332,14 @@ export interface ArtifactRecord {
   version: 1;
   operation: "edit" | "generate";
   inputsIncluded: boolean;
-  image: ImageArtifact;
+  image: {
+    mimeType: "image/png";
+    size: ImageSize;
+    /**
+     * Filename only, without directory information.
+     */
+    filename: string;
+  };
   sha256: string;
   bytes: number;
   model: string;
@@ -346,9 +353,40 @@ export interface ArtifactRecord {
   inputs?: {
     prompt?: string;
     instruction?: string;
+    references?: {
+      id: string;
+      role: "subject" | "object" | "style" | "background";
+      /**
+       * @minItems 1
+       *
+       * Items: Filename only, without directory information.
+       */
+      images: [string, ...string[]];
+    }[];
+    /**
+     * Path-free input geometry in source, mask, then reference order.
+     */
+    geometry?: {
+      originalSize: ImageSize;
+      orientedSize: ImageSize;
+      scaledSize: ImageSize;
+      preparedSize: ImageSize;
+      crop: {
+        left: number;
+        top: number;
+      };
+      /**
+       * Filename only, without directory information.
+       */
+      filename: string;
+    }[];
+    /**
+     * Filename only, without directory information.
+     */
     sourceImage?: string;
+    /**
+     * Filename only, without directory information.
+     */
     maskImage?: string;
-    references?: ReferenceGroup[];
-    geometry?: InputGeometry[];
   };
 }

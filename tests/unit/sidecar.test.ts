@@ -59,7 +59,9 @@ async function record(saved: EditResult): Promise<ArtifactRecord> {
   const image = await fs.readFile(output);
   expect(data.sha256).toBe(createHash('sha256').update(image).digest('hex'));
   expect(data.bytes).toBe(image.length);
-  expect(data.image.path).toBe(output);
+  expect(data.image).not.toHaveProperty('path');
+  expect(json).not.toContain(directory);
+  expect(data.image.filename).toBe('out.png');
   expect(data.effectiveParameters.steps).toBe(7);
   expect(data.seed).toBe(42);
   expect(json).not.toContain('.picpatch-');
@@ -81,8 +83,10 @@ it.each([false, true])('retains edit inputs only with explicit content consent (
   const data = await record(saved);
   expect(data.inputsIncluded).toBe(includeInputs);
   if (includeInputs) {
-    expect(data.inputs).toMatchObject({ instruction: 'private-instruction', sourceImage: source, references });
-    expect(data.inputs?.geometry?.[0]?.path).toBe(source);
+    expect(data.inputs).toMatchObject({ instruction: 'private-instruction', sourceImage: 'source.png', references: [{ id: 'private-id', role: 'style', images: ['source.png'] }] });
+    expect(data.inputs?.geometry?.[0]).not.toHaveProperty('path');
+    expect(data.inputs?.geometry?.[0]?.filename).toBe('source.png');
+    expect(data.inputs?.geometry?.[0]?.preparedSize).toEqual({ width: 8, height: 8 });
     expect(data.effectiveParameters.negativePrompt).toBe('private-negative');
   } else {
     expect(data).not.toHaveProperty('inputs');
@@ -148,4 +152,16 @@ it('cancels before publication without artifacts, but settles both files after t
   });
   const saved = await editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} }, { signal: late.signal });
   await record(saved);
+});
+
+it('rejects filesystem path fields in the sidecar schema', async () => {
+  const saved = await editor.edit({ instruction: 'Blue', sourceImage: source, references: [{ id: 'ref', role: 'style', images: [source] }], outputPath: output, sidecar: { includeInputs: true } });
+  const data = await record(saved);
+  const valid = contractValidator('ArtifactRecord');
+  for (const path of ['/Users/example/private.png', 'C:\\Users\\example\\private.png', '../private.png']) {
+    expect(valid({ ...data, image: { ...data.image, path } })).toBe(false);
+    expect(valid({ ...data, inputs: { ...data.inputs, sourcePath: path } })).toBe(false);
+    expect(valid({ ...data, inputs: { ...data.inputs, references: [{ id: 'ref', role: 'style', images: ['source.png'], path }] } })).toBe(false);
+    expect(valid({ ...data, inputs: { ...data.inputs, geometry: [{ ...data.inputs!.geometry![0], path }] } })).toBe(false);
+  }
 });

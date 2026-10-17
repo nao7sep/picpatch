@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { link, open } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { ArtifactRecord, EditResult, SidecarOutcome } from '../contracts.generated.ts';
 import type { ImageRequest } from '../types.ts';
 
@@ -16,14 +16,15 @@ export async function publishSidecar(request: ImageRequest, result: EditResult, 
     const { negativePrompt, ...parameters } = result.effectiveParameters;
     const record: ArtifactRecord = {
       version: 1, operation: 'prompt' in request ? 'generate' : 'edit', inputsIncluded,
-      image: result.image, sha256: hash.digest('hex'), bytes,
+      image: { filename: basename(result.image.path), mimeType: result.image.mimeType, size: result.image.size }, sha256: hash.digest('hex'), bytes,
       model: result.model, modelRevision: result.modelRevision, runtime: result.runtime, seed: result.seed,
       effectiveParameters: inputsIncluded ? result.effectiveParameters : parameters,
       ...(inputsIncluded ? { inputs: 'prompt' in request ? { prompt: request.prompt } : {
         instruction: request.instruction,
-        ...(request.sourceImage ? { sourceImage: request.sourceImage } : {}),
-        ...(request.maskImage ? { maskImage: request.maskImage } : {}),
-        references: result.references, geometry: result.inputGeometry ?? [],
+        ...(request.sourceImage ? { sourceImage: basename(request.sourceImage) } : {}),
+        ...(request.maskImage ? { maskImage: basename(request.maskImage) } : {}),
+        references: result.references.map(group => ({ id: group.id, role: group.role, images: [basename(group.images[0]), ...group.images.slice(1).map(path => basename(path))] })),
+        geometry: (result.inputGeometry ?? []).map(({ path, ...geometry }) => ({ ...geometry, filename: basename(path) })),
       } } : {}),
     };
     const staging = join(directory, 'sidecar.json');

@@ -180,7 +180,9 @@ it('generates from text, edits that result in the same session, and cancels gene
     expect(await sharp(generated.image.path).metadata()).toMatchObject({ format: 'png', width: 256, height: 256 });
     const edited = await editor.edit({ instruction: 'Make the bowl green.', sourceImage: generated.image.path, sidecar: { includeInputs: true } });
     expect(edited.sidecar?.status).toBe('saved');
-    expect(JSON.parse(await readFile(edited.sidecar!.path, 'utf8')).inputs.sourceImage).toBe(generated.image.path);
+    const editMetadata = await readFile(edited.sidecar!.path, 'utf8');
+    expect(JSON.parse(editMetadata).inputs.sourceImage).toBe(generated.image.path.split('/').at(-1));
+    expect(editMetadata).not.toContain(directory);
     expect(await sharp(edited.image.path).metadata()).toMatchObject({ width: 256, height: 256 });
     const controller = new AbortController(); let sawStep = false;
     await expect(editor.generate({ prompt: 'A yellow ceramic bowl.', outputPath: join(directory, 'cancelled.png') }, {

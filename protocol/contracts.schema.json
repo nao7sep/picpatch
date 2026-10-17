@@ -786,7 +786,7 @@
       "properties": {
         "includeInputs": {
           "type": "boolean",
-          "description": "Explicitly retain prompt/instruction, negative prompt and original input paths. False by default."
+          "description": "Explicitly retain prompt/instruction, negative prompt and path-free input descriptions. False by default."
         }
       },
       "required": [],
@@ -855,7 +855,26 @@
           "type": "boolean"
         },
         "image": {
-          "$ref": "#/definitions/ImageArtifact"
+          "type": "object",
+          "properties": {
+            "mimeType": {
+              "const": "image/png"
+            },
+            "size": {
+              "$ref": "#/definitions/ImageSize"
+            },
+            "filename": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Filename only, without directory information."
+            }
+          },
+          "required": [
+            "mimeType",
+            "size",
+            "filename"
+          ],
+          "additionalProperties": false
         },
         "sha256": {
           "type": "string",
@@ -912,23 +931,104 @@
             "instruction": {
               "type": "string"
             },
-            "sourceImage": {
-              "type": "string"
-            },
-            "maskImage": {
-              "type": "string"
-            },
             "references": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/ReferenceGroup"
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "role": {
+                    "enum": [
+                      "subject",
+                      "object",
+                      "style",
+                      "background"
+                    ]
+                  },
+                  "images": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Filename only, without directory information."
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "role",
+                  "images"
+                ],
+                "additionalProperties": false
               }
             },
             "geometry": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/InputGeometry"
-              }
+                "type": "object",
+                "properties": {
+                  "originalSize": {
+                    "$ref": "#/definitions/ImageSize"
+                  },
+                  "orientedSize": {
+                    "$ref": "#/definitions/ImageSize"
+                  },
+                  "scaledSize": {
+                    "$ref": "#/definitions/ImageSize"
+                  },
+                  "preparedSize": {
+                    "$ref": "#/definitions/ImageSize"
+                  },
+                  "crop": {
+                    "type": "object",
+                    "properties": {
+                      "left": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "top": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "left",
+                      "top"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "filename": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Filename only, without directory information."
+                  }
+                },
+                "required": [
+                  "originalSize",
+                  "orientedSize",
+                  "scaledSize",
+                  "preparedSize",
+                  "crop",
+                  "filename"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Path-free input geometry in source, mask, then reference order."
+            },
+            "sourceImage": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Filename only, without directory information."
+            },
+            "maskImage": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Filename only, without directory information."
             }
           },
           "required": [],
