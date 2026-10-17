@@ -123,6 +123,10 @@ async function discoverModelsOperation(roots?: string[], options: ModelOperation
           if (entry.isDirectory()) children.push(join(path, entry.name));
           else if (kind(entry.name)) candidate = true;
         }
+        // Component exports such as MFLUX bundles need not contain a root config.
+        // Recognize their layout only for grouping, never as architecture/readiness evidence.
+        const names = new Set(children.map(child => basename(child)));
+        candidate ||= (names.has('transformer') || names.has('unet')) && names.has('text_encoder');
         if (candidate) {
           models.push(await inspect(path, operation, 'discoverModels'));
           // The whole candidate is one model bundle, not one model per component.

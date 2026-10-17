@@ -87,3 +87,23 @@ it('deduplicates components across overlapping roots regardless of input order',
   await mkdir(child); await writeFile(join(child, 'model.safetensors'), 'x');
   expect((await discoverModels([child, path])).models.map(m => m.path)).toEqual([path]);
 });
+
+it.each(['transformer', 'unet'])('groups a component-only %s bundle without a root configuration', async denoiser => {
+  const root = join(directory, 'bundle');
+  for (const component of [denoiser, 'text_encoder', 'vae']) {
+    const path = join(root, component); await mkdir(path, { recursive: true });
+    await writeFile(join(path, 'model.safetensors'), 'fixture');
+  }
+  const other = await bundle('other');
+  const found = await discoverModels([directory, join(root, denoiser)]);
+  expect(found.models.map(model => model.path)).toEqual([root, other]);
+  expect(found.models[0]).toMatchObject({ status: 'unverified', integrity: 'not-verified', compatibility: 'unknown' });
+  expect(found.models[0]!.files).toHaveLength(3);
+});
+it('does not follow linked components when recognizing a bundle layout', async () => {
+  const root = join(directory, 'bundle'); await mkdir(root);
+  const external = await bundle('external');
+  await symlink(external, join(root, 'transformer'));
+  await symlink(external, join(root, 'text_encoder'));
+  expect(await discoverModels([root])).toEqual({ models: [] });
+});

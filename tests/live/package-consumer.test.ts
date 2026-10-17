@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, link, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import type { EditorOptions } from 'picpatch';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import pkg from '../../package.json' with { type: 'json' };
@@ -38,9 +39,31 @@ console.log('consumer passed');\n`);
     await writeFile(join(directory, 'package.json'), JSON.stringify({ type: 'module' }));
     const { stdout: output } = await exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), script], { cwd: directory, timeout: 30_000 });
     expect(output.trim()).toBe('consumer passed');
+    // Seed disposable managed storage using hard links to already acquired files.
+    // No model bytes are copied or changed; removing the fixture leaves the originals intact.
+    const model = (config as EditorOptions).model!;
+    const modelsDirectory = join(directory, 'models');
+    const cached = join(modelsDirectory, model.manifest.model, model.manifest.source.revision);
+    for (const component of model.manifest.components) {
+      const destination = join(cached, component.path);
+      await mkdir(dirname(destination), { recursive: true });
+      await link(await realpath(join(model.directory, component.path)), destination);
+    }
+    const outputDirectory = join(directory, 'images'); await mkdir(outputDirectory);
+    const native = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(root, 'node_modules/.cache/picpatch-live/native-inference-config.json'), 'utf8'));
+    const inputs = join(directory, 'inputs.json');
+    await writeFile(inputs, JSON.stringify({ pythonExecutable: config.pythonExecutable, modelId: model.manifest.model, modelsDirectory, outputDirectory, native }));
+    const journey = join(directory, 'journey.ts');
+    await copyFile(join(root, 'tests/fixtures/package-consumer.ts'), journey);
+    const inference = await exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), journey, inputs], {
+      cwd: directory, timeout: 600_000,
+      env: { ...process.env, PICPATCH_DATA_DIR: join(directory, 'data'), PICPATCH_MODELS_DIR: modelsDirectory, HF_HUB_OFFLINE: '1' },
+    });
+    expect(inference.stdout.trim()).toBe('inference consumer passed');
+    expect(inference.stderr).toBe('');
     await rm(join(modules, 'picpatch/runtimes/mflux/src/picpatch_worker/__main__.py'));
     const missing = await exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), script], { cwd: directory, timeout: 30_000 }).catch(error => error);
     expect(missing.code).not.toBe(0);
     expect(missing.stderr).toContain('Check the prepared Python dependencies and packaged worker resources.');
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 120_000);
+}, 900_000);
