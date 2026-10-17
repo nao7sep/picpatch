@@ -1,4 +1,4 @@
-import { inspectConditioningAssets } from './assets.ts';
+import { inspectNativeAssets } from './assets.ts';
 import { randomInt } from 'node:crypto';
 import { writeFile, mkdir, copyFile, symlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -23,7 +23,7 @@ export class NativeBackend implements EditBackend {
   }
   async inspect(signal?: AbortSignal): Promise<void> {
     if (this.checked) { checkSignal(signal); return; }
-    await inspectConditioningAssets(this.model, signal);
+    await inspectNativeAssets(this.model, signal);
     const help = await this.process.run(['--help'], this.model.directory, this.timeouts.startupMs, signal, true);
     // Short hashes are how the upstream build stamps sd_commit(). Do not accept arbitrary binaries.
     const match = /^stable-diffusion\.cpp version [^\r\n]+, commit ([a-f0-9]{7,40})(?:\s|$)/m.exec(help);

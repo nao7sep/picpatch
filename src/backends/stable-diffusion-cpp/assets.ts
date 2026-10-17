@@ -31,17 +31,24 @@ async function header(path: string, signal?: AbortSignal): Promise<Header> {
   } finally { await file.close(); }
 }
 
-/** Recognize the exact conventional exports supported by these conditioned workflows. */
+/** Recognize conventional SD checkpoints and the supported conditioning exports. */
 async function inspectAssets(model: LocalEditingModel, signal?: AbortSignal): Promise<void> {
-  if (!model.photoMaker && !model.ipAdapter) return;
-  const required = [model.checkpoint!, ...(model.photoMaker ? [model.photoMaker] : [model.ipAdapter!, model.clipVision!])];
-  if (required.some(path => !path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchUsageError('INVALID_REQUEST', 'Conditioned workflows currently require safetensors checkpoint and auxiliary assets.');
+  const conditioned = Boolean(model.photoMaker || model.ipAdapter);
+  const required = [model.checkpoint!, ...[model.photoMaker, model.ipAdapter, model.clipVision].filter((path): path is string => path !== undefined)];
+  if (conditioned && required.some(path => !path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchUsageError('INVALID_REQUEST', 'Conditioned workflows currently require safetensors checkpoint and auxiliary assets.');
   const incompatible = (): never => { throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint and auxiliary tensor metadata are incompatible with the selected conditioning workflow.'); };
   const shape = (data: Header, name: string, expected: number[]): boolean => Array.isArray(data[name]?.shape) && JSON.stringify(data[name]!.shape) === JSON.stringify(expected);
-  const checkpoint = await header(join(model.directory, model.checkpoint!), signal);
   const context = model.variant.startsWith('sdxl') ? 2048 : 768;
-  if (!shape(checkpoint, 'model.diffusion_model.input_blocks.0.0.weight', [320, 4, 3, 3]) ||
-    !Object.entries(checkpoint).some(([key, value]) => key.startsWith('model.diffusion_model.') && key.endsWith('.attn2.to_k.weight') && value?.shape?.length === 2 && value.shape[1] === context)) incompatible();
+  if (model.checkpoint!.toLowerCase().endsWith('.safetensors')) {
+    const checkpoint = await header(join(model.directory, model.checkpoint!), signal);
+    const channels = model.variant.endsWith('-inpaint') ? 9 : 4;
+    if (!shape(checkpoint, 'model.diffusion_model.input_blocks.0.0.weight', [320, channels, 3, 3]) ||
+      !Object.entries(checkpoint).some(([key, value]) => key.startsWith('model.diffusion_model.') && key.endsWith('.attn2.to_k.weight') && value?.shape?.length === 2 && value.shape[1] === context)) {
+      throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint tensor metadata does not match the selected SD architecture and base/inpaint variant. Supply a conventional complete checkpoint; component-only exports are unsupported.');
+    }
+  }
+  // GGUF architecture remains an explicit caller selection, checked by runtime loading.
+  if (!conditioned) return;
   if (model.photoMaker) {
     const identity = await header(join(model.directory, model.photoMaker), signal);
     if (!shape(identity, 'vision_model.embeddings.patch_embedding.weight', [1024, 3, 14, 14]) ||
@@ -58,11 +65,11 @@ async function inspectAssets(model: LocalEditingModel, signal?: AbortSignal): Pr
   }
 }
 
-export async function inspectConditioningAssets(model: LocalEditingModel, signal?: AbortSignal): Promise<void> {
+export async function inspectNativeAssets(model: LocalEditingModel, signal?: AbortSignal): Promise<void> {
   try { await inspectAssets(model, signal); }
   catch (cause) {
     checkSignal(signal);
     if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError) throw cause;
-    throw new PicPatchRuntimeError('MODEL_IO', 'Could not inspect native conditioning metadata.', { cause });
+    throw new PicPatchRuntimeError('MODEL_IO', 'Could not inspect native model metadata.', { cause });
   }
 }

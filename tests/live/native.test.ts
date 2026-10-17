@@ -1,3 +1,4 @@
+import { nativeCheckpoint } from '../helpers/native-assets.ts';
 import { mkdtemp, writeFile, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ async function fixture(revision = nativeRevision) {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-native-pipes-'));
   const png = await sharp({ create: { width: 16, height: 16, channels: 3, background: 'blue' } }).png().toBuffer();
   const executable = join(directory, 'sd-cli');
-  await writeFile(join(directory, 'weights.safetensors'), 'synthetic; never real weights');
+  await nativeCheckpoint(join(directory, 'weights.safetensors'), 'sdxl');
   await writeFile(executable, `#!${process.execPath}
 const fs = require('node:fs');
 const args = process.argv.slice(2);
@@ -35,6 +36,7 @@ it('runs native generation and masked editing through public preparation, pipes 
   const { directory, executable, png } = await fixture();
   try {
     for (const variant of ['sdxl', 'sdxl-inpaint']) {
+      await nativeCheckpoint(join(directory, 'weights.safetensors'), variant);
       const { model } = await prepareModel(variant, { directory, checkpoint: 'weights.safetensors' });
       expect(await inspectReadiness(executable, model)).toMatchObject({ runtime: { status: 'executable-ready', version: nativeRevision } });
       await expect(inspectReadiness(executable, model, { load: true })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
@@ -81,6 +83,7 @@ it('times out and disposes native children that ignore graceful termination befo
 
 it.each(['sd15', 'sdxl'])('runs repeated %s source variations with default/session/request strength and settled cancellation', async variant => {
   const { directory, executable, png } = await fixture();
+  await nativeCheckpoint(join(directory, 'weights.safetensors'), variant);
   const { model } = await prepareModel(variant, { directory, checkpoint: 'weights.safetensors' });
   const editor = createEditor({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
   const sourceImage = join(directory, 'source.png');

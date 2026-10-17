@@ -1,3 +1,4 @@
+import { nativeCheckpoint, tensorFile } from '../helpers/native-assets.ts';
 import { mkdtemp, writeFile, readdir, rm, symlink, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,12 +8,13 @@ import { createEditor, listModels, prepareModel, verifyModel, validateGenerateRe
 let directory: string;
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-native-model-'));
-  await writeFile(join(directory, 'custom.safetensors'), 'synthetic checkpoint');
+  await nativeCheckpoint(join(directory, 'custom.safetensors'), 'sdxl');
   await writeFile(join(directory, 'vae.gguf'), 'synthetic vae');
 });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
 
 it.each(['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint'])('prepares explicit %s files without copying, installing or claiming inference evidence', async id => {
+  await nativeCheckpoint(join(directory, 'custom.safetensors'), id);
   const before = await readdir(directory);
   const options = { directory, checkpoint: 'custom.safetensors', vae: 'vae.gguf' };
   const prepared = await prepareModel(id, options);
@@ -57,6 +59,7 @@ it('distinguishes base variation from dedicated inpaint before image I/O', () =>
 });
 
 it.each(['sd15', 'sdxl'])('admits %s source variation and rejects incompatible inputs before starting the executable', async id => {
+  await nativeCheckpoint(join(directory, 'custom.safetensors'), id);
   const { model } = await prepareModel(id, { directory, checkpoint: 'custom.safetensors' });
   const editor = createEditor({ model, nativeExecutable: '/missing/sd-cli', defaults: { outputDirectory: directory } });
   const request = { instruction: 'Blue', sourceImage: '/missing/image.png' };
@@ -70,4 +73,22 @@ it.each(['sd15', 'sdxl'])('admits %s source variation and rejects incompatible i
     await expect(editor.edit({ instruction: 'Blue', references: [{ id: 'style', role: 'style', images: ['/missing/ref.png'] }] })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     await expect(editor.generate({ prompt: 'Blue', parameters: { strength: 0.5 } })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
   } finally { await editor.dispose(); }
+});
+
+it.each(['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint'])('rejects mismatched architecture and base/inpaint headers for %s before hashing', async variant => {
+  for (const actual of ['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint'].filter(id => id !== variant)) {
+    await nativeCheckpoint(join(directory, 'custom.safetensors'), actual);
+    let hashing = false;
+    await expect(prepareModel(variant, { directory, checkpoint: 'custom.safetensors', onProgress: () => { hashing = true; } })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(hashing).toBe(false);
+  }
+});
+
+it('rejects incomplete component exports and malformed native safetensors headers', async () => {
+  await tensorFile(join(directory, 'custom.safetensors'), { 'conv_in.weight': [320, 4, 3, 3] });
+  await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors' })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  for (const bytes of [Buffer.from('short'), Buffer.alloc(8, 255), Buffer.from('12345678{}')]) {
+    await writeFile(join(directory, 'custom.safetensors'), bytes);
+    await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors' })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  }
 });

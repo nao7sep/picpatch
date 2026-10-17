@@ -1,4 +1,4 @@
-import { inspectConditioningAssets } from './assets.ts';
+import { inspectNativeAssets } from './assets.ts';
 import type { BigIntStats } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -32,7 +32,7 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
       const snapshots = new Map<string, BigIntStats>();
       const provisional = validateLocalEditingModel({ variant, directory: root, ...assets, manifest: { version: 1, model: variant, source: { repository: 'local', revision: '0'.repeat(64) }, components: selected.map(path => ({ path, role: 'weights', bytes: 1, sha256: '0'.repeat(64) })) } });
       // Check compatibility before hashing multi-GB assets; repeat headers under final snapshots below.
-      await inspectConditioningAssets(provisional, signal);
+      await inspectNativeAssets(provisional, signal);
       for (const path of selected) {
         checkSignal(signal);
         const target = join(root, path);
@@ -59,7 +59,7 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
       const revision = createHash('sha256').update(JSON.stringify({ variant, components })).digest('hex');
       const manifest = validateModelManifest({ version: 1, model: variant, source: { repository: 'local', revision }, components });
       const model = validateLocalEditingModel({ variant, directory, manifest, ...assets });
-      await inspectConditioningAssets({ ...model, directory: root }, signal);
+      await inspectNativeAssets({ ...model, directory: root }, signal);
       // The hashing read already checks file identity and mutation. Recheck every earlier file
       // after callbacks/header inspection, rather than reading all weights a second time.
       if (await realpath(directory) !== root) throw new PicPatchRuntimeError('MODEL_IO', 'Model directory changed during preparation.');

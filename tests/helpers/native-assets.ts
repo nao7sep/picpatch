@@ -10,10 +10,7 @@ export async function tensorFile(path: string, shapes: Record<string, number[]>)
 export async function nativeAssets(directory: string, variant: string) {
   const xl = variant.startsWith('sdxl'); const identity = variant.includes('photomaker'); const plus = variant.endsWith('-plus');
   const context = xl ? 2048 : 768;
-  await tensorFile(join(directory, 'checkpoint.safetensors'), {
-    'model.diffusion_model.input_blocks.0.0.weight': [320, 4, 3, 3],
-    'model.diffusion_model.input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight': [320, context],
-  });
+  await nativeCheckpoint(join(directory, 'checkpoint.safetensors'), variant);
   if (identity) {
     await tensorFile(join(directory, 'v2-name.safetensors'), {
       'vision_model.embeddings.patch_embedding.weight': [1024, 3, 14, 14],
@@ -29,4 +26,11 @@ export async function nativeAssets(directory: string, variant: string) {
     'image_proj.latents': [1, 16, dim], 'image_proj.proj_in.weight': [dim, 1280], 'image_proj.proj_out.weight': [context, dim],
   } : { 'image_proj.norm.weight': [context], 'image_proj.proj.weight': [context * 4, 1024] });
   return { directory, checkpoint: 'checkpoint.safetensors', ipAdapter: 'adapter.safetensors', clipVision: 'vision.safetensors' };
+}
+
+export async function nativeCheckpoint(path: string, variant: string): Promise<void> {
+  await tensorFile(path, {
+    'model.diffusion_model.input_blocks.0.0.weight': [320, variant.endsWith('-inpaint') ? 9 : 4, 3, 3],
+    'model.diffusion_model.input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight': [320, variant.startsWith('sdxl') ? 2048 : 768],
+  });
 }
