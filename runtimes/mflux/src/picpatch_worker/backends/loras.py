@@ -1,5 +1,6 @@
 """Local LoRA admission and pinned MFLUX mapping, without downloading or baking."""
 import importlib
+import json
 import math
 from pathlib import Path, PurePosixPath
 from .errors import InvalidEditInput
@@ -51,6 +52,7 @@ def lora_kwargs(config, family):
     mapping = getattr(importlib.import_module(f'mflux.models.{package}.weights.{module}'), name).get_mapping()
     patterns = [item for item in LoRALoader._build_pattern_mappings(mapping) if item.matrix_name in ('lora_A', 'lora_B', 'alpha')]
     paths = []
+    scales = []
     for lora in config['loras']:
         path = Path(config['directory']) / lora['path']
         try:
@@ -59,6 +61,7 @@ def lora_kwargs(config, family):
                 raise InvalidEditInput('Local LoRA file is missing.')
             with safe_open(str(path), framework='numpy') as weights:
                 keys = list(weights.keys())
+                factor = metadata_scale(weights.metadata(), {key: weights.get_slice(key).get_shape() for key in keys})
                 if not keys or any(not any(LoRALoader._match_pattern(key, item.source_pattern) is not None for item in patterns) for key in keys):
                     raise InvalidEditInput('LoRA contains tensors unsupported by the selected MFLUX family.')
         except InvalidEditInput:
@@ -66,7 +69,11 @@ def lora_kwargs(config, family):
         except Exception as error:
             raise InvalidEditInput('Could not read local LoRA safetensors.') from error
         paths.append(str(path))
-    return {'lora_paths': paths, 'lora_scales': [item.get('scale', 1) for item in config['loras']], 'bake_lora': False}
+        scale = lora.get('scale', 1) * factor
+        if not math.isfinite(scale) or abs(scale) > 3.4028234663852886e38:
+            raise InvalidEditInput('LoRA metadata and requested scale exceed the runtime range.')
+        scales.append(scale)
+    return {'lora_paths': paths, 'lora_scales': scales, 'bake_lora': False}
 
 
 def lora_provenance(config):
@@ -92,3 +99,32 @@ def validate_loaded_loras(pipeline):
             raise InvalidEditInput('LoRA dimensions do not match the selected model.')
     if not count:
         raise InvalidEditInput('No supported LoRA layers were loaded.')
+
+
+def metadata_scale(metadata, shapes):
+    """MFLUX reads tensor alpha, but ignores Diffusers' serialized PEFT configuration."""
+    raw = (metadata or {}).get('lora_adapter_metadata')
+    if raw is None:
+        return 1.0
+    try:
+        config = json.loads(raw)
+        if not isinstance(config, dict) or any(not key.startswith('transformer.') for key in config):
+            raise ValueError()
+        config = {key.removeprefix('transformer.'): value for key, value in config.items()}
+        rank, alpha = config['r'], config['lora_alpha']
+        rslora = config.get('use_rslora', False)
+        if (isinstance(rank, bool) or not isinstance(rank, int) or rank <= 0
+                or isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(alpha)
+                or not isinstance(rslora, bool)
+                or config.get('rank_pattern') or config.get('alpha_pattern')
+                or config.get('use_dora') or config.get('use_qalora') or config.get('fan_in_fan_out')
+                or config.get('lora_bias') or config.get('bias', 'none') != 'none'
+                or config.get('modules_to_save') or config.get('alora_invocation_tokens')
+                or any(key.endswith('.alpha') for key in shapes)):
+            raise ValueError()
+        matrices = [shape for key, shape in shapes.items() if '.lora_A' in key or '.lora_down' in key]
+        if not matrices or any(len(shape) != 2 or shape[0] != rank for shape in matrices):
+            raise ValueError()
+        return alpha / (math.sqrt(rank) if rslora else rank)
+    except (ValueError, TypeError, KeyError, OverflowError) as error:
+        raise InvalidEditInput('Unsupported or inconsistent PEFT LoRA scaling metadata.') from error

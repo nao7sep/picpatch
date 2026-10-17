@@ -6,7 +6,7 @@ import { expect, it } from 'vitest';
 
 it('checks every installed family constructor and mapping, rejects ignored tensors, and composes unbaked adapters', async () => {
   const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url)), 'utf8'));
-  const script = `import importlib, inspect, tempfile
+  const script = `import importlib, inspect, json, tempfile
 from types import SimpleNamespace
 from pathlib import Path
 import mlx.core as mx
@@ -42,6 +42,14 @@ with tempfile.TemporaryDirectory() as directory:
     class Transformer(nn.Module):
         def __init__(self): self.x_embedder = nn.Linear(2, 3, bias=False)
     weights = {'transformer.x_embedder.lora_A.weight': mx.ones((1, 2)), 'transformer.x_embedder.lora_B.weight': mx.ones((3, 1))}
+    mx.save_safetensors(str(path), weights)
+    mx.save_safetensors(str(path), weights, {"lora_adapter_metadata": json.dumps({"transformer.r": 1, "transformer.lora_alpha": 2, "transformer.use_rslora": True})})
+    metadata_config = {'directory': directory, 'loras': [{'path': path.name, 'scale': 0.5}]}
+    kwargs = lora_kwargs(metadata_config, 'flux2-klein')
+    assert kwargs['lora_scales'] == [1.0]
+    metadata_model = Transformer(); metadata_x = mx.ones((1, 2)); metadata_before = metadata_model.x_embedder(metadata_x); mx.eval(metadata_before)
+    LoRALoader.load_and_apply_lora(Flux2LoRAMapping.get_mapping(), metadata_model, **kwargs)
+    assert bool(mx.allclose(metadata_model.x_embedder(metadata_x), metadata_before + 2.0))
     mx.save_safetensors(str(path), weights)
     second = Path(directory) / 'second.safetensors'; mx.save_safetensors(str(second), weights)
     model = Transformer(); x = mx.ones((1, 2)); before = model.x_embedder(x); mx.eval(before)

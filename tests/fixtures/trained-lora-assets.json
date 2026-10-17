@@ -1,0 +1,26 @@
+[
+  {
+    "family": "klein",
+    "repository": "Limbicnation/pixel-art-lora",
+    "revision": "0ac8e5c3400af68228811edc324721e25fc26777",
+    "path": "pytorch_lora_weights.safetensors",
+    "filename": "klein-pixel-art.safetensors",
+    "bytes": 325280664,
+    "sha256": "72ac6e652196cd9f450d4d3256d197978d3fa690e22dc21361d3bd4fb4e8250e",
+    "license": "apache-2.0",
+    "scale": 0.0625,
+    "steps": 4
+  },
+  {
+    "family": "sdxl",
+    "repository": "ntc-ai/SDXL-LoRA-slider.pixel-art",
+    "revision": "291f7cac2ff1f01429919b100ee6209fb5527bcc",
+    "path": "pixel art.safetensors",
+    "filename": "sdxl-pixel-art.safetensors",
+    "bytes": 8789076,
+    "sha256": "8ced4b0130070266742559b16b6b92c3b1f1b43c2db1e3317e950e68a8bc32d1",
+    "license": "mit",
+    "scale": 3,
+    "steps": 20
+  }
+]
