@@ -61,7 +61,8 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
         if (request.instruction.split(placeholder).length !== 2 || /\bimg\b/i.test(request.instruction.replace(placeholder, ''))) unsupported('Use the identity group placeholder exactly once; the SDK supplies the native trigger word.');
       } else if (group.conditioning !== 'appearance' || group.className) unsupported('Appearance conditioning requires an appearance group without an identity class.');
     } else if (groups.some(group => (group.conditioning !== undefined && group.conditioning !== 'prompt') || group.className !== undefined)) unsupported('This model supports prompt grouping, not dedicated identity or appearance conditioning.');
-    resolveParameters(request.parameters, capabilities);
+    const effective = resolveParameters(request.parameters, capabilities);
+    if (effective.strength !== undefined && effective.strength < 1 && !request.sourceImage) unsupported('Source-strength control requires a source image.');
     validateSize(request.size, capabilities);
   }
   return request;

@@ -12,8 +12,8 @@ it('checks parameter mappings, defaults and scheduler construction against every
 import mlx.core as mx
 from picpatch_worker.backends import create_adapter
 from picpatch_worker.backends.runtime import MODEL_DEFINITIONS
-from mflux.models.common.config import Config
-names = {'steps': 'num_inference_steps', 'guidance': 'guidance', 'negativePrompt': 'negative_prompt', 'scheduler': 'scheduler'}
+from mflux.models.common.config import Config, ModelConfig
+names = {'steps': 'num_inference_steps', 'guidance': 'guidance', 'negativePrompt': 'negative_prompt', 'scheduler': 'scheduler', 'strength': 'strength'}
 for variant, definition in MODEL_DEFINITIONS.items():
     adapter = create_adapter({'variant': variant, 'manifest': {'model': variant}})
     caps = adapter.capabilities
@@ -22,10 +22,11 @@ for variant, definition in MODEL_DEFINITIONS.items():
             continue
         model_config, pipeline, _ = adapter.import_pipeline(operation)
         signature = inspect.signature(pipeline.generate_image)
-        kwargs, effective = adapter.sampling({})
+        kwargs, effective = adapter.sampling({}, operation)
         for key, descriptor in caps['parameters'].items():
+            if key == 'strength' and operation != 'edit': continue
             assert names[key] in signature.parameters, (variant, operation, key)
-            if key in ('steps', 'guidance'):
+            if key in ('steps', 'guidance', 'strength'):
                 actual = kwargs.get(names[key], signature.parameters[names[key]].default)
                 assert actual == descriptor['default'], (variant, key, actual)
         # Qwen's shifted linear schedule is non-finite at one step; its advertised minimum must exclude it.
@@ -38,9 +39,13 @@ for variant, definition in MODEL_DEFINITIONS.items():
         supplied = {'steps': 3, 'scheduler': effective['scheduler']}
         if 'guidance' in caps['parameters']: supplied['guidance'] = 2.0
         if 'negativePrompt' in caps['parameters']: supplied['negativePrompt'] = ''
-        mapped, resolved = adapter.sampling({'parameters': supplied})
+        if 'strength' in caps['parameters'] and operation == 'edit': supplied['strength'] = 0.5
+        mapped, resolved = adapter.sampling({'parameters': supplied}, operation)
         assert all(mapped[names[key]] == value for key, value in supplied.items())
         signature.bind_partial(None, seed=0, prompt='Blue', **mapped)
+config = Config(model_config=ModelConfig.qwen_image_21(), num_inference_steps=40, width=64, height=32, image_path='/source.png', image_strength=0.5, scheduler='linear')
+assert config.init_time_step == 20
+assert len(list(config.time_steps)) == 20
 print('verified')`;
   const result = await promisify(execFile)(pythonExecutable, ['-c', script], {
     env: { ...process.env, PYTHONPATH: worker, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' }, timeout: 60_000,

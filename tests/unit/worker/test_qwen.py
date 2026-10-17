@@ -98,3 +98,21 @@ def test_qwen21_total_count_and_geometry_before_load(monkeypatch, tmp_path):
         adapter.edit(request, Event(), lambda event: None)
     with pytest.raises(InvalidEditInput):
         adapter.generate({'model': 'qwen-image-2.1', 'prompt': 'A bowl.', 'size': {'width': 16, 'height': 32}}, Event(), lambda event: None)
+
+
+def test_qwen21_strength_mapping_and_source_requirement(monkeypatch, tmp_path):
+    adapter = create_adapter({'variant': 'qwen-image-2.1', 'directory': str(tmp_path),
+                              'manifest': {'model': 'qwen-image-2.1', 'source': {'revision': 'a' * 40}}})
+    family = (adapter, 'mflux.models.qwen21.variants.edit.qwen_image_21_edit', 'QwenImage21Edit', 'qwen_image_21')
+    calls, _ = fake_runtime(monkeypatch, family)
+    request = {**request_for(family, tmp_path), 'parameters': {'strength': 0.5}}
+    result = adapter.edit(request, Event(), lambda _: None)
+    assert calls[1][1]['strength'] == result['effectiveParameters']['strength'] == 0.5
+    assert calls[1][1]['image_paths'][0] == '/source.png'
+    calls.clear()
+    with pytest.raises(InvalidEditInput):
+        adapter.edit({**request, 'sourceImage': None}, Event(), lambda _: None)
+    with pytest.raises(InvalidEditInput):
+        adapter.generate({**request, 'prompt': 'Blue'}, Event(), lambda _: None)
+    assert not calls
+    assert 'strength' not in adapter.sampling({}, 'generate')[1]

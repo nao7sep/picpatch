@@ -50,20 +50,24 @@ class MfluxAdapter:
     def capabilities(self):
         return {**copy.deepcopy(self.definition['capabilities']), 'model': self.config['manifest']['model']}
 
-    def sampling(self, request):
+    def sampling(self, request, operation="edit"):
         supported = self.capabilities['parameters']
         supplied = request.get('parameters', {})
         if not isinstance(supplied, dict) or any(key not in supported for key in supplied):
             raise InvalidEditInput('Unsupported sampling parameter.')
+        if operation != 'edit' and 'strength' in supplied:
+            raise InvalidEditInput('Source strength is only supported for editing.')
         effective = {}
         for key, descriptor in supported.items():
+            if key == 'strength' and operation != 'edit':
+                continue
             value = supplied.get(key, descriptor.get('default'))
             if value is None:
                 if key in supplied:
                     raise InvalidEditInput('Invalid sampling parameter.')
                 continue
-            if key in ('steps', 'guidance'):
-                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < descriptor['minimum'] or value > descriptor.get('maximum', math.inf) or (descriptor.get('integer') and int(value) != value):
+            if key in ('steps', 'guidance', 'strength'):
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < descriptor['minimum'] or (descriptor.get('minimumExclusive') and value == descriptor['minimum']) or value > descriptor.get('maximum', math.inf) or (descriptor.get('integer') and int(value) != value):
                     raise InvalidEditInput('Invalid sampling range.')
             elif not isinstance(value, str) or (key == 'scheduler' and value not in descriptor['values']):
                 raise InvalidEditInput('Invalid sampling choice.')
@@ -74,7 +78,7 @@ class MfluxAdapter:
             raise InvalidEditInput('Negative prompt requires active guidance.')
         if 'negativePrompt' not in effective and 'requiredForGuidanceAbove' in negative and guidance > negative['requiredForGuidanceAbove']:
             raise InvalidEditInput('Guidance requires an explicit negative prompt.')
-        names = {'steps': 'num_inference_steps', 'guidance': 'guidance', 'negativePrompt': 'negative_prompt', 'scheduler': 'scheduler'}
+        names = {'steps': 'num_inference_steps', 'guidance': 'guidance', 'negativePrompt': 'negative_prompt', 'scheduler': 'scheduler', 'strength': 'strength'}
         # Preserve upstream defaults unless the caller or our model definition sets an override.
         kwargs = {**self.definition['defaults'], **{names[key]: value for key, value in supplied.items()}}
         return kwargs, effective
@@ -140,7 +144,7 @@ class MfluxAdapter:
     def _run(self, request, cancel, progress, operation, prompt, conditioning_args):
         if request['model'] != self.capabilities['model']:
             raise InvalidEditInput('The requested model is not configured.')
-        sampling, effective = self.sampling(request)
+        sampling, effective = self.sampling(request, operation)
         size = request.get('size', self.capabilities['defaultOutputSize'])
         limits = self.capabilities['size']
         if any(size[axis] < limits[axis + 'Multiple'] or size[axis] % limits[axis + 'Multiple']

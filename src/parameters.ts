@@ -13,6 +13,7 @@ export function resolveParameters(parameters: SamplingParameters = {}, capabilit
     if (!descriptor) continue;
     const value = parameters[key] ?? descriptor.default;
     if (!Number.isFinite(value) || value < descriptor.minimum || (descriptor.maximum !== undefined && value > descriptor.maximum) || (descriptor.integer && !Number.isSafeInteger(value))) unsupported();
+    if (key === 'strength' && supported.strength?.minimumExclusive && value === descriptor.minimum) unsupported();
     effective[key] = value;
   }
   for (const key of ['scheduler', 'sampler'] as const) {

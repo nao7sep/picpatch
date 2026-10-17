@@ -840,6 +840,10 @@
             },
             "integer": {
               "type": "boolean"
+            },
+            "minimumExclusive": {
+              "type": "boolean",
+              "description": "When true, the minimum itself is not supported."
             }
           },
           "required": [

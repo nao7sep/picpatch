@@ -34,6 +34,9 @@ class QwenAdapter(MfluxAdapter):
             return Image.composite(image.convert('RGBA'), source.convert('RGBA'), edited)
 
     def edit(self, request, cancel, progress):
+        _, effective = self.sampling(request)
+        if effective.get('strength', 1) < 1 and not request.get('sourceImage'):
+            raise InvalidEditInput('Source-strength control requires a source image.')
         if request.get('maskImage'):
             if self.definition['family'] != 'qwen21' or not request.get('sourceImage'):
                 raise InvalidEditInput('Masked Qwen editing requires Qwen 2.1 and a source image.')

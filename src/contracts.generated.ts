@@ -218,6 +218,10 @@ export interface ParameterCapabilities {
     minimum: number;
     maximum?: number;
     integer?: boolean;
+    /**
+     * When true, the minimum itself is not supported.
+     */
+    minimumExclusive?: boolean;
   };
   /**
    * Edit-only conditioning control; unsupported unless advertised.

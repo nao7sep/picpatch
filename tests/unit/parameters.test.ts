@@ -54,3 +54,14 @@ it('resolves native strength only for edits, preserving defaults and endpoints',
   for (const strength of [0, 0.25, 1]) expect(resolveParameters({ strength }, caps, 'edit').strength).toBe(strength);
   expect(() => resolveParameters({ strength: 0.5 }, caps, 'generate')).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
 });
+
+it('requires a source for Qwen source-strength edits and rejects strength on generation', () => {
+  const model = 'qwen-image-2.1';
+  const caps = listModels().find(item => item.id === model)!.capabilities;
+  const request = { model, instruction: 'Blue', outputPath: '/out.png', references: [{ id: 'style', role: 'style' as const, images: ['/ref.png'] }] };
+  expect(() => validateEditRequest({ ...request, parameters: { strength: 0.5 } }, caps)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
+  expect(validateEditRequest({ ...request, sourceImage: '/source.png', parameters: { strength: 0.5 } }, caps).parameters?.strength).toBe(0.5);
+  expect(validateEditRequest(request, caps).references).toEqual(request.references);
+  expect(resolveParameters({}, caps, 'generate')).not.toHaveProperty('strength');
+  expect(() => validateGenerateRequest({ model, prompt: 'Blue', outputPath: '/out.png', parameters: { strength: 1 } }, caps)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
+});

@@ -829,6 +829,12 @@
         "negativePrompt": {
           "requiresGuidanceAbove": 1,
           "requiredForGuidanceAbove": 1
+        },
+        "strength": {
+          "default": 1,
+          "minimum": 0,
+          "maximum": 1,
+          "minimumExclusive": true
         }
       },
       "outpainting": true

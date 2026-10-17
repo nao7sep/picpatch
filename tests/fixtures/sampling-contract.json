@@ -115,7 +115,8 @@
       "steps": 40,
       "guidance": 2,
       "scheduler": "linear",
-      "negativePrompt": ""
+      "negativePrompt": "",
+      "strength": 1
     }
   },
   {
@@ -150,5 +151,38 @@
       "steps": 1
     },
     "invalid": true
+  },
+  {
+    "variant": "qwen-image-2.1",
+    "parameters": {
+      "strength": 0
+    },
+    "invalid": true
+  },
+  {
+    "variant": "qwen-image-2.1",
+    "parameters": {
+      "strength": -0.1
+    },
+    "invalid": true
+  },
+  {
+    "variant": "qwen-image-2.1",
+    "parameters": {
+      "strength": 1.1
+    },
+    "invalid": true
+  },
+  {
+    "variant": "qwen-image-2.1",
+    "parameters": {
+      "strength": 0.5
+    },
+    "effective": {
+      "steps": 40,
+      "guidance": 1,
+      "scheduler": "linear",
+      "strength": 0.5
+    }
   }
 ]
