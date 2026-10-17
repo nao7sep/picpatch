@@ -102,6 +102,9 @@
         },
         "parameters": {
           "$ref": "#/definitions/SamplingParameters"
+        },
+        "sidecar": {
+          "$ref": "#/definitions/SidecarOptions"
         }
       },
       "required": [
@@ -330,6 +333,9 @@
         },
         "effectiveParameters": {
           "$ref": "#/definitions/SamplingParameters"
+        },
+        "sidecar": {
+          "$ref": "#/definitions/SidecarOutcome"
         }
       },
       "required": [
@@ -600,6 +606,9 @@
         },
         "parameters": {
           "$ref": "#/definitions/SamplingParameters"
+        },
+        "sidecar": {
+          "$ref": "#/definitions/SidecarOptions"
         }
       },
       "required": [
@@ -770,6 +779,175 @@
           "additionalProperties": false
         }
       },
+      "additionalProperties": false
+    },
+    "SidecarOptions": {
+      "type": "object",
+      "properties": {
+        "includeInputs": {
+          "type": "boolean",
+          "description": "Explicitly retain prompt/instruction, negative prompt and original input paths. False by default."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "SidecarOutcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "saved"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "failed"
+            },
+            "path": {
+              "type": "string"
+            },
+            "code": {
+              "enum": [
+                "OUTPUT_CONFLICT",
+                "OUTPUT_IO"
+              ]
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "path",
+            "code",
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ArtifactRecord": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "operation": {
+          "enum": [
+            "edit",
+            "generate"
+          ]
+        },
+        "inputsIncluded": {
+          "type": "boolean"
+        },
+        "image": {
+          "$ref": "#/definitions/ImageArtifact"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "modelRevision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "effectiveParameters": {
+          "$ref": "#/definitions/SamplingParameters"
+        },
+        "inputs": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string"
+            },
+            "instruction": {
+              "type": "string"
+            },
+            "sourceImage": {
+              "type": "string"
+            },
+            "maskImage": {
+              "type": "string"
+            },
+            "references": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ReferenceGroup"
+              }
+            },
+            "geometry": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/InputGeometry"
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "operation",
+        "inputsIncluded",
+        "image",
+        "sha256",
+        "bytes",
+        "model",
+        "modelRevision",
+        "runtime",
+        "seed",
+        "effectiveParameters"
+      ],
       "additionalProperties": false
     }
   }

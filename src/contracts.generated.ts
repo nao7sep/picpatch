@@ -1,5 +1,21 @@
 /* Generated from protocol/contracts.schema.json. Run npm run contracts:generate. */
 
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "SidecarOutcome".
+ */
+export type SidecarOutcome =
+  | {
+      status: "saved";
+      path: string;
+    }
+  | {
+      status: "failed";
+      path: string;
+      code: "OUTPUT_CONFLICT" | "OUTPUT_IO";
+      message: string;
+    };
+
 export interface EditRequestContract {
   model: string;
   instruction: string;
@@ -13,6 +29,7 @@ export interface EditRequestContract {
   seed?: number;
   size?: ImageSize;
   parameters?: SamplingParameters;
+  sidecar?: SidecarOptions;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -51,6 +68,16 @@ export interface SamplingParameters {
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "SidecarOptions".
+ */
+export interface SidecarOptions {
+  /**
+   * Explicitly retain prompt/instruction, negative prompt and original input paths. False by default.
+   */
+  includeInputs?: boolean;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
  * via the `definition` "EditRequest".
  */
 export interface EditRequest {
@@ -66,6 +93,7 @@ export interface EditRequest {
   seed?: number;
   size?: ImageSize;
   parameters?: SamplingParameters;
+  sidecar?: SidecarOptions;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -190,6 +218,7 @@ export interface EditResult {
   };
   inputGeometry?: InputGeometry[];
   effectiveParameters: SamplingParameters;
+  sidecar?: SidecarOutcome;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -293,4 +322,33 @@ export interface GenerateRequest {
   size?: ImageSize;
   prompt: string;
   parameters?: SamplingParameters;
+  sidecar?: SidecarOptions;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "ArtifactRecord".
+ */
+export interface ArtifactRecord {
+  version: 1;
+  operation: "edit" | "generate";
+  inputsIncluded: boolean;
+  image: ImageArtifact;
+  sha256: string;
+  bytes: number;
+  model: string;
+  modelRevision: string;
+  runtime: {
+    name: string;
+    version: string;
+  };
+  seed: number;
+  effectiveParameters: SamplingParameters;
+  inputs?: {
+    prompt?: string;
+    instruction?: string;
+    sourceImage?: string;
+    maskImage?: string;
+    references?: ReferenceGroup[];
+    geometry?: InputGeometry[];
+  };
 }

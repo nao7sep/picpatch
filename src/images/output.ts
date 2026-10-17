@@ -1,3 +1,4 @@
+import { publishSidecar } from './sidecar.ts';
 import { basename, dirname, join } from 'node:path';
 import { chmod, link, lstat, mkdtemp, open, realpath, rm } from 'node:fs/promises';
 import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
@@ -16,6 +17,8 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   private constructor(directory: string, destination: string, request: T) {
     this.directory = directory; this.destination = destination; this.request = request;
     this.workerRequest = { ...structuredClone(request), outputPath: join(directory, 'worker.png') };
+    // Artifact retention belongs to this process, never to an inference runtime.
+    delete this.workerRequest.sidecar;
   }
 
   static async create<T extends ImageRequest>(request: T, signal?: AbortSignal): Promise<ImageWorkspace<T>> {
@@ -24,13 +27,15 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     try { parent = await realpath(dirname(request.outputPath)); }
     catch (cause) { throw new PicPatchUsageError('INVALID_REQUEST', 'Output directory must already exist and be accessible.', { cause }); }
     const destination = join(parent, basename(request.outputPath));
-    try {
-      await lstat(destination);
-      throw new PicPatchUsageError('OUTPUT_CONFLICT', 'Output already exists; choose a new path.');
-    } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') {
-        if (cause instanceof PicPatchUsageError) throw cause;
-        throw new PicPatchRuntimeError('OUTPUT_IO', 'Could not inspect the output destination.', { cause });
+    for (const path of request.sidecar ? [destination, `${destination}.json`] : [destination]) {
+      try {
+        await lstat(path);
+        throw new PicPatchUsageError('OUTPUT_CONFLICT', 'Output already exists; choose a new path.');
+      } catch (cause) {
+        if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') {
+          if (cause instanceof PicPatchUsageError) throw cause;
+          throw new PicPatchRuntimeError('OUTPUT_IO', 'Could not inspect the output destination.', { cause });
+        }
       }
     }
     try {
@@ -114,7 +119,10 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       throw error;
     }
     // Publication is the commit point. A later abort must not disguise a saved result.
-    return { ...result, image: { ...result.image, path: this.request.outputPath }, references: structuredClone('instruction' in this.request ? this.request.references ?? [] : []), inputGeometry: structuredClone(this.geometry) };
+    const { sidecar: _runtimeSidecar, ...response } = result;
+    const saved: EditResult = { ...response, image: { ...result.image, path: this.request.outputPath }, references: structuredClone('instruction' in this.request ? this.request.references ?? [] : []), inputGeometry: structuredClone(this.geometry) };
+    if (this.request.sidecar) saved.sidecar = await publishSidecar(this.request, saved, complete, `${this.destination}.json`, this.directory);
+    return saved;
   }
 
   preserve(): void { this.retain = true; }

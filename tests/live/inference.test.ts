@@ -169,12 +169,18 @@ it('generates from text, edits that result in the same session, and cancels gene
   const editor = createEditor({ ...options, model: prepared.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
   const events: DiagnosticEvent[] = [];
   try {
-    const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.', parameters: { steps: 2 } }, { onDiagnostic: event => events.push(event) });
+    const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.', parameters: { steps: 2 }, sidecar: {} }, { onDiagnostic: event => events.push(event) });
+    expect(generated.sidecar?.status).toBe('saved');
+    const metadata = JSON.parse(await readFile(generated.sidecar!.path, 'utf8'));
+    expect(metadata.effectiveParameters.steps).toBe(2);
+    expect(metadata).not.toHaveProperty('inputs');
     expect(generated.effectiveParameters).toEqual({ steps: 2, guidance: 1, scheduler: 'flow_match_euler_discrete' });
     expect(generated).toMatchObject({ references: [], inputGeometry: [], seed: 42, runtime: { name: 'mflux', version: '0.22.0' } });
     expect(generated.image.path).toMatch(/generate-[a-f0-9-]+\.png$/);
     expect(await sharp(generated.image.path).metadata()).toMatchObject({ format: 'png', width: 256, height: 256 });
-    const edited = await editor.edit({ instruction: 'Make the bowl green.', sourceImage: generated.image.path });
+    const edited = await editor.edit({ instruction: 'Make the bowl green.', sourceImage: generated.image.path, sidecar: { includeInputs: true } });
+    expect(edited.sidecar?.status).toBe('saved');
+    expect(JSON.parse(await readFile(edited.sidecar!.path, 'utf8')).inputs.sourceImage).toBe(generated.image.path);
     expect(await sharp(edited.image.path).metadata()).toMatchObject({ width: 256, height: 256 });
     const controller = new AbortController(); let sawStep = false;
     await expect(editor.generate({ prompt: 'A yellow ceramic bowl.', outputPath: join(directory, 'cancelled.png') }, {
@@ -183,7 +189,7 @@ it('generates from text, edits that result in the same session, and cancels gene
     })).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(sawStep).toBe(true);
     await editor.dispose();
-    expect(await readdir(directory)).toHaveLength(2);
+    expect(await readdir(directory)).toHaveLength(4);
     expect(events.every(event => event.verb === 'generate')).toBe(true);
     expect(events.at(-1)?.stage).toBe('succeeded');
     expect(JSON.stringify(events)).not.toContain('ceramic');

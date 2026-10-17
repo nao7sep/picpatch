@@ -26,3 +26,5 @@ export type { GenerateInput, EditInput, EditDefaults } from './defaults.ts';
 export type { DiagnosticEvent, DiagnosticOptions, WorkerDiagnostic } from './diagnostics.ts';
 
 export type { SamplingParameters, ParameterCapabilities } from './contracts.generated.ts';
+
+export type { ArtifactRecord, SidecarOptions, SidecarOutcome } from './contracts.generated.ts';
