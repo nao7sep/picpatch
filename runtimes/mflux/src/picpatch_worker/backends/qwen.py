@@ -45,6 +45,7 @@ class QwenAdapter(MfluxAdapter):
                 size = request.get('size', {'width': source.width, 'height': source.height})
                 if mask.mode != 'L' or mask.size != source.size or source.size != (size['width'], size['height']):
                     raise InvalidEditInput('Source, grayscale mask and output dimensions must match.')
+                request = {**request, 'size': size}
         paths, prompt = conditioning(request)
         maximum = self.capabilities.get('maxConditioningImages')
         if maximum is not None and len(paths) > maximum:

@@ -64,6 +64,8 @@ for variant in ('qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1'):
             inspect.signature(actual).bind(**kwargs)
         def generate_image(self, **kwargs):
             actual_signature.bind(None, **kwargs)
+            if kwargs.get('mask_image'):
+                assert (kwargs['width'], kwargs['height']) == (64, 32)
             return SimpleNamespace(image=image)
     output = root / (variant + '.png')
     request = {'model': variant, 'seed': 0, 'size': {'width': 64, 'height': 32}, 'outputPath': str(output)}
@@ -90,7 +92,7 @@ latent = QwenImage21Grounding.to_latent_mask(resolved, 2, 4)
 assert latent.min() == 0 and latent.max() == 1
 output = root / 'masked.png'
 with patch.object(adapter, 'import_pipeline', return_value=(model_config, Pipeline, mx)):
-    adapter.edit({**request, 'instruction': 'Use blue.', 'sourceImage': str(source), 'maskImage': str(mask), 'outputPath': str(output)}, Event(), lambda _: None)
+    adapter.edit({**{key: value for key, value in request.items() if key != 'size'}, 'instruction': 'Use blue.', 'sourceImage': str(source), 'maskImage': str(mask), 'outputPath': str(output)}, Event(), lambda _: None)
 with Image.open(output) as saved:
     assert saved.getpixel((0, 0)) == (17, 81, 143, 63)
     assert saved.getpixel((32, 0)) == (128, 128, 128, 128)
