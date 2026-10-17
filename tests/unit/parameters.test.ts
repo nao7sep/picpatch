@@ -46,3 +46,11 @@ it('rejects malformed controls and unsupported combinations through both public 
     expect(() => validateEditRequest({ ...base, instruction: 'Blue', sourceImage: '/in.png', parameters }, caps)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
   }
 });
+
+it('resolves native strength only for edits, preserving defaults and endpoints', () => {
+  const caps = listModels().find(model => model.id === 'sdxl')!.capabilities;
+  expect(resolveParameters({}, caps, 'edit').strength).toBe(0.75);
+  expect(resolveParameters({}, caps, 'generate')).not.toHaveProperty('strength');
+  for (const strength of [0, 0.25, 1]) expect(resolveParameters({ strength }, caps, 'edit').strength).toBe(strength);
+  expect(() => resolveParameters({ strength: 0.5 }, caps, 'generate')).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
+});

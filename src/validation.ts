@@ -64,7 +64,7 @@ export function validateGenerateRequest(input: unknown, capabilities?: ModelCapa
     if (capabilities.model !== request.model || capabilities.textToImage !== true) {
       throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'This model does not advertise text-to-image generation.');
     }
-    resolveParameters(request.parameters, capabilities);
+    resolveParameters(request.parameters, capabilities, 'generate');
     validateSize(request.size, capabilities);
   }
   return request;

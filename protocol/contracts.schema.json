@@ -633,6 +633,7 @@
           "minLength": 1
         },
         "strength": {
+          "description": "Edit-only denoising strength. Lower values retain more source influence; zero still encodes/decodes and is not a pixel-preserving no-op. Unsupported for generation.",
           "type": "number",
           "minimum": 0,
           "maximum": 1
@@ -746,6 +747,7 @@
           "additionalProperties": false
         },
         "strength": {
+          "description": "Denoising strength for edit operations only; never a generation default. Semantics and bounds are model-specific.",
           "type": "object",
           "properties": {
             "default": {

@@ -2,13 +2,14 @@ import type { ModelCapabilities, SamplingParameters } from './contracts.generate
 import { PicPatchUsageError } from './errors.ts';
 
 /** Resolve advertised defaults and validate combinations before image I/O or loading. */
-export function resolveParameters(parameters: SamplingParameters = {}, capabilities: ModelCapabilities): SamplingParameters {
+export function resolveParameters(parameters: SamplingParameters = {}, capabilities: ModelCapabilities, operation: 'edit' | 'generate' = 'edit'): SamplingParameters {
   const supported = capabilities.parameters ?? {};
   const effective: SamplingParameters = {};
   const unsupported = (): never => { throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The requested sampling parameters are unsupported by this model.'); };
-  for (const key of Object.keys(parameters) as (keyof SamplingParameters)[]) if (!supported[key]) unsupported();
+  for (const key of Object.keys(parameters) as (keyof SamplingParameters)[]) if (!supported[key] || (key === 'strength' && operation !== 'edit')) unsupported();
   for (const key of ['steps', 'guidance', 'strength'] as const) {
     const descriptor = supported[key];
+    if (key === 'strength' && operation !== 'edit') continue;
     if (!descriptor) continue;
     const value = parameters[key] ?? descriptor.default;
     if (!Number.isFinite(value) || value < descriptor.minimum || (descriptor.maximum !== undefined && value > descriptor.maximum) || (descriptor.integer && !Number.isSafeInteger(value))) unsupported();

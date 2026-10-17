@@ -44,6 +44,9 @@ export interface SamplingParameters {
   negativePrompt?: string;
   scheduler?: string;
   sampler?: string;
+  /**
+   * Edit-only denoising strength. Lower values retain more source influence; zero still encodes/decodes and is not a pixel-preserving no-op. Unsupported for generation.
+   */
   strength?: number;
 }
 /**
@@ -148,6 +151,9 @@ export interface ParameterCapabilities {
      */
     values: [string, ...string[]];
   };
+  /**
+   * Denoising strength for edit operations only; never a generation default. Semantics and bounds are model-specific.
+   */
   strength?: {
     default: number;
     minimum: number;

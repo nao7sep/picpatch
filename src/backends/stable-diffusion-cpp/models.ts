@@ -7,13 +7,13 @@ export function isNativeVariant(variant: string): boolean { return (nativeVarian
 export function nativeCapabilities(variant: string, model: string = variant): ModelCapabilities {
   const masked = variant.endsWith('-inpaint');
   const dimension = variant.startsWith('sdxl') ? 1024 : 512;
-  return { model, textToImage: !masked, instructionEditing: masked, sourceImageRequired: masked, maskRequired: masked,
+  return { model, textToImage: !masked, instructionEditing: true, sourceImageRequired: true, maskRequired: masked,
     referenceRoles: [], maxReferenceImages: 0, maskMode: masked ? 'native' : 'none',
     size: { widthMultiple: 8, heightMultiple: 8, maxWidth: 2147483640, maxHeight: 2147483640 }, defaultOutputSize: { width: dimension, height: dimension },
     parameters: { steps: { default: 20, minimum: 1, maximum: 2147483647, integer: true },
       guidance: { default: 7, minimum: 0, maximum: 3.4028234663852886e38 }, negativePrompt: { default: '' },
       scheduler: { default: 'discrete', values: ['discrete'] }, sampler: { default: 'euler_a', values: ['euler_a'] },
-      ...(masked ? { strength: { default: 1, minimum: 1, maximum: 1 } } : {}) } };
+      strength: { default: masked ? 1 : 0.75, minimum: masked ? 1 : 0, maximum: 1 } } };
 }
 export function nativeModels() {
   return nativeVariants.map(variant => ({ id: variant, variant, family: variant.startsWith('sdxl') ? 'sdxl' : 'sd15',

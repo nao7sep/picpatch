@@ -2,7 +2,7 @@ import { mkdtemp, writeFile, readdir, rm, symlink, mkdir } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { createEditor, listModels, prepareModel, verifyModel, validateGenerateRequest, validateEditRequest } from '../../src/index.ts';
+import { createEditor, listModels, prepareModel, verifyModel, validateGenerateRequest, validateEditRequest, type EditInput } from '../../src/index.ts';
 
 let directory: string;
 beforeEach(async () => {
@@ -47,11 +47,27 @@ it('cancels preparation and rejects directory indirection without mutating exter
   await expect(prepareModel('sdxl', { directory, checkpoint: 'linked/weights.gguf' })).rejects.toMatchObject({ code: 'MODEL_IO' });
 });
 
-it('distinguishes base generation from dedicated inpaint before image I/O', () => {
+it('distinguishes base variation from dedicated inpaint before image I/O', () => {
   const base = listModels().find(m => m.id === 'sdxl')!.capabilities;
   const mask = listModels().find(m => m.id === 'sdxl-inpaint')!.capabilities;
   expect(() => validateGenerateRequest({ model: base.model, prompt: 'Blue', outputPath: '/out.png' }, base)).not.toThrow();
-  expect(() => validateEditRequest({ model: base.model, instruction: 'Blue', sourceImage: '/in.png', outputPath: '/out.png' }, base)).toThrow();
+  expect(() => validateEditRequest({ model: base.model, instruction: 'Blue', sourceImage: '/in.png', outputPath: '/out.png' }, base)).not.toThrow();
   expect(() => validateEditRequest({ model: mask.model, instruction: 'Blue', sourceImage: '/in.png', outputPath: '/out.png' }, mask)).toThrow();
   expect(() => validateEditRequest({ model: mask.model, instruction: 'Blue', sourceImage: '/in.png', maskImage: '/mask.png', outputPath: '/out.png', parameters: { strength: 0.5 } }, mask)).toThrow();
+});
+
+it.each(['sd15', 'sdxl'])('admits %s source variation and rejects incompatible inputs before starting the executable', async id => {
+  const { model } = await prepareModel(id, { directory, checkpoint: 'custom.safetensors' });
+  const editor = createEditor({ model, nativeExecutable: '/missing/sd-cli', defaults: { outputDirectory: directory } });
+  const request = { instruction: 'Blue', sourceImage: '/missing/image.png' };
+  try {
+    for (const extra of [{ maskImage: '/missing/mask.png' }, { references: [{ id: 'style', role: 'style' as const, images: ['/missing/ref.png'] }] }, { size: { width: 17, height: 16 } }] satisfies Partial<EditInput>[]) {
+      await expect(editor.edit({ ...request, ...extra })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+    }
+    for (const strength of [-0.1, 1.1, NaN, Infinity]) {
+      await expect(editor.edit({ ...request, parameters: { strength } })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    }
+    await expect(editor.edit({ instruction: 'Blue', references: [{ id: 'style', role: 'style', images: ['/missing/ref.png'] }] })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+    await expect(editor.generate({ prompt: 'Blue', parameters: { strength: 0.5 } })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+  } finally { await editor.dispose(); }
 });

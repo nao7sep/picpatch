@@ -39,7 +39,7 @@ export class NativeBackend implements EditBackend {
   edit(request: EditRequest, options: OperationOptions = {}): Promise<EditResult> { return this.execute(request, options); }
   private async execute(request: ImageRequest, options: OperationOptions): Promise<EditResult> {
     const capabilities = await this.validate(request, options);
-    const effectiveParameters = resolveParameters(request.parameters, capabilities);
+    const effectiveParameters = resolveParameters(request.parameters, capabilities, 'prompt' in request ? 'generate' : 'edit');
     const seed = request.seed ?? randomInt(0x1_0000_0000);
     const size = request.size ?? capabilities.defaultOutputSize!;
     const directory = dirname(request.outputPath);
@@ -60,7 +60,10 @@ export class NativeBackend implements EditBackend {
       '--steps', String(effectiveParameters.steps), '--cfg-scale', String(effectiveParameters.guidance),
       '--sampling-method', effectiveParameters.sampler!, '--scheduler', effectiveParameters.scheduler!, '--lora-model-dir', directory];
     if (this.model.vae) args.push('--vae', join(this.model.directory, this.model.vae));
-    if ('instruction' in request) args.push('--init-img', request.sourceImage!, '--mask', request.maskImage!, '--strength', String(effectiveParameters.strength));
+    if ('instruction' in request) {
+      args.push('--init-img', request.sourceImage!, '--strength', String(effectiveParameters.strength));
+      if (request.maskImage) args.push('--mask', request.maskImage);
+    }
     const verb = 'prompt' in request ? 'generate' : 'edit';
     emitProgress(options, { type: 'progress', verb, stage: verb === 'generate' ? 'generating' : 'editing', message: 'Running native image inference.' });
     await this.process.run(args, directory, verb === 'generate' ? this.timeouts.generateMs ?? this.timeouts.editMs : this.timeouts.editMs, options.signal);
