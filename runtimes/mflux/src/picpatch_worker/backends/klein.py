@@ -30,14 +30,6 @@ class KleinAdapter(MfluxAdapter):
     def transform_output(self, image, request):
         return composite_mask(image, request)
 
-    @property
-    def capabilities(self) -> dict:
-        return {'model': self.config['manifest']['model'], 'instructionEditing': True, 'textToImage': True,
-                'referenceRoles': ['subject', 'object', 'style', 'background'],
-                'maskMode': 'composite', 'size': {'widthMultiple': 16, 'heightMultiple': 16},
-                'sourceImageRequired': False, 'referenceConditioning': 'ordered-images-with-role-prompt',
-                'defaultOutputSize': {'width': 1024, 'height': 1024}, 'inputGeometry': 'klein-reference'}
-
     def edit(self, request: dict, cancel: Event, progress) -> dict:
         paths, prompt = conditioning(request)
         return self._run(request, cancel, progress, 'edit', prompt, {'image_paths': paths})

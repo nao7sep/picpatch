@@ -20,7 +20,25 @@
       "height": 1024
     },
     "inputGeometry": "klein-reference",
-    "textToImage": true
+    "textToImage": true,
+    "parameters": {
+      "steps": {
+        "default": 4,
+        "minimum": 1,
+        "maximum": 9007199254740991,
+        "integer": true
+      },
+      "scheduler": {
+        "default": "flow_match_euler_discrete",
+        "values": [
+          "flow_match_euler_discrete"
+        ]
+      },
+      "guidance": {
+        "default": 1,
+        "minimum": 0
+      }
+    }
   },
   "cases": [
     {

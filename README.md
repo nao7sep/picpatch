@@ -72,9 +72,33 @@ Qwen-Image generation and Qwen-Image Edit 2511 are separate checkpoint selection
 
 Qwen 2.1 Base (`qwen-image-2.1`) supports both verbs through the complete reference-capable pipeline, at 40 steps with guidance 1. It accepts up to ten conditioning images total, including the source, and output dimensions divisible by 32. PNG output preserves RGBA. Preparation requires transformer, VAE and text-encoder weights with their component configurations, plus the processor/tokenizer assets; a text-only export that omits the vision tower is insufficient. Actual tensor completeness is checked by runtime loading. These adapters leave reference resizing to Qwen and do not apply Klein geometry. Masks are not exposed: Qwen's sampler preservation differs from trained Fill conditioning. Official Qwen 2.1 Turbo is not yet selectable because its checkpoint-defined sampling schedule is not exposed by the pinned runtime. All Qwen selections are experimental and have no real-weight PicPatch validation or pinned downloads yet.
 
+## Sampling controls and capability discovery
+
+Each `listModels()` entry includes `capabilities`, also returned by runtime readiness. These describe generation/editing support, source/mask requirements, reference roles and limits, geometry, and `parameters`. An absent parameter descriptor means unsupported. Numeric descriptors carry defaults and bounds; scheduler descriptors carry an explicit allowed list. These are implementation capabilities, not proof of model quality or real-weight validation; check the entry's separate evidence field.
+
+Both `generate` and `edit` accept `parameters: { steps?, guidance?, negativePrompt?, scheduler? }`. Set session-wide values in `defaults.parameters`; per-call values override individual fields, while omitted fields retain session or model defaults. Unsupported controls and combinations fail before image preparation or model loading. `result.effectiveParameters` reports resolved supported controls, including defaults. A returned negative prompt is caller content; it is never copied to diagnostics or files automatically.
+
+Scheduler selection is restricted to each adapter's verified default schedule for now; arbitrary runtime scheduler names and external classes are rejected. FLUX.1 negative prompts and Schnell/Z-Image Turbo guidance are not exposed because these pipelines do not apply those controls. Z-Image Base and ERNIE negative prompts require guidance above 1. Qwen 2.1 requires guidance at least 1, and guidance above 1 requires an explicit negative prompt (which may be empty); a negative prompt at guidance 1 is rejected because it would be ignored. Qwen pipelines require at least two steps because the pinned linear scheduler produces non-finite values at one step. These restrictions are available in the descriptors so generic scripts can validate combinations without model-name branches.
+
+```ts
+const selected = listModels().find(model => model.id === 'flux2-klein-4b')!;
+const controls = selected.capabilities.parameters;
+const prepared = await prepareModel(selected.id, { directory: '/absolute/model-bundle' });
+const editor = createEditor({
+  model: prepared.model,
+  defaults: { outputDirectory: '/absolute/results', parameters: { steps: controls!.steps!.default } },
+});
+try {
+  const result = await editor.generate({ prompt: 'A blue ceramic bowl', parameters: { steps: 6 } });
+  console.log(result.image.path, result.effectiveParameters);
+} finally {
+  await editor.dispose();
+}
+```
+
 ## Caller defaults and diagnostics
 
-An editor accepts `defaults: { size?, seed?, outputDirectory? }`. Per-call values override these; absent size and seed continue to use the adapter's defaults. The session model is inherited, and a conflicting explicit model is rejected. Returned results contain the actual seed, dimensions and model provenance. Explicit model registration remains available for advanced local configurations.
+An editor accepts `defaults: { size?, seed?, outputDirectory?, parameters? }`. Per-call values override these; absent size and seed continue to use the adapter's defaults. The session model is inherited, and a conflicting explicit model is rejected. Returned results contain the actual seed, dimensions and model provenance. Explicit model registration remains available for advanced local configurations.
 
 An explicit `outputPath` wins over session destination settings. Otherwise PicPatch generates `edit-<UUID>.png` in the per-edit `outputDirectory`, the session's directory, or beside the authored source path, in that order. Reference-only compositions require a chosen destination. Directories must already exist; PicPatch never falls back to the working directory, creates an output directory implicitly, or overwrites an existing file. Input paths remain literal, including symlink paths.
 

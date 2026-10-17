@@ -10,14 +10,6 @@ class FillAdapter(MfluxAdapter):
         import mlx.core as mx
         return ModelConfig.dev_fill(), Flux1Fill, mx
 
-    @property
-    def capabilities(self):
-        return {'model': self.config['manifest']['model'], 'textToImage': False,
-                'instructionEditing': True, 'sourceImageRequired': True, 'maskRequired': True,
-                'referenceRoles': [], 'maxReferenceImages': 0, 'maskMode': 'native',
-                'size': {'widthMultiple': 16, 'heightMultiple': 16},
-                'defaultOutputSize': {'width': 1024, 'height': 1024}}
-
     def generate(self, request, cancel, progress):
         raise InvalidEditInput('FLUX.1 Fill requires a source image and a mask.')
 

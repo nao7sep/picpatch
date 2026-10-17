@@ -9,7 +9,47 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": true,
+      "referenceRoles": [
+        "subject",
+        "object",
+        "style",
+        "background"
+      ],
+      "maskMode": "composite",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "sourceImageRequired": false,
+      "referenceConditioning": "ordered-images-with-role-prompt",
+      "inputGeometry": "klein-reference",
+      "parameters": {
+        "steps": {
+          "default": 4,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "flow_match_euler_discrete",
+          "values": [
+            "flow_match_euler_discrete"
+          ]
+        },
+        "guidance": {
+          "default": 1,
+          "minimum": 0
+        }
+      }
+    }
   },
   {
     "id": "flux2-klein-9b",
@@ -21,7 +61,47 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": true,
+      "referenceRoles": [
+        "subject",
+        "object",
+        "style",
+        "background"
+      ],
+      "maskMode": "composite",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "sourceImageRequired": false,
+      "referenceConditioning": "ordered-images-with-role-prompt",
+      "inputGeometry": "klein-reference",
+      "parameters": {
+        "steps": {
+          "default": 4,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "flow_match_euler_discrete",
+          "values": [
+            "flow_match_euler_discrete"
+          ]
+        },
+        "guidance": {
+          "default": 1,
+          "minimum": 0
+        }
+      }
+    }
   },
   {
     "id": "flux2-klein-base-4b",
@@ -36,7 +116,47 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": true,
+      "referenceRoles": [
+        "subject",
+        "object",
+        "style",
+        "background"
+      ],
+      "maskMode": "composite",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "sourceImageRequired": false,
+      "referenceConditioning": "ordered-images-with-role-prompt",
+      "inputGeometry": "klein-reference",
+      "parameters": {
+        "steps": {
+          "default": 50,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "flow_match_euler_discrete",
+          "values": [
+            "flow_match_euler_discrete"
+          ]
+        },
+        "guidance": {
+          "default": 4.0,
+          "minimum": 0
+        }
+      }
+    }
   },
   {
     "id": "flux2-klein-base-9b",
@@ -51,7 +171,47 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": true,
+      "referenceRoles": [
+        "subject",
+        "object",
+        "style",
+        "background"
+      ],
+      "maskMode": "composite",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "sourceImageRequired": false,
+      "referenceConditioning": "ordered-images-with-role-prompt",
+      "inputGeometry": "klein-reference",
+      "parameters": {
+        "steps": {
+          "default": 50,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "flow_match_euler_discrete",
+          "values": [
+            "flow_match_euler_discrete"
+          ]
+        },
+        "guidance": {
+          "default": 4.0,
+          "minimum": 0
+        }
+      }
+    }
   },
   {
     "id": "z-image-turbo",
@@ -63,7 +223,36 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 4,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        }
+      }
+    }
   },
   {
     "id": "flux1-schnell",
@@ -77,7 +266,36 @@
       "tokenizer",
       "text_encoder_2",
       "tokenizer_2"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 4,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        }
+      }
+    }
   },
   {
     "id": "flux1-dev",
@@ -94,7 +312,40 @@
       "tokenizer",
       "text_encoder_2",
       "tokenizer_2"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 25,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        },
+        "guidance": {
+          "default": 3.5,
+          "minimum": 0
+        }
+      }
+    }
   },
   {
     "id": "flux1-krea-dev",
@@ -111,7 +362,40 @@
       "tokenizer",
       "text_encoder_2",
       "tokenizer_2"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 25,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        },
+        "guidance": {
+          "default": 3.5,
+          "minimum": 0
+        }
+      }
+    }
   },
   {
     "id": "flux1-fill-dev",
@@ -128,7 +412,42 @@
       "tokenizer",
       "text_encoder_2",
       "tokenizer_2"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": false,
+      "referenceRoles": [],
+      "maskMode": "native",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "sourceImageRequired": true,
+      "maskRequired": true,
+      "parameters": {
+        "steps": {
+          "default": 25,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        },
+        "guidance": {
+          "default": 30.0,
+          "minimum": 0
+        }
+      }
+    }
   },
   {
     "id": "flux1-kontext-dev",
@@ -145,7 +464,41 @@
       "tokenizer",
       "text_encoder_2",
       "tokenizer_2"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": false,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "sourceImageRequired": true,
+      "parameters": {
+        "steps": {
+          "default": 25,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        },
+        "guidance": {
+          "default": 2.5,
+          "minimum": 0
+        }
+      }
+    }
   },
   {
     "id": "z-image",
@@ -160,7 +513,43 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 50,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "flow_match_euler_discrete",
+          "values": [
+            "flow_match_euler_discrete"
+          ]
+        },
+        "guidance": {
+          "default": 4.0,
+          "minimum": 0
+        },
+        "negativePrompt": {
+          "requiresGuidanceAbove": 1
+        }
+      }
+    }
   },
   {
     "id": "ernie-image",
@@ -175,7 +564,43 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 50,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        },
+        "guidance": {
+          "default": 4.0,
+          "minimum": 0
+        },
+        "negativePrompt": {
+          "requiresGuidanceAbove": 1
+        }
+      }
+    }
   },
   {
     "id": "ernie-image-turbo",
@@ -190,7 +615,43 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 8,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        },
+        "guidance": {
+          "default": 1.0,
+          "minimum": 0
+        },
+        "negativePrompt": {
+          "requiresGuidanceAbove": 1
+        }
+      }
+    }
   },
   {
     "id": "qwen-image",
@@ -205,7 +666,43 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 20,
+          "minimum": 2,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        },
+        "guidance": {
+          "default": 4.0,
+          "minimum": 0
+        },
+        "negativePrompt": {
+          "default": ""
+        }
+      }
+    }
   },
   {
     "id": "qwen-image-edit-2511",
@@ -220,7 +717,49 @@
       "vae",
       "text_encoder",
       "tokenizer"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": false,
+      "referenceRoles": [
+        "subject",
+        "object",
+        "style",
+        "background"
+      ],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "sourceImageRequired": false,
+      "referenceConditioning": "ordered-images-with-role-prompt",
+      "parameters": {
+        "steps": {
+          "default": 20,
+          "minimum": 2,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        },
+        "guidance": {
+          "default": 4.0,
+          "minimum": 0
+        },
+        "negativePrompt": {
+          "default": ""
+        }
+      }
+    }
   },
   {
     "id": "qwen-image-2.1",
@@ -243,6 +782,50 @@
       "processor/tokenizer.json",
       "processor/tokenizer_config.json",
       "processor/preprocessor_config.json"
-    ]
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": true,
+      "referenceRoles": [
+        "subject",
+        "object",
+        "style",
+        "background"
+      ],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 32,
+        "heightMultiple": 32
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "sourceImageRequired": false,
+      "referenceConditioning": "ordered-images-with-role-prompt",
+      "maxConditioningImages": 10,
+      "parameters": {
+        "steps": {
+          "default": 40,
+          "minimum": 2,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "scheduler": {
+          "default": "linear",
+          "values": [
+            "linear"
+          ]
+        },
+        "guidance": {
+          "default": 1.0,
+          "minimum": 1
+        },
+        "negativePrompt": {
+          "requiresGuidanceAbove": 1,
+          "requiredForGuidanceAbove": 1
+        }
+      }
+    }
   }
 ]

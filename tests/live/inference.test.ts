@@ -44,7 +44,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
     for (let index = 0; index < 2; index++) {
       const result = await editor.edit({
         instruction: 'Combine both colors into a simple striped image.',
-        ...(index === 1 ? { sourceImage: paths[0]! } : {}),
+        ...(index === 1 ? { sourceImage: paths[0]!, parameters: { steps: 2, guidance: 1 } } : {}),
         references: [{ id: 'colors', role: 'style', images: [images[0]!, images[1]!] }],
       }, { onDiagnostic: event => events.push(event) });
       paths.push(result.image.path);
@@ -52,6 +52,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
       expect(metadata).toMatchObject({ format: 'png', width: 256, height: 256 });
       expect(result.runtime).toEqual({ name: 'mflux', version: '0.22.0' });
       expect(result.seed).toBe(42);
+      expect(result.effectiveParameters).toEqual({ steps: index === 1 ? 2 : 4, guidance: 1, scheduler: 'flow_match_euler_discrete' });
       expect(result.modelRevision).toBe(options.model!.manifest.source.revision);
       expect(result.references[0]?.images).toEqual(images);
       const geometry = result.inputGeometry!.filter(input => images.includes(input.path));
@@ -168,7 +169,8 @@ it('generates from text, edits that result in the same session, and cancels gene
   const editor = createEditor({ ...options, model: prepared.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
   const events: DiagnosticEvent[] = [];
   try {
-    const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.' }, { onDiagnostic: event => events.push(event) });
+    const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.', parameters: { steps: 2 } }, { onDiagnostic: event => events.push(event) });
+    expect(generated.effectiveParameters).toEqual({ steps: 2, guidance: 1, scheduler: 'flow_match_euler_discrete' });
     expect(generated).toMatchObject({ references: [], inputGeometry: [], seed: 42, runtime: { name: 'mflux', version: '0.22.0' } });
     expect(generated.image.path).toMatch(/generate-[a-f0-9-]+\.png$/);
     expect(await sharp(generated.image.path).metadata()).toMatchObject({ format: 'png', width: 256, height: 256 });

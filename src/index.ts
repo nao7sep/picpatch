@@ -24,3 +24,5 @@ export type { ReadinessOptions, ModelReadiness } from './runtime/readiness.ts';
 
 export type { GenerateInput, EditInput, EditDefaults } from './defaults.ts';
 export type { DiagnosticEvent, DiagnosticOptions, WorkerDiagnostic } from './diagnostics.ts';
+
+export type { SamplingParameters, ParameterCapabilities } from './contracts.generated.ts';

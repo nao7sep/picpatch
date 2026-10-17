@@ -17,7 +17,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
 function result(request: EditRequest): EditResult {
-  return { image: { path: request.outputPath, mimeType: 'image/png', size: { width: 4, height: 3 } }, model: 'test', modelRevision: 'rev', runtime: { name: 'test', version: '1' }, seed: 2, references: request.references ?? [] };
+  return { image: { path: request.outputPath, mimeType: 'image/png', size: { width: 4, height: 3 } }, model: 'test', effectiveParameters: {}, modelRevision: 'rev', runtime: { name: 'test', version: '1' }, seed: 2, references: request.references ?? [] };
 }
 async function render(request: EditRequest) { await sharp(request.sourceImage!).png().toFile(request.outputPath); return result(request); }
 async function workspace() { const work = await ImageWorkspace.create(request); await work.prepare(); return work; }

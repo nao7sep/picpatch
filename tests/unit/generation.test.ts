@@ -15,7 +15,7 @@ const capabilities: ModelCapabilities = { model: 'test', instructionEditing: tru
 function request(): GenerateRequest { return { model: 'test', prompt: 'A ceramic bowl.', seed: 0, size: { width: 32, height: 16 }, outputPath: join(directory, 'out.png') }; }
 async function render(input: GenerateRequest): Promise<EditResult> {
   await sharp({ create: { width: 32, height: 16, channels: 3, background: 'blue' } }).png().toFile(input.outputPath);
-  return { image: { path: input.outputPath, mimeType: 'image/png', size: { width: 32, height: 16 } }, model: input.model, seed: input.seed ?? 0, modelRevision: 'test-revision', runtime: { name: 'test', version: '1' }, references: [] };
+  return { image: { path: input.outputPath, mimeType: 'image/png', size: { width: 32, height: 16 } }, model: input.model, seed: input.seed ?? 0, effectiveParameters: {}, modelRevision: 'test-revision', runtime: { name: 'test', version: '1' }, references: [] };
 }
 function backend(generate: EditBackend['generate'] = render): EditBackend {
   return { validate: async () => capabilities, generate, edit: async () => { throw new Error('Unexpected edit'); }, dispose: async () => {} };

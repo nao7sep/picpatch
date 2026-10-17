@@ -51,7 +51,7 @@ it('uses the model-free handshake to reject unsupported sizes before opening ima
   } });
   try {
     const base = { instruction: 'Use blue.', sourceImage: join(directory, 'absent.png'), outputPath: join(directory, 'out.png') };
-    for (const change of [{ size: { width: 17, height: 32 } }]) {
+    for (const change of [{ size: { width: 17, height: 32 } }, { parameters: { negativePrompt: 'blur' } }, { parameters: { scheduler: 'external.Class' } }]) {
       await expect(editor.edit({ ...base, ...change })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     }
     expect(await readdir(directory)).toEqual([]);

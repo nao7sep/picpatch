@@ -35,7 +35,7 @@ class FakeWorker extends EventEmitter {
     return true;
   }
   reply(id: number, type: string, fields: object = {}) { this.stdout.write(JSON.stringify({ version: 1, id, type, ...fields })+'\n'); }
-  result(id: number) { this.reply(id, 'result', { result: { image: { path: '/out.png', mimeType: 'image/png', size: { width: 64, height: 64 } }, model: 'test', modelRevision: 'rev', runtime: { name: 'fake', version: '1' }, seed: 1, references: [] } }); }
+  result(id: number) { this.reply(id, 'result', { result: { image: { path: '/out.png', mimeType: 'image/png', size: { width: 64, height: 64 } }, model: 'test', effectiveParameters: {}, modelRevision: 'rev', runtime: { name: 'fake', version: '1' }, seed: 1, references: [] } }); }
   close() {
     if (this.closed) return;
     this.closed = true;

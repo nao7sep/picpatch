@@ -1,3 +1,4 @@
+import { resolveParameters } from './parameters.ts';
 import { extname, isAbsolute, resolve } from 'node:path';
 import { contractValidator } from './contracts.ts';
 import { PicPatchRuntimeError, PicPatchUsageError } from './errors.ts';
@@ -38,6 +39,7 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
     if (groups.some(group => !capabilities.referenceRoles.includes(group.role))) unsupported('This model does not support a requested reference role.');
     if (capabilities.maxReferenceImages !== undefined && references.length > capabilities.maxReferenceImages) unsupported('The reference count exceeds this model’s supported limit.');
     if (capabilities.maxConditioningImages !== undefined && references.length + (request.sourceImage ? 1 : 0) > capabilities.maxConditioningImages) unsupported('The total source and reference count exceeds this model’s supported limit.');
+    resolveParameters(request.parameters, capabilities);
     validateSize(request.size, capabilities);
   }
   return request;
@@ -62,6 +64,7 @@ export function validateGenerateRequest(input: unknown, capabilities?: ModelCapa
     if (capabilities.model !== request.model || capabilities.textToImage !== true) {
       throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'This model does not advertise text-to-image generation.');
     }
+    resolveParameters(request.parameters, capabilities);
     validateSize(request.size, capabilities);
   }
   return request;

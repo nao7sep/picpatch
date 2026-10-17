@@ -17,7 +17,7 @@ lines.on('line', line => {
     if (mode === 'exit') { process.exit(7); }
     reply(message.id, 'result', { result: {
       image: { path: message.request.outputPath, mimeType: 'image/png', size: { width: 64, height: 64 } },
-      model: message.request.model, modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' },
+      model: message.request.model, effectiveParameters: {}, modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' },
       seed: message.request.seed ?? 1, references: message.request.references ?? [],
     } });
   } else if (message.type === 'shutdown') {

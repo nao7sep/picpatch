@@ -12,6 +12,7 @@ export interface EditRequestContract {
   outputPath: string;
   seed?: number;
   size?: ImageSize;
+  parameters?: SamplingParameters;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -35,6 +36,16 @@ export interface ImageSize {
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "SamplingParameters".
+ */
+export interface SamplingParameters {
+  steps?: number;
+  guidance?: number;
+  negativePrompt?: string;
+  scheduler?: string;
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
  * via the `definition` "EditRequest".
  */
 export interface EditRequest {
@@ -49,6 +60,7 @@ export interface EditRequest {
   outputPath: string;
   seed?: number;
   size?: ImageSize;
+  parameters?: SamplingParameters;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -94,6 +106,39 @@ export interface ModelCapabilities {
    * Limit on all conditioning images together: source plus grouped references. Masks are excluded.
    */
   maxConditioningImages?: number;
+  parameters?: ParameterCapabilities;
+}
+/**
+ * Absent controls are unsupported. Descriptors apply to every advertised operation of this model.
+ *
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "ParameterCapabilities".
+ */
+export interface ParameterCapabilities {
+  steps?: {
+    default: number;
+    minimum: number;
+    maximum?: number;
+    integer?: boolean;
+  };
+  guidance?: {
+    default: number;
+    minimum: number;
+    maximum?: number;
+    integer?: boolean;
+  };
+  scheduler?: {
+    default: string;
+    /**
+     * @minItems 1
+     */
+    values: [string, ...string[]];
+  };
+  negativePrompt?: {
+    default?: string;
+    requiresGuidanceAbove?: number;
+    requiredForGuidanceAbove?: number;
+  };
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -123,6 +168,7 @@ export interface EditResult {
     message: string;
   };
   inputGeometry?: InputGeometry[];
+  effectiveParameters: SamplingParameters;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -213,4 +259,5 @@ export interface GenerateRequest {
   seed?: number;
   size?: ImageSize;
   prompt: string;
+  parameters?: SamplingParameters;
 }

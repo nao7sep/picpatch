@@ -28,6 +28,7 @@ it.each(['qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1', 'flux1-kontext-
     const editing = qwenEdit || qwen21 || fill || kontext || adapter.startsWith('flux2-klein');
     expect(readiness.capabilities).toEqual([expect.objectContaining({ model: adapter, textToImage: !fill && !kontext && !qwenEdit,
       instructionEditing: editing, maskMode: fill ? 'native' : adapter.startsWith('flux2-klein') ? 'composite' : 'none' })]);
+    expect(readiness.capabilities).toEqual([listModels().find(entry => entry.id === adapter)!.capabilities]);
     if (kontext) await expect(editor.edit({ instruction: 'Use blue.', references: [{ id: 'subject', role: 'subject', images: [join(directory, 'absent.png')] }], outputPath: join(directory, 'edit.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     if (!editing || fill) await expect(editor.edit({ instruction: 'Use blue.', sourceImage: join(directory, 'absent.png'), outputPath: join(directory, 'edit.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     await expect(editor.generate({ prompt: 'A bowl.', size: { width: 17, height: 32 }, outputPath: join(directory, 'generate.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });

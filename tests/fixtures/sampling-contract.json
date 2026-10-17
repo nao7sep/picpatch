@@ -1,0 +1,154 @@
+[
+  {
+    "variant": "flux2-klein-4b",
+    "parameters": {},
+    "effective": {
+      "steps": 4,
+      "guidance": 1,
+      "scheduler": "flow_match_euler_discrete"
+    }
+  },
+  {
+    "variant": "flux2-klein-base-9b",
+    "parameters": {
+      "steps": 7,
+      "guidance": 2
+    },
+    "effective": {
+      "steps": 7,
+      "guidance": 2,
+      "scheduler": "flow_match_euler_discrete"
+    }
+  },
+  {
+    "variant": "flux2-klein-4b",
+    "parameters": {
+      "negativePrompt": "blur"
+    },
+    "invalid": true
+  },
+  {
+    "variant": "flux1-dev",
+    "parameters": {
+      "negativePrompt": "blur"
+    },
+    "invalid": true
+  },
+  {
+    "variant": "flux1-schnell",
+    "parameters": {
+      "guidance": 4
+    },
+    "invalid": true
+  },
+  {
+    "variant": "z-image-turbo",
+    "parameters": {
+      "guidance": 0
+    },
+    "invalid": true
+  },
+  {
+    "variant": "z-image",
+    "parameters": {
+      "negativePrompt": "blur"
+    },
+    "effective": {
+      "steps": 50,
+      "guidance": 4,
+      "scheduler": "flow_match_euler_discrete",
+      "negativePrompt": "blur"
+    }
+  },
+  {
+    "variant": "z-image",
+    "parameters": {
+      "negativePrompt": "blur",
+      "guidance": 1
+    },
+    "invalid": true
+  },
+  {
+    "variant": "ernie-image-turbo",
+    "parameters": {
+      "negativePrompt": "blur"
+    },
+    "invalid": true
+  },
+  {
+    "variant": "ernie-image-turbo",
+    "parameters": {
+      "negativePrompt": "blur",
+      "guidance": 2
+    },
+    "effective": {
+      "steps": 8,
+      "guidance": 2,
+      "scheduler": "linear",
+      "negativePrompt": "blur"
+    }
+  },
+  {
+    "variant": "qwen-image",
+    "parameters": {},
+    "effective": {
+      "steps": 20,
+      "guidance": 4,
+      "scheduler": "linear",
+      "negativePrompt": ""
+    }
+  },
+  {
+    "variant": "qwen-image-2.1",
+    "parameters": {
+      "guidance": 2
+    },
+    "invalid": true
+  },
+  {
+    "variant": "qwen-image-2.1",
+    "parameters": {
+      "guidance": 2,
+      "negativePrompt": ""
+    },
+    "effective": {
+      "steps": 40,
+      "guidance": 2,
+      "scheduler": "linear",
+      "negativePrompt": ""
+    }
+  },
+  {
+    "variant": "qwen-image-2.1",
+    "parameters": {
+      "negativePrompt": "blur"
+    },
+    "invalid": true
+  },
+  {
+    "variant": "qwen-image-2.1",
+    "parameters": {
+      "scheduler": "viggle_turbo"
+    },
+    "invalid": true
+  },
+  {
+    "variant": "flux1-fill-dev",
+    "parameters": {
+      "steps": 12,
+      "guidance": 20
+    },
+    "effective": {
+      "steps": 12,
+      "guidance": 20,
+      "scheduler": "linear"
+    }
+  },
+  {
+    "variant": "qwen-image",
+    "parameters": {
+      "steps": 1
+    },
+    "invalid": true
+  }
+]

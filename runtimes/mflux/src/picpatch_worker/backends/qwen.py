@@ -16,20 +16,6 @@ class QwenAdapter(MfluxAdapter):
             pipeline = QwenImageEdit
         return getattr(ModelConfig, self.definition['config'])(), pipeline, mx
 
-    @property
-    def capabilities(self):
-        unified = self.definition['family'] == 'qwen21'
-        multiple = 32 if unified else 16
-        result = {'model': self.config['manifest']['model'], 'instructionEditing': True,
-                  'textToImage': unified, 'sourceImageRequired': False,
-                  'referenceRoles': ['subject', 'object', 'style', 'background'],
-                  'referenceConditioning': 'ordered-images-with-role-prompt', 'maskMode': 'none',
-                  'size': {'widthMultiple': multiple, 'heightMultiple': multiple},
-                  'defaultOutputSize': {'width': 1024, 'height': 1024}}
-        if unified:
-            result['maxConditioningImages'] = 10
-        return result
-
     def generate(self, request, cancel, progress):
         if not self.capabilities['textToImage']:
             raise InvalidEditInput('Qwen Image Edit requires image conditioning.')

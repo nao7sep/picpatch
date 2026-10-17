@@ -99,6 +99,9 @@
         },
         "size": {
           "$ref": "#/definitions/ImageSize"
+        },
+        "parameters": {
+          "$ref": "#/definitions/SamplingParameters"
         }
       },
       "required": [
@@ -219,6 +222,9 @@
           "minimum": 0,
           "maximum": 9007199254740991,
           "description": "Limit on all conditioning images together: source plus grouped references. Masks are excluded."
+        },
+        "parameters": {
+          "$ref": "#/definitions/ParameterCapabilities"
         }
       },
       "required": [
@@ -321,6 +327,9 @@
           "items": {
             "$ref": "#/definitions/InputGeometry"
           }
+        },
+        "effectiveParameters": {
+          "$ref": "#/definitions/SamplingParameters"
         }
       },
       "required": [
@@ -329,7 +338,8 @@
         "modelRevision",
         "runtime",
         "seed",
-        "references"
+        "references",
+        "effectiveParameters"
       ],
       "additionalProperties": false
     },
@@ -573,6 +583,9 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\S"
+        },
+        "parameters": {
+          "$ref": "#/definitions/SamplingParameters"
         }
       },
       "required": [
@@ -580,6 +593,115 @@
         "prompt",
         "outputPath"
       ],
+      "additionalProperties": false
+    },
+    "SamplingParameters": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "guidance": {
+          "type": "number",
+          "minimum": 0
+        },
+        "negativePrompt": {
+          "type": "string"
+        },
+        "scheduler": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParameterCapabilities": {
+      "type": "object",
+      "description": "Absent controls are unsupported. Descriptors apply to every advertised operation of this model.",
+      "properties": {
+        "steps": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "number"
+            },
+            "minimum": {
+              "type": "number"
+            },
+            "maximum": {
+              "type": "number"
+            },
+            "integer": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "default",
+            "minimum"
+          ],
+          "additionalProperties": false
+        },
+        "guidance": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "number"
+            },
+            "minimum": {
+              "type": "number"
+            },
+            "maximum": {
+              "type": "number"
+            },
+            "integer": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "default",
+            "minimum"
+          ],
+          "additionalProperties": false
+        },
+        "scheduler": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "string"
+            },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "default",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        "negativePrompt": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "string"
+            },
+            "requiresGuidanceAbove": {
+              "type": "number"
+            },
+            "requiredForGuidanceAbove": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
       "additionalProperties": false
     }
   }

@@ -60,7 +60,7 @@ it('keeps independent mixed input sizes and reports caller paths after publicati
     expect(await sharp(work.workerRequest.sourceImage!).metadata()).toMatchObject({ width: 32, height: 48 });
     expect(await sharp(work.workerRequest.references![0].images[0]).metadata()).toMatchObject({ width: 64, height: 32 });
     await sharp({ create: { width: 16, height: 16, channels: 3, background: 'green' } }).png().toFile(work.workerRequest.outputPath);
-    const saved = await work.publish({ model: 'fixture', modelRevision: 'test', runtime: { name: 'test', version: '1' }, seed: 0, references: [],
+    const saved = await work.publish({ model: 'fixture', effectiveParameters: {}, modelRevision: 'test', runtime: { name: 'test', version: '1' }, seed: 0, references: [],
       image: { path: work.workerRequest.outputPath, mimeType: 'image/png', size: { width: 16, height: 16 } } });
     expect(saved.inputGeometry?.map(image => [image.path, image.preparedSize])).toEqual([[source, { width: 32, height: 48 }], [reference, { width: 64, height: 32 }]]);
     expect(JSON.stringify(saved.inputGeometry)).not.toContain('.picpatch-');

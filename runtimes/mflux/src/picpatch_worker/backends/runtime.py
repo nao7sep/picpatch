@@ -1,5 +1,7 @@
 """Shared offline MFLUX loading, inference settlement and pixel-only output."""
 import gc
+import copy
+import math
 import json
 from importlib.metadata import version, PackageNotFoundError
 import os
@@ -43,6 +45,39 @@ class MfluxAdapter:
             self.definition = MODEL_DEFINITIONS[config['variant']]
         except KeyError as error:
             raise InvalidEditInput('Unsupported model variant.') from error
+
+    @property
+    def capabilities(self):
+        return {**copy.deepcopy(self.definition['capabilities']), 'model': self.config['manifest']['model']}
+
+    def sampling(self, request):
+        supported = self.capabilities['parameters']
+        supplied = request.get('parameters', {})
+        if not isinstance(supplied, dict) or any(key not in supported for key in supplied):
+            raise InvalidEditInput('Unsupported sampling parameter.')
+        effective = {}
+        for key, descriptor in supported.items():
+            value = supplied.get(key, descriptor.get('default'))
+            if value is None:
+                if key in supplied:
+                    raise InvalidEditInput('Invalid sampling parameter.')
+                continue
+            if key in ('steps', 'guidance'):
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < descriptor['minimum'] or value > descriptor.get('maximum', math.inf) or (descriptor.get('integer') and int(value) != value):
+                    raise InvalidEditInput('Invalid sampling range.')
+            elif not isinstance(value, str) or (key == 'scheduler' and value not in descriptor['values']):
+                raise InvalidEditInput('Invalid sampling choice.')
+            effective[key] = value
+        negative = supported.get('negativePrompt', {})
+        guidance = effective.get('guidance', 0)
+        if 'negativePrompt' in effective and 'requiresGuidanceAbove' in negative and guidance <= negative['requiresGuidanceAbove']:
+            raise InvalidEditInput('Negative prompt requires active guidance.')
+        if 'negativePrompt' not in effective and 'requiredForGuidanceAbove' in negative and guidance > negative['requiredForGuidanceAbove']:
+            raise InvalidEditInput('Guidance requires an explicit negative prompt.')
+        names = {'steps': 'num_inference_steps', 'guidance': 'guidance', 'negativePrompt': 'negative_prompt', 'scheduler': 'scheduler'}
+        # Preserve upstream defaults unless the caller or our model definition sets an override.
+        kwargs = {**self.definition['defaults'], **{names[key]: value for key, value in supplied.items()}}
+        return kwargs, effective
 
     def load_pipeline(self, operation="generate"):
         # Set before importing HF/Transformers: these libraries cache environment settings.
@@ -105,6 +140,7 @@ class MfluxAdapter:
     def _run(self, request, cancel, progress, operation, prompt, conditioning_args):
         if request['model'] != self.capabilities['model']:
             raise InvalidEditInput('The requested model is not configured.')
+        sampling, effective = self.sampling(request)
         size = request.get('size', self.capabilities['defaultOutputSize'])
         limits = self.capabilities['size']
         if any(size[axis] < limits[axis + 'Multiple'] or size[axis] % limits[axis + 'Multiple']
@@ -129,7 +165,7 @@ class MfluxAdapter:
             stage = "editing" if operation == "edit" else "generating"
             pipeline.callbacks.register(StepObserver(cancel, emit, stage))
             emit(stage, 'Running image inference.')
-            generated = pipeline.generate_image(seed=seed, prompt=prompt, **self.definition['defaults'], **conditioning_args, **size)
+            generated = pipeline.generate_image(seed=seed, prompt=prompt, **sampling, **conditioning_args, **size)
             mx.synchronize()
             check_cancelled(cancel)
             emit('saving', 'Writing image.')
@@ -144,7 +180,7 @@ class MfluxAdapter:
                               'size': {'width': width, 'height': height}},
                     'model': request['model'], 'modelRevision': self.config['manifest']['source']['revision'],
                     'runtime': {'name': 'mflux', 'version': runtime_version}, 'seed': seed,
-                    'references': request.get('references', [])}
+                    'references': request.get('references', []), 'effectiveParameters': effective}
         finally:
             # No model retention until measured memory behavior justifies it. Synchronize
             # GPU producers before reporting terminal settlement or releasing private files.

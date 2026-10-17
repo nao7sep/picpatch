@@ -10,14 +10,6 @@ class KontextAdapter(MfluxAdapter):
         import mlx.core as mx
         return ModelConfig.dev_kontext(), Flux1Kontext, mx
 
-    @property
-    def capabilities(self):
-        return {'model': self.config['manifest']['model'], 'textToImage': False,
-                'instructionEditing': True, 'sourceImageRequired': True,
-                'referenceRoles': [], 'maxReferenceImages': 0, 'maskMode': 'none',
-                'size': {'widthMultiple': 16, 'heightMultiple': 16},
-                'defaultOutputSize': {'width': 1024, 'height': 1024}}
-
     def generate(self, request, cancel, progress):
         raise InvalidEditInput('FLUX.1 Kontext requires a source image.')
 
