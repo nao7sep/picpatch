@@ -57,8 +57,6 @@ def summarize(samples, phases):
         active = [sample for sample in samples if start['time'] <= sample['time'] <= end['time']]
         next_boundary = next((event['time'] for event in phases if event['time'] > end['time'] and event['kind'] in ('start', 'disposed')), end['time'])
         idle = [sample for sample in samples if end['time'] < sample['time'] < next_boundary]
-        if not active:
-            raise RuntimeError('No memory samples cover a completed edit.')
         transitions = [start] + [event for event in phases if event['kind'] == 'phase' and event['index'] == start['index']] + [end]
         stages = []
         for left, right in zip(transitions, transitions[1:]):
@@ -72,15 +70,17 @@ def summarize(samples, phases):
         runs.append({'index': start['index'], 'references': start['count'], 'seconds': end['seconds'],
                      'inputSize': start.get('inputSize'), 'outputSize': start.get('outputSize'),
                      'stages': stages,
-                     'peakFootprintBytes': max(sample['footprintBytes'] for sample in active),
-                     'peakResidentBytes': max(sample['residentBytes'] for sample in active),
+                     'peakFootprintBytes': max((sample['footprintBytes'] for sample in active), default=None),
+                     'peakResidentBytes': max((sample['residentBytes'] for sample in active), default=None),
                      'pressureLevels': sorted({sample['pressure'] for sample in active}),
+                     'resourceStatus': 'not-measured' if not active else 'pressure-observed' if any(sample['pressure'] > 1 for sample in active) else 'no-pressure-observed',
                      'settledFootprintBytes': idle[-1]['footprintBytes'] if idle else None})
     return runs
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--comparison-config', help='Run compare-local.ts with prepared caller scenarios instead of the reference workload.')
     parser.add_argument('--input-size', type=int, default=512)
     parser.add_argument('--output-size', type=int, default=768)
     parser.add_argument('--counts', default='4,6,4,6,4,6', help='Comma-separated reference counts (2, 4 or 6).')
@@ -94,7 +94,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     base = root / 'benchmarks/results'
     base.mkdir(exist_ok=True)
-    output = Path(tempfile.mkdtemp(prefix='references-', dir=base))
+    output = Path(tempfile.mkdtemp(prefix='comparison-' if args.comparison_config else 'references-', dir=base))
     images = output / 'images'
     images.mkdir()
     lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
@@ -104,9 +104,11 @@ def main():
     before = subprocess.check_output(['sysctl', '-n', 'vm.swapusage'], text=True).strip()
     env = dict(os.environ, HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', UV_OFFLINE='1')
     with (output / 'events.log').open('w') as events:
-        process = subprocess.Popen(['node', str(root / 'benchmarks/references.ts'), str(images),
-                                    '--input-size', str(args.input_size), '--output-size', str(args.output_size),
-                                    '--counts', args.counts],
+        command = (['node', str(root / 'benchmarks/compare-local.ts'), str(Path(args.comparison_config).resolve()), str(images)]
+                   if args.comparison_config else
+                   ['node', str(root / 'benchmarks/references.ts'), str(images),
+                    '--input-size', str(args.input_size), '--output-size', str(args.output_size), '--counts', args.counts])
+        process = subprocess.Popen(command,
                                    cwd=root, env=env, stdout=events)
         try:
             while process.poll() is None:
