@@ -10,7 +10,7 @@ export function nativeCapabilities(variant: string, model: string = variant): Mo
   const appearance = variant.includes('-ip-adapter');
   const conditioned = identity || appearance;
   const dimension = variant.startsWith('sdxl') ? 1024 : 512;
-  return { model, textToImage: !masked && !conditioned, instructionEditing: true, sourceImageRequired: !conditioned, maskRequired: masked, outpainting: masked,
+  return { model, loraFormats: ['sd-unet-safetensors'], textToImage: !masked && !conditioned, instructionEditing: true, sourceImageRequired: !conditioned, maskRequired: masked, outpainting: masked,
     referenceRoles: identity ? ['subject'] : appearance ? ['style'] : [],
     ...(identity ? { referenceConditioning: 'pooled-identity' as const } : appearance ? { referenceConditioning: 'appearance-embedding' as const, maxReferenceImages: 1 } : { maxReferenceImages: 0 }), maskMode: masked ? 'native' : 'none',
     size: { widthMultiple: 8, heightMultiple: 8, maxWidth: 2147483640, maxHeight: 2147483640 }, defaultOutputSize: { width: dimension, height: dimension },

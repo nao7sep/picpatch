@@ -260,6 +260,15 @@
         "outpainting": {
           "type": "boolean",
           "description": "SDK canvas expansion through this model mask workflow; preservation follows maskMode."
+        },
+        "loraFormats": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "sd-unet-safetensors"
+            ]
+          },
+          "uniqueItems": true
         }
       },
       "required": [
@@ -374,6 +383,12 @@
         },
         "conditioning": {
           "$ref": "#/definitions/ConditioningProvenance"
+        },
+        "loras": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LoraProvenance"
+          }
         }
       },
       "required": [
@@ -579,6 +594,13 @@
           "type": "string",
           "minLength": 1,
           "description": "Prepared native auxiliary weight path relative to the model directory."
+        },
+        "loras": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/LocalLora"
+          }
         }
       },
       "required": [
@@ -1176,6 +1198,12 @@
         },
         "conditioning": {
           "$ref": "#/definitions/ConditioningProvenance"
+        },
+        "loras": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LoraProvenance"
+          }
         }
       },
       "required": [
@@ -1287,6 +1315,48 @@
       "required": [
         "method",
         "assets"
+      ],
+      "additionalProperties": false
+    },
+    "LocalLora": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000]+$"
+        },
+        "scale": {
+          "type": "number",
+          "minimum": -3.4028234663852886e+38,
+          "maximum": 3.4028234663852886e+38
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "LoraProvenance": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "scale": {
+          "type": "number",
+          "minimum": -3.4028234663852886e+38,
+          "maximum": 3.4028234663852886e+38
+        }
+      },
+      "required": [
+        "filename",
+        "sha256",
+        "scale"
       ],
       "additionalProperties": false
     }

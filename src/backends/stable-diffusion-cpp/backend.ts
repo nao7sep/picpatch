@@ -32,7 +32,7 @@ export class NativeBackend implements EditBackend {
   }
   async validate(request: ImageRequest, options: OperationOptions = {}): Promise<ModelCapabilities> {
     const capabilities = nativeCapabilities(this.model.variant, this.model.manifest.model);
-    if (/<lora:/i.test('prompt' in request ? request.prompt : request.instruction)) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'Prompt-embedded LoRA loading is unsupported; use prepared model assets.');
+    if (/<lora:/i.test('prompt' in request ? request.prompt : request.instruction)) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'Prompt-embedded LoRA loading is unsupported; use prepareModel loras.');
     if ('prompt' in request) validateGenerateRequest(request, capabilities); else validateEditRequest(request, capabilities);
     await this.inspect(options.signal);
     return capabilities;
@@ -50,6 +50,12 @@ export class NativeBackend implements EditBackend {
     if (this.model.photoMaker && group) prompt = prompt.replace(`{${group.id}}`, `${group.className} img`);
     // Keep private text out of process arguments and disable native PNG metadata.
     try {
+      for (const [index, lora] of (this.model.loras ?? []).entries()) {
+        const alias = `adapter-${index}`;
+        await symlink(join(this.model.directory, lora.path), join(directory, `${alias}.safetensors`));
+        // Only generated aliases enter the CLI's prompt syntax; caller paths stay literal.
+        prompt += ` <lora:${alias}:${lora.scale ?? 1}>`;
+      }
       await writeFile(join(directory, 'prompt.txt'), prompt, { flag: 'wx', mode: 0o600 });
       checkSignal(options.signal);
       await writeFile(join(directory, 'negative.txt'), effectiveParameters.negativePrompt ?? '', { flag: 'wx', mode: 0o600 });
@@ -64,6 +70,7 @@ export class NativeBackend implements EditBackend {
       '--width', String(size.width), '--height', String(size.height), '--seed', String(seed),
       '--steps', String(effectiveParameters.steps), '--cfg-scale', String(effectiveParameters.guidance),
       '--sampling-method', effectiveParameters.sampler!, '--scheduler', effectiveParameters.scheduler!, '--lora-model-dir', directory];
+    if (this.model.loras) args.push('--lora-apply-mode', 'at_runtime');
     if (this.model.vae) args.push('--vae', join(this.model.directory, this.model.vae));
     if ('instruction' in request && request.sourceImage) {
       args.push('--init-img', request.sourceImage!, '--strength', String(effectiveParameters.strength));
@@ -97,6 +104,7 @@ export class NativeBackend implements EditBackend {
     emitProgress(options, { type: 'progress', verb, stage: 'saving', message: 'Validating native image output.' });
     return { model: request.model, modelRevision: this.model.manifest.source.revision, runtime: { name: 'stable-diffusion.cpp', version: nativeRevision },
       seed, effectiveParameters,
+      ...(this.model.loras ? { loras: this.model.loras.map(lora => ({ filename: basename(lora.path), scale: lora.scale ?? 1, sha256: this.model.manifest.components.find(component => component.path === lora.path)!.sha256 })) } : {}),
       ...(this.model.photoMaker || this.model.ipAdapter ? { conditioning: { method: this.model.photoMaker ? 'photomaker-v1' as const : this.model.variant.endsWith('-plus') ? 'ip-adapter-plus' as const : 'ip-adapter' as const, assets: (['photoMaker', 'ipAdapter', 'clipVision'] as const).flatMap(role => this.model[role] ? [{ role, filename: basename(this.model[role]!), sha256: this.model.manifest.components.find(component => component.path === this.model[role])!.sha256 }] : []) } } : {}),
       image: { path: request.outputPath, mimeType: 'image/png', size }, references: [] };
   }

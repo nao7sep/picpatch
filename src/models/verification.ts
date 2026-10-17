@@ -45,10 +45,13 @@ export function validateLocalEditingModel(input: unknown): LocalEditingModel {
     const identity = input.variant === 'sdxl-photomaker-v1';
     const appearance = input.variant.includes('-ip-adapter');
     if (identity !== (input.photoMaker !== undefined) || appearance !== (input.ipAdapter !== undefined) || appearance !== (input.clipVision !== undefined)) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply exactly the auxiliary assets required by the selected native conditioning method.');
-    for (const path of [input.checkpoint, input.vae, input.photoMaker, input.ipAdapter, input.clipVision].filter(value => value !== undefined)) {
+    if (input.loras && !input.checkpoint.toLowerCase().endsWith('.safetensors')) throw new PicPatchUsageError('INVALID_REQUEST', 'LoRA compatibility checks require a safetensors checkpoint.');
+    const loraPaths = input.loras?.map(lora => lora.path) ?? [];
+    if (new Set(loraPaths.map(path => path.toLowerCase())).size !== loraPaths.length || loraPaths.some(path => !path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchUsageError('INVALID_REQUEST', 'LoRAs must be distinct safetensors files.');
+    for (const path of [...loraPaths, input.checkpoint, input.vae, input.photoMaker, input.ipAdapter, input.clipVision].filter(value => value !== undefined)) {
       if (!input.manifest.components.some(component => component.path === path && component.role === 'weights')) throw new PicPatchUsageError('INVALID_REQUEST', 'Native model files must be declared manifest weights.');
     }
-  } else if (input.checkpoint !== undefined || input.vae !== undefined || input.photoMaker !== undefined || input.ipAdapter !== undefined || input.clipVision !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
+  } else if (input.loras !== undefined || input.checkpoint !== undefined || input.vae !== undefined || input.photoMaker !== undefined || input.ipAdapter !== undefined || input.clipVision !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
 
   return { ...structuredClone(input), manifest: validateModelManifest(input.manifest) };
 }

@@ -1,3 +1,4 @@
+import { validateLoraTensors } from './lora.ts';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -41,6 +42,7 @@ async function inspectAssets(model: LocalEditingModel, signal?: AbortSignal): Pr
   const context = model.variant.startsWith('sdxl') ? 2048 : 768;
   if (model.checkpoint!.toLowerCase().endsWith('.safetensors')) {
     const checkpoint = await header(join(model.directory, model.checkpoint!), signal);
+    for (const lora of model.loras ?? []) validateLoraTensors(checkpoint, await header(join(model.directory, lora.path), signal));
     const channels = model.variant.endsWith('-inpaint') ? 9 : 4;
     if (!shape(checkpoint, 'model.diffusion_model.input_blocks.0.0.weight', [320, channels, 3, 3]) ||
       !Object.entries(checkpoint).some(([key, value]) => key.startsWith('model.diffusion_model.') && key.endsWith('.attn2.to_k.weight') && value?.shape?.length === 2 && value.shape[1] === context)) {

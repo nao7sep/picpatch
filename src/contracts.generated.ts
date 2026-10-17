@@ -171,6 +171,7 @@ export interface ModelCapabilities {
    * SDK canvas expansion through this model mask workflow; preservation follows maskMode.
    */
   outpainting?: boolean;
+  loraFormats?: "sd-unet-safetensors"[];
 }
 /**
  * Absent controls are unsupported. Descriptors apply to every advertised operation of this model.
@@ -274,6 +275,7 @@ export interface EditResult {
   sidecar?: SidecarOutcome;
   outpaint?: OutpaintGeometry;
   conditioning?: ConditioningProvenance;
+  loras?: LoraProvenance[];
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -311,6 +313,15 @@ export interface ConditioningProvenance {
     filename: string;
     sha256: string;
   }[];
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "LoraProvenance".
+ */
+export interface LoraProvenance {
+  filename: string;
+  sha256: string;
+  scale: number;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -404,6 +415,18 @@ export interface LocalEditingModel {
    * Prepared native auxiliary weight path relative to the model directory.
    */
   clipVision?: string;
+  /**
+   * @minItems 1
+   */
+  loras?: [LocalLora, ...LocalLora[]];
+}
+/**
+ * This interface was referenced by `EditRequestContract`'s JSON-Schema
+ * via the `definition` "LocalLora".
+ */
+export interface LocalLora {
+  path: string;
+  scale?: number;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -493,4 +516,5 @@ export interface ArtifactRecord {
   };
   outpaint?: OutpaintGeometry;
   conditioning?: ConditioningProvenance;
+  loras?: LoraProvenance[];
 }
