@@ -21,5 +21,8 @@
     "test:python:coverage": "npm run test:python:coverage --workspace picpatchsdk",
     "test:full": "npm run test:full --workspace picpatchsdk",
     "example:worker": "npm run example:worker --workspace picpatchsdk"
-  }
+  },
+  "productName": "PicPatch",
+  "license": "GPL-3.0-or-later",
+  "author": "Yoshinao Inoguchi <yoshinao@inoguchi.com>"
 }

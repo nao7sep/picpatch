@@ -77,9 +77,9 @@ it('supports cancellation before reads and from progress', async () => {
   const active = new AbortController();
   await expect(discoverModels([directory], { signal: active.signal, onProgress: () => active.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
 });
-it('preserves callback errors', async () => {
+it('continues inspection when progress callbacks fail', async () => {
   const cause = new Error('callback');
-  await expect(inspectModel(directory, { onProgress: () => { throw cause; } })).rejects.toMatchObject({ code: 'CALLBACK_FAILED', cause });
+  await expect(inspectModel(directory, { onProgress: () => { throw cause; } })).resolves.toHaveProperty('files');
 });
 
 it('deduplicates components across overlapping roots regardless of input order', async () => {

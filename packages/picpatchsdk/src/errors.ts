@@ -14,8 +14,8 @@ export class PicPatchRuntimeError extends Error {
   diagnostic?: WorkerDiagnostic;
   readonly category = 'runtime';
   recoveryDirectory?: string;
-  readonly code: 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'CALLBACK_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE' | 'IMAGE_IO' | 'INVALID_OUTPUT' | 'OUTPUT_IO' | 'CLEANUP_FAILED' | 'MODEL_IO';
-  constructor(code: 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'CALLBACK_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE' | 'IMAGE_IO' | 'INVALID_OUTPUT' | 'OUTPUT_IO' | 'CLEANUP_FAILED' | 'MODEL_IO', message: string, options?: ErrorOptions) {
+  readonly code: 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE' | 'IMAGE_IO' | 'INVALID_OUTPUT' | 'OUTPUT_IO' | 'CLEANUP_FAILED' | 'MODEL_IO';
+  constructor(code: 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE' | 'IMAGE_IO' | 'INVALID_OUTPUT' | 'OUTPUT_IO' | 'CLEANUP_FAILED' | 'MODEL_IO', message: string, options?: ErrorOptions) {
     super(message, options);
     this.code = code;
     this.name = 'PicPatchRuntimeError';

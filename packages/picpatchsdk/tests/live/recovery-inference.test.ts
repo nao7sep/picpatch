@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel, type EditorOptions, type DiagnosticEvent } from 'picpatchsdk';
+import { createEditor, prepareModel, type EditorOptions, type SdkEvent } from 'picpatchsdk';
 
 const exec = promisify(execFile);
 async function children(): Promise<number[]> {
@@ -36,12 +36,12 @@ it('recovers native sessions after real loading cancellation and protects prior 
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-native-recovery-'));
   const editor = createEditor({ model: prepared.model, nativeExecutable: config.executable,
     defaults: { outputDirectory: directory, size: { width: 512, height: 512 }, seed: 42 } });
-  const events: DiagnosticEvent[] = [];
+  const events: SdkEvent[] = [];
   try {
     const controller = new AbortController();
     const started = Promise.withResolvers<void>();
     const cancelled = expect(editor.generate({ prompt: 'A ceramic bowl.', parameters: { steps: 10000 }, outputPath: join(directory, 'cancelled.png') }, {
-      signal: controller.signal, onProgress: event => { if (event.stage === 'generating') started.resolve(); }, onDiagnostic: event => events.push(event),
+      signal: controller.signal, onProgress: event => { if (event.stage === 'generating') started.resolve(); }, onEvent: event => events.push(event),
     })).rejects.toMatchObject({ code: 'CANCELLED' });
     await Promise.race([started.promise, cancelled]);
     // Observe the actual owned process before cancelling, rather than guessing load duration.
@@ -70,7 +70,7 @@ it('recovers native sessions after real loading cancellation and protects prior 
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
 }, 600_000);
 
-it('recovers from cooperative MFLUX cancellation and replaces a settled failed worker for real 512px inference', async () => {
+it('recovers from cooperative MFLUX cancellation and survives failing progress hooks for real 512px inference', async () => {
   const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(root, 'inference-config.json'), 'utf8')) as EditorOptions;
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-mflux-recovery-'));
   const options: EditorOptions = { ...config, defaults: { outputDirectory: directory, size: { width: 512, height: 512 }, seed: 42 } };
@@ -90,11 +90,12 @@ it('recovers from cooperative MFLUX cancellation and replaces a settled failed w
     expect(await children()).toEqual(pids);
     expect((await sharp(generated.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
     const original = await readFile(generated.image.path);
-    // A progress callback is caller code; its failure must settle the real writer before cleanup.
-    await expect(editor.edit({ instruction: 'Make the bowl red.', sourceImage: generated.image.path, parameters: { steps: 4 } }, {
+    // A broken caller progress hook must not stop inference or poison the worker.
+    const afterHookFailure = await editor.edit({ instruction: 'Make the bowl red.', sourceImage: generated.image.path, parameters: { steps: 4 } }, {
       onProgress: event => { if (event.stage === 'editing' && event.completed !== undefined) throw new Error('consumer callback failed'); },
-    })).rejects.toMatchObject({ code: 'CALLBACK_FAILED' });
-    await gone(pids);
+    });
+    expect((await sharp(afterHookFailure.image.path).metadata()).width).toBe(512);
+    expect(await children()).toEqual(pids);
     await editor.dispose();
     editor = createEditor(options);
     const edited = await editor.edit({ instruction: 'Make the bowl yellow.', sourceImage: generated.image.path, parameters: { steps: 2 }, sidecar: {} });
@@ -103,6 +104,6 @@ it('recovers from cooperative MFLUX cancellation and replaces a settled failed w
     expect(await readFile(generated.image.path)).toEqual(original);
     pids.push(...await children());
     await editor.dispose(); await gone(pids);
-    expect(await readdir(directory)).toHaveLength(4);
+    expect(await readdir(directory)).toHaveLength(5);
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
 }, 600_000);

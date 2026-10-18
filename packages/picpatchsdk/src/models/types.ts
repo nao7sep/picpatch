@@ -1,4 +1,4 @@
-import type { DiagnosticOptions } from '../diagnostics.ts';
+import type { EventOptions } from '../diagnostics.ts';
 /** Local presence is not integrity verification or runtime compatibility. */
 export interface LocalModelFile {
   path: string;
@@ -26,7 +26,7 @@ export interface ModelProgressEvent {
   message: string;
   path: string;
 }
-export interface ModelOperationOptions extends DiagnosticOptions {
+export interface ModelOperationOptions extends EventOptions {
   /** Whole operation budget: one minute for inspection/discovery, ten for verification. */
   timeoutMs?: number;
   signal?: AbortSignal;

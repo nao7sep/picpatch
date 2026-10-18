@@ -1,8 +1,8 @@
-import type { DiagnosticOptions } from './diagnostics.ts';
+import type { EventOptions } from './diagnostics.ts';
 import type { ProgressEvent } from './contracts.generated.ts';
 export type { GenerateRequest, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, ProgressEvent, ReferenceGroup } from './contracts.generated.ts';
 
-export interface OperationOptions extends DiagnosticOptions {
+export interface OperationOptions extends EventOptions {
   readonly signal?: AbortSignal;
   readonly onProgress?: (event: ProgressEvent) => void;
 }

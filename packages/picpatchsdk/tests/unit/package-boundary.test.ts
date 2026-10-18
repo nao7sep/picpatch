@@ -21,26 +21,38 @@ async function files(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   return (await Promise.all(entries.map(entry => entry.isDirectory() ? files(resolve(directory, entry.name)) : [resolve(directory, entry.name)]))).flat();
 }
+function imports(file: string, text: string): string[] {
+  const failures: string[] = [];
+  const source = parse(text, { sourceType: 'module', createImportExpressions: true, plugins: ['typescript', 'importAttributes'] });
+  function visit(node: unknown): void {
+    if (!node || typeof node !== 'object') return;
+    const value = node as Record<string, unknown>;
+    const specifier = ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression'].includes(String(value.type)) ? value.source : undefined;
+    if (specifier && typeof specifier === 'object' && 'value' in specifier && typeof specifier.value === 'string' && violation(file, specifier.value)) failures.push(specifier.value);
+    for (const child of Object.values(value)) {
+      if (Array.isArray(child)) child.forEach(visit);
+      else if (child && typeof child === 'object') visit(child);
+    }
+  }
+  visit(source);
+  return failures;
+}
 it('keeps every runtime import inside the package or its declared dependencies', async () => {
   const failures: string[] = [];
   for (const file of (await files(resolve(root, 'src'))).filter(file => file.endsWith('.ts'))) {
-    const source = parse(await readFile(file, 'utf8'), { sourceType: 'module', plugins: ['typescript', 'importAttributes'] });
-    function visit(node: unknown): void {
-      if (!node || typeof node !== 'object') return;
-      const value = node as Record<string, unknown>;
-      const specifier = ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression'].includes(String(value.type)) ? value.source : undefined;
-      if (specifier && typeof specifier === 'object' && 'value' in specifier && typeof specifier.value === 'string' && violation(file, specifier.value)) failures.push(`${relative(root, file)}: ${specifier.value}`);
-      for (const child of Object.values(value)) {
-        if (Array.isArray(child)) child.forEach(visit);
-        else if (child && typeof child === 'object') visit(child);
-      }
-    }
-    visit(source);
+    failures.push(...imports(file, await readFile(file, 'utf8')).map(specifier => `${relative(root, file)}: ${specifier}`));
   }
   expect(failures).toEqual([]);
 });
-it('detects outside imports, undeclared dependencies and extensionless source imports', () => {
+it('detects planted static imports, re-exports and dynamic imports across the boundary', () => {
   const file = resolve(root, 'src/index.ts');
-  for (const specifier of ['../../app.ts', 'electron', './client', '/outside.ts']) expect(violation(file, specifier)).toBe(true);
-  for (const specifier of ['./client.ts', 'node:fs', 'sharp']) expect(violation(file, specifier)).toBe(false);
+  expect(imports(file, `
+    import '../../app.ts';
+    export * from 'electron';
+    export { value } from './client';
+    await import('/outside.ts');
+    import './client.ts';
+    import 'node:fs';
+    import 'sharp';
+  `)).toEqual(['../../app.ts', 'electron', './client', '/outside.ts']);
 });

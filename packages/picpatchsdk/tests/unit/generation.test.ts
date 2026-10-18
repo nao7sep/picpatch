@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createEditor, validateGenerateRequest, type DiagnosticEvent, type GenerateRequest, type EditResult, type ModelCapabilities } from '../../src/index.ts';
+import { createEditor, validateGenerateRequest, type SdkEvent, type GenerateRequest, type EditResult, type ModelCapabilities } from '../../src/index.ts';
 import { resolveGenerateRequest } from '../../src/defaults.ts';
 import { ImageEditor } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
@@ -40,7 +40,7 @@ it('resolves defaults with explicit seed zero, unique names, and no implicit des
   expect(() => resolveGenerateRequest({ ...request(), outputDirectory: directory }, defaults, 'test')).toThrow();
 });
 it('publishes generation through shared safe storage without fabricated inputs or prompt diagnostics', async () => {
-  const events: DiagnosticEvent[] = [];
+  const events: SdkEvent[] = [];
   const generate = vi.fn(async (input: GenerateRequest) => {
     expect(await readdir(join(input.outputPath, '..'))).toEqual([]);
     expect(input.outputPath).not.toBe(request().outputPath);
@@ -48,7 +48,7 @@ it('publishes generation through shared safe storage without fabricated inputs o
   });
   const editor = new ImageEditor(backend(generate));
   try {
-    const result = await editor.generate(request(), { onDiagnostic: event => events.push(event) });
+    const result = await editor.generate(request(), { onEvent: event => events.push(event) });
     expect(result).toMatchObject({ image: { path: request().outputPath }, references: [], inputGeometry: [], seed: 0 });
     expect(await readdir(directory)).toEqual(['out.png']);
     expect((await sharp(result.image.path).metadata()).width).toBe(32);

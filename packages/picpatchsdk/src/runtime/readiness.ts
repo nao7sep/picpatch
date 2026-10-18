@@ -1,7 +1,7 @@
 import { NativeBackend } from '../backends/stable-diffusion-cpp/backend.ts';
 import { isNativeVariant, nativeCapabilities, nativeRevision } from '../backends/stable-diffusion-cpp/models.ts';
 import { withDiagnostics } from '../diagnostics.ts';
-import type { DiagnosticOptions } from '../diagnostics.ts';
+import type { EventOptions } from '../diagnostics.ts';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { LocalEditingModel, ModelCapabilities } from '../contracts.generated.ts';
@@ -13,7 +13,7 @@ import type { RuntimeCheck } from '../worker/protocol.ts';
 import { workerLaunch } from '../backends/mflux/launch.ts';
 import { workerTimeouts } from '../worker/process.ts';
 
-export interface ReadinessOptions extends DiagnosticOptions {
+export interface ReadinessOptions extends EventOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   verify?: boolean;

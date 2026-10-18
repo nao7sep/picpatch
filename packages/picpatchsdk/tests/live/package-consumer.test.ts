@@ -59,7 +59,7 @@ console.log('consumer passed');\n`);
     await copyFile(join(root, 'tests/fixtures/package-consumer.ts'), journey);
     const inference = await exec(process.execPath, [journey, inputs], {
       cwd: directory, timeout: 600_000,
-      env: { ...process.env, PICPATCH_DATA_DIR: join(directory, 'data'), PICPATCH_MODELS_DIR: modelsDirectory, HF_HUB_OFFLINE: '1' },
+      env: { ...process.env, HF_HUB_OFFLINE: '1' },
     });
     expect(inference.stdout.trim()).toBe('inference consumer passed');
     expect(inference.stderr).toBe('');

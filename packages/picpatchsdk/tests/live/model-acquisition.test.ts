@@ -4,7 +4,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
-import { listModels, prepareModel, verifyModel, type CatalogModel, type DiagnosticEvent } from '../../src/index.ts';
+import { listModels, prepareModel, verifyModel, type CatalogModel, type SdkEvent } from '../../src/index.ts';
 import * as catalog from '../../src/models/catalog.ts';
 
 it.each([false, true])('acquires a tiny HTTP fixture through the production streaming boundary (cancel=%s)', async cancel => {
@@ -29,14 +29,12 @@ it.each([false, true])('acquires a tiny HTTP fixture through the production stre
   // Fixture catalog pins replace real weights; all public orchestration remains intact.
   vi.spyOn(catalog, 'catalogModel').mockReturnValue(entry);
   vi.stubGlobal('fetch', vi.fn(fetcher));
-  vi.stubEnv('PICPATCH_DATA_DIR', directory);
-  vi.stubEnv('PICPATCH_MODELS_DIR', join(directory, 'models'));
   const storage = { modelsDirectory: join(directory, 'models') };
-  const events: DiagnosticEvent[] = [];
+  const events: SdkEvent[] = [];
   try {
     await expect(prepareModel(entry.id, { storage })).rejects.toMatchObject({ code: 'MODEL_IO' });
     expect(fetch).not.toHaveBeenCalled();
-    const preparation = prepareModel(entry.id, { storage, download: true, signal: controller.signal, onDiagnostic: event => events.push(event) });
+    const preparation = prepareModel(entry.id, { storage, download: true, signal: controller.signal, onEvent: event => events.push(event) });
     if (cancel) await expect(preparation).rejects.toMatchObject({ code: 'CANCELLED' });
     else {
       const prepared = await preparation;
@@ -49,7 +47,7 @@ it.each([false, true])('acquires a tiny HTTP fixture through the production stre
     expect(new Set(events.map(event => event.operationId)).size).toBe(1);
     expect(await readdir(join(directory, 'models', 'fixture'))).toEqual(cancel ? [] : ['b'.repeat(40)]);
   } finally {
-    vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs();
+    vi.restoreAllMocks(); vi.unstubAllGlobals();
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     expect(server.listening).toBe(false);

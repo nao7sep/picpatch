@@ -7,7 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ImageEditor } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
 import { contractValidator } from '../../src/contracts.ts';
-import { validateGenerateRequest, validateEditRequest, type ArtifactRecord, type DiagnosticEvent, type EditResult } from '../../src/index.ts';
+import { validateGenerateRequest, validateEditRequest, type ArtifactRecord, type SdkEvent, type EditResult } from '../../src/index.ts';
 
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof fs>();
@@ -20,7 +20,7 @@ let output: string;
 let png: Buffer;
 let editor: ImageEditor;
 let beforeRender: (() => Promise<void>) | undefined;
-const events: DiagnosticEvent[] = [];
+const events: SdkEvent[] = [];
 beforeEach(async () => {
   vi.mocked(fs.link).mockImplementation(actual.link);
   vi.mocked(fs.open).mockImplementation(actual.open);
@@ -79,7 +79,7 @@ it.each(['edit', 'generate'] as const)('writes no sidecar unless %s explicitly r
 
 it.each([false, true])('retains edit inputs only with explicit content consent (%s)', async includeInputs => {
   const references = [{ id: 'private-id', role: 'style' as const, images: [source] as [string] }] as const;
-  const saved = await editor.edit({ instruction: 'private-instruction', sourceImage: source, references: [...references], outputPath: output, sidecar: { includeInputs } }, { onDiagnostic: event => events.push(event) });
+  const saved = await editor.edit({ instruction: 'private-instruction', sourceImage: source, references: [...references], outputPath: output, sidecar: { includeInputs } }, { onEvent: event => events.push(event) });
   const data = await record(saved);
   expect(data.inputsIncluded).toBe(includeInputs);
   if (includeInputs) {

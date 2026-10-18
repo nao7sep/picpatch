@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 import { referenceWorkload } from '../../benchmarks/reference-workload.ts';
-import { createEditor, listModels, prepareModel, inspectReadiness, discoverModels, resolveStoragePaths, type EditorOptions, type DiagnosticEvent } from '../../src/index.ts';
+import { createEditor, listModels, prepareModel, inspectReadiness, discoverModels, resolveStoragePaths, type EditorOptions, type SdkEvent } from '../../src/index.ts';
 
 async function localOptions(): Promise<EditorOptions> {
   const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
@@ -19,18 +19,18 @@ async function localOptions(): Promise<EditorOptions> {
 it('completes the catalog-to-edit consumer journey with existing weights and isolated owned storage', async () => {
   const options = await localOptions();
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-inference-'));
-  vi.stubEnv('PICPATCH_DATA_DIR', join(directory, 'data'));
-  vi.stubEnv('PICPATCH_MODELS_DIR', join(directory, 'models'));
-  const events: DiagnosticEvent[] = [];
+  const storage = { modelsDirectory: join(directory, 'models') };
+  const events: SdkEvent[] = [];
   let editor: ReturnType<typeof createEditor> | undefined;
   const paths: string[] = [];
   try {
     // The harness supplies only existing filesystem locations. Consumer code uses public operations.
     const selected = listModels().find(entry => entry.id === options.model!.manifest.model)!;
     expect(selected).toBeDefined();
-    expect(resolveStoragePaths().modelsDirectory).toBe(join(directory, 'models'));
-    expect(await discoverModels()).toEqual({ models: [] });
-    await expect(prepareModel(selected.id)).rejects.toMatchObject({ code: 'MODEL_IO' });
+    expect(resolveStoragePaths(storage).modelsDirectory).toBe(join(directory, 'models'));
+    await mkdir(storage.modelsDirectory);
+    expect(await discoverModels([storage.modelsDirectory])).toEqual({ models: [] });
+    await expect(prepareModel(selected.id, { storage })).rejects.toMatchObject({ code: 'MODEL_IO' });
     const prepared = await prepareModel(selected.id, { directory: options.model!.directory });
     expect(prepared).toMatchObject({ origin: 'external', integrity: 'matches-manifest' });
     expect(await inspectReadiness(options.pythonExecutable!, prepared.model)).toMatchObject({
@@ -46,7 +46,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
         instruction: 'Combine both colors into a simple striped image.',
         ...(index === 1 ? { sourceImage: paths[0]!, parameters: { steps: 2, guidance: 1 } } : {}),
         references: [{ id: 'colors', role: 'style', images: [images[0]!, images[1]!] }],
-      }, { onDiagnostic: event => events.push(event) });
+      }, { onEvent: event => events.push(event) });
       paths.push(result.image.path);
       const metadata = await sharp(result.image.path).metadata();
       expect(metadata).toMatchObject({ format: 'png', width: 256, height: 256 });
@@ -65,13 +65,12 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
     expect(await readFile(paths[0]!)).toEqual(saved);
     await editor.dispose();
     await expect(editor.edit({ instruction: 'Use blue.', sourceImage: images[0]! })).rejects.toMatchObject({ code: 'DISPOSED' });
-    expect((await readdir(directory)).sort()).toEqual(['red.png', 'blue.png', ...paths.map(path => path.split('/').at(-1)!)].sort());
+    expect((await readdir(directory)).sort()).toEqual(['models', 'red.png', 'blue.png', ...paths.map(path => path.split('/').at(-1)!)].sort());
     expect(events.filter(event => event.stage === 'succeeded')).toHaveLength(2);
     expect(new Set(events.map(event => event.operationId)).size).toBe(2);
     expect(JSON.stringify(events)).not.toContain('Combine both colors');
   } finally {
     await editor?.dispose();
-    vi.unstubAllEnvs();
     await rm(directory, { recursive: true, force: true });
   }
 }, 3_600_000);
@@ -143,7 +142,7 @@ it('edits through a mask while preserving every black-mask source pixel', async 
     for (let y = 0; y < 256; y++) mask.fill(255, y * 256 + 128, (y + 1) * 256);
     await sharp(mask, { raw: { width: 256, height: 256, channels: 1 } }).toColourspace('b-w').png().toFile(maskImage);
     const original = await readFile(sourceImage); const originalMask = await readFile(maskImage);
-    const result = await editor.edit({ instruction: 'Make the entire image solid blue.', sourceImage, maskImage, seed: 42 });
+    const result = await editor.edit({ instruction: 'Make the entire image solid blue.', sourceImage, maskImage, seed: 42, outputPath: join(directory, 'output.png') });
     expect(result.image.size).toEqual({ width: 256, height: 256 });
     const pixels = await sharp(result.image.path).ensureAlpha().raw().toBuffer();
     let changed = false;
@@ -167,9 +166,9 @@ it('generates from text, edits that result in the same session, and cancels gene
   const prepared = await prepareModel('flux2-klein-4b', { directory: options.model!.directory });
   expect(prepared.integrity).toBe('locally-fingerprinted');
   const editor = createEditor({ ...options, model: prepared.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
-  const events: DiagnosticEvent[] = [];
+  const events: SdkEvent[] = [];
   try {
-    const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.', parameters: { steps: 2 }, sidecar: {} }, { onDiagnostic: event => events.push(event) });
+    const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.', parameters: { steps: 2 }, sidecar: {} }, { onEvent: event => events.push(event) });
     expect(generated.sidecar?.status).toBe('saved');
     const metadata = JSON.parse(await readFile(generated.sidecar!.path, 'utf8'));
     expect(metadata.effectiveParameters.steps).toBe(2);

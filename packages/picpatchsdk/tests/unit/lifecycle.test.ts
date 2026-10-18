@@ -141,11 +141,12 @@ describe('owned worker lifecycle', () => {
     const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'WORKER_UNAVAILABLE' });
     child.emit('error', new Error('spawn failed')); await caught; expect(child.closed).toBe(true); await editor.dispose();
   });
-  it('contains progress callback exceptions and stops the producer', async () => {
+  it('contains progress callback exceptions without stopping the producer', async () => {
     const { editor, child } = setup(); const active = editor.edit(request, { onProgress: () => { throw new Error('caller'); } });
-    const caught = expect(active).rejects.toMatchObject({ code: 'CALLBACK_FAILED' }); await tick();
+    await tick();
     child.reply(2, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing' } });
-    await caught; expect(child.closed).toBe(true); await editor.dispose();
+    child.result(2);
+    await expect(active).resolves.toMatchObject({ seed: 1 }); expect(child.closed).toBe(false); await editor.dispose();
   });
   it('disposes an active edit only after process close', async () => {
     const { editor, child } = setup(); const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'CANCELLED' });

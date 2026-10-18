@@ -129,9 +129,9 @@ describe('cleanup reporting', () => {
 
 it('reserves edit admission before diagnostic callbacks and settles diagnostics after publication', async () => {
   const editor = new ImageEditor(backend());
-  const events: import('../../src/index.ts').DiagnosticEvent[] = [];
+  const events: import('../../src/index.ts').SdkEvent[] = [];
   let reentrant: Promise<unknown> | undefined;
-  await editor.edit(request, { onDiagnostic: event => {
+  await editor.edit(request, { onEvent: event => {
     events.push(event);
     if (event.stage === 'started') reentrant = expect(editor.edit(request)).rejects.toMatchObject({ code: 'BUSY' });
   } });

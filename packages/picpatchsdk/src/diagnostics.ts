@@ -8,32 +8,39 @@ export interface WorkerDiagnostic {
   exitCode?: number;
   signal?: string;
 }
-export interface DiagnosticEvent {
-  type: 'diagnostic';
+export interface SdkEvent {
+  type: 'event';
   operationId: string;
   verb: string;
   time: string;
-  level: 'info' | 'error';
-  stage: 'started' | 'progress' | 'succeeded' | 'failed' | 'cancelled';
+  level: 'debug' | 'info' | 'warn' | 'error';
+  stage: 'started' | 'progress' | 'succeeded' | 'failed' | 'cancelled' | 'hook-failed';
   message: string;
   progress?: { stage: string; completed?: number; total?: number };
   error?: { code: string; causes: { kind: string; code?: string }[]; worker?: WorkerDiagnostic };
 }
-export interface DiagnosticOptions { onDiagnostic?: (event: DiagnosticEvent) => void }
+export interface EventOptions { onEvent?: (event: SdkEvent) => void }
 const scope = Symbol('diagnostic scope');
-type Scoped = DiagnosticOptions & { [scope]?: { id: string; verb: string } };
+type Scoped = EventOptions & { [scope]?: { id: string; verb: string; progressFailed?: boolean } };
 
 /** Caller-owned sinks are best effort and cannot change the primary operation outcome. */
-function deliver(options: Scoped, event: Omit<DiagnosticEvent, 'type' | 'operationId' | 'verb' | 'time'>): void {
+function deliver(options: Scoped, event: Omit<SdkEvent, 'type' | 'operationId' | 'verb' | 'time'>): void {
   const context = options[scope];
-  if (!context || !options.onDiagnostic) return;
+  if (!context || !options.onEvent) return;
   try {
-    const returned: unknown = options.onDiagnostic({ type: 'diagnostic', operationId: context.id, verb: context.verb, time: new Date().toISOString(), ...event });
+    const returned: unknown = options.onEvent({ type: 'event', operationId: context.id, verb: context.verb, time: new Date().toISOString(), ...event });
     // Do not await caller-owned asynchronous logging or leave rejected sinks unhandled.
-    if (returned instanceof Promise) void returned.catch(() => {});
+    void Promise.resolve(returned).catch(() => { /* No fallback to the hook that failed. */ });
   } catch { /* Diagnostic delivery must not replace a saved result or its original failure. */ }
 }
-export function diagnosticProgress(options: DiagnosticOptions, event: { stage: string; completed?: number; total?: number }): void {
+/** Reports progress-sink failure through the separate event sink, at most once per call. */
+export function progressHookFailed(options: EventOptions): void {
+  const context = (options as Scoped)[scope];
+  if (!context || context.progressFailed) return;
+  context.progressFailed = true;
+  deliver(options, { level: 'warn', stage: 'hook-failed', message: 'The progress callback failed; the operation continues.' });
+}
+export function diagnosticProgress(options: EventOptions, event: { stage: string; completed?: number; total?: number }): void {
   deliver(options, { level: 'info', stage: 'progress', message: 'Operation progress.', progress: {
     stage: event.stage, ...(event.completed !== undefined ? { completed: event.completed } : {}), ...(event.total !== undefined ? { total: event.total } : {}),
   } });
@@ -52,9 +59,9 @@ function safeCauses(error: unknown): { kind: string; code?: string }[] {
   return causes;
 }
 /** One invocation identity and exactly one terminal record; no input or exception text is serialized. */
-export async function withDiagnostics<O extends DiagnosticOptions, T>(verb: string, options: O, action: (options: O) => Promise<T>): Promise<T> {
+export async function withDiagnostics<O extends EventOptions, T>(verb: string, options: O, action: (options: O) => Promise<T>): Promise<T> {
   if (!options || typeof options !== 'object' || Array.isArray(options)) return action(options);
-  if (options.onDiagnostic !== undefined && typeof options.onDiagnostic !== 'function') throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid diagnostic callback.');
+  if (options.onEvent !== undefined && typeof options.onEvent !== 'function') throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid diagnostic callback.');
   const operation = { ...options, [scope]: { id: randomUUID(), verb } };
   deliver(operation, { level: 'info', stage: 'started', message: 'Operation started.' });
   try {
