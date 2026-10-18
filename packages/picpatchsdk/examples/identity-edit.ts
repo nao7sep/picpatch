@@ -14,5 +14,6 @@ try {
     references: [{ id: 'person', role: 'subject', conditioning: 'identity', className: 'man', images: photos.map(photo => resolve(photo)) as [string, ...string[]] }],
     outputPath: resolve(output), sidecar: {},
   });
+  if ('status' in result) throw new Error(result.code);
   console.log(JSON.stringify({ image: result.image, conditioning: result.conditioning }));
 } finally { await editor.dispose(); }

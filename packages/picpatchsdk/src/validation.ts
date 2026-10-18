@@ -2,7 +2,7 @@ import { inputGeometry } from './images/geometry.ts';
 import { resolveParameters } from './parameters.ts';
 import { extname, isAbsolute, resolve } from 'node:path';
 import { contractValidator } from './contracts.ts';
-import { PicPatchRuntimeError, PicPatchUsageError } from './errors.ts';
+import { PicPatchSdkError } from './errors.ts';
 import type { ImageRequest } from './types.ts';
 import type { GenerateRequest, EditRequest, ImageSize, ModelCapabilities } from './types.ts';
 
@@ -12,32 +12,32 @@ const capabilitiesValid = contractValidator<ModelCapabilities>('ModelCapabilitie
 
 /** Validate metadata only; opening images and reserving output happens at execution. */
 export function validateEditRequest(input: unknown, capabilities?: ModelCapabilities): EditRequest {
-  if (!requestValid(input)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid edit request: check required fields, image conditioning, numeric bounds, and unknown fields.');
+  if (!requestValid(input)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid edit request: check required fields, image conditioning, numeric bounds, and unknown fields.');
   const request = structuredClone(input);
   if (request.outpaint) {
-    if (request.maskImage) throw new PicPatchUsageError('INVALID_REQUEST', 'Outpainting creates its own mask; omit maskImage.');
-    if (request.size && (request.size.width !== request.outpaint.size.width || request.size.height !== request.outpaint.size.height)) throw new PicPatchUsageError('INVALID_REQUEST', 'Output size must match the outpaint canvas.');
+    if (request.maskImage) throw new PicPatchSdkError('INVALID_REQUEST', 'Outpainting creates its own mask; omit maskImage.');
+    if (request.size && (request.size.width !== request.outpaint.size.width || request.size.height !== request.outpaint.size.height)) throw new PicPatchSdkError('INVALID_REQUEST', 'Output size must match the outpaint canvas.');
   }
-  if (capabilities && !capabilitiesValid(capabilities)) throw new PicPatchRuntimeError('INVALID_CAPABILITIES', 'Worker returned invalid model capabilities.');
+  if (capabilities && !capabilitiesValid(capabilities)) throw new PicPatchSdkError('INVALID_CAPABILITIES', 'Worker returned invalid model capabilities.');
   validateControl(request, capabilities);
   const groups = request.references ?? [];
   if (new Set(groups.map(group => group.id)).size !== groups.length) {
-    throw new PicPatchUsageError('INVALID_REQUEST', 'Reference group IDs must be unique.');
+    throw new PicPatchSdkError('INVALID_REQUEST', 'Reference group IDs must be unique.');
   }
   const references = groups.flatMap(group => group.images);
   const inputs = [...references, ...(request.sourceImage ? [request.sourceImage] : []), ...(request.maskImage ? [request.maskImage] : [])];
   if ([...inputs, request.outputPath].some(path => !isAbsolute(path))) {
-    throw new PicPatchUsageError('INVALID_REQUEST', 'Image paths must be absolute.');
+    throw new PicPatchSdkError('INVALID_REQUEST', 'Image paths must be absolute.');
   }
-  if (extname(request.outputPath).toLowerCase() !== '.png') throw new PicPatchUsageError('INVALID_REQUEST', 'Output must have a .png extension.');
+  if (extname(request.outputPath).toLowerCase() !== '.png') throw new PicPatchSdkError('INVALID_REQUEST', 'Output must have a .png extension.');
   if (inputs.some(path => resolve(path) === resolve(request.outputPath))) {
-    throw new PicPatchUsageError('OUTPUT_CONFLICT', 'Output must not replace an input image.');
+    throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output must not replace an input image.');
   }
   if (new Set(references.map(path => resolve(path))).size !== references.length) {
-    throw new PicPatchUsageError('INVALID_REQUEST', 'Reference image paths must be unique across groups.');
+    throw new PicPatchSdkError('INVALID_REQUEST', 'Reference image paths must be unique across groups.');
   }
   if (capabilities) {
-    const unsupported = (message: string): never => { throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', message); };
+    const unsupported = (message: string): never => { throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', message); };
     if (capabilities.model !== request.model) unsupported('Capabilities do not describe the requested model.');
     if (capabilities.sourceImageRequired && !request.sourceImage) unsupported('This model requires a source image.');
     if (capabilities.maskRequired && !request.maskImage && !request.outpaint) unsupported('This model requires a mask image.');
@@ -74,21 +74,21 @@ function validateSize(size: ImageSize | undefined, capabilities: ModelCapabiliti
   const limits = capabilities.size;
   if (size && limits && (size.width % limits.widthMultiple !== 0 || size.height % limits.heightMultiple !== 0 ||
     (limits.maxWidth !== undefined && size.width > limits.maxWidth) || (limits.maxHeight !== undefined && size.height > limits.maxHeight))) {
-    throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The requested dimensions are unsupported by this model.');
+    throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The requested dimensions are unsupported by this model.');
   }
 }
 
 export function validateGenerateRequest(input: unknown, capabilities?: ModelCapabilities): GenerateRequest {
-  if (!generationValid(input)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid generation request: check prompt, output, numeric bounds, and unknown fields.');
+  if (!generationValid(input)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid generation request: check prompt, output, numeric bounds, and unknown fields.');
   const request = structuredClone(input);
   if (!isAbsolute(request.outputPath) || extname(request.outputPath).toLowerCase() !== '.png') {
-    throw new PicPatchUsageError('INVALID_REQUEST', 'Output must be an absolute path with a .png extension.');
+    throw new PicPatchSdkError('INVALID_REQUEST', 'Output must be an absolute path with a .png extension.');
   }
-  if (capabilities && !capabilitiesValid(capabilities)) throw new PicPatchRuntimeError('INVALID_CAPABILITIES', 'Worker returned invalid model capabilities.');
+  if (capabilities && !capabilitiesValid(capabilities)) throw new PicPatchSdkError('INVALID_CAPABILITIES', 'Worker returned invalid model capabilities.');
   validateControl(request, capabilities);
   if (capabilities) {
     if (capabilities.model !== request.model || capabilities.textToImage !== true) {
-      throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'This model does not advertise text-to-image generation.');
+      throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This model does not advertise text-to-image generation.');
     }
     resolveParameters(request.parameters, capabilities, 'generate');
     validateSize(request.size, capabilities);
@@ -98,7 +98,7 @@ export function validateGenerateRequest(input: unknown, capabilities?: ModelCapa
 
 function validateControl(request: ImageRequest, capabilities?: ModelCapabilities): void {
   if (!request.control) return;
-  if (!isAbsolute(request.control.image)) throw new PicPatchUsageError('INVALID_REQUEST', 'Control image paths must be absolute.');
-  if (resolve(request.control.image) === resolve(request.outputPath)) throw new PicPatchUsageError('OUTPUT_CONFLICT', 'Output must not replace the control image.');
-  if (capabilities && !capabilities.controlKinds?.includes(request.control.kind)) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'This model does not support the requested structural control.');
+  if (!isAbsolute(request.control.image)) throw new PicPatchSdkError('INVALID_REQUEST', 'Control image paths must be absolute.');
+  if (resolve(request.control.image) === resolve(request.outputPath)) throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output must not replace the control image.');
+  if (capabilities && !capabilities.controlKinds?.includes(request.control.kind)) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This model does not support the requested structural control.');
 }

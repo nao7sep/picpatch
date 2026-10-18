@@ -1,6 +1,6 @@
 import type { WorkerDiagnostic } from '../diagnostics.ts';
 import { contractAjv } from '../contracts.ts';
-import { PicPatchRuntimeError } from '../errors.ts';
+import { PicPatchSdkError, isPicPatchSdkError, type PicPatchSdkErrorData } from '../errors.ts';
 import { validateEditRequest, validateGenerateRequest } from '../validation.ts';
 import type { GenerateRequest, EditRequest, EditResult, ModelCapabilities, ProgressEvent } from '../types.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
@@ -13,12 +13,12 @@ export type WorkerRequest = Envelope<'shutdown'> | (Envelope<'hello'> & { model?
   (Envelope<'generate'> & { request: GenerateRequest }) | (Envelope<'edit'> & { request: EditRequest }) | (Envelope<'cancel'> & { targetId: number });
 export type WorkerResponse = (Envelope<'ready'> & { workerVersion: string; models: ModelCapabilities[]; runtimeCheck?: RuntimeCheck }) |
   (Envelope<'progress'> & { event: ProgressEvent }) | (Envelope<'result'> & { result: EditResult }) |
-  (Envelope<'error'> & { error: { code: 'INVALID_REQUEST' | 'NOT_READY' | 'BACKEND_UNAVAILABLE' | 'BUSY' | 'CANCELLED' | 'RUNTIME_FAILURE'; message: string; diagnostic?: WorkerDiagnostic } }) |
+  (Envelope<'error'> & { error: PicPatchSdkErrorData }) |
   (Envelope<'cancelAck'> & { targetId: number; accepted: boolean }) | Envelope<'shutdownAck'>;
 contractAjv.addSchema(schema, 'worker.schema.json');
 const requestValid = contractAjv.compile<WorkerRequest>({ $ref: 'worker.schema.json#/definitions/Request' });
 const responseValid = contractAjv.compile<WorkerResponse>({ $ref: 'worker.schema.json#/definitions/Response' });
-function fail(message: string): never { throw new PicPatchRuntimeError('PROTOCOL_ERROR', message); }
+function fail(message: string): never { throw new PicPatchSdkError('PROTOCOL_ERROR', message); }
 
 export function validateRequest(value: unknown): asserts value is WorkerRequest {
   if (!requestValid(value)) fail('Invalid worker request or unsupported protocol version.');
@@ -27,6 +27,7 @@ export function validateRequest(value: unknown): asserts value is WorkerRequest 
 }
 export function validateResponse(value: unknown): asserts value is WorkerResponse {
   if (!responseValid(value)) fail('Invalid worker response or unsupported protocol version.');
+  if (value.type === 'error' && !isPicPatchSdkError(value.error)) fail('Invalid worker error code or kind.');
   if (value.type === 'progress') {
     const { completed, total } = value.event;
     if ((completed === undefined) !== (total === undefined) || (completed !== undefined && total !== undefined && completed > total)) fail('Invalid progress counters.');

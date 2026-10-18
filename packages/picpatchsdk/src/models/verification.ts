@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, posix, relative, sep } from 'node:path';
 import { parser } from 'stream-json';
 import { pipeline } from 'node:stream/promises';
 import { contractValidator } from '../contracts.ts';
-import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
 import type { ModelComponent, ModelManifest, ModelOperationOptions, ModelVerificationOptions, ModelVerification, VerifiedComponent } from './types.ts';
@@ -19,40 +19,40 @@ function componentPath(path: string): boolean {
     path.split('/').every(part => part !== '' && part !== '.' && part !== '..');
 }
 export function validateModelManifest(input: unknown): ModelManifest {
-  if (!manifestValidator(input)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid model manifest.');
+  if (!manifestValidator(input)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model manifest.');
   const paths = new Set<string>();
   for (const component of input.components) {
     const key = component.path.toLowerCase();
-    if (!componentPath(component.path) || paths.has(key)) throw new PicPatchUsageError('INVALID_REQUEST', 'Manifest paths must be unique portable relative file paths.');
+    if (!componentPath(component.path) || paths.has(key)) throw new PicPatchSdkError('INVALID_REQUEST', 'Manifest paths must be unique portable relative file paths.');
     paths.add(key);
   }
   for (const key of paths) {
     const parts = key.split('/'); parts.pop();
     while (parts.length) {
-      if (paths.has(parts.join('/'))) throw new PicPatchUsageError('INVALID_REQUEST', 'A manifest file cannot also be a directory.');
+      if (paths.has(parts.join('/'))) throw new PicPatchSdkError('INVALID_REQUEST', 'A manifest file cannot also be a directory.');
       parts.pop();
     }
   }
-  if (!input.components.some(component => component.role === 'weights')) throw new PicPatchUsageError('INVALID_REQUEST', 'A model manifest must name its weights.');
+  if (!input.components.some(component => component.role === 'weights')) throw new PicPatchSdkError('INVALID_REQUEST', 'A model manifest must name its weights.');
   return structuredClone(input);
 }
 /** Shared registration validation for editing and read-only readiness. */
 export function validateLocalEditingModel(input: unknown): LocalEditingModel {
-  if (!contractValidator<LocalEditingModel>('LocalEditingModel')(input)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid local editing model configuration.');
+  if (!contractValidator<LocalEditingModel>('LocalEditingModel')(input)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid local editing model configuration.');
   absolutePath(input.directory);
   const loraPaths = input.loras?.map(lora => lora.path) ?? [];
-  if (new Set(loraPaths.map(path => path.toLowerCase())).size !== loraPaths.length || loraPaths.some(path => !path.toLowerCase().endsWith('.safetensors') || !input.manifest.components.some(component => component.path === path && component.role === 'weights'))) throw new PicPatchUsageError('INVALID_REQUEST', 'LoRAs must be distinct declared safetensors weights.');
+  if (new Set(loraPaths.map(path => path.toLowerCase())).size !== loraPaths.length || loraPaths.some(path => !path.toLowerCase().endsWith('.safetensors') || !input.manifest.components.some(component => component.path === path && component.role === 'weights'))) throw new PicPatchSdkError('INVALID_REQUEST', 'LoRAs must be distinct declared safetensors weights.');
   if (isNativeVariant(input.variant)) {
-    if (!input.checkpoint || input.quantize !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Native models require a checkpoint and use checkpoint-owned quantization.');
+    if (!input.checkpoint || input.quantize !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Native models require a checkpoint and use checkpoint-owned quantization.');
     const identity = input.variant === 'sdxl-photomaker-v1';
     const appearance = input.variant.includes('-ip-adapter');
-    if (identity !== (input.photoMaker !== undefined) || appearance !== (input.ipAdapter !== undefined) || appearance !== (input.clipVision !== undefined)) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply exactly the auxiliary assets required by the selected native conditioning method.');
-    if (input.loras && !input.checkpoint.toLowerCase().endsWith('.safetensors')) throw new PicPatchUsageError('INVALID_REQUEST', 'LoRA compatibility checks require a safetensors checkpoint.');
-    if (input.controlNet && (input.variant !== 'sd15' || !input.checkpoint.toLowerCase().endsWith('.safetensors') || !input.controlNet.path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchUsageError('INVALID_REQUEST', 'ControlNet currently requires an SD1.5 base safetensors checkpoint and Canny safetensors asset.');
+    if (identity !== (input.photoMaker !== undefined) || appearance !== (input.ipAdapter !== undefined) || appearance !== (input.clipVision !== undefined)) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply exactly the auxiliary assets required by the selected native conditioning method.');
+    if (input.loras && !input.checkpoint.toLowerCase().endsWith('.safetensors')) throw new PicPatchSdkError('INVALID_REQUEST', 'LoRA compatibility checks require a safetensors checkpoint.');
+    if (input.controlNet && (input.variant !== 'sd15' || !input.checkpoint.toLowerCase().endsWith('.safetensors') || !input.controlNet.path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchSdkError('INVALID_REQUEST', 'ControlNet currently requires an SD1.5 base safetensors checkpoint and Canny safetensors asset.');
     for (const path of [...loraPaths, input.controlNet?.path, input.checkpoint, input.vae, input.photoMaker, input.ipAdapter, input.clipVision].filter(value => value !== undefined)) {
-      if (!input.manifest.components.some(component => component.path === path && component.role === 'weights')) throw new PicPatchUsageError('INVALID_REQUEST', 'Native model files must be declared manifest weights.');
+      if (!input.manifest.components.some(component => component.path === path && component.role === 'weights')) throw new PicPatchSdkError('INVALID_REQUEST', 'Native model files must be declared manifest weights.');
     }
-  } else if (input.controlNet !== undefined || input.checkpoint !== undefined || input.vae !== undefined || input.photoMaker !== undefined || input.ipAdapter !== undefined || input.clipVision !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
+  } else if (input.controlNet !== undefined || input.checkpoint !== undefined || input.vae !== undefined || input.photoMaker !== undefined || input.ipAdapter !== undefined || input.clipVision !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
 
   return { ...structuredClone(input), manifest: validateModelManifest(input.manifest) };
 }
@@ -149,7 +149,7 @@ async function verifyModelOperation(path: string, input: ModelManifest, options:
     const operation = { ...options, signal };
     try {
       const root = await realpath(path);
-      if (!(await stat(root)).isDirectory()) throw new PicPatchUsageError('INVALID_REQUEST', 'Model verification requires a directory.');
+      if (!(await stat(root)).isDirectory()) throw new PicPatchSdkError('INVALID_REQUEST', 'Model verification requires a directory.');
       const components: VerifiedComponent[] = [];
       for (const component of manifest.components) {
         emitProgress(operation, { type: 'progress', verb: 'verifyModel', stage: 'verifying', message: 'Verifying a model component.', path: join(path, component.path) });
@@ -159,8 +159,8 @@ async function verifyModelOperation(path: string, input: ModelManifest, options:
       return { path, manifest, components, status: components.every(c => c.status === 'verified') ? 'matches-manifest' : 'invalid', compatibility: 'unknown' };
     } catch (cause) {
       checkSignal(options.signal);
-      if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError || cause instanceof PicPatchCancelledError) throw cause;
-      throw new PicPatchRuntimeError('MODEL_IO', 'Could not verify the selected model files.', { cause });
+      if (cause instanceof PicPatchSdkError) throw cause;
+      throw new PicPatchSdkError('MODEL_IO', 'Could not verify the selected model files.', { cause });
     }
   });
 }

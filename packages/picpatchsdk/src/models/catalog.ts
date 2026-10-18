@@ -4,7 +4,7 @@ import distilled9Manifest from './catalog/klein-9b-4bit.manifest.json' with { ty
 import base9Manifest from './catalog/klein-base-9b-4bit.manifest.json' with { type: 'json' };
 import type { LocalEditingModel, ModelManifest, ModelCapabilities } from '../contracts.generated.ts';
 import { externalModels, modelCapabilities, type ExternalModel } from './variants.ts';
-import { PicPatchUsageError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 import { validateModelManifest } from './verification.ts';
 
 export interface CatalogModel {
@@ -41,6 +41,6 @@ export function listModels(): ModelSelection[] {
 export type ModelSelection = CatalogModel | ExternalModel | ReturnType<typeof nativeModels>[number];
 export function catalogModel(id: string): ModelSelection {
   const entry = listModels().find(model => model.id === id);
-  if (!entry) throw new PicPatchUsageError('INVALID_REQUEST', 'Choose a model ID returned by listModels.');
+  if (!entry) throw new PicPatchSdkError('INVALID_REQUEST', 'Choose a model ID returned by listModels.');
   return entry;
 }

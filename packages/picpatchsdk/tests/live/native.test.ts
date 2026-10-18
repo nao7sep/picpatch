@@ -45,14 +45,15 @@ it('runs native generation and masked editing through public preparation, pipes 
         await writeFile(join(directory, 'source.png'), png);
         await sharp({ create: { width: 16, height: 16, channels: 3, background: 'white' } }).toColourspace('b-w').png().toFile(join(directory, 'mask.png'));
         const result = variant === 'sdxl' ? await editor.generate({ prompt: 'Blue', parameters: { steps: 3 } }) : await editor.edit({ instruction: 'Blue', sourceImage: join(directory, 'source.png'), maskImage: join(directory, 'mask.png') });
+        if ('status' in result) throw new Error(result.code);
         expect(await readFile(result.image.path)).toEqual(png);
         expect(result.effectiveParameters).toMatchObject({ steps: variant === 'sdxl' ? 3 : 20, guidance: 7, sampler: 'euler_a', scheduler: 'discrete' });
         expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
         if (variant === 'sdxl') {
-          await expect(editor.generate({ prompt: 'fail' })).rejects.toMatchObject({ code: 'RUNTIME_FAILURE', diagnostic: { phase: 'worker', exitCode: 2, causes: [{ kind: 'ProcessExit' }] } });
+          await expect(editor.generate({ prompt: 'fail' })).rejects.toMatchObject({ code: 'WORKER_EXITED', details: { diagnostic: { phase: 'worker', exitCode: 2, causes: [{ kind: 'ProcessExit' }] } } });
           await expect(editor.generate({ prompt: 'malformed' })).rejects.toMatchObject({ code: 'INVALID_OUTPUT' });
           await expect(editor.generate({ prompt: '<lora:unknown:1>' })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
-          await expect(editor.generate({ prompt: 'Blue', outputPath: result.image.path })).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT' });
+          await expect(editor.generate({ prompt: 'Blue', outputPath: result.image.path })).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
           await editor.generate({ prompt: 'Blue' });
         }
       } finally { await editor.dispose(); }
@@ -91,10 +92,12 @@ it.each(['sd15', 'sdxl'])('runs repeated %s source variations with default/sessi
   const original = await readFile(sourceImage);
   try {
     const first = await editor.edit({ instruction: 'variation:0.75', sourceImage });
+    if ('status' in first) throw new Error(first.code);
     expect(first.effectiveParameters.strength).toBe(0.75);
     expect(first.inputGeometry?.[0]).toMatchObject({ path: sourceImage, preparedSize: { width: 29, height: 19 } });
     for (const strength of [0, 0.5, 1]) {
       const result = await editor.edit({ instruction: `variation:${strength}`, sourceImage: first.image.path, parameters: { strength } });
+      if ('status' in result) throw new Error(result.code);
       expect(result.effectiveParameters.strength).toBe(strength);
       expect(await readFile(result.image.path)).toEqual(png);
     }
@@ -104,14 +107,15 @@ it.each(['sd15', 'sdxl'])('runs repeated %s source variations with default/sessi
     } })).rejects.toMatchObject({ code: 'CANCELLED' });
     await editor.edit({ instruction: 'variation:0.75', sourceImage });
     const generated = await editor.generate({ prompt: 'Blue' });
+    if ('status' in generated) throw new Error(generated.code);
     expect(generated.effectiveParameters).not.toHaveProperty('strength');
     expect(await readFile(sourceImage)).toEqual(original);
     expect(await readFile(first.image.path)).toEqual(png);
     expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
     const session = createEditor({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory, parameters: { strength: 0.4 } } });
     try {
-      expect((await session.edit({ instruction: 'variation:0.4', sourceImage })).effectiveParameters.strength).toBe(0.4);
-      expect((await session.edit({ instruction: 'variation:0.2', sourceImage, parameters: { strength: 0.2 } })).effectiveParameters.strength).toBe(0.2);
+      expect(await session.edit({ instruction: 'variation:0.4', sourceImage })).toMatchObject({ effectiveParameters: { strength: 0.4 } });
+      expect(await session.edit({ instruction: 'variation:0.2', sourceImage, parameters: { strength: 0.2 } })).toMatchObject({ effectiveParameters: { strength: 0.2 } });
       await expect(session.generate({ prompt: 'Blue' })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     } finally { await session.dispose(); }
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }

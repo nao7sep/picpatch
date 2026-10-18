@@ -57,10 +57,12 @@ it('recovers native sessions after real loading cancellation and protects prior 
     await cancelled; await gone(pids);
     expect(await readdir(directory)).toEqual([]);
     let result = await editor.generate({ prompt: 'A blue ceramic bowl on a wooden table.', parameters: { steps: 4 }, sidecar: {} });
+    if ('status' in result) throw new Error(result.code);
     for (const color of ['green', 'red']) {
       const previous = result.image.path; const bytes = await readFile(previous);
-      await expect(editor.generate({ prompt: 'A bowl.', outputPath: previous })).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT' });
+      await expect(editor.generate({ prompt: 'A bowl.', outputPath: previous })).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
       result = await editor.edit({ instruction: `A ${color} ceramic bowl on a wooden table.`, sourceImage: previous, parameters: { steps: 4, strength: 0.5 }, sidecar: {} });
+      if ('status' in result) throw new Error(result.code);
       expect(await readFile(previous)).toEqual(bytes);
       expect(result.image.size).toEqual({ width: 512, height: 512 });
       expect((await sharp(result.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
@@ -88,6 +90,7 @@ it('recovers from cooperative MFLUX cancellation and survives failing progress h
     expect(await readdir(directory)).toEqual([]);
     pids.push(...await children()); expect(pids.length).toBeGreaterThan(0);
     const generated = await editor.generate({ prompt: 'A green ceramic bowl on a table.', parameters: { steps: 2 }, sidecar: {} });
+    if ('status' in generated) throw new Error(generated.code);
     expect(await children()).toEqual(pids);
     expect((await sharp(generated.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
     const original = await readFile(generated.image.path);
@@ -95,11 +98,16 @@ it('recovers from cooperative MFLUX cancellation and survives failing progress h
     const afterHookFailure = await editor.edit({ instruction: 'Make the bowl red.', sourceImage: generated.image.path, parameters: { steps: 4 } }, {
       onProgress: event => { if (event.stage === 'editing' && event.completed !== undefined) throw new Error('consumer callback failed'); },
     });
+    if ('status' in afterHookFailure) throw new Error(afterHookFailure.code);
     expect((await sharp(afterHookFailure.image.path).metadata()).width).toBe(512);
     expect(await children()).toEqual(pids);
-    await editor.dispose();
-    editor = createEditor(options);
+    for (const pid of pids) process.kill(pid, 'SIGKILL');
+    await expect.poll(children, { timeout: 5_000 }).toEqual([]);
+    await gone(pids);
+    // Allow Node's close event to confirm pipes are closed before the next explicit call.
+    await new Promise(resolve => setTimeout(resolve, 50));
     const edited = await editor.edit({ instruction: 'Make the bowl yellow.', sourceImage: generated.image.path, parameters: { steps: 2 }, sidecar: {} });
+    if ('status' in edited) throw new Error(edited.code);
     expect(edited.image.size).toEqual({ width: 512, height: 512 });
     expect((await sharp(edited.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
     expect(await readFile(generated.image.path)).toEqual(original);

@@ -94,7 +94,7 @@ describe('owned worker lifecycle', () => {
     const cancel = child.requests.find(message => message.type === 'cancel')!;
     child.reply(cancel.id, 'cancelAck', { targetId: 2, accepted: true });
     await tick(); expect(settled).toBe(false);
-    child.reply(2, 'error', { error: { code: 'CANCELLED', message: 'Cancelled' } });
+    child.reply(2, 'error', { error: { code: 'CANCELLED', kind: 'cancelled', effect: 'none', details: {}, message: 'Cancelled' } });
     await caught; await editor.dispose(); expect(child.closed).toBe(true);
   });
   it('preserves a successful result racing with cancellation', async () => {
@@ -131,10 +131,10 @@ describe('owned worker lifecycle', () => {
     await tick(); child.stdout.write(output); await caught; expect(child.closed).toBe(true); await editor.dispose();
   });
   it('handles unexpected exit and does not silently restart', async () => {
-    const { editor, child, spawn } = setup(); const active = editor.edit(request);
+    const { editor, child, spawn, worker } = setup(); const active = editor.edit(request);
     const caught = expect(active).rejects.toBeInstanceOf(Error); await tick(); child.close(); await caught;
     await expect(editor.edit(request)).rejects.toBeInstanceOf(Error);
-    expect(spawn).toHaveBeenCalledOnce(); await editor.dispose();
+    expect(worker.restartable).toBe(true); expect(spawn).toHaveBeenCalledOnce(); await editor.dispose();
   });
   it('handles spawn failure', async () => {
     const { editor, child } = setup(); child.onRequest = () => {};
@@ -183,7 +183,7 @@ describe('transport boundaries', () => {
     await tick(); child.stdout.write(Buffer.from([0xff])); await caught; expect(child.closed).toBe(true); await editor.dispose();
   });
   it('closes on a rejected handshake', async () => {
-    const { editor, child } = setup(); child.onRequest = message => child.reply(message.id, 'error', { error: { code: 'RUNTIME_FAILURE', message: 'Unavailable' } });
+    const { editor, child } = setup(); child.onRequest = message => child.reply(message.id, 'error', { error: { code: 'RUNTIME_FAILURE', kind: 'internal', effect: 'none', details: {}, message: 'Unavailable' } });
     await expect(editor.edit(request)).rejects.toMatchObject({ code: 'PROTOCOL_ERROR' }); expect(child.closed).toBe(true); await editor.dispose();
   });
   it('contains a synchronous spawn exception', async () => {
@@ -229,10 +229,12 @@ describe('settlement after deadlines', () => {
     child.stdout.end('{"version":1'); await caught; expect(child.closed).toBe(true); await editor.dispose();
   });
   it('reports failed termination and prevents reuse', async () => {
-    vi.useFakeTimers(); const { editor, child, spawn } = setup();
+    vi.useFakeTimers(); const { editor, child, spawn, worker } = setup();
     child.kill = () => true;
     const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'TERMINATION_FAILED' });
     await vi.advanceTimersByTimeAsync(120); await caught;
+    expect(worker.restartable).toBe(false);
+    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'TERMINATION_FAILED' });
     await expect(editor.dispose()).rejects.toMatchObject({ code: 'TERMINATION_FAILED' });
     await expect(editor.edit(request)).rejects.toMatchObject({ code: 'DISPOSED' }); expect(spawn).toHaveBeenCalledOnce();
     child.close();
@@ -248,17 +250,19 @@ describe('termination signal races', () => {
     void active.catch(() => { settled = true; });
     const caught = expect(active).rejects.toMatchObject({ code: 'PROTOCOL_ERROR' });
     await vi.advanceTimersByTimeAsync(0);
-    child.stdout.end();
+    child.stdout.end('{"version":1');
     await vi.advanceTimersByTimeAsync(1);
     expect(settled).toBe(false);
     child.close(); await caught; await editor.dispose();
   });
   it('retains the signal failure as a cause if closure never arrives', async () => {
-    vi.useFakeTimers(); const { editor, child } = setup();
+    vi.useFakeTimers(); const { editor, child, worker } = setup();
     child.kill = () => { throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' }); };
     const active = editor.edit(request);
     const caught = expect(active).rejects.toMatchObject({ code: 'TERMINATION_FAILED', cause: { code: 'TERMINATION_FAILED', cause: { code: 'EPERM' } } });
     await vi.advanceTimersByTimeAsync(120); await caught;
+    expect(worker.restartable).toBe(false);
+    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'TERMINATION_FAILED' });
     await expect(editor.dispose()).rejects.toMatchObject({ code: 'TERMINATION_FAILED' });
     child.close();
   });
@@ -289,7 +293,7 @@ it('allows cancellation from progress without turning it into a callback failure
     if (message.type === 'edit') child.reply(message.id, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing' } });
     if (message.type === 'cancel') {
       child.reply(message.id, 'cancelAck', { targetId: message.targetId, accepted: true });
-      child.reply(message.targetId, 'error', { error: { code: 'CANCELLED', message: 'Cancelled' } });
+      child.reply(message.targetId, 'error', { error: { code: 'CANCELLED', kind: 'cancelled', effect: 'none', details: {}, message: 'Cancelled' } });
     }
   };
   await expect(editor.edit(request, { signal: controller.signal, onProgress: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
@@ -299,8 +303,8 @@ it('allows cancellation from progress without turning it into a callback failure
 it('preserves structured worker failure causes on the public runtime error', async () => {
   const { editor, child } = setup();
   const diagnostic = { phase: 'loading', reason: 'missing-package', causes: [{ kind: 'BackendUnavailable' }, { kind: 'ModuleNotFoundError' }] };
-  const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE', diagnostic });
-  await tick(); child.reply(2, 'error', { error: { code: 'BACKEND_UNAVAILABLE', message: 'Unavailable', diagnostic } });
+  const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE', details: { diagnostic } });
+  await tick(); child.reply(2, 'error', { error: { code: 'BACKEND_UNAVAILABLE', kind: 'unavailable', effect: 'none', message: 'Unavailable', details: { diagnostic } } });
   await caught; await editor.dispose();
 });
 

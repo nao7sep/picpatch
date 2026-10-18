@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createEditor, PicPatchUsageError, type EditResult } from 'picpatchsdk';
+import { createEditor, PicPatchSdkError, type EditResult } from 'picpatchsdk';
 import { compare, type ComparisonRecord } from '../../benchmarks/comparison.ts';
 vi.mock('picpatchsdk', async original => ({ ...await original<typeof import('picpatchsdk')>(), createEditor: vi.fn() }));
 const directories: string[] = [];
@@ -12,7 +12,7 @@ async function records(path: string): Promise<ComparisonRecord[]> { return (awai
 const result: EditResult = { model: 'test', modelRevision: 'revision', runtime: { name: 'mflux', version: 'test' }, seed: 1, effectiveParameters: { steps: 2, negativePrompt: 'private words' }, image: { path: '/private/output.png', mimeType: 'image/png', size: { width: 16, height: 16 } }, references: [], sidecar: { status: 'saved', path: '/private/output.png.json' } };
 it('persists success, skips unsupported and dependent cases, and recreates a failed session', async () => {
   const path = await reportPath();
-  const first = { generate: vi.fn().mockResolvedValue(result), edit: vi.fn().mockRejectedValue(new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'private details')), dispose: vi.fn().mockResolvedValue(undefined) };
+  const first = { generate: vi.fn().mockResolvedValue(result), edit: vi.fn().mockRejectedValue(new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'private details')), dispose: vi.fn().mockResolvedValue(undefined) };
   const next = { generate: vi.fn().mockResolvedValue(result), edit: vi.fn(), dispose: vi.fn().mockResolvedValue(undefined) };
   vi.mocked(createEditor).mockReturnValueOnce(first).mockReturnValueOnce(next);
   await compare([{ id: 'neutral', options: {}, operations: [

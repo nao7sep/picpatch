@@ -1,12 +1,12 @@
 import { contractValidator } from '../contracts.ts';
 import definitions from '../../runtimes/mflux/src/picpatch_worker/backends/models.json' with { type: 'json' };
 import type { LocalEditingModel, ModelCapabilities } from '../contracts.generated.ts';
-import { PicPatchUsageError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 
 export type ModelVariant = LocalEditingModel['variant'];
 export function modelDefinition(id: string) {
   const definition = definitions.find(item => item.id === id);
-  if (!definition) throw new PicPatchUsageError('INVALID_REQUEST', 'Unknown model variant. Choose a model returned by listModels.');
+  if (!definition) throw new PicPatchSdkError('INVALID_REQUEST', 'Unknown model variant. Choose a model returned by listModels.');
   return structuredClone(definition);
 }
 export function modelCapabilities(variant: string, model: string = variant): ModelCapabilities {

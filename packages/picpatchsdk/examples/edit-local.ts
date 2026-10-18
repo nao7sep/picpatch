@@ -16,5 +16,6 @@ try {
   }, ...(values.mask ? { maskImage: resolve(values.mask) } : {}) }, {
     onProgress: event => console.error(event.message),
   });
+  if ('status' in result) throw new Error(result.code);
   console.log(result.image.path);
 } finally { await editor.dispose(); }

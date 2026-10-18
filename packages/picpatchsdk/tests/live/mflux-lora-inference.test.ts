@@ -31,6 +31,7 @@ it('applies local LoRAs to real quantized Klein generation and editing without b
         const result = scale === -1
           ? await editor.edit({ instruction: 'Make the bowl green.', sourceImage: outputs[0]!, sidecar: { includeInputs: true } })
           : await editor.generate({ prompt: 'A blue ceramic bowl on a wooden table.', sidecar: {} });
+          if ('status' in result) throw new Error(result.code);
         expect(result.loras).toEqual([{ filename: 'adapter.safetensors', scale, sha256: prepared.model.manifest.components.find(item => item.path === 'adapter.safetensors')!.sha256 }]);
         expect((await sharp(result.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
         const sidecar = await readFile(result.sidecar!.path, 'utf8'); expect(sidecar).not.toContain(directory);

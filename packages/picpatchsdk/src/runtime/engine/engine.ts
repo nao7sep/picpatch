@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { resolveStoragePaths } from '../../paths.ts';
-import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../../errors.ts';
+import { PicPatchSdkError } from '../../errors.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../../operations.ts';
 import { operationStage, withDiagnostics } from '../../diagnostics.ts';
 import { engineDefinition, probePath, projectDirectory, validRecord } from './identity.ts';
@@ -12,7 +12,7 @@ import type { EngineIdentity, EngineInspection, EngineInstallation, EngineOption
 const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException)?.code ?? '');
 function validate(options: EngineOptions, install: boolean): string {
   validateOperation(options, ['engineDirectory', 'timeoutMs', ...(install ? ['uvExecutable', 'cacheDirectory', 'pythonDirectory', 'toolDirectories', 'offline'] : [])]);
-  if ('onProgress' in options) throw new PicPatchUsageError('INVALID_REQUEST', 'Engine operations report stages through onEvent, not invented progress counts.');
+  if ('onProgress' in options) throw new PicPatchSdkError('INVALID_REQUEST', 'Engine operations report stages through onEvent, not invented progress counts.');
   return resolveStoragePaths(options.engineDirectory === undefined ? {} : { engineDirectory: options.engineDirectory }).engineDirectory;
 }
 /** Isolated environment for package managers/probes. No ambient credentials, config or cache selection. */
@@ -30,14 +30,14 @@ async function readReady(root: string, identity: EngineIdentity): Promise<Engine
   } catch (cause) {
     if (missing(cause)) return { status: 'missing', code: 'ENGINE_MISSING', identity, engineDirectory: root };
     if (cause instanceof SyntaxError) return { status: 'incompatible', code: 'ENGINE_RECORD_INVALID', identity, engineDirectory: root };
-    throw new PicPatchRuntimeError('ENGINE_IO', 'Could not read engine readiness.', { cause });
+    throw new PicPatchSdkError('ENGINE_IO', 'Could not read engine readiness.', { cause });
   }
   if (!validRecord(record, identity)) return { status: 'incompatible', code: 'ENGINE_RECORD_INVALID', identity, engineDirectory: root };
   const pythonExecutable = join(root, 'installations', record.installation, 'venv', 'bin', 'python');
   try { if (!(await stat(pythonExecutable)).isFile()) return { status: 'incompatible', code: 'ENGINE_CHECK_FAILED', identity, engineDirectory: root }; }
   catch (cause) {
     if (missing(cause)) return { status: 'incompatible', code: 'ENGINE_CHECK_FAILED', identity, engineDirectory: root };
-    throw new PicPatchRuntimeError('ENGINE_IO', 'Could not read the installed interpreter.', { cause });
+    throw new PicPatchSdkError('ENGINE_IO', 'Could not read the installed interpreter.', { cause });
   }
   return { status: 'ready', code: 'ENGINE_READY', identity, engineDirectory: root, pythonExecutable };
 }
@@ -45,7 +45,7 @@ async function probe(engine: ReadyEngine, signal: AbortSignal): Promise<void> {
   const installation = dirname(dirname(dirname(engine.pythonExecutable)));
   const result = await runCommand(engine.pythonExecutable, ['-I', '-B', probePath, join(projectDirectory, 'uv.lock')], installation, environment(installation), signal, 60_000);
   try { if (JSON.parse(result).ready !== true) throw new Error('No ready result'); }
-  catch (cause) { throw new PicPatchRuntimeError('ENGINE_UNAVAILABLE', 'The installed runtime did not confirm its dependencies.', { cause }); }
+  catch (cause) { throw new PicPatchSdkError('ENGINE_UNAVAILABLE', 'The installed runtime did not confirm its dependencies.', { cause }); }
 }
 async function inspect(root: string, identity: EngineIdentity, signal: AbortSignal): Promise<EngineInspection> {
   const result = await readReady(root, identity);
@@ -53,7 +53,7 @@ async function inspect(root: string, identity: EngineIdentity, signal: AbortSign
   if (result.status !== 'ready') return result;
   try { await probe(result, signal); }
   catch (cause) {
-    if (cause instanceof PicPatchRuntimeError && ['INSTALL_FAILED', 'ENGINE_UNAVAILABLE'].includes(cause.code)) return { status: 'incompatible', code: 'ENGINE_CHECK_FAILED', identity, engineDirectory: root };
+    if (cause instanceof PicPatchSdkError && ['INSTALL_FAILED', 'ENGINE_UNAVAILABLE'].includes(cause.code)) return { status: 'incompatible', code: 'ENGINE_CHECK_FAILED', identity, engineDirectory: root };
     throw cause;
   }
   return result;
@@ -75,7 +75,7 @@ export async function resolveEngine(root: string, signal?: AbortSignal): Promise
   const { identity } = await engineDefinition();
   const result = await readReady(root, identity);
   checkSignal(signal);
-  if (result.status !== 'ready') throw new PicPatchRuntimeError('ENGINE_UNAVAILABLE', 'Install this SDK version’s engine before using the editor.');
+  if (result.status !== 'ready') throw new PicPatchSdkError(result.status === 'missing' ? 'ENGINE_MISSING' : 'ENGINE_INCOMPATIBLE', 'Install this SDK version’s engine before using the editor.', { subject: root });
   return result;
 }
 async function syncDirectory(path: string): Promise<void> {
@@ -88,8 +88,8 @@ export function installEngine(options: InstallEngineOptions): Promise<EngineInst
     const root = validate(operation, true);
     absolutePath(operation.uvExecutable);
     for (const path of [operation.cacheDirectory, operation.pythonDirectory]) if (path !== undefined) absolutePath(path);
-    if (operation.toolDirectories !== undefined && (!Array.isArray(operation.toolDirectories) || operation.toolDirectories.some(path => { absolutePath(path); return false; }))) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply absolute build-tool directories.');
-    if (operation.offline !== undefined && typeof operation.offline !== 'boolean') throw new PicPatchUsageError('INVALID_REQUEST', 'offline must be a boolean.');
+    if (operation.toolDirectories !== undefined && (!Array.isArray(operation.toolDirectories) || operation.toolDirectories.some(path => { absolutePath(path); return false; }))) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply absolute build-tool directories.');
+    if (operation.offline !== undefined && typeof operation.offline !== 'boolean') throw new PicPatchSdkError('INVALID_REQUEST', 'offline must be a boolean.');
     const toolDirectories = operation.toolDirectories?.slice() ?? [];
     const budget = timeBudget(operation.timeoutMs, 1_800_000);
     let completed: EngineInstallation | undefined;
@@ -97,7 +97,7 @@ export function installEngine(options: InstallEngineOptions): Promise<EngineInst
       const definition = await engineDefinition();
       operationStage(operation, 'checking', 'Checking the installed engine.');
       const existing = await inspect(root, definition.identity, signal);
-      if (existing.status === 'incompatible' && existing.code === 'ENGINE_RECORD_INVALID') throw new PicPatchRuntimeError('ENGINE_UNAVAILABLE', 'Engine readiness has an unsupported or invalid format; it was preserved.');
+      if (existing.status === 'incompatible' && existing.code === 'ENGINE_RECORD_INVALID') throw new PicPatchSdkError('ENGINE_INCOMPATIBLE', 'Engine readiness has an unsupported or invalid format; it was preserved.', { subject: root });
       if (existing.status === 'ready') return { ...existing, origin: 'reused' as const };
       const name = `${definition.identity.id}-${randomUUID()}`;
       const installation = join(root, 'installations', name);
@@ -137,18 +137,19 @@ export function installEngine(options: InstallEngineOptions): Promise<EngineInst
         return completed;
       } catch (cause) {
         // Unconfirmed termination/publication must never trigger deletion of an environment still in use.
-        if (!publicationAttempted && !(cause instanceof PicPatchRuntimeError && cause.code === 'TERMINATION_FAILED')) {
+        if (!publicationAttempted && !(cause instanceof PicPatchSdkError && cause.code === 'TERMINATION_FAILED')) {
           try {
             await rm(temporary, { force: true });
             if (owned) await rm(installation, { recursive: true, force: true });
           } catch (cleanup) {
-            const error = new PicPatchRuntimeError('CLEANUP_FAILED', 'Engine installation failed and its private files could not be removed.', { cause: new AggregateError([cause, cleanup]) });
-            error.recoveryDirectory = installation;
+            const error = new PicPatchSdkError('CLEANUP_FAILED', 'Engine installation failed and its private files could not be removed.', { cause: new AggregateError([cause, cleanup]) });
+            error.details.recoveryDirectory = installation;
+            error.effect = 'unknown';
             throw error;
           }
         }
-        const error = cause instanceof PicPatchRuntimeError || cause instanceof PicPatchUsageError || cause instanceof PicPatchCancelledError ? cause : new PicPatchRuntimeError('ENGINE_IO', 'Could not prepare or publish the engine.', { cause });
-        if (error instanceof PicPatchRuntimeError && (publicationAttempted || error.code === 'TERMINATION_FAILED')) error.recoveryDirectory = installation;
+        const error = cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('ENGINE_IO', 'Could not prepare or publish the engine.', { cause });
+        if (publicationAttempted || error.code === 'TERMINATION_FAILED') { error.details.recoveryDirectory = installation; error.effect = 'unknown'; }
         throw error;
       }
     }).catch(error => { if (completed) return completed; throw error; });

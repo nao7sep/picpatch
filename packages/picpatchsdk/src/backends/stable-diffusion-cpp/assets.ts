@@ -3,14 +3,14 @@ import { safetensorsHeader as header, type Header } from '../../models/safetenso
 import { join } from 'node:path';
 import type { LocalEditingModel } from '../../contracts.generated.ts';
 import { checkSignal } from '../../operations.ts';
-import { PicPatchRuntimeError, PicPatchUsageError } from '../../errors.ts';
+import { PicPatchSdkError } from '../../errors.ts';
 
 /** Recognize conventional SD checkpoints and the supported conditioning exports. */
 async function inspectAssets(model: LocalEditingModel, signal?: AbortSignal): Promise<void> {
   const conditioned = Boolean(model.photoMaker || model.ipAdapter);
   const required = [model.checkpoint!, ...[model.photoMaker, model.ipAdapter, model.clipVision].filter((path): path is string => path !== undefined)];
-  if (conditioned && required.some(path => !path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchUsageError('INVALID_REQUEST', 'Conditioned workflows currently require safetensors checkpoint and auxiliary assets.');
-  const incompatible = (): never => { throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint and auxiliary tensor metadata are incompatible with the selected conditioning workflow.'); };
+  if (conditioned && required.some(path => !path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchSdkError('INVALID_REQUEST', 'Conditioned workflows currently require safetensors checkpoint and auxiliary assets.');
+  const incompatible = (): never => { throw new PicPatchSdkError('INVALID_REQUEST', 'Checkpoint and auxiliary tensor metadata are incompatible with the selected conditioning workflow.'); };
   const shape = (data: Header, name: string, expected: number[]): boolean => Array.isArray(data[name]?.shape) && JSON.stringify(data[name]!.shape) === JSON.stringify(expected);
   const context = model.variant.startsWith('sdxl') ? 2048 : 768;
   if (model.checkpoint!.toLowerCase().endsWith('.safetensors')) {
@@ -19,7 +19,7 @@ async function inspectAssets(model: LocalEditingModel, signal?: AbortSignal): Pr
     const channels = model.variant.endsWith('-inpaint') ? 9 : 4;
     if (!shape(checkpoint, 'model.diffusion_model.input_blocks.0.0.weight', [320, channels, 3, 3]) ||
       !Object.entries(checkpoint).some(([key, value]) => key.startsWith('model.diffusion_model.') && key.endsWith('.attn2.to_k.weight') && value?.shape?.length === 2 && value.shape[1] === context)) {
-      throw new PicPatchUsageError('INVALID_REQUEST', 'Checkpoint tensor metadata does not match the selected SD architecture and base/inpaint variant. Supply a conventional complete checkpoint; component-only exports are unsupported.');
+      throw new PicPatchSdkError('INVALID_REQUEST', 'Checkpoint tensor metadata does not match the selected SD architecture and base/inpaint variant. Supply a conventional complete checkpoint; component-only exports are unsupported.');
     }
   }
   if (model.controlNet) {
@@ -55,7 +55,7 @@ export async function inspectNativeAssets(model: LocalEditingModel, signal?: Abo
   try { await inspectAssets(model, signal); }
   catch (cause) {
     checkSignal(signal);
-    if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError) throw cause;
-    throw new PicPatchRuntimeError('MODEL_IO', 'Could not inspect native model metadata.', { cause });
+    if (cause instanceof PicPatchSdkError) throw cause;
+    throw new PicPatchSdkError('MODEL_IO', 'Could not inspect native model metadata.', { cause });
   }
 }

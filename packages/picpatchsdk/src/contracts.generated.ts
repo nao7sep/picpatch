@@ -12,8 +12,10 @@ export type SidecarOutcome =
   | {
       status: "failed";
       path: string;
-      code: "OUTPUT_CONFLICT" | "OUTPUT_IO";
+      code:
+        "OUTPUT_CONFLICT" | "OUTPUT_IO" | "FILE_NOT_FOUND" | "PERMISSION_DENIED" | "DISK_FULL" | "IO_ERROR" | "TIMEOUT";
       message: string;
+      effect: "none" | "unknown";
     };
 
 export interface EditRequestContract {

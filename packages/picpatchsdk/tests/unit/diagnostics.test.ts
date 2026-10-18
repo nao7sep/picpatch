@@ -2,16 +2,16 @@ import { expect, it } from 'vitest';
 import { inspectModel, prepareModel, listModels, type SdkEvent } from '../../src/index.ts';
 import { withDiagnostics } from '../../src/diagnostics.ts';
 import { emitProgress } from '../../src/operations.ts';
-import { PicPatchRuntimeError } from '../../src/errors.ts';
+import { PicPatchSdkError } from '../../src/errors.ts';
 import { ProtocolSession } from '../../src/worker/protocol.ts';
 
 it('emits one invocation ID and one safe terminal error without serializing exception text or paths', async () => {
   const events: SdkEvent[] = [];
-  await expect(inspectModel('/missing/private-sentinel', { onEvent: event => events.push(event) })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(inspectModel('/missing/private-sentinel', { onEvent: event => events.push(event) })).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
   expect(events.map(event => event.stage)).toEqual(['started', 'progress', 'failed']);
   expect(new Set(events.map(event => event.operationId)).size).toBe(1);
   expect(JSON.stringify(events)).not.toContain('private-sentinel');
-  expect(events.at(-1)?.error?.code).toBe('MODEL_IO');
+  expect(events.at(-1)?.error?.code).toBe('FILE_NOT_FOUND');
 });
 it('routes progress and diagnostics from the same event owner without letting sink failures mask results', async () => {
   const stages: string[] = [];
@@ -21,7 +21,7 @@ it('routes progress and diagnostics from the same event owner without letting si
   expect(result).toBe(42); expect(stages).toEqual(['started', 'progress', 'succeeded']);
 });
 it('ignores progress errors and preserves the original failure when an event sink fails', async () => {
-  const error = new PicPatchRuntimeError('MODEL_IO', 'private sentinel');
+  const error = new PicPatchSdkError('MODEL_IO', 'private sentinel');
   await expect(withDiagnostics('fixture', { onEvent: () => { throw new Error('sink'); } }, async () => { throw error; })).rejects.toBe(error);
   await expect(withDiagnostics('fixture', {}, async options => {
     emitProgress({ ...options, onProgress: () => { throw error; } }, { stage: 'working' });
@@ -36,7 +36,7 @@ it('does not await blocked caller logging and reports cancellation as cancellati
 it('rejects malformed worker diagnostics instead of forwarding arbitrary private fields', () => {
   const session = new ProtocolSession();
   session.send({ version: 1, id: 1, type: 'hello' });
-  expect(() => session.receive(JSON.stringify({ version: 1, id: 1, type: 'error', error: { code: 'RUNTIME_FAILURE', message: 'Failed', diagnostic: { phase: 'loading', causes: [{ kind: 'Exception', message: 'private sentinel' }] } } }))).toThrow(expect.objectContaining({ code: 'PROTOCOL_ERROR' }));
+  expect(() => session.receive(JSON.stringify({ version: 1, id: 1, type: 'error', error: { code: 'RUNTIME_FAILURE', kind: 'internal', effect: 'none', details: { diagnostic: { phase: 'loading', causes: [{ kind: 'Exception', message: 'private sentinel' }] } }, message: 'Failed' } }))).toThrow(expect.objectContaining({ code: 'PROTOCOL_ERROR' }));
 });
 
 it('contains rejected progress hooks and reports them once through the separate event hook', async () => {

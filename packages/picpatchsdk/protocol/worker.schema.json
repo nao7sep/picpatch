@@ -230,27 +230,43 @@
           "type": "object",
           "properties": {
             "code": {
-              "enum": [
-                "INVALID_REQUEST",
-                "NOT_READY",
-                "BACKEND_UNAVAILABLE",
-                "BUSY",
-                "CANCELLED",
-                "RUNTIME_FAILURE"
-              ]
+              "type": "string"
             },
             "message": {
               "type": "string",
               "minLength": 1,
               "pattern": "\\S"
             },
-            "diagnostic": {
-              "$ref": "#/definitions/Diagnostic"
+            "kind": {
+              "enum": [
+                "invalid",
+                "unavailable",
+                "cancelled",
+                "internal"
+              ]
+            },
+            "effect": {
+              "enum": [
+                "none",
+                "unknown"
+              ]
+            },
+            "details": {
+              "type": "object",
+              "properties": {
+                "diagnostic": {
+                  "$ref": "#/definitions/Diagnostic"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "required": [
             "code",
-            "message"
+            "message",
+            "kind",
+            "effect",
+            "details"
           ],
           "additionalProperties": false
         }

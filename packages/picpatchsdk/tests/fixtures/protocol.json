@@ -131,7 +131,10 @@
       "type": "error",
       "error": {
         "code": "BACKEND_UNAVAILABLE",
-        "message": "Unavailable"
+        "message": "Unavailable",
+        "kind": "unavailable",
+        "effect": "none",
+        "details": {}
       }
     },
     "valid": true
@@ -294,14 +297,18 @@
       "error": {
         "code": "RUNTIME_FAILURE",
         "message": "Editing failed.",
-        "diagnostic": {
-          "phase": "loading",
-          "causes": [
-            {
-              "kind": "FileNotFoundError",
-              "errno": 2
-            }
-          ]
+        "kind": "internal",
+        "effect": "none",
+        "details": {
+          "diagnostic": {
+            "phase": "loading",
+            "causes": [
+              {
+                "kind": "FileNotFoundError",
+                "errno": 2
+              }
+            ]
+          }
         }
       }
     }
@@ -317,14 +324,18 @@
       "error": {
         "code": "RUNTIME_FAILURE",
         "message": "Editing failed.",
-        "diagnostic": {
-          "phase": "loading",
-          "causes": [
-            {
-              "kind": "Exception",
-              "message": "private sentinel"
-            }
-          ]
+        "kind": "internal",
+        "effect": "none",
+        "details": {
+          "diagnostic": {
+            "phase": "loading",
+            "causes": [
+              {
+                "kind": "Exception",
+                "message": "private sentinel"
+              }
+            ]
+          }
         }
       }
     }

@@ -72,7 +72,7 @@ def test_loading_failure_preserves_safe_causal_structure():
         'model': 'test', 'instruction': 'edit', 'sourceImage': '/in.png', 'outputPath': '/out.png'}})
     session.close()
     error = replies[-1]['error']
-    assert error['diagnostic'] == {'phase': 'loading', 'causes': [{'kind': 'RuntimeError'}, {'kind': 'FileNotFoundError', 'errno': 2}]}
+    assert error['details']['diagnostic'] == {'phase': 'loading', 'causes': [{'kind': 'RuntimeError'}, {'kind': 'FileNotFoundError', 'errno': 2}]}
     assert 'sentinel' not in str(replies) and '/private' not in str(replies)
     protocol.validate(replies[-1], 'Response')
 

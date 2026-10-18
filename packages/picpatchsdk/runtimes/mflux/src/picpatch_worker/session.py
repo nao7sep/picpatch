@@ -51,7 +51,7 @@ class Session:
         envelope = {'version': 1, 'id': request['id']}
 
         def error(code: str, message: str) -> dict:
-            return {**envelope, 'type': 'error', 'error': {'code': code, 'message': message}}
+            return {**envelope, 'type': 'error', 'error': {'code': code, 'kind': self.protocol.error_codes[code], 'effect': 'none', 'message': message, 'details': {}}}
 
         kind = request['type']
         if kind == 'hello':
@@ -106,12 +106,21 @@ class Session:
             if isinstance(error, Cancelled):
                 code, message = 'CANCELLED', 'Image operation was cancelled.'
             elif isinstance(error, BackendUnavailable):
-                code, message = 'BACKEND_UNAVAILABLE', 'The local inference runtime or model bundle is unavailable.'
+                code = {'missing-package': 'DEPENDENCY_MISSING', 'unsupported-version': 'DEPENDENCY_INCOMPATIBLE', 'missing-directory': 'FILE_NOT_FOUND'}.get(error.reason, 'BACKEND_UNAVAILABLE')
+                message = 'The local inference runtime or model bundle is unavailable.'
             elif isinstance(error, InvalidEditInput):
                 code, message = 'INVALID_REQUEST', 'The model could not accept these image inputs.'
+            elif isinstance(error, FileNotFoundError):
+                code, message = 'FILE_NOT_FOUND', 'A required local file is missing.'
+            elif isinstance(error, PermissionError):
+                code, message = 'PERMISSION_DENIED', 'A local file is not accessible.'
+            elif isinstance(error, MemoryError):
+                code, message = 'OUT_OF_MEMORY', 'The runtime could not allocate memory.'
             else:
                 code, message = 'RUNTIME_FAILURE', 'Local image operation failed; verify the runtime and model bundle.'
-            response = {**envelope, 'type': 'error', 'error': {'code': code, 'message': message, 'diagnostic': diagnostic(error, phase)}}
+            # The worker writes only its caller-owned private workspace. The client
+            # classifies publication/cleanup effects after process settlement.
+            response = {**envelope, 'type': 'error', 'error': {'code': code, 'kind': self.protocol.error_codes[code], 'effect': 'none', 'message': message, 'details': {'diagnostic': diagnostic(error, phase)}}}
         with self.lock:
             try:
                 self.emit(response)

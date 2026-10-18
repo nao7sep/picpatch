@@ -19,6 +19,7 @@ it.each(['sd15', 'sdxl'])('applies a local LoRA at distinct scales during real n
       const editor = createEditor({ nativeExecutable: config.executable, model: { ...prepared.model, loras: [{ path: 'adapter.safetensors', scale }] }, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
       try {
         const result = await editor.generate({ prompt: 'A blue ceramic bowl on a table.', parameters: { steps: 4 }, sidecar: {} });
+        if ('status' in result) throw new Error(result.code);
         expect(result.loras).toEqual([{ filename: 'adapter.safetensors', scale, sha256: prepared.model.manifest.components[1]!.sha256 }]);
         const text = await readFile(result.sidecar!.path, 'utf8'); expect(text).not.toContain(directory);
         expect(JSON.parse(text).loras).toEqual(result.loras);

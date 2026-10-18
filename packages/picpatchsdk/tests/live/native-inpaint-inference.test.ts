@@ -22,10 +22,12 @@ it('runs SD1.5 generation, variation and trained inpainting with thresholded mas
     try {
       phase = 'base generation';
       const image = await editor.generate({ prompt: 'A blue ceramic bowl on a wooden table.', parameters: { steps: 4 } });
+      if ('status' in image) throw new Error(image.code);
       expect((await sharp(image.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
       await sharp(image.image.path).resize(320, 192).png().toFile(sourceImage);
       phase = 'source variation';
       const variation = await editor.edit({ instruction: 'A green ceramic bowl on a wooden table.', sourceImage, parameters: { steps: 4, strength: 0.5 } });
+      if ('status' in variation) throw new Error(variation.code);
       expect(variation.effectiveParameters.strength).toBe(0.5);
       expect(await sharp(variation.image.path).metadata()).toMatchObject({ width: 256, height: 256 });
     } finally { await editor.dispose(); }
@@ -43,6 +45,7 @@ it('runs SD1.5 generation, variation and trained inpainting with thresholded mas
         await sharp(Buffer.alloc(320 * 192, value), { raw: { width: 320, height: 192, channels: 1 } }).toColourspace('b-w').png().toFile(maskImage);
         const maskBytes = await readFile(maskImage);
         const result = await inpaint.edit({ instruction: 'A red glass vase on a wooden table.', sourceImage, maskImage, parameters: { steps: 4 }, sidecar: {} });
+        if ('status' in result) throw new Error(result.code);
         expect(result.effectiveParameters.strength).toBe(1);
         expect(await sharp(result.image.path).metadata()).toMatchObject({ width: 256, height: 256 });
         expect((await sharp(result.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
@@ -58,6 +61,7 @@ it('runs SD1.5 generation, variation and trained inpainting with thresholded mas
         return total / a.length;
       };
       const repeated = await inpaint.edit({ instruction: 'A red glass vase on a wooden table.', sourceImage, maskImage: join(directory, 'mask-0.png'), parameters: { steps: 4 } });
+      if ('status' in repeated) throw new Error(repeated.code);
       // Permit at most one intensity level of average numerical variation between
       // independent native runs; a threshold reversal changes the whole canvas.
       expect(distance(pixels.get(0)!, await sharp(repeated.image.path).removeAlpha().raw().toBuffer())).toBeLessThanOrEqual(1);
@@ -72,6 +76,7 @@ it('runs SD1.5 generation, variation and trained inpainting with thresholded mas
       await inpaint.edit({ instruction: 'A red glass vase.', sourceImage, maskImage, parameters: { steps: 4 } });
       phase = 'outpainting';
       const extended = await inpaint.edit({ instruction: 'A wooden table extending around the bowl.', sourceImage, outpaint: { size: { width: 384, height: 256 }, left: 32, top: 32 }, size: { width: 384, height: 256 }, parameters: { steps: 4 } });
+      if ('status' in extended) throw new Error(extended.code);
       expect(await sharp(extended.image.path).metadata()).toMatchObject({ width: 384, height: 256 });
       expect((await sharp(extended.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
       phase = 'inpaint cancellation';

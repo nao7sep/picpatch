@@ -3,7 +3,7 @@ import { WorkerProcess } from '../worker/process.ts';
 import { workerLaunch } from '../backends/mflux/launch.ts';
 import { workerTimeouts } from '../worker/process.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation } from '../operations.ts';
-import { PicPatchRuntimeError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 import type { RuntimeInspection, RuntimeOperationOptions } from './types.ts';
 
 /** Starts only the bundled model-free handshake and confirms closure before returning. */
@@ -19,7 +19,7 @@ async function inspectRuntimeOperation(pythonExecutable: string, options: Runtim
     checkSignal(operation.signal);
     const ready = await worker.start();
     checkSignal(operation.signal);
-    if (ready.type !== 'ready') throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker did not complete its handshake.');
+    if (ready.type !== 'ready') throw new PicPatchSdkError('PROTOCOL_ERROR', 'Worker did not complete its handshake.');
     result = { pythonExecutable, status: 'worker-ready', workerVersion: ready.workerVersion, models: ready.models };
   } finally {
     try { await worker.dispose(); }

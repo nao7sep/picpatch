@@ -1,32 +1,85 @@
+import { isAbsolute } from 'node:path';
+import workerSchema from '../protocol/worker.schema.json' with { type: 'json' };
+import codes from '../protocol/error-codes.json' with { type: 'json' };
 import type { WorkerDiagnostic } from './diagnostics.ts';
-export class PicPatchUsageError extends Error {
-  readonly category = 'usage';
-  recoveryDirectory?: string;
-  readonly code: 'INVALID_REQUEST' | 'UNSUPPORTED_CAPABILITY' | 'OUTPUT_CONFLICT' | 'BUSY' | 'DISPOSED' | 'INVALID_IMAGE' | 'INVALID_MASK';
-  constructor(code: 'INVALID_REQUEST' | 'UNSUPPORTED_CAPABILITY' | 'OUTPUT_CONFLICT' | 'BUSY' | 'DISPOSED' | 'INVALID_IMAGE' | 'INVALID_MASK', message: string, options?: ErrorOptions) {
+
+export type ErrorKind = 'invalid' | 'unavailable' | 'cancelled' | 'internal';
+export type ErrorEffect = 'none' | 'unknown';
+export type ErrorCode = keyof typeof codes;
+/** Shared with the worker; kind is never inferred from exception prose. */
+export const errorCodes = Object.freeze(codes) as Readonly<Record<ErrorCode, ErrorKind>>;
+export interface ErrorDetails { diagnostic?: WorkerDiagnostic; recoveryDirectory?: string }
+export interface PicPatchSdkErrorData {
+  code: ErrorCode;
+  kind: ErrorKind;
+  effect: ErrorEffect;
+  message: string;
+  subject?: string;
+  details: ErrorDetails;
+  cause?: unknown;
+}
+export interface SdkErrorOptions extends ErrorOptions { effect?: ErrorEffect; subject?: string; details?: ErrorDetails }
+const filesystemCodes: Record<string, ErrorCode> = { ENOENT: 'FILE_NOT_FOUND', ENOTDIR: 'FILE_NOT_FOUND', EACCES: 'PERMISSION_DENIED', EPERM: 'PERMISSION_DENIED', ENOSPC: 'DISK_FULL', EIO: 'IO_ERROR', ETIMEDOUT: 'TIMEOUT' };
+
+export class PicPatchSdkError extends Error implements PicPatchSdkErrorData {
+  readonly code: ErrorCode;
+  readonly kind: ErrorKind;
+  effect: ErrorEffect;
+  readonly subject?: string;
+  readonly details: ErrorDetails;
+  constructor(code: ErrorCode, message: string, options: SdkErrorOptions = {}) {
     super(message, options);
-    this.code = code;
-    this.name = 'PicPatchUsageError';
+    this.name = 'PicPatchSdkError';
+    // Preserve a concrete observed filesystem cause instead of naming only the failed step.
+    const observed = (options.cause as NodeJS.ErrnoException | undefined)?.code;
+    this.code = (code.endsWith('_IO') || code === 'WORKER_UNAVAILABLE') && observed && filesystemCodes[observed] || code;
+    this.kind = errorCodes[this.code];
+    this.effect = options.effect ?? 'none';
+    const path = (options.cause as NodeJS.ErrnoException | undefined)?.path;
+    const subject = options.subject ?? (typeof path === 'string' && isAbsolute(path) ? path : undefined);
+    if (subject !== undefined) this.subject = subject;
+    this.details = { ...options.details };
+  }
+  toJSON(): PicPatchSdkErrorData {
+    return { code: this.code, kind: this.kind, effect: this.effect, message: this.message,
+      ...(this.subject !== undefined ? { subject: this.subject } : {}), details: structuredClone(this.details),
+      ...(this.cause === undefined ? {} : { cause: safeCause(this.cause) }) };
   }
 }
-
-export class PicPatchRuntimeError extends Error {
-  diagnostic?: WorkerDiagnostic;
-  readonly category = 'runtime';
-  recoveryDirectory?: string;
-  readonly code: 'ENGINE_IO' | 'ENGINE_UNAVAILABLE' | 'INSTALL_FAILED' | 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE' | 'IMAGE_IO' | 'INVALID_OUTPUT' | 'OUTPUT_IO' | 'CLEANUP_FAILED' | 'MODEL_IO';
-  constructor(code: 'ENGINE_IO' | 'ENGINE_UNAVAILABLE' | 'INSTALL_FAILED' | 'INVALID_CAPABILITIES' | 'PROTOCOL_ERROR' | 'WORKER_UNAVAILABLE' | 'WORKER_EXITED' | 'TIMEOUT' | 'TERMINATION_FAILED' | 'BACKEND_UNAVAILABLE' | 'RUNTIME_FAILURE' | 'IMAGE_IO' | 'INVALID_OUTPUT' | 'OUTPUT_IO' | 'CLEANUP_FAILED' | 'MODEL_IO', message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.code = code;
-    this.name = 'PicPatchRuntimeError';
-  }
+/** Accept errors from another realm/process, without relying on class identity. */
+export function isPicPatchSdkError(value: unknown): value is PicPatchSdkErrorData {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as PicPatchSdkErrorData;
+  return typeof item.code === 'string' && Object.hasOwn(errorCodes, item.code) && item.kind === errorCodes[item.code] &&
+    (item.effect === 'none' || item.effect === 'unknown') && typeof item.message === 'string' &&
+    (item.subject === undefined || typeof item.subject === 'string') && !!item.details && typeof item.details === 'object' && !Array.isArray(item.details) &&
+    Object.keys(item.details).every(key => ['diagnostic', 'recoveryDirectory'].includes(key)) &&
+    (item.details.recoveryDirectory === undefined || typeof item.details.recoveryDirectory === 'string') &&
+    (item.details.diagnostic === undefined || validDiagnostic(item.details.diagnostic));
+}
+/** Unknown external failures keep their original local cause; no raw text enters events or transport. */
+export function sdkError(cause: unknown): PicPatchSdkError {
+  if (cause instanceof PicPatchSdkError) return cause;
+  if (isPicPatchSdkError(cause)) return new PicPatchSdkError(cause.code, cause.message, { ...cause, cause: cause.cause });
+  return new PicPatchSdkError('INTERNAL', 'An unclassified SDK failure occurred.', { cause });
+}
+function safeCause(cause: unknown, seen = new Set<unknown>()): unknown {
+  if (!cause || typeof cause !== 'object' || seen.has(cause) || seen.size >= 4) return { kind: 'Unknown' };
+  seen.add(cause);
+  const error = cause as Error & { code?: unknown };
+  const code = typeof error.code === 'string' && (Object.hasOwn(errorCodes, error.code) || Object.hasOwn(filesystemCodes, error.code)) ? error.code : undefined;
+  return { kind: error instanceof TypeError ? 'TypeError' : error instanceof SyntaxError ? 'SyntaxError' : 'Error',
+    ...(code ? { code } : {}), ...(error.cause === undefined ? {} : { cause: safeCause(error.cause, seen) }) };
 }
 
-export class PicPatchCancelledError extends Error {
-  readonly category = 'cancelled';
-  readonly code = 'CANCELLED';
-  constructor(message = 'The edit was cancelled.', options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'PicPatchCancelledError';
-  }
+function validDiagnostic(value: unknown): value is WorkerDiagnostic {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const item = value as WorkerDiagnostic;
+  const schema = workerSchema.definitions.Diagnostic.properties;
+  return Object.keys(item).every(key => ['phase', 'causes', 'reason', 'exitCode', 'signal'].includes(key)) &&
+    schema.phase.enum.includes(item.phase) && Array.isArray(item.causes) && item.causes.length >= 1 && item.causes.length <= 4 &&
+    item.causes.every(cause => !!cause && typeof cause === 'object' && Object.keys(cause).every(key => key === 'kind' || key === 'errno') &&
+      schema.causes.items.properties.kind.enum.includes(cause.kind) && (cause.errno === undefined || Number.isInteger(cause.errno) && cause.errno >= 0 && cause.errno <= 4095)) &&
+    (item.reason === undefined || schema.reason.enum.includes(item.reason)) &&
+    (item.exitCode === undefined || Number.isInteger(item.exitCode)) && (item.signal === undefined || typeof item.signal === 'string');
 }

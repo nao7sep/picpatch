@@ -1,3 +1,4 @@
+import { PicPatchSdkError } from '../errors.ts';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { link, open } from 'node:fs/promises';
@@ -8,6 +9,7 @@ import type { ImageRequest } from '../types.ts';
 /** Called only after PNG publication; settlement must never disguise a saved image. */
 export async function publishSidecar(request: ImageRequest, result: EditResult, complete: string, destination: string, directory: string): Promise<SidecarOutcome> {
   const path = `${request.outputPath}.json`;
+  let publishing = false;
   try {
     const hash = createHash('sha256');
     let bytes = 0;
@@ -37,10 +39,12 @@ export async function publishSidecar(request: ImageRequest, result: EditResult, 
     try { await file.writeFile(`${JSON.stringify(record, null, 2)}\n`, 'utf8'); await file.sync(); }
     finally { await file.close(); }
     // Each file publishes exclusively. The pair is deliberately not called atomic.
+    publishing = true;
     await link(staging, destination);
     return { status: 'saved', path };
   } catch (cause) {
-    const code = (cause as NodeJS.ErrnoException).code === 'EEXIST' ? 'OUTPUT_CONFLICT' : 'OUTPUT_IO';
-    return { status: 'failed', path, code, message: 'Image was saved, but its metadata sidecar could not be saved.' };
+    // OUTPUT_IO classification can only select these filesystem causes.
+    const code = ((cause as NodeJS.ErrnoException).code === 'EEXIST' ? 'OUTPUT_CONFLICT' : new PicPatchSdkError('OUTPUT_IO', 'Sidecar write failed.', { cause }).code) as Extract<SidecarOutcome, { status: 'failed' }>['code'];
+    return { status: 'failed', path, code, effect: publishing && code !== 'OUTPUT_CONFLICT' ? 'unknown' : 'none', message: 'Image was saved, but its metadata sidecar could not be saved.' };
   }
 }

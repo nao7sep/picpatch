@@ -25,6 +25,7 @@ it('runs Canny generation and source editing with local LoRA composition and pat
       const outputs: string[] = [];
       for (const strength of [0, 1]) {
         const result = await editor.generate({ prompt: 'A square blue ceramic tile on a table.', control: { kind: 'canny', image: map, strength }, sidecar: { includeInputs: true } });
+        if ('status' in result) throw new Error(result.code);
         expect(result.control).toMatchObject({ kind: 'canny', strength, asset: { filename: 'canny.safetensors', sha256: '8932b66e15aae835b3490dbf989f56c253104cee08a88bf21283762f557c9f10' } });
         expect(result.loras?.[0]?.scale).toBe(0.5);
         expect((await sharp(result.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
@@ -38,6 +39,7 @@ it('runs Canny generation and source editing with local LoRA composition and pat
       const abort = new AbortController();
       await expect(editor.edit(request, { signal: abort.signal, onProgress: event => { if (event.stage === 'editing') abort.abort(); } })).rejects.toMatchObject({ code: 'CANCELLED' });
       const edit = await editor.edit(request);
+      if ('status' in edit) throw new Error(edit.code);
       expect(edit.control?.strength).toBe(0.9);
       expect((await sharp(edit.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
       const record = JSON.parse(await readFile(edit.sidecar!.path, 'utf8'));

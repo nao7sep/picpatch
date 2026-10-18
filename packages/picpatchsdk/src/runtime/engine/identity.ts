@@ -2,14 +2,14 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PicPatchUsageError } from '../../errors.ts';
+import { PicPatchSdkError } from '../../errors.ts';
 import type { EngineIdentity, EngineRecord } from './types.ts';
 
 export const projectDirectory = fileURLToPath(new URL('../../../runtimes/mflux/', import.meta.url));
 export const probePath = fileURLToPath(new URL('../../../runtimes/mflux/engine_probe.py', import.meta.url));
 const hash = (bytes: string) => createHash('sha256').update(bytes).digest('hex');
 export async function engineDefinition() {
-  if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The managed MFLUX runtime requires macOS arm64.');
+  if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The managed MFLUX runtime requires macOS arm64.');
   const [manifest, lock] = await Promise.all([readFile(join(projectDirectory, 'pyproject.toml'), 'utf8'), readFile(join(projectDirectory, 'uv.lock'), 'utf8')]);
   return { identity: identifyEngine(manifest, lock), manifest, lock };
 }

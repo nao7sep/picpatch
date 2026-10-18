@@ -1,4 +1,4 @@
-import { PicPatchUsageError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 import type { InputGeometry, ModelCapabilities } from '../types.ts';
 export type GeometryPolicy = ModelCapabilities['inputGeometry'];
 
@@ -20,7 +20,7 @@ export function inputGeometry(width: number, height: number, orientation = 1, po
   const preparedSize = policy === 'klein-reference'
     ? { width: scaledSize.width - scaledSize.width % 16, height: scaledSize.height - scaledSize.height % 16 }
     : { ...scaledSize };
-  if (preparedSize.width < 1 || preparedSize.height < 1) throw new PicPatchUsageError('INVALID_IMAGE', 'Image is too small or narrow for this model after downscaling; each prepared side must be at least 16 pixels.');
+  if (preparedSize.width < 1 || preparedSize.height < 1) throw new PicPatchSdkError('INVALID_IMAGE', 'Image is too small or narrow for this model after downscaling; each prepared side must be at least 16 pixels.');
   return { originalSize, orientedSize, scaledSize, preparedSize,
     crop: { left: Math.floor((scaledSize.width - preparedSize.width) / 2), top: Math.floor((scaledSize.height - preparedSize.height) / 2) } };
 }

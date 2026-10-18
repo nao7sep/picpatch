@@ -49,6 +49,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
         ...(index === 1 ? { sourceImage: paths[0]!, parameters: { steps: 2, guidance: 1 } } : {}),
         references: [{ id: 'colors', role: 'style', images: [images[0]!, images[1]!] }],
       }, { onEvent: event => events.push(event) });
+      if ('status' in result) throw new Error(result.code);
       paths.push(result.image.path);
       const metadata = await sharp(result.image.path).metadata();
       expect(metadata).toMatchObject({ format: 'png', width: 256, height: 256 });
@@ -63,7 +64,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
       expect(result.image.path).toMatch(/edit-[a-f0-9-]+\.png$/);
     }
     const saved = await readFile(paths[0]!);
-    await expect(editor.edit({ instruction: 'Use blue.', sourceImage: images[0]!, outputPath: paths[0]! })).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT' });
+    await expect(editor.edit({ instruction: 'Use blue.', sourceImage: images[0]!, outputPath: paths[0]! })).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
     expect(await readFile(paths[0]!)).toEqual(saved);
     await editor.dispose();
     await expect(editor.edit({ instruction: 'Use blue.', sourceImage: images[0]! })).rejects.toMatchObject({ code: 'DISPOSED' });
@@ -145,6 +146,7 @@ it('edits through a mask while preserving every black-mask source pixel', async 
     await sharp(mask, { raw: { width: 256, height: 256, channels: 1 } }).toColourspace('b-w').png().toFile(maskImage);
     const original = await readFile(sourceImage); const originalMask = await readFile(maskImage);
     const result = await editor.edit({ instruction: 'Make the entire image solid blue.', sourceImage, maskImage, seed: 42, outputPath: join(directory, 'output.png') });
+    if ('status' in result) throw new Error(result.code);
     expect(result.image.size).toEqual({ width: 256, height: 256 });
     const pixels = await sharp(result.image.path).ensureAlpha().raw().toBuffer();
     let changed = false;
@@ -171,6 +173,7 @@ it('generates from text, edits that result in the same session, and cancels gene
   const events: SdkEvent[] = [];
   try {
     const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.', parameters: { steps: 2 }, sidecar: {} }, { onEvent: event => events.push(event) });
+    if ('status' in generated) throw new Error(generated.code);
     expect(generated.sidecar?.status).toBe('saved');
     const metadata = JSON.parse(await readFile(generated.sidecar!.path, 'utf8'));
     expect(metadata.effectiveParameters.steps).toBe(2);
@@ -180,6 +183,7 @@ it('generates from text, edits that result in the same session, and cancels gene
     expect(generated.image.path).toMatch(/generate-[a-f0-9-]+\.png$/);
     expect(await sharp(generated.image.path).metadata()).toMatchObject({ format: 'png', width: 256, height: 256 });
     const edited = await editor.edit({ instruction: 'Make the bowl green.', sourceImage: generated.image.path, sidecar: { includeInputs: true } });
+    if ('status' in edited) throw new Error(edited.code);
     expect(edited.sidecar?.status).toBe('saved');
     const editMetadata = await readFile(edited.sidecar!.path, 'utf8');
     expect(JSON.parse(editMetadata).inputs.sourceImage).toBe(generated.image.path.split('/').at(-1));
@@ -208,6 +212,7 @@ it('outpaints an asymmetric canvas while preserving normalized source pixels inc
     const original = await sharp(sourceImage).ensureAlpha().raw().toBuffer();
     const result = await editor.edit({ instruction: 'Extend the plain background around the color swatch.', sourceImage,
       outpaint: { size: { width: 256, height: 256 }, left: 81, top: 93 }, parameters: { steps: 2 }, seed: 42, outputPath: join(directory, 'out.png') });
+      if ('status' in result) throw new Error(result.code);
     expect(result.outpaint).toEqual({ size: { width: 256, height: 256 }, left: 81, top: 93, sourceSize: { width: 37, height: 29 } });
     const preserved = await sharp(result.image.path).extract({ left: 81, top: 93, width: 37, height: 29 }).ensureAlpha().raw().toBuffer();
     expect(preserved).toEqual(original);

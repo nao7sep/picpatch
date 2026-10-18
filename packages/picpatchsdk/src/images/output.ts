@@ -3,7 +3,7 @@ import { prepareOutpaint } from './outpaint.ts';
 import { publishSidecar } from './sidecar.ts';
 import { basename, dirname, join } from 'node:path';
 import { chmod, link, lstat, mkdtemp, open, realpath, rm } from 'node:fs/promises';
-import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 import type { ImageRequest, EditResult, InputGeometry, ModelCapabilities } from '../types.ts';
 import type { GeometryPolicy } from './geometry.ts';
 import { checkCancellation, normalizeImage, prepareImage, snapshotImage } from './validation.ts';
@@ -28,29 +28,29 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     checkCancellation(signal);
     let parent: string;
     try { parent = await realpath(dirname(request.outputPath)); }
-    catch (cause) { throw new PicPatchUsageError('INVALID_REQUEST', 'Output directory must already exist and be accessible.', { cause }); }
+    catch (cause) { throw new PicPatchSdkError('OUTPUT_IO', 'Output directory must already exist and be accessible.', { cause, subject: dirname(request.outputPath) }); }
     const destination = join(parent, basename(request.outputPath));
     for (const path of request.sidecar ? [destination, `${destination}.json`] : [destination]) {
       try {
         await lstat(path);
-        throw new PicPatchUsageError('OUTPUT_CONFLICT', 'Output already exists; choose a new path.');
+        throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output already exists; choose a new path.');
       } catch (cause) {
         if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') {
-          if (cause instanceof PicPatchUsageError) throw cause;
-          throw new PicPatchRuntimeError('OUTPUT_IO', 'Could not inspect the output destination.', { cause });
+          if (cause instanceof PicPatchSdkError) throw cause;
+          throw new PicPatchSdkError('OUTPUT_IO', 'Could not inspect the output destination.', { cause });
         }
       }
     }
     try {
       const directory = await mkdtemp(join(parent, '.picpatch-'));
       return new ImageWorkspace(directory, destination, structuredClone(request));
-    } catch (cause) { throw new PicPatchRuntimeError('OUTPUT_IO', 'Could not create private output storage.', { cause }); }
+    } catch (cause) { throw new PicPatchSdkError('OUTPUT_IO', 'Could not create private output storage.', { cause }); }
   }
 
   async prepare(signal?: AbortSignal, policy?: GeometryPolicy, maskMode: ModelCapabilities['maskMode'] = 'composite', defaultSize?: ModelCapabilities['defaultOutputSize']): Promise<void> {
     if (this.request.control) {
       const size = this.request.size ?? defaultSize;
-      if (!size) throw new PicPatchUsageError('INVALID_REQUEST', 'Control maps require output dimensions.');
+      if (!size) throw new PicPatchSdkError('INVALID_REQUEST', 'Control maps require output dimensions.');
       const prepared = await prepareControl(this.request.control.image, this.directory, size, signal);
       this.workerRequest.control = { ...this.request.control, image: prepared.path };
       this.workerRequest.size = size;
@@ -76,15 +76,15 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     }
     if (this.request.maskImage) {
       if (!source || source.width !== source.geometry.orientedSize.width || source.height !== source.geometry.orientedSize.height) {
-        throw new PicPatchUsageError('INVALID_MASK', 'Masked editing requires source dimensions that need no model resizing or cropping.');
+        throw new PicPatchSdkError('INVALID_MASK', 'Masked editing requires source dimensions that need no model resizing or cropping.');
       }
       if (maskMode !== 'native' && this.request.size && (this.request.size.width !== source.width || this.request.size.height !== source.height)) {
-        throw new PicPatchUsageError('INVALID_MASK', 'Masked output dimensions must match the oriented source.');
+        throw new PicPatchSdkError('INVALID_MASK', 'Masked output dimensions must match the oriented source.');
       }
       this.workerRequest.size = this.request.size ?? { width: source.width, height: source.height };
       const mask = await prepare(this.request.maskImage, true);
       if (!source || mask.width !== source.width || mask.height !== source.height) {
-        throw new PicPatchUsageError('INVALID_MASK', 'Mask dimensions must match the oriented source image.');
+        throw new PicPatchSdkError('INVALID_MASK', 'Mask dimensions must match the oriented source image.');
       }
       this.workerRequest.maskImage = mask.path;
     }
@@ -92,7 +92,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     for (const group of this.workerRequest.references ?? []) {
       for (let i = 0; i < group.images.length; i++) {
         const image = await prepare(group.images[i]!);
-        if (identities.has(image.identity)) throw new PicPatchUsageError('INVALID_IMAGE', 'Reference images must not alias the same file.');
+        if (identities.has(image.identity)) throw new PicPatchSdkError('INVALID_IMAGE', 'Reference images must not alias the same file.');
         identities.add(image.identity);
         group.images[i] = image.path;
       }
@@ -117,7 +117,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       }
     } catch (cause) {
       checkCancellation(signal);
-      throw new PicPatchRuntimeError('INVALID_OUTPUT', 'Worker output is missing, malformed, or inconsistent with its metadata.', { cause });
+      throw new PicPatchSdkError('INVALID_OUTPUT', 'Worker output is missing, malformed, or inconsistent with its metadata.', { cause });
     }
     checkCancellation(signal);
     try {
@@ -129,12 +129,13 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       // No overwriting rename or copy fallback is permitted.
       await link(complete, this.destination);
     } catch (cause) {
-      if (cause instanceof PicPatchCancelledError) throw cause;
+      if ((cause instanceof PicPatchSdkError && cause.kind === 'cancelled')) throw cause;
       this.retain = true;
       const error = (cause as NodeJS.ErrnoException).code === 'EEXIST'
-        ? new PicPatchUsageError('OUTPUT_CONFLICT', 'Output appeared during the operation; the completed image was retained.', { cause })
-        : new PicPatchRuntimeError('OUTPUT_IO', 'Could not publish atomically; the completed image was retained.', { cause });
-      error.recoveryDirectory = this.directory;
+        ? new PicPatchSdkError('OUTPUT_CONFLICT', 'Output appeared during the operation; the completed image was retained.', { cause })
+        : new PicPatchSdkError('OUTPUT_IO', 'Could not publish atomically; the completed image was retained.', { cause });
+      error.details.recoveryDirectory = this.directory;
+      error.effect = 'unknown';
       throw error;
     }
     // Publication is the commit point. A later abort must not disguise a saved result.

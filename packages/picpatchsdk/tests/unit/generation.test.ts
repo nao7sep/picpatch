@@ -7,7 +7,7 @@ import { createEditor, validateGenerateRequest, type SdkEvent, type GenerateRequ
 import { resolveGenerateRequest } from '../../src/defaults.ts';
 import { ImageEditor } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
-import { PicPatchCancelledError } from '../../src/errors.ts';
+import { PicPatchSdkError } from '../../src/errors.ts';
 let directory: string;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-generate-')); });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
@@ -49,6 +49,7 @@ it('publishes generation through shared safe storage without fabricated inputs o
   const editor = new ImageEditor(backend(generate));
   try {
     const result = await editor.generate(request(), { onEvent: event => events.push(event) });
+    if ('status' in result) throw new Error(result.code);
     expect(result).toMatchObject({ image: { path: request().outputPath }, references: [], inputGeometry: [], seed: 0 });
     expect(await readdir(directory)).toEqual(['out.png']);
     expect((await sharp(result.image.path).metadata()).width).toBe(32);
@@ -56,7 +57,7 @@ it('publishes generation through shared safe storage without fabricated inputs o
     expect(events.at(-1)?.stage).toBe('succeeded');
     expect(JSON.stringify(events)).not.toContain(request().prompt);
     const saved = await readFile(result.image.path);
-    await expect(editor.generate(request())).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT' });
+    await expect(editor.generate(request())).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
     expect(await readFile(result.image.path)).toEqual(saved);
     expect(generate).toHaveBeenCalledTimes(1);
   } finally { await editor.dispose(); }
@@ -66,16 +67,16 @@ it('rejects malformed generated output and cleans private storage', async () => 
   try { await expect(editor.generate(request())).rejects.toMatchObject({ code: 'INVALID_OUTPUT' }); expect(await readdir(directory)).toEqual([]); }
   finally { await editor.dispose(); }
 });
-it('shares busy/disposal ownership across edit and generation and waits before cleanup', async () => {
+it('shares queued/disposal ownership across edit and generation and waits before cleanup', async () => {
   const entered = Promise.withResolvers<void>(); const release = Promise.withResolvers<void>();
-  const editor = new ImageEditor(backend(async () => { entered.resolve(); await release.promise; throw new PicPatchCancelledError(); }));
+  const editor = new ImageEditor(backend(async () => { entered.resolve(); await release.promise; throw new PicPatchSdkError('CANCELLED', 'The operation was cancelled.'); }));
   const operation = editor.generate(request()); const caught = expect(operation).rejects.toMatchObject({ code: 'CANCELLED' });
   await entered.promise;
-  await expect(editor.edit({ instruction: 'Edit', sourceImage: '/source.png', outputPath: '/out.png' })).rejects.toMatchObject({ code: 'BUSY' });
-  await expect(editor.generate(request())).rejects.toMatchObject({ code: 'BUSY' });
+  const waiting = editor.generate({ ...request(), outputPath: join(directory, 'queued.png') });
+  const waitingCancelled = expect(waiting).rejects.toMatchObject({ code: 'CANCELLED' });
   let disposed = false; const disposal = editor.dispose().then(() => { disposed = true; });
   await Promise.resolve(); expect(disposed).toBe(false);
-  release.resolve(); await caught; await disposal;
+  release.resolve(); await caught; await waitingCancelled; await disposal;
   expect(await readdir(directory)).toEqual([]);
   await expect(editor.generate(request())).rejects.toMatchObject({ code: 'DISPOSED' });
 });

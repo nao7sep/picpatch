@@ -1,8 +1,9 @@
 export { createEditor } from './client.ts';
 export type { Editor, EditorOptions } from './client.ts';
-export type { GenerateRequest, GenerateResult, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, OperationOptions, ProgressEvent, ReferenceGroup } from './types.ts';
+export type { ImageOutcome, OperationRefusal, GenerateRequest, GenerateResult, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, OperationOptions, ProgressEvent, ReferenceGroup } from './types.ts';
 export { validateEditRequest, validateGenerateRequest } from './validation.ts';
-export { PicPatchUsageError, PicPatchRuntimeError, PicPatchCancelledError } from './errors.ts';
+export { PicPatchSdkError, isPicPatchSdkError, errorCodes } from './errors.ts';
+export type { PicPatchSdkErrorData, SdkErrorOptions, ErrorCode, ErrorKind, ErrorEffect, ErrorDetails } from './errors.ts';
 
 export { inspectModel, discoverModels } from './models/inspection.ts';
 export type { ModelInspection, LocalModelFile, ModelIssue, ModelDiscovery, ModelOperationOptions, ModelProgressEvent } from './models/types.ts';

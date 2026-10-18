@@ -1,4 +1,4 @@
-import { createEditor, PicPatchUsageError } from 'picpatchsdk';
+import { createEditor, PicPatchSdkError } from 'picpatchsdk';
 import { resolve } from 'node:path';
 
 const engineDirectory = process.argv[2];
@@ -15,7 +15,7 @@ try {
   });
 } catch (error) {
   // The current worker advertises no editing models. This example exercises input preparation and startup.
-  if (error instanceof PicPatchUsageError && error.code === 'UNSUPPORTED_CAPABILITY') {
+  if (error instanceof PicPatchSdkError && error.code === 'UNSUPPORTED_CAPABILITY') {
     console.log('Worker started successfully; no editing models are available.');
   } else throw error;
 } finally {

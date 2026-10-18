@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from './errors.ts';
+import { PicPatchSdkError, sdkError } from './errors.ts';
 
 export interface WorkerDiagnostic {
   phase: 'loading' | 'generating' | 'editing' | 'saving' | 'worker';
@@ -14,10 +14,10 @@ export interface SdkEvent {
   verb: string;
   time: string;
   level: 'debug' | 'info' | 'warn' | 'error';
-  stage: 'started' | 'progress' | 'succeeded' | 'failed' | 'cancelled' | 'hook-failed' | 'checking' | 'installing' | 'publishing';
+  stage: 'started' | 'progress' | 'succeeded' | 'failed' | 'cancelled' | 'hook-failed' | 'refused' | 'checking' | 'installing' | 'publishing';
   message: string;
   progress?: { stage: string; completed?: number; total?: number };
-  error?: { code: string; causes: { kind: string; code?: string }[]; worker?: WorkerDiagnostic };
+  error?: { code: string; kind: import('./errors.ts').ErrorKind; effect: import('./errors.ts').ErrorEffect; causes: { kind: string; code?: string }[]; worker?: WorkerDiagnostic };
 }
 export interface EventOptions { onEvent?: (event: SdkEvent) => void }
 const scope = Symbol('diagnostic scope');
@@ -64,18 +64,19 @@ function safeCauses(error: unknown): { kind: string; code?: string }[] {
 /** One invocation identity and exactly one terminal record; no input or exception text is serialized. */
 export async function withDiagnostics<O extends EventOptions, T>(verb: string, options: O, action: (options: O) => Promise<T>): Promise<T> {
   if (!options || typeof options !== 'object' || Array.isArray(options)) return action(options);
-  if (options.onEvent !== undefined && typeof options.onEvent !== 'function') throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid diagnostic callback.');
+  if (options.onEvent !== undefined && typeof options.onEvent !== 'function') throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid diagnostic callback.');
   const operation = { ...options, [scope]: { id: randomUUID(), verb } };
   deliver(operation, { level: 'info', stage: 'started', message: 'Operation started.' });
   try {
     const result = await action(operation);
-    deliver(operation, { level: 'info', stage: 'succeeded', message: 'Operation completed.' });
+    const refused = result !== null && typeof result === 'object' && 'status' in result && result.status === 'refused';
+    deliver(operation, { level: 'info', stage: refused ? 'refused' : 'succeeded', message: refused ? 'Operation refused.' : 'Operation completed.' });
     return result;
-  } catch (error) {
-    const cancelled = error instanceof PicPatchCancelledError;
-    const known = cancelled || error instanceof PicPatchRuntimeError || error instanceof PicPatchUsageError;
+  } catch (cause) {
+    const error = sdkError(cause);
+    const cancelled = error.kind === 'cancelled';
     deliver(operation, { level: cancelled ? 'info' : 'error', stage: cancelled ? 'cancelled' : 'failed', message: cancelled ? 'Operation cancelled.' : 'Operation failed.',
-      error: { code: known ? error.code : 'UNKNOWN', causes: safeCauses(error), ...(error instanceof PicPatchRuntimeError && error.diagnostic ? { worker: structuredClone(error.diagnostic) } : {}) } });
+      error: { code: error.code, kind: error.kind, effect: error.effect, causes: safeCauses(error), ...(error.details.diagnostic ? { worker: structuredClone(error.details.diagnostic) } : {}) } });
     throw error;
   }
 }

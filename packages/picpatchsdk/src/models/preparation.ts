@@ -3,7 +3,7 @@ import { prepareNativeModel } from '../backends/stable-diffusion-cpp/preparation
 import { withDiagnostics } from '../diagnostics.ts';
 import { chmod, lstat, mkdir, mkdtemp, open, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { resolveStoragePaths, type StorageOptions } from '../paths.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
@@ -63,8 +63,8 @@ async function prepareModelOperation(id: string, options: PrepareModelOptions = 
       try { return await attachMfluxLoras(prepared, loras, operation); }
       catch (cause) {
         checkSignal(signal);
-        if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError) throw cause;
-        throw new PicPatchRuntimeError('MODEL_IO', 'Could not prepare local LoRA weights.', { cause });
+        if (cause instanceof PicPatchSdkError) throw cause;
+        throw new PicPatchSdkError('MODEL_IO', 'Could not prepare local LoRA weights.', { cause });
       }
     });
   }
@@ -75,13 +75,13 @@ async function prepareModelOperation(id: string, options: PrepareModelOptions = 
 export async function prepareCatalogModel(entry: CatalogModel, options: PrepareModelOptions, fetcher: typeof fetch = fetch): Promise<PreparedModel> {
   entry = { ...entry, manifest: validateModelManifest(entry.manifest) };
   validateOperation(options, ['timeoutMs', 'directory', 'download', 'storage']);
-  if (options.download !== undefined && typeof options.download !== 'boolean') throw new PicPatchUsageError('INVALID_REQUEST', 'download must be a boolean.');
+  if (options.download !== undefined && typeof options.download !== 'boolean') throw new PicPatchSdkError('INVALID_REQUEST', 'download must be a boolean.');
   if (options.directory !== undefined) absolutePath(options.directory);
-  if (options.directory !== undefined && options.download) throw new PicPatchUsageError('INVALID_REQUEST', 'External bundles cannot be downloaded or repaired in place.');
+  if (options.directory !== undefined && options.download) throw new PicPatchSdkError('INVALID_REQUEST', 'External bundles cannot be downloaded or repaired in place.');
   const paths = resolveStoragePaths(options.storage);
   const budget = timeBudget(options.timeoutMs, 3_600_000);
   // Catalog identity, not caller-controlled filesystem syntax, determines the cache key.
-  if (!/^[a-z0-9-]+$/.test(entry.id)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid catalog ID.');
+  if (!/^[a-z0-9-]+$/.test(entry.id)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid catalog ID.');
   const directory = options.directory ?? join(paths.modelsDirectory, entry.id, entry.manifest.source.revision);
   let committed: PreparedModel | undefined;
   try {
@@ -89,15 +89,15 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
       const operation = { ...options, signal };
       const verified = async (path: string) => {
         const result = await verifyModel(path, entry.manifest, { signal, timeoutMs: budget, onProgress: event => emitProgress(operation, event) });
-        if (result.status !== 'matches-manifest') throw new PicPatchRuntimeError('MODEL_IO', 'Model files do not match the catalog. Existing files were preserved; choose a complete bundle or a new cache location.');
+        if (result.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_IO', 'Model files do not match the catalog. Existing files were preserved; choose a complete bundle or a new cache location.');
       };
       const result = (origin: PreparedModel['origin']): PreparedModel => ({ model: { variant: entry.variant, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });
       if (await exists(directory)) { await verified(directory); return result(options.directory ? 'external' : 'cache'); }
       checkSignal(signal);
-      if (options.directory || !options.download) throw new PicPatchRuntimeError('MODEL_IO', 'Model bundle is missing. Supply a local directory or explicitly enable download.');
+      if (options.directory || !options.download) throw new PicPatchSdkError('MODEL_IO', 'Model bundle is missing. Supply a local directory or explicitly enable download.');
       await privateDirectory(paths.modelsDirectory);
       const parent = dirname(directory);
-      if (await exists(parent) && (await lstat(parent)).isSymbolicLink()) throw new PicPatchRuntimeError('MODEL_IO', 'A managed model directory cannot be a symbolic link.');
+      if (await exists(parent) && (await lstat(parent)).isSymbolicLink()) throw new PicPatchSdkError('MODEL_IO', 'A managed model directory cannot be a symbolic link.');
       await privateDirectory(parent);
       checkSignal(signal);
       const staging = await mkdtemp(join(parent, '.prepare-'));
@@ -121,7 +121,7 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
         checkSignal(signal);
         try { await rename(staging, directory); }
         catch (cause) {
-          if (!['EEXIST', 'ENOTEMPTY'].includes((cause as NodeJS.ErrnoException).code ?? '')) throw cause;
+          if (!['EEXIST', 'ENOTEMPTY'].includes((cause as NodeJS.ErrnoException).code ?? '')) throw new PicPatchSdkError('MODEL_IO', 'Model publication could not be confirmed.', { cause, effect: 'unknown', subject: directory });
           await verified(directory); // A concurrent complete winner is reusable, never replaced.
           return result('cache');
         }
@@ -134,14 +134,14 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
         try { await rm(staging, { recursive: true, force: true }); }
         catch (cause) {
           if (committed) committed.cleanupWarning = { directory: staging, message: 'Model is prepared; staging cleanup failed.' };
-          else { const error = new PicPatchRuntimeError('CLEANUP_FAILED', 'Model preparation staging could not be removed.', { cause: failure ?? cause }); error.recoveryDirectory = staging; throw error; }
+          else { const error = new PicPatchSdkError('CLEANUP_FAILED', 'Model preparation staging could not be removed.', { cause: failure ?? cause }); error.details.recoveryDirectory = staging; error.effect = 'unknown'; throw error; }
         }
       }
     });
   } catch (cause) {
     if (committed) return committed; // Publication wins cancellation races.
-    if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError || cause instanceof PicPatchCancelledError) throw cause;
-    throw new PicPatchRuntimeError('MODEL_IO', 'Could not prepare the model bundle.', { cause });
+    if (cause instanceof PicPatchSdkError) throw cause;
+    throw new PicPatchSdkError('MODEL_IO', 'Could not prepare the model bundle.', { cause });
   }
 }
 

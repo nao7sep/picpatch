@@ -59,7 +59,7 @@ it('does not follow nested directory links or cycles', async () => {
 });
 it('distinguishes an empty search from an unreadable root', async () => {
   expect(await discoverModels([directory])).toEqual({ models: [] });
-  await expect(discoverModels([join(directory, 'missing')])).rejects.toMatchObject({ code: 'MODEL_IO', cause: { code: 'ENOENT' } });
+  await expect(discoverModels([join(directory, 'missing')])).rejects.toMatchObject({ code: 'FILE_NOT_FOUND', cause: { code: 'ENOENT' } });
 });
 it('returns unrecognized for directories without weights', async () => {
   expect(await inspectModel(directory)).toMatchObject({ status: 'unrecognized', files: [] });

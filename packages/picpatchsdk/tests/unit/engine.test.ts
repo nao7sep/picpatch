@@ -1,5 +1,5 @@
 import { withDeadline } from '../../src/operations.ts';
-import { PicPatchRuntimeError } from '../../src/errors.ts';
+import { PicPatchSdkError } from '../../src/errors.ts';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -64,7 +64,7 @@ it('ignores incomplete installations and refuses malformed or foreign readiness 
   for (const record of ['bad json', JSON.stringify({ version: 2 }), JSON.stringify({ version: 1, identity, installation: '../elsewhere' })]) {
     await writeFile(join(root, 'ready', `${identity.id}.json`), record);
     expect(await inspectEngine({ engineDirectory: root })).toMatchObject({ status: 'incompatible', code: 'ENGINE_RECORD_INVALID' });
-    await expect(installEngine(options())).rejects.toMatchObject({ code: 'ENGINE_UNAVAILABLE' });
+    await expect(installEngine(options())).rejects.toMatchObject({ code: 'ENGINE_INCOMPATIBLE' });
     expect(await readFile(join(root, 'ready', `${identity.id}.json`), 'utf8')).toBe(record);
   }
   expect(await readdir(join(root, 'installations'))).toEqual(['unfinished']);
@@ -75,7 +75,7 @@ it('preserves the previous reference when a replacement fails and cleans only it
   const reference = join(previous.engineDirectory, 'ready', `${previous.identity.id}.json`);
   const bytes = await readFile(reference);
   await writeFile(tool, `#!${process.execPath}\nprocess.exit(12);\n`);
-  await expect(installEngine(options())).rejects.toMatchObject({ code: 'INSTALL_FAILED', diagnostic: { exitCode: 12 } });
+  await expect(installEngine(options())).rejects.toMatchObject({ code: 'INSTALL_FAILED', details: { diagnostic: { exitCode: 12 } } });
   expect(await readFile(reference)).toEqual(bytes);
   expect(await readdir(join(previous.engineDirectory, 'installations'))).toHaveLength(1);
 });
@@ -110,7 +110,7 @@ it('allows an explicit later call after installing a previously missing engine',
   const editor = createEditor({ engineDirectory: options().engineDirectory });
   const request = { prompt: 'Neutral', model: 'fixture', outputPath: join(directory, 'out.png') };
   try {
-    await expect(editor.generate(request)).rejects.toMatchObject({ code: 'ENGINE_UNAVAILABLE' });
+    await expect(editor.generate(request)).rejects.toMatchObject({ code: 'ENGINE_MISSING' });
     await installEngine(options());
     await expect(editor.generate(request)).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
   } finally { await editor.dispose(); }
@@ -129,7 +129,7 @@ writeFileSync(${JSON.stringify(pidPath)},String(child.pid)); setInterval(()=>{},
 
 it('preserves unsettled-process evidence over a simultaneous cancellation', async () => {
   const controller = new AbortController();
-  const failure = new PicPatchRuntimeError('TERMINATION_FAILED', 'Writer still exists');
+  const failure = new PicPatchSdkError('TERMINATION_FAILED', 'Writer still exists');
   await expect(withDeadline(controller.signal, 1000, 'Deadline', async () => {
     controller.abort(); throw failure;
   })).rejects.toBe(failure);

@@ -35,8 +35,10 @@ fs.writeFileSync(value('--output'), Buffer.from('${png.toString('base64')}', 'ba
     const editor = createEditor({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
     try {
       const ordinary = await editor.generate({ prompt: 'A bowl.' });
+      if ('status' in ordinary) throw new Error(ordinary.code);
       expect(ordinary.control).toBeUndefined();
       const controlled = await editor.generate({ prompt: 'A bowl.', control: { kind: 'canny', image }, sidecar: {} });
+      if ('status' in controlled) throw new Error(controlled.code);
       expect(controlled.control?.strength).toBe(0.9);
       expect(controlled.loras?.map(lora => lora.filename)).toEqual(['one odd name.safetensors', 'two.safetensors']);
       expect(await readFile(controlled.sidecar!.path, 'utf8')).not.toContain(directory);

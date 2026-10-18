@@ -45,6 +45,7 @@ fs.writeFileSync(value('--output'),Buffer.from('${png.toString('base64')}','base
         parameters: identity ? { identityStyleStrength: 15 } : { appearanceStrength: 0.7 }, sidecar: {},
       };
       const result = await editor.edit({ ...request, references: request.references as [typeof request.references[number]] });
+      if ('status' in result) throw new Error(result.code);
       expect(result.references[0]?.images).toEqual(images);
       expect(result.conditioning?.method).toBe(identity ? 'photomaker-v1' : variant.endsWith('-plus') ? 'ip-adapter-plus' : 'ip-adapter');
       expect(result.conditioning?.assets).toHaveLength(identity ? 1 : 2);

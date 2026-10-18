@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import type { LocalEditingModel, ModelCapabilities } from '../contracts.generated.ts';
 import { validateLocalEditingModel, verifyModel } from '../models/verification.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
-import { PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 import { WorkerProcess } from '../worker/process.ts';
 import type { RuntimeCheck } from '../worker/protocol.ts';
 import { workerLaunch } from '../backends/mflux/launch.ts';
@@ -31,7 +31,7 @@ export interface ModelReadiness {
 /** Presence, integrity, imports and load evidence remain separate. Never downloads. */
 async function inspectReadinessOperation(executable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
   absolutePath(executable); validateOperation(options, ['timeoutMs', 'verify', 'load']);
-  for (const value of [options.verify, options.load]) if (value !== undefined && typeof value !== 'boolean') throw new PicPatchUsageError('INVALID_REQUEST', 'Readiness switches must be booleans.');
+  for (const value of [options.verify, options.load]) if (value !== undefined && typeof value !== 'boolean') throw new PicPatchSdkError('INVALID_REQUEST', 'Readiness switches must be booleans.');
   const model = validateLocalEditingModel(input);
   const budget = timeBudget(options.timeoutMs, options.load || options.verify ? 600_000 : 30_000);
   return withDeadline(options.signal, budget, 'Model readiness inspection timed out.', async signal => {
@@ -45,7 +45,7 @@ async function inspectReadinessOperation(executable: string, input: LocalEditing
         if (!info.isFile() || info.size !== component.bytes) files = 'incomplete';
       } catch (cause) {
         if (['ENOENT', 'ENOTDIR'].includes((cause as NodeJS.ErrnoException).code ?? '')) files = 'incomplete';
-        else throw new PicPatchRuntimeError('MODEL_IO', 'Could not check local model files.', { cause });
+        else throw new PicPatchSdkError('MODEL_IO', 'Could not check local model files.', { cause });
       }
     }
     checkSignal(signal);
@@ -54,7 +54,7 @@ async function inspectReadinessOperation(executable: string, input: LocalEditing
     if (options.verify && files === 'incomplete') integrity = 'invalid';
     if (files === 'incomplete' || integrity === 'invalid') return { files, integrity, runtime: { status: 'not-checked' }, capabilities: [] };
     if (isNativeVariant(model.variant)) {
-      if (options.load) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The native CLI has no load-only readiness operation.');
+      if (options.load) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The native CLI has no load-only readiness operation.');
       emitProgress(operation, { type: 'progress', verb: 'inspectReadiness', stage: 'runtime', message: 'Checking the native runtime executable.' });
       const backend = new NativeBackend(executable, model, { ...workerTimeouts, startupMs: budget });
       try {
@@ -70,7 +70,7 @@ async function inspectReadinessOperation(executable: string, input: LocalEditing
       checkSignal(signal);
       const ready = await worker.start();
       checkSignal(signal);
-      if (ready.type !== 'ready' || !ready.runtimeCheck) throw new PicPatchRuntimeError('PROTOCOL_ERROR', 'Worker did not report inference readiness.');
+      if (ready.type !== 'ready' || !ready.runtimeCheck) throw new PicPatchSdkError('PROTOCOL_ERROR', 'Worker did not report inference readiness.');
       return { files, integrity, runtime: ready.runtimeCheck, capabilities: ready.models };
     } finally {
       try { await worker.dispose(); }

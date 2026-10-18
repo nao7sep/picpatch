@@ -1,11 +1,11 @@
 import type { ModelCapabilities, SamplingParameters } from './contracts.generated.ts';
-import { PicPatchUsageError } from './errors.ts';
+import { PicPatchSdkError } from './errors.ts';
 
 /** Resolve advertised defaults and validate combinations before image I/O or loading. */
 export function resolveParameters(parameters: SamplingParameters = {}, capabilities: ModelCapabilities, operation: 'edit' | 'generate' = 'edit'): SamplingParameters {
   const supported = capabilities.parameters ?? {};
   const effective: SamplingParameters = {};
-  const unsupported = (): never => { throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'The requested sampling parameters are unsupported by this model.'); };
+  const unsupported = (): never => { throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The requested sampling parameters are unsupported by this model.'); };
   for (const key of Object.keys(parameters) as (keyof SamplingParameters)[]) if (!supported[key] || (['strength', 'identityStyleStrength', 'appearanceStrength'].includes(key) && operation !== 'edit')) unsupported();
   for (const key of ['steps', 'guidance', 'strength', 'identityStyleStrength', 'appearanceStrength'] as const) {
     const descriptor = supported[key];

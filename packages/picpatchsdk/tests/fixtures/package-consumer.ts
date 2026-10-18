@@ -34,10 +34,12 @@ const editor = createEditor({ engineDirectory: config.engineDirectory, model: pr
 let source: string;
 try {
   const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a white table.', parameters: { steps: 2 }, sidecar: {} });
+  if ('status' in generated) throw new Error(generated.code);
   const record = await artifact(generated);
   assert.equal(record.effectiveParameters.steps, 2); assert.equal(record.inputs, undefined);
   source = generated.image.path;
   const edited = await editor.edit({ instruction: 'Make the bowl green.', sourceImage: source, parameters: { steps: 2 }, sidecar: { includeInputs: true } });
+  if ('status' in edited) throw new Error(edited.code);
   assert.equal((await artifact(edited)).inputs.sourceImage, basename(source));
 } finally { await editor.dispose(); }
 const original = await readFile(source!);
@@ -49,6 +51,7 @@ assert.equal(masked.integrity, 'locally-fingerprinted');
 const inpaint = createEditor({ nativeExecutable: config.native.executable, model: masked.model, defaults });
 try {
   const result = await inpaint.edit({ instruction: 'A red ceramic bowl on a white table.', sourceImage: source!, maskImage, parameters: { steps: 4 }, sidecar: { includeInputs: true } });
+  if ('status' in result) throw new Error(result.code);
   const record = await artifact(result);
   assert.equal(record.inputs.maskImage, basename(maskImage));
   assert.equal(record.effectiveParameters.strength, 1);
@@ -60,6 +63,7 @@ try {
   const result = await conditioned.edit({ instruction: 'A watercolor portrait of {person}.', references: [
     { id: 'person', role: 'subject', conditioning: 'identity', className: 'man', images: [source!] },
   ], parameters: { steps: 4, identityStyleStrength: 25 }, sidecar: {} });
+  if ('status' in result) throw new Error(result.code);
   const record = await artifact(result);
   assert.equal(record.conditioning.method, 'photomaker-v1');
   assert.equal(record.conditioning.assets[0].filename, basename(config.native.photoMaker));

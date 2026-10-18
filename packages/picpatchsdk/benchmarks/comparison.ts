@@ -2,7 +2,7 @@ import { appendFile, open } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { arch, cpus, platform, release, totalmem } from 'node:os';
 import { performance } from 'node:perf_hooks';
-import { createEditor, PicPatchUsageError, PicPatchCancelledError, type EditorOptions, type EditInput, type GenerateInput, type EditResult, type ProgressEvent } from 'picpatchsdk';
+import { createEditor, PicPatchSdkError, type EditorOptions, type EditInput, type GenerateInput, type EditResult, type ProgressEvent } from 'picpatchsdk';
 
 export type ComparisonOperation = { operation: 'generate'; request: Omit<GenerateInput, 'sidecar'> } |
   { operation: 'edit'; request: Omit<EditInput, 'sidecar'>; sourceFromPrevious?: boolean };
@@ -13,7 +13,7 @@ export interface ComparisonRecord {
   index: number;
   measurementIndex: number;
   operation: 'generate' | 'edit';
-  outcome: 'completed' | 'unsupported' | 'failed' | 'cancelled' | 'untested';
+  outcome: 'refused' | 'completed' | 'unsupported' | 'failed' | 'cancelled' | 'untested';
   seconds: number;
   model?: string;
   modelRevision?: string;
@@ -60,6 +60,7 @@ export async function compare(cases: ComparisonCase[], report: string, signal?: 
               const result = operation.operation === 'generate'
                 ? await editor.generate({ ...operation.request, sidecar: {} }, operationOptions)
                 : await editor.edit({ ...operation.request, ...(operation.sourceFromPrevious ? { sourceImage: previous!.image.path } : {}), sidecar: {} }, operationOptions);
+                if ('status' in result) { previous = undefined; record.outcome = 'refused'; record.errorCode = result.code; continue; }
               previous = result;
               const { negativePrompt: _private, ...parameters } = result.effectiveParameters;
               Object.assign(record, { outcome: 'completed', model: result.model, modelRevision: result.modelRevision, runtime: result.runtime, seed: result.seed, parameters,
@@ -68,7 +69,7 @@ export async function compare(cases: ComparisonCase[], report: string, signal?: 
                 ...(result.sidecar?.status === 'saved' ? { sidecar: basename(result.sidecar.path) } : {}) });
             } catch (error) {
               previous = undefined;
-              record.outcome = error instanceof PicPatchCancelledError ? 'cancelled' : error instanceof PicPatchUsageError && error.code === 'UNSUPPORTED_CAPABILITY' ? 'unsupported' : 'failed';
+              record.outcome = (error instanceof PicPatchSdkError && error.kind === 'cancelled') ? 'cancelled' : error instanceof PicPatchSdkError && error.code === 'UNSUPPORTED_CAPABILITY' ? 'unsupported' : 'failed';
               record.errorCode = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'UNKNOWN';
               // Failed sessions may be unusable. Dispose before trying another independent operation.
               await editor?.dispose(); editor = undefined;

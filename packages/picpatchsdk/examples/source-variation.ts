@@ -14,5 +14,6 @@ try {
     sourceImage: resolve(source), outputPath: resolve(output),
     ...(strength === undefined ? {} : { parameters: { strength: Number(strength) } }),
   });
+  if ('status' in result) throw new Error(result.code);
   console.log(JSON.stringify({ image: result.image, parameters: result.effectiveParameters }));
 } finally { await editor.dispose(); }

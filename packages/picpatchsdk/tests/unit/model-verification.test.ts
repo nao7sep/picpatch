@@ -67,7 +67,7 @@ it('supports cancellation and ignores callback failures', async () => {
   await expect(verifyModel(directory, manifest, { onProgress: () => { throw new Error('listener'); } })).resolves.toHaveProperty('components');
 });
 it('preserves filesystem failures instead of claiming missing models', async () => {
-  await expect(verifyModel(join(directory, 'missing'), manifest)).rejects.toMatchObject({ code: 'MODEL_IO', cause: { code: 'ENOENT' } });
+  await expect(verifyModel(join(directory, 'missing'), manifest)).rejects.toMatchObject({ code: 'FILE_NOT_FOUND', cause: { code: 'ENOENT' } });
 });
 
 it('distinguishes an expired verification budget from caller cancellation', async () => {

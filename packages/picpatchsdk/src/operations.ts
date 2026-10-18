@@ -1,17 +1,18 @@
 import { diagnosticProgress, progressHookFailed, type EventOptions } from './diagnostics.ts';
 import { isAbsolute } from 'node:path';
-import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from './errors.ts';
+import { PicPatchSdkError } from './errors.ts';
 
 export function absolutePath(path: unknown): asserts path is string {
-  if (typeof path !== 'string' || !isAbsolute(path) || path.includes('\0')) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply an absolute filesystem path.');
+  if (typeof path !== 'string' || !isAbsolute(path) || path.includes('\0')) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply an absolute filesystem path.');
 }
 export function checkSignal(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new PicPatchCancelledError('The operation was cancelled.');
+  if (signal?.aborted) throw new PicPatchSdkError('CANCELLED', 'The operation was cancelled.');
 }
 export function validateOperation(options: unknown, extraKeys: string[] = []): void {
-  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['signal', 'onProgress', 'onEvent', ...extraKeys].includes(key))) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid operation options.');
+  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['signal', 'onProgress', 'onEvent', 'timeoutMs', ...extraKeys].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid operation options.');
+  timeBudget((options as { timeoutMs?: unknown }).timeoutMs, 1_800_000);
   const value = options as { signal?: unknown; onProgress?: unknown; onEvent?: unknown };
-  if ((value.signal !== undefined && !(value.signal instanceof AbortSignal)) || (value.onProgress !== undefined && typeof value.onProgress !== 'function') || (value.onEvent !== undefined && typeof value.onEvent !== 'function')) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid cancellation signal or progress callback.');
+  if ((value.signal !== undefined && !(value.signal instanceof AbortSignal)) || (value.onProgress !== undefined && typeof value.onProgress !== 'function') || (value.onEvent !== undefined && typeof value.onEvent !== 'function')) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid cancellation signal or progress callback.');
 }
 export function emitProgress<T extends { stage: string }>(options: EventOptions & { signal?: AbortSignal; onProgress?: (event: T) => void }, event: T): void {
   checkSignal(options.signal);
@@ -24,7 +25,7 @@ export function emitProgress<T extends { stage: string }>(options: EventOptions 
 }
 export function timeBudget(value: unknown, fallback: number): number {
   if (value === undefined) return fallback;
-  if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > 1_000_000_000) throw new PicPatchUsageError('INVALID_REQUEST', 'Timeout must be positive whole milliseconds within the timer range.');
+  if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > 1_000_000_000) throw new PicPatchSdkError('INVALID_REQUEST', 'Timeout must be positive whole milliseconds within the timer range.');
   return value as number;
 }
 
@@ -40,9 +41,9 @@ export async function withDeadline<T>(signal: AbortSignal | undefined, milliseco
     return result;
   } catch (cause) {
     // Cancellation cannot erase evidence that a writer or its private files remain unsettled.
-    if (cause instanceof PicPatchRuntimeError && (cause.code === 'TERMINATION_FAILED' || cause.code === 'CLEANUP_FAILED' || cause.recoveryDirectory !== undefined)) throw cause;
+    if (cause instanceof PicPatchSdkError && (cause.effect === 'unknown' || cause.code === 'TERMINATION_FAILED' || cause.code === 'CLEANUP_FAILED' || cause.details.recoveryDirectory !== undefined)) throw cause;
     checkSignal(signal);
-    if (deadline.signal.aborted) throw new PicPatchRuntimeError('TIMEOUT', message, { cause });
+    if (deadline.signal.aborted) throw new PicPatchSdkError('TIMEOUT', message, { cause });
     throw cause;
   } finally { clearTimeout(timer); }
 }

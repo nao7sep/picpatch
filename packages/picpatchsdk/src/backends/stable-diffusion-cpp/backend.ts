@@ -8,7 +8,7 @@ import type { ImageRequest, EditRequest, GenerateRequest, EditResult, OperationO
 import { validateEditRequest, validateGenerateRequest } from '../../validation.ts';
 import { resolveParameters } from '../../parameters.ts';
 import { checkSignal, emitProgress } from '../../operations.ts';
-import { PicPatchRuntimeError, PicPatchUsageError } from '../../errors.ts';
+import { PicPatchSdkError } from '../../errors.ts';
 import { nativeCapabilities, nativeRevision } from './models.ts';
 import { NativeProcess } from './process.ts';
 import type { WorkerTimeouts } from '../../worker/process.ts';
@@ -27,14 +27,14 @@ export class NativeBackend implements EditBackend {
     const help = await this.process.run(['--help'], this.model.directory, this.timeouts.startupMs, signal, true);
     // Short hashes are how the upstream build stamps sd_commit(). Do not accept arbitrary binaries.
     const match = /^stable-diffusion\.cpp version [^\r\n]+, commit ([a-f0-9]{7,40})(?:\s|$)/m.exec(help);
-    if (!match || !nativeRevision.startsWith(match[1]!)) throw new PicPatchRuntimeError('BACKEND_UNAVAILABLE', 'Use the documented stable-diffusion.cpp revision.');
+    if (!match || !nativeRevision.startsWith(match[1]!)) throw new PicPatchSdkError('BACKEND_UNAVAILABLE', 'Use the documented stable-diffusion.cpp revision.');
     this.checked = true;
   }
   async validate(request: ImageRequest, options: OperationOptions = {}): Promise<ModelCapabilities> {
     const capabilities = nativeCapabilities(this.model.variant, this.model.manifest.model);
-    if (/<lora:/i.test('prompt' in request ? request.prompt : request.instruction)) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'Prompt-embedded LoRA loading is unsupported; use prepareModel loras.');
+    if (/<lora:/i.test('prompt' in request ? request.prompt : request.instruction)) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'Prompt-embedded LoRA loading is unsupported; use prepareModel loras.');
     if ('prompt' in request) validateGenerateRequest(request, capabilities); else validateEditRequest(request, capabilities);
-    if (request.control && (!this.model.controlNet || request.control.kind !== this.model.controlNet.kind)) throw new PicPatchUsageError('UNSUPPORTED_CAPABILITY', 'Prepare the matching ControlNet asset before supplying a control map.');
+    if (request.control && (!this.model.controlNet || request.control.kind !== this.model.controlNet.kind)) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'Prepare the matching ControlNet asset before supplying a control map.');
     await this.inspect(options.signal);
     return capabilities;
   }
@@ -62,7 +62,7 @@ export class NativeBackend implements EditBackend {
       await writeFile(join(directory, 'negative.txt'), effectiveParameters.negativePrompt ?? '', { flag: 'wx', mode: 0o600 });
     } catch (cause) {
       checkSignal(options.signal);
-      throw new PicPatchRuntimeError('IMAGE_IO', 'Could not prepare private native input files.', { cause });
+      throw new PicPatchSdkError('IMAGE_IO', 'Could not prepare private native input files.', { cause });
     }
     checkSignal(options.signal);
     const args = ['--model', join(this.model.directory, this.model.checkpoint!), '--prompt-file', 'prompt.txt', '--negative-prompt-file', 'negative.txt',
@@ -95,7 +95,7 @@ export class NativeBackend implements EditBackend {
         args.push('--lora-apply-mode', 'at_runtime', '--photo-maker', 'photomaker-v1.safetensors', '--pm-id-images-dir', photos, '--pm-style-strength', String(effectiveParameters.identityStyleStrength));
       } catch (cause) {
         checkSignal(options.signal);
-        throw new PicPatchRuntimeError('IMAGE_IO', 'Could not prepare private identity inputs.', { cause });
+        throw new PicPatchSdkError('IMAGE_IO', 'Could not prepare private identity inputs.', { cause });
       }
     } else if (this.model.ipAdapter && group) {
       args.push('--ip-adapter', join(this.model.directory, this.model.ipAdapter), '--clip_vision', join(this.model.directory, this.model.clipVision!), '--ip-adapter-image', group.images[0], '--ip-adapter-strength', String(effectiveParameters.appearanceStrength));

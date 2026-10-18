@@ -106,7 +106,7 @@ it('does not follow a downgrade redirect or contact the next endpoint', async ()
 it('preserves existing files when the selected model store is unusable', async () => {
   await writeFile(join(directory, 'models'), 'caller data');
   const fetcher = source();
-  await expect(prepareCatalogModel(entry, { download: true }, fetcher)).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareCatalogModel(entry, { download: true }, fetcher)).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
   expect(fetcher).not.toHaveBeenCalled();
   expect(await readFile(join(directory, 'models'), 'utf8')).toBe('caller data');
 });

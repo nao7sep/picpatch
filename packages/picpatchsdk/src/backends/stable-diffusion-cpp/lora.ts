@@ -1,4 +1,4 @@
-import { PicPatchUsageError } from '../../errors.ts';
+import { PicPatchSdkError } from '../../errors.ts';
 
 type Shapes = Record<string, { shape?: number[] }>;
 /** Aliases for the conventional SD UNet layout, not a general tensor converter. */
@@ -27,7 +27,7 @@ function diffusersName(name: string): string | undefined {
 
 /** Every low-rank target must exist in the selected checkpoint with matching dimensions. */
 export function validateLoraTensors(checkpoint: Shapes, lora: Shapes): void {
-  const reject = (): never => { throw new PicPatchUsageError('INVALID_REQUEST', 'LoRA tensors must be compatible SD UNet up/down pairs. Text-encoder, DoRA, LyCORIS and unknown target formats are unsupported.'); };
+  const reject = (): never => { throw new PicPatchSdkError('INVALID_REQUEST', 'LoRA tensors must be compatible SD UNet up/down pairs. Text-encoder, DoRA, LyCORIS and unknown target formats are unsupported.'); };
   const targets = new Map<string, { shape: number[]; key: string }>();
   for (const [key, value] of Object.entries(checkpoint)) {
     if (!key.startsWith('model.diffusion_model.') || !key.endsWith('.weight') || !value?.shape) continue;

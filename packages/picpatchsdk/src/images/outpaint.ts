@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { OutpaintCanvas } from '../contracts.generated.ts';
-import { PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 import { checkCancellation } from './validation.ts';
 
 /** Expand normalized pixels without cropping/resizing; white mask marks only added canvas. */
@@ -11,7 +11,7 @@ export async function prepareOutpaint(source: { path: string; width: number; hei
   const right = canvas.size.width - source.width - canvas.left;
   const bottom = canvas.size.height - source.height - canvas.top;
   if (right < 0 || bottom < 0 || (canvas.left === 0 && canvas.top === 0 && right === 0 && bottom === 0)) {
-    throw new PicPatchUsageError('INVALID_REQUEST', 'Outpaint canvas must contain the oriented source and add pixels on at least one side.');
+    throw new PicPatchSdkError('INVALID_REQUEST', 'Outpaint canvas must contain the oriented source and add pixels on at least one side.');
   }
   const margins = { left: canvas.left, top: canvas.top, right, bottom };
   const sourceImage = join(directory, 'canvas.png');
@@ -27,6 +27,6 @@ export async function prepareOutpaint(source: { path: string; width: number; hei
     return { sourceImage, maskImage };
   } catch (cause) {
     checkCancellation(signal);
-    throw new PicPatchRuntimeError('IMAGE_IO', 'Could not prepare the outpaint canvas and mask.', { cause });
+    throw new PicPatchSdkError('IMAGE_IO', 'Could not prepare the outpaint canvas and mask.', { cause });
   }
 }

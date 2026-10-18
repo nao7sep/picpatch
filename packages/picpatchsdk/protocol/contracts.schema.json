@@ -986,18 +986,30 @@
             "code": {
               "enum": [
                 "OUTPUT_CONFLICT",
-                "OUTPUT_IO"
+                "OUTPUT_IO",
+                "FILE_NOT_FOUND",
+                "PERMISSION_DENIED",
+                "DISK_FULL",
+                "IO_ERROR",
+                "TIMEOUT"
               ]
             },
             "message": {
               "type": "string"
+            },
+            "effect": {
+              "enum": [
+                "none",
+                "unknown"
+              ]
             }
           },
           "required": [
             "status",
             "path",
             "code",
-            "message"
+            "message",
+            "effect"
           ],
           "additionalProperties": false
         }

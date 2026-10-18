@@ -3,7 +3,7 @@ import { resolveStoragePaths } from '../paths.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { lstat, stat, realpath, opendir } from 'node:fs/promises';
 import { basename, extname, isAbsolute, join, normalize, relative, sep } from 'node:path';
-import { PicPatchCancelledError, PicPatchRuntimeError, PicPatchUsageError } from '../errors.ts';
+import { PicPatchSdkError } from '../errors.ts';
 import type { LocalModelFile, ModelDiscovery, ModelInspection, ModelIssue, ModelOperationOptions } from './types.ts';
 
 const validatePath: typeof absolutePath = absolutePath;
@@ -24,8 +24,8 @@ async function boundary<T>(action: () => Promise<T>, options: ModelOperationOpti
   try { return await action(); }
   catch (cause) {
     check(options);
-    if (cause instanceof PicPatchUsageError || cause instanceof PicPatchRuntimeError || cause instanceof PicPatchCancelledError) throw cause;
-    throw new PicPatchRuntimeError('MODEL_IO', 'Could not inspect the selected model location.', { cause });
+    if (cause instanceof PicPatchSdkError) throw cause;
+    throw new PicPatchSdkError('MODEL_IO', 'Could not inspect the selected model location.', { cause });
   }
 }
 
@@ -60,7 +60,7 @@ async function inspect(path: string, options: ModelOperationOptions, verb: 'insp
       if (info.size === 0) issues.push({ path: current, code: 'EMPTY_FILE' });
       if (category === 'partial') issues.push({ path: current, code: 'PARTIAL_FILE' });
     } else if (current === path) {
-      throw new PicPatchUsageError('INVALID_REQUEST', 'Select a regular model file or directory.');
+      throw new PicPatchSdkError('INVALID_REQUEST', 'Select a regular model file or directory.');
     }
   }
   check(options);
@@ -82,7 +82,7 @@ async function inspectModelOperation(path: string, options: ModelOperationOption
 async function discoverModelsOperation(roots?: string[], options: ModelOperationOptions = {}): Promise<ModelDiscovery> {
   const defaultRoot = roots === undefined;
   if (roots === undefined) roots = [resolveStoragePaths().modelsDirectory];
-  if (!Array.isArray(roots) || roots.length === 0) throw new PicPatchUsageError('INVALID_REQUEST', 'Supply at least one model search root.');
+  if (!Array.isArray(roots) || roots.length === 0) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply at least one model search root.');
   for (const root of roots) validatePath(root);
   validateOptions(options); check(options);
   const selected = roots.map(root => normalize(root));
@@ -114,7 +114,7 @@ async function discoverModelsOperation(roots?: string[], options: ModelOperation
           if (kind(path)) models.push(await inspect(path, operation, 'discoverModels'));
           continue;
         }
-        if (!info.isDirectory()) throw new PicPatchUsageError('INVALID_REQUEST', 'Select regular model files or directories.');
+        if (!info.isDirectory()) throw new PicPatchSdkError('INVALID_REQUEST', 'Select regular model files or directories.');
         const children: string[] = []; let candidate = false;
         const directory = await opendir(path);
         for await (const entry of directory) {

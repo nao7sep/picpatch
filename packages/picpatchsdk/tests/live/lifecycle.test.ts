@@ -36,8 +36,8 @@ afterEach(async () => {
 describe('real model-free worker processes', () => {
   it('reuses one process and confirms it exits on disposal', async () => {
     const editor = fixtureEditor();
-    expect((await editor.edit(request)).seed).toBe(1);
-    expect((await editor.edit(request)).seed).toBe(1);
+    expect(await editor.edit(request)).toMatchObject({ seed: 1 });
+    expect(await editor.edit(request)).toMatchObject({ seed: 1 });
     expect(children).toHaveLength(1);
     await editor.dispose();
     expect(children[0]!.exitCode).toBe(0);
@@ -50,7 +50,7 @@ describe('real model-free worker processes', () => {
   it.each(['malformed', 'exit'])('cleans up after %s output', async mode => {
     const editor = fixtureEditor(mode);
     const failure = await editor.edit(request).catch(error => error);
-    expect(failure).toMatchObject({ category: 'runtime' });
+    expect(failure).toMatchObject(mode === 'exit' ? { code: 'WORKER_EXITED', kind: 'unavailable', details: { diagnostic: { exitCode: 7 } } } : { code: 'PROTOCOL_ERROR', kind: 'internal' });
     expect(failure.code).not.toBe('TERMINATION_FAILED');
   });
   it('runs the bundled Python handshake and verifies process closure', async () => {

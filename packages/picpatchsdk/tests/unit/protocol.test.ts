@@ -4,7 +4,7 @@ import fixtures from '../fixtures/protocol.json' with { type: 'json' };
 const hello = { version: 1, id: 1, type: 'hello' } as const;
 const ready = { version: 1, id: 1, type: 'ready', workerVersion: 'test', models: [] };
 const edit = { version: 1, id: 2, type: 'edit', request: { model: 'test', instruction: 'Edit', sourceImage: '/in.png', outputPath: '/out.png' } } as const;
-const error = { version: 1, id: 2, type: 'error', error: { code: 'BACKEND_UNAVAILABLE', message: 'Unavailable' } };
+const error = { version: 1, id: 2, type: 'error', error: { code: 'BACKEND_UNAVAILABLE', kind: 'unavailable', effect: 'none', details: {}, message: 'Unavailable' } };
 const progress = { version: 1, id: 2, type: 'progress', event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing', completed: 1, total: 2 } };
 function started() { const session = new ProtocolSession(); session.send(hello); session.receive(JSON.stringify(ready)); return session; }
 
@@ -50,7 +50,7 @@ describe('worker protocol', () => {
     expect(() => session.receive(JSON.stringify({ ...ack, targetId: 99 }))).toThrow();
     session.receive(JSON.stringify(ack));
     expect(() => session.send({ version: 1, id: 4, type: 'shutdown' })).toThrow();
-    session.receive(JSON.stringify({ ...error, error: { code: 'CANCELLED', message: 'Cancelled' } }));
+    session.receive(JSON.stringify({ ...error, error: { code: 'CANCELLED', kind: 'cancelled', effect: 'none', details: {}, message: 'Cancelled' } }));
     session.send({ version: 1, id: 4, type: 'shutdown' });
     session.receive(JSON.stringify({ version: 1, id: 4, type: 'shutdownAck' }));
     expect(() => session.send({ ...edit, id: 5 })).toThrow();
@@ -71,6 +71,6 @@ it('correlates generation, blocks mixed concurrent work, and cancels generation 
   session.send({ version: 1, id: 3, type: 'cancel', targetId: 2 });
   session.receive(JSON.stringify({ version: 1, id: 3, type: 'cancelAck', targetId: 2, accepted: true }));
   expect(() => session.send({ ...edit, id: 4 })).toThrow();
-  session.receive(JSON.stringify({ ...error, error: { code: 'CANCELLED', message: 'Cancelled' } }));
+  session.receive(JSON.stringify({ ...error, error: { code: 'CANCELLED', kind: 'cancelled', effect: 'none', details: {}, message: 'Cancelled' } }));
   session.send({ ...edit, id: 4 });
 });

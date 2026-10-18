@@ -90,6 +90,7 @@ it('publishes geometry and path-free sidecar through the session, and cleans can
   const editor = new ImageEditor(backend);
   try {
     const saved = await editor.edit({ ...request, sidecar: { includeInputs: true } });
+    if ('status' in saved) throw new Error(saved.code);
     expect(saved.outpaint).toEqual({ ...request.outpaint, sourceSize: { width: 13, height: 9 } });
     expect(saved.inputGeometry?.[0]?.preparedSize).toEqual({ width: 13, height: 9 });
     const json = await readFile(saved.sidecar!.path, 'utf8');

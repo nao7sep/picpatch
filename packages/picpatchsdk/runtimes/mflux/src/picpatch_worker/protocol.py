@@ -14,6 +14,7 @@ class Protocol:
     def __init__(self, directory: Path):
         if not directory.is_absolute():
             raise ValueError('Protocol directory must be absolute.')
+        self.error_codes = json.loads((directory / 'error-codes.json').read_text())
         contracts = json.loads((directory / 'contracts.schema.json').read_text())
         worker = json.loads((directory / 'worker.schema.json').read_text())
         registry = Registry().with_resources([
@@ -28,6 +29,8 @@ class Protocol:
     def validate(self, value: object, kind: str) -> None:
         if not self.validators[kind].is_valid(value):
             raise ProtocolError('Invalid message or unsupported protocol version.')
+        if value['type'] == 'error' and self.error_codes.get(value['error']['code']) != value['error']['kind']:
+            raise ProtocolError('Invalid error code or kind.')
         if value['type'] == 'progress':
             event = value['event']
             if ('completed' in event) != ('total' in event) or event.get('completed', 0) > event.get('total', 0):

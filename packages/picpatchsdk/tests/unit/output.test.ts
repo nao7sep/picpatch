@@ -6,7 +6,7 @@ import sharp from 'sharp';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ImageWorkspace } from '../../src/images/output.ts';
 import { ImageEditor } from '../../src/execution/session.ts';
-import { PicPatchCancelledError, PicPatchRuntimeError, type EditRequest, type EditResult } from '../../src/index.ts';
+import { PicPatchSdkError, type EditRequest, type EditResult } from '../../src/index.ts';
 let directory: string;
 let request: EditRequest;
 beforeEach(async () => {
@@ -28,7 +28,8 @@ describe('safe image publication', () => {
   it('publishes a verified complete PNG, restores caller paths and cleans private data', async () => {
     const original = await readFile(request.sourceImage!); let staged: EditRequest | undefined;
     const editor = new ImageEditor(backend(async r => { staged = r; expect(await readdir(directory)).not.toContain('out.png'); return render(r); }));
-    const saved = await editor.edit(request); expect(saved.image.path).toBe(request.outputPath);
+    const saved = await editor.edit(request);
+    if ('status' in saved) throw new Error(saved.code); expect(saved.image.path).toBe(request.outputPath);
     expect(staged!.sourceImage).not.toBe(request.sourceImage); expect(staged!.outputPath).not.toBe(request.outputPath);
     expect((await sharp(saved.image.path).metadata()).format).toBe('png');
     expect(await readFile(request.sourceImage!)).toEqual(original); expect(await leftovers()).toEqual([]);
@@ -40,14 +41,14 @@ describe('safe image publication', () => {
     if (kind === 'dangling') await symlink(join(directory, 'missing'), request.outputPath);
     if (kind === 'hardlink') await link(request.sourceImage!, request.outputPath);
     const execute = vi.fn(render); const editor = new ImageEditor(backend(execute));
-    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT' });
+    await expect(editor.edit(request)).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
     expect(execute).not.toHaveBeenCalled(); expect(await leftovers()).toEqual([]);
     if (kind === 'file') expect(await readFile(request.outputPath, 'utf8')).toBe('original'); await editor.dispose();
   });
   it('never clobbers a destination that appears during rendering and retains recovery data', async () => {
     const work = await workspace(); const reply = await render(work.workerRequest);
     await writeFile(request.outputPath, 'other writer');
-    await expect(work.publish(reply)).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT', recoveryDirectory: work.directory });
+    await expect(work.publish(reply)).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT', details: { recoveryDirectory: work.directory } });
     await work.cleanup(); expect(await readFile(request.outputPath, 'utf8')).toBe('other writer');
     expect((await sharp(join(work.directory, 'complete.png')).metadata()).width).toBe(4);
   });
@@ -81,25 +82,25 @@ describe('safe image publication', () => {
     const editor = new ImageEditor(backend());
     await expect(editor.edit({ ...request, references: [{ id: 'a', role: 'subject', images: [request.sourceImage!, alias] }] })).rejects.toMatchObject({ code: 'INVALID_IMAGE' });
     const refs: NonNullable<EditRequest['references']> = [{ id: 'a', role: 'subject' as const, images: [alias] as [string] }];
-    expect((await editor.edit({ ...request, references: refs })).references).toEqual(refs); await editor.dispose();
+    expect(await editor.edit({ ...request, references: refs })).toMatchObject({ references: refs }); await editor.dispose();
   });
   it('retains temporary files when worker termination cannot be confirmed', async () => {
-    const editor = new ImageEditor(backend(async () => { throw new PicPatchRuntimeError('TERMINATION_FAILED', 'Unconfirmed'); }));
+    const editor = new ImageEditor(backend(async () => { throw new PicPatchSdkError('TERMINATION_FAILED', 'Unconfirmed'); }));
     const failure = await editor.edit(request).catch(error => error);
-    expect(failure).toMatchObject({ code: 'TERMINATION_FAILED', recoveryDirectory: expect.any(String) });
+    expect(failure).toMatchObject({ code: 'TERMINATION_FAILED', details: { recoveryDirectory: expect.any(String) } });
     expect(await leftovers()).toHaveLength(1); await editor.dispose();
   });
   it('waits for active work before cleanup during disposal', async () => {
     const started = Promise.withResolvers<void>(); const finish = Promise.withResolvers<void>(); let path = '';
-    const editor = new ImageEditor(backend(async r => { path = r.sourceImage!; started.resolve(); await finish.promise; throw new PicPatchCancelledError(); }));
+    const editor = new ImageEditor(backend(async r => { path = r.sourceImage!; started.resolve(); await finish.promise; throw new PicPatchSdkError('CANCELLED', 'The operation was cancelled.'); }));
     const edit = editor.edit(request); const caught = expect(edit).rejects.toMatchObject({ code: 'CANCELLED' }); await started.promise;
     let disposed = false; const disposal = editor.dispose().then(() => { disposed = true; });
     await Promise.resolve(); expect(disposed).toBe(false); expect((await stat(path)).isFile()).toBe(true);
     finish.resolve(); await disposal; await caught; expect(await leftovers()).toEqual([]);
   });
-  it('blocks reentrant edits from progress callbacks', async () => {
+  it('queues reentrant edits from progress callbacks', async () => {
     const editor = new ImageEditor(backend()); let reentrant: Promise<unknown> | undefined;
-    await editor.edit(request, { onProgress: () => { reentrant = expect(editor.edit(request)).rejects.toMatchObject({ code: 'BUSY' }); } });
+    await editor.edit(request, { onProgress: () => { reentrant = expect(editor.edit(request)).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' }); } });
     await reentrant; await editor.dispose();
   });
   it('does not publish if cancellation arrives after the worker finishes', async () => {
@@ -115,6 +116,7 @@ describe('cleanup reporting', () => {
     const editor = new ImageEditor(backend());
     try {
       const saved = await editor.edit(request);
+      if ('status' in saved) throw new Error(saved.code);
       expect(saved.cleanupWarning).toMatchObject({ directory: expect.any(String) });
       expect((await sharp(saved.image.path).metadata()).width).toBe(4);
     } finally { cleanup.mockRestore(); await editor.dispose(); }
@@ -122,7 +124,7 @@ describe('cleanup reporting', () => {
   it('reports both the original failure and failed cleanup', async () => {
     const cleanup = vi.spyOn(ImageWorkspace.prototype, 'cleanup').mockRejectedValue(new Error('cleanup failed'));
     const editor = new ImageEditor(backend(async () => { throw new Error('worker failure'); }));
-    try { await expect(editor.edit(request)).rejects.toMatchObject({ code: 'CLEANUP_FAILED', recoveryDirectory: expect.any(String), cause: expect.any(AggregateError) }); }
+    try { await expect(editor.edit(request)).rejects.toMatchObject({ code: 'CLEANUP_FAILED', details: { recoveryDirectory: expect.any(String) }, cause: expect.any(AggregateError) }); }
     finally { cleanup.mockRestore(); await editor.dispose(); }
   });
 });
@@ -133,7 +135,7 @@ it('reserves edit admission before diagnostic callbacks and settles diagnostics 
   let reentrant: Promise<unknown> | undefined;
   await editor.edit(request, { onEvent: event => {
     events.push(event);
-    if (event.stage === 'started') reentrant = expect(editor.edit(request)).rejects.toMatchObject({ code: 'BUSY' });
+    if (event.stage === 'started') reentrant = expect(editor.edit(request)).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
   } });
   await reentrant;
   expect(events[0]?.stage).toBe('started'); expect(events.at(-1)?.stage).toBe('succeeded');

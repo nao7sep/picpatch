@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Calls on an editor run in submission order, capturing arguments and applying cancellation/time budgets while waiting. Confirmed worker death allows a fresh worker on a later explicit call; failed inference is never replayed.
+- `PicPatchSdkError` replaces the separate usage/runtime/cancellation classes. `errorCodes` and `isPicPatchSdkError` expose a data-first contract with kind, effect, subject and typed details across process boundaries.
+- Image calls return `ImageOutcome`: a completed image or an `OUTPUT_CONFLICT` refusal. Sidecar failures report their own effect and never remove a published image.
+
 - `installEngine` installs or reuses a managed Python 3.15 inference environment; `inspectEngine` checks its actual dependency/import readiness. Installation requires a caller-provided uv executable and never acquires models.
 - Editor configuration uses `engineDirectory` instead of `pythonExecutable`. The worker and protocol stay with the SDK; compatible locked environments can be shared across independently released consumers.
 - Engine readiness references use format version 1. Interrupted installations are not discoverable as ready, and existing environments remain usable during replacement.

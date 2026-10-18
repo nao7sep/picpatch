@@ -73,6 +73,7 @@ async function record(saved: EditResult): Promise<ArtifactRecord> {
 it.each(['edit', 'generate'] as const)('writes no sidecar unless %s explicitly requests it', async verb => {
   const saved = verb === 'edit' ? await editor.edit({ instruction: 'private-instruction', sourceImage: source, outputPath: output })
     : await editor.generate({ prompt: 'private-prompt', outputPath: output });
+    if ('status' in saved) throw new Error(saved.code);
   expect(saved).not.toHaveProperty('sidecar');
   expect(await fs.readdir(directory)).toEqual(['out.png', 'source.png']);
 });
@@ -80,6 +81,7 @@ it.each(['edit', 'generate'] as const)('writes no sidecar unless %s explicitly r
 it.each([false, true])('retains edit inputs only with explicit content consent (%s)', async includeInputs => {
   const references = [{ id: 'private-id', role: 'style' as const, images: [source] as [string] }] as const;
   const saved = await editor.edit({ instruction: 'private-instruction', sourceImage: source, references: [...references], outputPath: output, sidecar: { includeInputs } }, { onEvent: event => events.push(event) });
+  if ('status' in saved) throw new Error(saved.code);
   const data = await record(saved);
   expect(data.inputsIncluded).toBe(includeInputs);
   if (includeInputs) {
@@ -97,6 +99,7 @@ it.each([false, true])('retains edit inputs only with explicit content consent (
 
 it.each([false, true])('writes generation provenance with optional prompt (%s)', async includeInputs => {
   const saved = await editor.generate({ prompt: 'private-prompt', outputPath: output, sidecar: includeInputs ? { includeInputs } : {} });
+  if ('status' in saved) throw new Error(saved.code);
   const data = await record(saved);
   expect(data.operation).toBe('generate');
   if (includeInputs) expect(data.inputs).toEqual({ prompt: 'private-prompt' });
@@ -114,7 +117,7 @@ it.each(['file', 'symlink'])('rejects an existing sidecar %s before inference', 
   if (kind === 'file') await fs.writeFile(`${output}.json`, 'existing');
   else await fs.symlink(join(directory, 'absent.json'), `${output}.json`);
   beforeRender = vi.fn();
-  await expect(editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} })).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT' });
+  await expect(editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} })).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
   expect(beforeRender).not.toHaveBeenCalled();
   await expect(fs.stat(output)).rejects.toMatchObject({ code: 'ENOENT' });
 });
@@ -122,7 +125,8 @@ it.each(['file', 'symlink'])('rejects an existing sidecar %s before inference', 
 it('reports a racing sidecar conflict without overwriting it or deleting the saved PNG', async () => {
   beforeRender = () => fs.writeFile(`${output}.json`, 'another writer');
   const saved = await editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} });
-  expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'OUTPUT_CONFLICT', path: `${output}.json` });
+  if ('status' in saved) throw new Error(saved.code);
+  expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'OUTPUT_CONFLICT', effect: 'none', path: `${output}.json` });
   expect(await fs.readFile(`${output}.json`, 'utf8')).toBe('another writer');
   expect((await sharp(output).metadata()).format).toBe('png');
   expect((await fs.readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
@@ -134,7 +138,8 @@ it('reports a metadata write error as partial success with safe copy', async () 
     return actual.open(...args);
   });
   const saved = await editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} });
-  expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'OUTPUT_IO' });
+  if ('status' in saved) throw new Error(saved.code);
+  expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'DISK_FULL', effect: 'none' });
   expect(JSON.stringify(saved.sidecar)).not.toContain('private filesystem detail');
   expect((await sharp(output).metadata()).format).toBe('png');
   await expect(fs.stat(`${output}.json`)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -151,11 +156,13 @@ it('cancels before publication without artifacts, but settles both files after t
     if (args[1] === output) late.abort();
   });
   const saved = await editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} }, { signal: late.signal });
+  if ('status' in saved) throw new Error(saved.code);
   await record(saved);
 });
 
 it('rejects filesystem path fields in the sidecar schema', async () => {
   const saved = await editor.edit({ instruction: 'Blue', sourceImage: source, references: [{ id: 'ref', role: 'style', images: [source] }], outputPath: output, sidecar: { includeInputs: true } });
+  if ('status' in saved) throw new Error(saved.code);
   const data = await record(saved);
   const valid = contractValidator('ArtifactRecord');
   for (const path of ['/Users/example/private.png', 'C:\\Users\\example\\private.png', '../private.png']) {
@@ -164,4 +171,16 @@ it('rejects filesystem path fields in the sidecar schema', async () => {
     expect(valid({ ...data, inputs: { ...data.inputs, references: [{ id: 'ref', role: 'style', images: ['source.png'], path }] } })).toBe(false);
     expect(valid({ ...data, inputs: { ...data.inputs, geometry: [{ ...data.inputs!.geometry![0], path }] } })).toBe(false);
   }
+});
+
+it('reports uncertain sidecar publication without deleting either complete file', async () => {
+  vi.mocked(fs.link).mockImplementation(async (...args) => {
+    await actual.link(...args);
+    if (String(args[1]).endsWith('.json')) throw Object.assign(new Error('uncertain publication'), { code: 'EIO' });
+  });
+  const saved = await editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} });
+  if ('status' in saved) throw new Error(saved.code);
+  expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'IO_ERROR', effect: 'unknown' });
+  expect((await sharp(output).metadata()).format).toBe('png');
+  expect(JSON.parse(await fs.readFile(`${output}.json`, 'utf8')).version).toBe(1);
 });

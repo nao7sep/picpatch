@@ -39,7 +39,7 @@ describe('image content validation', () => {
     if (kind === 'directory') source = directory;
     if (kind === 'svg') await writeFile(source, '<svg xmlns="http://www.w3.org/2000/svg" width="3" height="3"/>');
     if (kind === 'truncated') { const valid = await image(); const bytes = await readFile(valid); await writeFile(source, bytes.subarray(0, bytes.length - 20)); }
-    await expect(prepare(source)).rejects.toMatchObject({ code: 'INVALID_IMAGE' });
+    await expect(prepare(source)).rejects.toMatchObject({ code: kind === 'missing' ? 'FILE_NOT_FOUND' : 'INVALID_IMAGE' });
   });
   it('requires an opaque grayscale PNG mask', async () => {
     const source = await image(); await expect(prepare(source, true)).rejects.toMatchObject({ code: 'INVALID_MASK' });
