@@ -56,3 +56,54 @@ it('detects planted static imports, re-exports and dynamic imports across the bo
     import 'sharp';
   `)).toEqual(['../../app.ts', 'electron', './client', '/outside.ts']);
 });
+
+function ambientReads(text: string, file: string): string[] {
+  const source = parse(text, { sourceType: 'module', plugins: ['typescript', 'importAttributes'] });
+  const failures: string[] = [];
+  const processes = new Set(['process']); const operatingSystems = new Set<string>();
+  const prohibited = new Set(['env', 'cwd', 'stdout', 'stderr', 'stdin']);
+  const name = (node: any): string | undefined => node?.name ?? node?.value;
+  for (const entry of source.program.body) {
+    if (entry.type !== 'ImportDeclaration') continue;
+    if (['node:console', 'console'].includes(entry.source.value)) failures.push('console');
+    for (const specifier of entry.specifiers) {
+      const member = specifier.type === 'ImportSpecifier' ? name(specifier.imported) : undefined;
+      if (['node:process', 'process'].includes(entry.source.value)) {
+        if (member && prohibited.has(member)) failures.push(member);
+        else if (!member) processes.add(specifier.local.name);
+      }
+      if (['node:os', 'os'].includes(entry.source.value)) {
+        if (member === 'homedir' && file !== 'src/paths.ts') failures.push('homedir');
+        else if (!member) operatingSystems.add(specifier.local.name);
+      }
+    }
+  }
+  function visit(value: any): void {
+    if (!value || typeof value !== 'object') return;
+    if (value.type === 'MemberExpression' || value.type === 'OptionalMemberExpression') {
+      if (processes.has(name(value.object)!) && prohibited.has(name(value.property)!)) failures.push(name(value.property)!);
+      if (name(value.object) === 'console') failures.push('console');
+      if (operatingSystems.has(name(value.object)!) && name(value.property) === 'homedir' && file !== 'src/paths.ts') failures.push('homedir');
+    }
+    if (value.type === 'VariableDeclarator' && value.id?.type === 'ObjectPattern' && processes.has(name(value.init)!)) {
+      for (const property of value.id.properties) if (prohibited.has(name(property.key)!)) failures.push(name(property.key)!);
+    }
+    for (const child of Object.values(value)) {
+      if (Array.isArray(child)) child.forEach(visit);
+      else if (child && typeof child === 'object') visit(child);
+    }
+  }
+  visit(source);
+  return failures;
+}
+it('keeps ambient caller state and standard streams outside SDK source', async () => {
+  const failures: string[] = [];
+  for (const file of (await files(resolve(root, 'src'))).filter(file => file.endsWith('.ts'))) {
+    failures.push(...ambientReads(await readFile(file, 'utf8'), relative(root, file)).map(reason => `${relative(root, file)}: ${reason}`));
+  }
+  expect(failures).toEqual([]);
+});
+it('detects planted ambient reads, import aliases and stream writes', () => {
+  expect(ambientReads(`import p from 'node:process'; import {env as settings} from 'node:process'; import os from 'node:os'; p['env']; const {cwd} = process; process.stderr.write('x'); console.log('x'); os.homedir();`, 'src/client.ts')).toEqual(['env', 'env', 'cwd', 'stderr', 'console', 'homedir']);
+  expect(ambientReads(`import {homedir} from 'node:os'; homedir();`, 'src/paths.ts')).toEqual([]);
+});
