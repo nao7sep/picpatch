@@ -1,6 +1,6 @@
 export { createEditor } from './client.ts';
 export type { Editor, EditorOptions } from './client.ts';
-export type { ImageOutcome, OperationRefusal, GenerateRequest, GenerateResult, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, OperationOptions, ProgressEvent, ReferenceGroup } from './types.ts';
+export type { ImageResult, ImageOutcome, OperationRefusal, GenerateRequest, GenerateResult, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, OperationOptions, ProgressEvent, ReferenceGroup } from './types.ts';
 export { validateEditRequest, validateGenerateRequest } from './validation.ts';
 export { PicPatchSdkError, isPicPatchSdkError, errorCodes } from './errors.ts';
 export type { PicPatchSdkErrorData, SdkErrorOptions, ErrorCode, ErrorKind, ErrorEffect, ErrorDetails } from './errors.ts';
@@ -48,3 +48,6 @@ export type { PlannedDestination } from './images/output.ts';
 
 export { openModel, inspectModels, readModelRegistration, validateModelRegistration } from './models/opening.ts';
 export type { ModelRegistration, ModelOpenOptions, ModelPresenceIssue, OpenedModel, ModelOpenRefusal, ModelOpenResult, ManagedModelInventory } from './models/opening.ts';
+
+export { readArtifactRecord, verifyArtifact, validateArtifactRecord } from './images/records.ts';
+export type { ArtifactReadOptions, ArtifactRefusal, ArtifactVerification } from './images/records.ts';

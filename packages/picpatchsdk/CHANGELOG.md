@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Return private versioned artifact records on every saved image, with SDK/caller identity and encoded input/output hashes. Add record reading and artifact verification; optional sidecars use `-picpatchsdk.json` and fail independently of images.
+
 - Add presence-only `openModel`, managed catalog inventory and versioned caller-owned model registrations; preparation remains the integrity boundary.
 
 - Read-only versioned profiles bundle resource locations, timeouts and editor defaults; explicit arguments win without ambient configuration.

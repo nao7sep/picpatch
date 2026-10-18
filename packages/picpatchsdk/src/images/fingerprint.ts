@@ -1,3 +1,5 @@
+import { pipeline } from 'node:stream/promises';
+import { Writable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
@@ -7,7 +9,7 @@ import { absolutePath, checkSignal } from '../operations.ts';
 
 /** SHA-256 of original encoded file bytes, not normalized pixels or a path string. */
 export interface ImageFingerprint { bytes: number; sha256: string }
-export async function inspectImage(path: string, signal?: AbortSignal) {
+export async function inspectImage(path: string, signal?: AbortSignal, decode = false) {
   absolutePath(path); checkSignal(signal);
   let file;
   try {
@@ -20,7 +22,10 @@ export async function inspectImage(path: string, signal?: AbortSignal) {
     }
     checkSignal(signal);
     let metadata;
-    try { metadata = await sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).metadata(); }
+    try {
+      metadata = await sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).metadata();
+      if (decode) await pipeline(sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).raw(), new Writable({ write(_chunk, _encoding, done) { done(); } }), { signal });
+    }
     catch (cause) { throw new PicPatchSdkError('INVALID_IMAGE', 'Image headers could not be decoded.', { cause, subject: path }); }
     const after = await stat(path, { bigint: true });
     if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || BigInt(bytes) !== before.size) throw new PicPatchSdkError('INPUTS_CHANGED', 'Image changed while planning.', { subject: path });

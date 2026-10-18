@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import sharp from 'sharp';
-import { createEditor, readProfile, prepareModel, discoverModels, resolveStoragePaths, type EditResult } from 'picpatchsdk';
+import { createEditor, readProfile, verifyArtifact, readArtifactRecord, openModel, prepareModel, discoverModels, resolveStoragePaths, type EditResult } from 'picpatchsdk';
 
 const config = JSON.parse(await readFile(process.argv[2]!, 'utf8')) as {
   engineDirectory: string; modelId: string; outputDirectory: string; modelsDirectory: string;
@@ -19,6 +19,9 @@ const defaults = { outputDirectory: config.outputDirectory, size: { width: 256, 
 async function artifact(result: EditResult) {
   assert.equal(result.sidecar?.status, 'saved');
   const bytes = await readFile(result.image.path);
+  const parsed = await readArtifactRecord(result.sidecar!.path);
+  if ('status' in parsed) throw new Error(parsed.code);
+  assert.equal((await verifyArtifact(result.image.path, parsed)).status, 'verified');
   const text = await readFile(result.sidecar!.path, 'utf8');
   const record = JSON.parse(text);
   assert.equal(record.image.filename, basename(result.image.path));
@@ -34,7 +37,9 @@ const profilePath = join(config.outputDirectory, 'consumer-profile.json');
 await writeFile(profilePath, JSON.stringify({ version: 1, engineDirectory: config.engineDirectory, nativeExecutable: config.native.executable, defaults }));
 const profile = await readProfile(profilePath);
 if ('status' in profile) throw new Error(profile.code);
-const editor = createEditor({ profile, model: prepared.model });
+const opened = await openModel(prepared);
+if (opened.status !== 'ready') throw new Error(opened.code);
+const editor = createEditor({ profile, model: opened.model });
 let source: string;
 try {
   const generation = await editor.plan({ prompt: 'A blue ceramic bowl on a white table.', parameters: { steps: 2 }, sidecar: {} });

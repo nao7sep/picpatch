@@ -1,15 +1,16 @@
+import artifactFixture from '../fixtures/artifacts/current.json' with { type: 'json' };
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createEditor, PicPatchSdkError, type EditResult } from 'picpatchsdk';
+import { createEditor, PicPatchSdkError, type ImageResult } from 'picpatchsdk';
 import { compare, type ComparisonRecord } from '../../benchmarks/comparison.ts';
 vi.mock('picpatchsdk', async original => ({ ...await original<typeof import('picpatchsdk')>(), createEditor: vi.fn() }));
 const directories: string[] = [];
 afterEach(async () => { vi.resetAllMocks(); await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 async function reportPath() { const dir = await mkdtemp(join(tmpdir(), 'picpatch-comparison-')); directories.push(dir); return join(dir, 'report.jsonl'); }
 async function records(path: string): Promise<ComparisonRecord[]> { return (await readFile(path, 'utf8')).trim().split('\n').map(line => JSON.parse(line)); }
-const result: EditResult = { model: 'test', modelRevision: 'revision', runtime: { name: 'mflux', version: 'test' }, seed: 1, effectiveParameters: { steps: 2, negativePrompt: 'private words' }, image: { path: '/private/output.png', mimeType: 'image/png', size: { width: 16, height: 16 } }, references: [], sidecar: { status: 'saved', path: '/private/output.png.json' } };
+const result: ImageResult = { record: artifactFixture as ImageResult['record'], model: 'test', modelRevision: 'revision', runtime: { name: 'mflux', version: 'test' }, seed: 1, effectiveParameters: { steps: 2, negativePrompt: 'private words' }, image: { path: '/private/output.png', mimeType: 'image/png', size: { width: 16, height: 16 } }, references: [], sidecar: { status: 'saved', path: '/private/output-picpatchsdk.json' } };
 it('persists success, skips unsupported and dependent cases, and recreates a failed session', async () => {
   const path = await reportPath();
   const first = { plan: vi.fn(), generate: vi.fn().mockResolvedValue(result), edit: vi.fn().mockRejectedValue(new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'private details')), dispose: vi.fn().mockResolvedValue(undefined) };
@@ -26,7 +27,7 @@ it('persists success, skips unsupported and dependent cases, and recreates a fai
   expect(first.edit.mock.calls[0]![0].sourceImage).toBe(result.image.path);
   expect(first.dispose).toHaveBeenCalledOnce(); expect(next.dispose).toHaveBeenCalledOnce();
   expect(await readFile(path, 'utf8')).not.toContain('private');
-  expect(rows[0]).toMatchObject({ image: 'output.png', sidecar: 'output.png.json', parameters: { steps: 2 }, memory: 'not-measured' });
+  expect(rows[0]).toMatchObject({ image: 'output.png', sidecar: 'output-picpatchsdk.json', parameters: { steps: 2 }, memory: 'not-measured' });
   await expect(compare([], path)).rejects.toMatchObject({ code: 'EEXIST' });
   expect(await records(path)).toEqual(rows);
 });

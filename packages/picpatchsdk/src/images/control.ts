@@ -7,9 +7,9 @@ import type { ImageSize } from '../types.ts';
 import { checkCancellation, normalizeImage, snapshotImage } from './validation.ts';
 
 /** A control map describes the output coordinate system; never silently crop or resize it. */
-export async function prepareControl(image: string, directory: string, size: ImageSize, signal?: AbortSignal, expected?: ImageFingerprint) {
+export async function prepareControl(image: string, directory: string, size: ImageSize, signal?: AbortSignal, expected?: ImageFingerprint, measured?: (fingerprint: ImageFingerprint) => void) {
   const snapshot = join(directory, 'control.tmp'); const target = join(directory, 'control.png');
-  await snapshotImage(image, snapshot, signal, false, expected);
+  await snapshotImage(image, snapshot, signal, false, expected, measured);
   try {
     const metadata = await sharp(snapshot, { limitInputPixels: false, sequentialRead: true }).metadata();
     if (metadata.format !== 'png' || metadata.hasAlpha) throw new PicPatchSdkError('INVALID_IMAGE', 'Control maps must be opaque PNG images.');

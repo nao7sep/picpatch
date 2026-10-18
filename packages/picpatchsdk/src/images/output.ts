@@ -1,7 +1,9 @@
+import type { ArtifactRecord } from '../contracts.generated.ts';
+import type { ImageResult } from '../types.ts';
 import type { ImagePlan } from './planning.ts';
 import { prepareControl } from './control.ts';
 import { prepareOutpaint } from './outpaint.ts';
-import { publishSidecar } from './sidecar.ts';
+import { createArtifactRecord, publishSidecar, sidecarPath } from './sidecar.ts';
 import { basename, dirname, join } from 'node:path';
 import { chmod, link, lstat, mkdtemp, open, realpath, rm, stat } from 'node:fs/promises';
 import { PicPatchSdkError } from '../errors.ts';
@@ -17,6 +19,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   private readonly destination: string;
   private retain = false;
   private readonly geometry: InputGeometry[] = [];
+  private readonly fingerprints: ArtifactRecord['fingerprints'] = [];
   private outpaint: EditResult['outpaint'];
   private constructor(directory: string, destination: string, request: T) {
     this.directory = directory; this.destination = destination; this.request = request;
@@ -46,20 +49,20 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     if (this.request.control) {
       const size = this.request.size ?? defaultSize;
       if (!size) throw new PicPatchSdkError('INVALID_REQUEST', 'Control maps require output dimensions.');
-      const prepared = await prepareControl(this.request.control.image, this.directory, size, signal, expected(this.request.control.image));
+      const prepared = await prepareControl(this.request.control.image, this.directory, size, signal, expected(this.request.control.image), fingerprint => this.fingerprints.push({ role: 'control', ...fingerprint }));
       this.workerRequest.control = { ...this.request.control, image: prepared.path };
       this.workerRequest.size = size;
       this.geometry.push({ path: this.request.control.image, ...prepared.geometry });
     }
     if (!('instruction' in this.request) || !('instruction' in this.workerRequest)) { checkCancellation(signal); return; }
     let index = 0;
-    const prepare = async (path: string, mask = false, preserveSize = false) => {
+    const prepare = async (path: string, role: ArtifactRecord['fingerprints'][number]['role'], mask = false, preserveSize = false) => {
       const stem = join(this.directory, `input-${index++}`);
-      const image = await prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal, mask || preserveSize ? undefined : policy, expected(path));
+      const image = await prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal, mask || preserveSize ? undefined : policy, expected(path), fingerprint => this.fingerprints.push({ role, ...fingerprint }));
       this.geometry.push({ path, ...image.geometry });
       return image;
     };
-    const source = this.request.sourceImage ? await prepare(this.request.sourceImage, false, this.request.outpaint !== undefined) : undefined;
+    const source = this.request.sourceImage ? await prepare(this.request.sourceImage, 'source', false, this.request.outpaint !== undefined) : undefined;
     if (source) this.workerRequest.sourceImage = source.path;
     if (this.request.outpaint && source) {
       const prepared = await prepareOutpaint(source, this.request.outpaint, this.directory, signal);
@@ -77,7 +80,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
         throw new PicPatchSdkError('INVALID_MASK', 'Masked output dimensions must match the oriented source.');
       }
       this.workerRequest.size = this.request.size ?? { width: source.width, height: source.height };
-      const mask = await prepare(this.request.maskImage, true);
+      const mask = await prepare(this.request.maskImage, 'mask', true);
       if (!source || mask.width !== source.width || mask.height !== source.height) {
         throw new PicPatchSdkError('INVALID_MASK', 'Mask dimensions must match the oriented source image.');
       }
@@ -86,7 +89,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     const identities = new Set<string>();
     for (const group of this.workerRequest.references ?? []) {
       for (let i = 0; i < group.images.length; i++) {
-        const image = await prepare(group.images[i]!);
+        const image = await prepare(group.images[i]!, 'reference');
         if (identities.has(image.identity)) throw new PicPatchSdkError('INVALID_IMAGE', 'Reference images must not alias the same file.');
         identities.add(image.identity);
         group.images[i] = image.path;
@@ -95,7 +98,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     checkCancellation(signal);
   }
 
-  async publish(result: EditResult, signal?: AbortSignal): Promise<EditResult> {
+  async publish(result: EditResult, signal?: AbortSignal, caller?: ArtifactRecord['caller']): Promise<ImageResult> {
     checkCancellation(signal);
     const snapshot = join(this.directory, 'result.tmp');
     const complete = join(this.directory, 'complete.png');
@@ -115,6 +118,11 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       throw new PicPatchSdkError('INVALID_OUTPUT', 'Worker output is missing, malformed, or inconsistent with its metadata.', { cause });
     }
     checkCancellation(signal);
+    const { sidecar: _runtimeSidecar, outpaint: _runtimeCanvas, ...response } = result;
+    const saved: EditResult = { ...response, image: { ...result.image, path: this.request.outputPath }, references: structuredClone('instruction' in this.request ? this.request.references ?? [] : []), inputGeometry: structuredClone(this.geometry) };
+    if (this.outpaint) saved.outpaint = structuredClone(this.outpaint);
+    const record = await createArtifactRecord(this.request, saved, complete, this.fingerprints, caller);
+    const published: ImageResult = { ...saved, record };
     try {
       await chmod(complete, 0o600);
       const file = await open(complete, 'r');
@@ -133,12 +141,9 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       error.effect = 'unknown';
       throw error;
     }
-    // Publication is the commit point. A later abort must not disguise a saved result.
-    const { sidecar: _runtimeSidecar, outpaint: _runtimeCanvas, ...response } = result;
-    const saved: EditResult = { ...response, image: { ...result.image, path: this.request.outputPath }, references: structuredClone('instruction' in this.request ? this.request.references ?? [] : []), inputGeometry: structuredClone(this.geometry) };
-    if (this.outpaint) saved.outpaint = structuredClone(this.outpaint);
-    if (this.request.sidecar) saved.sidecar = await publishSidecar(this.request, saved, complete, `${this.destination}.json`, this.directory);
-    return saved;
+    // Publication wins later cancellation. Sidecar failure cannot undo the image.
+    if (this.request.sidecar) published.sidecar = await publishSidecar(record, sidecarPath(this.request.outputPath), sidecarPath(this.destination), this.directory);
+    return published;
   }
 
   preserve(): void { this.retain = true; }
@@ -155,7 +160,7 @@ export async function inspectDestination(request: ImageRequest, signal?: AbortSi
   try { parent = await realpath(dirname(request.outputPath)); }
   catch (cause) { throw new PicPatchSdkError('OUTPUT_IO', 'Output directory must already exist and be accessible.', { cause, subject: dirname(request.outputPath) }); }
   const destination = join(parent, basename(request.outputPath));
-  for (const path of request.sidecar ? [destination, `${destination}.json`] : [destination]) {
+  for (const path of [destination]) {
     try {
       await lstat(path);
       throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output already exists; choose a new path.', { subject: path });

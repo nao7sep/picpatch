@@ -74,7 +74,7 @@ export class ImageEditor implements Editor {
     const callerSignal = options.signal;
     const deadline = new AbortController();
     const signal = AbortSignal.any([this.lifetime.signal, deadline.signal, ...(options.signal ? [options.signal] : [])]);
-    const captured = { ...options, signal };
+    const captured = { ...options, signal, ...(options.caller ? { caller: structuredClone(options.caller) } : {}) };
     const timer = setTimeout(() => deadline.abort(), budget);
     const previous = this.tail;
     const operation = Promise.resolve().then(() => withDiagnostics('prompt' in request ? 'generate' : 'edit', captured, async scoped => {
@@ -96,7 +96,7 @@ export class ImageEditor implements Editor {
 
   private async run(request: ImageRequest, signal: AbortSignal, options: OperationOptions, plan?: ImagePlan): Promise<ImageOutcome> {
     let workspace: ImageWorkspace | undefined;
-    let result: EditResult | undefined;
+    let result: import('../types.ts').ImageResult | undefined;
     let failure: unknown;
     try {
       checkCancellation(signal);
@@ -109,7 +109,7 @@ export class ImageEditor implements Editor {
       const response = 'prompt' in workspace.workerRequest
         ? await this.backend.generate(workspace.workerRequest, options)
         : await this.backend.edit(workspace.workerRequest, options);
-      result = await workspace.publish(response, signal);
+      result = await workspace.publish(response, signal, options.caller);
     } catch (error) {
       failure = error;
       if (error instanceof PicPatchSdkError && error.code === 'TERMINATION_FAILED' && workspace) {

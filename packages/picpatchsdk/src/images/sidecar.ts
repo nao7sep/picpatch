@@ -1,3 +1,5 @@
+import packageInfo from '../../package.json' with { type: 'json' };
+import { contractValidator } from '../contracts.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
@@ -6,18 +8,15 @@ import { basename, join } from 'node:path';
 import type { ArtifactRecord, EditResult, SidecarOutcome } from '../contracts.generated.ts';
 import type { ImageRequest } from '../types.ts';
 
-/** Called only after PNG publication; settlement must never disguise a saved image. */
-export async function publishSidecar(request: ImageRequest, result: EditResult, complete: string, destination: string, directory: string): Promise<SidecarOutcome> {
-  const path = `${request.outputPath}.json`;
-  let publishing = false;
-  try {
+/** Reproducibility metadata never enters the image. Hashes identify encoded file bytes. */
+export async function createArtifactRecord(request: ImageRequest, result: EditResult, complete: string, fingerprints: ArtifactRecord['fingerprints'], caller?: ArtifactRecord['caller']): Promise<ArtifactRecord> {
     const hash = createHash('sha256');
     let bytes = 0;
     for await (const chunk of createReadStream(complete)) { hash.update(chunk); bytes += chunk.length; }
     const inputsIncluded = request.sidecar?.includeInputs === true;
     const { negativePrompt, ...parameters } = result.effectiveParameters;
     const record: ArtifactRecord = {
-      version: 1, operation: 'prompt' in request ? 'generate' : 'edit', inputsIncluded,
+      version: 1, writer: { name: 'picpatchsdk', version: packageInfo.version }, fingerprints, ...(caller ? { caller } : {}), operation: 'prompt' in request ? 'generate' : 'edit', inputsIncluded,
       image: { filename: basename(result.image.path), mimeType: result.image.mimeType, size: result.image.size }, sha256: hash.digest('hex'), bytes,
       ...(result.control ? { control: result.control } : {}),
       ...(result.loras ? { loras: result.loras } : {}),
@@ -34,6 +33,18 @@ export async function publishSidecar(request: ImageRequest, result: EditResult, 
         geometry: (result.inputGeometry ?? []).map(({ path, ...geometry }) => ({ ...geometry, filename: basename(path) })),
       } } : {}),
     };
+    if (!contractValidator('ArtifactRecord')(record)) throw new PicPatchSdkError('INVALID_OUTPUT', 'Invalid artifact provenance.');
+    return record;
+}
+
+export function sidecarPath(image: string): string {
+  return image.slice(0, -4) + '-picpatchsdk.json';
+}
+
+/** Called only after PNG publication; settlement must never disguise a saved image. */
+export async function publishSidecar(record: ArtifactRecord, path: string, destination: string, directory: string): Promise<SidecarOutcome> {
+  let publishing = false;
+  try {
     const staging = join(directory, 'sidecar.json');
     const file = await open(staging, 'wx', 0o600);
     try { await file.writeFile(`${JSON.stringify(record, null, 2)}\n`, 'utf8'); await file.sync(); }

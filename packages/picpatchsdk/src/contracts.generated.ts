@@ -494,7 +494,13 @@ export interface ArtifactRecord {
      */
     filename: string;
   };
+  /**
+   * SHA-256 of the final PNG file bytes, not decoded pixels or the record.
+   */
   sha256: string;
+  /**
+   * Length of the final PNG file in bytes.
+   */
   bytes: number;
   model: string;
   modelRevision: string;
@@ -559,4 +565,20 @@ export interface ArtifactRecord {
   conditioning?: ConditioningProvenance;
   loras?: LoraProvenance[];
   control?: ControlProvenance;
+  writer: {
+    name: "picpatchsdk";
+    version: string;
+  };
+  caller?: {
+    name: string;
+    version: string;
+  };
+  /**
+   * Original encoded input file bytes, before normalization; ordered by preparation.
+   */
+  fingerprints: {
+    role: "source" | "mask" | "reference" | "control";
+    sha256: string;
+    bytes: number;
+  }[];
 }

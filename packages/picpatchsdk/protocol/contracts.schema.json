@@ -1042,7 +1042,8 @@
             "filename": {
               "type": "string",
               "minLength": 1,
-              "description": "Filename only, without directory information."
+              "description": "Filename only, without directory information.",
+              "pattern": "^[^/\\\\]+$"
             }
           },
           "required": [
@@ -1054,11 +1055,13 @@
         },
         "sha256": {
           "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 of the final PNG file bytes, not decoded pixels or the record."
         },
         "bytes": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "Length of the final PNG file in bytes."
         },
         "model": {
           "type": "string",
@@ -1131,7 +1134,8 @@
                     "items": {
                       "type": "string",
                       "minLength": 1,
-                      "description": "Filename only, without directory information."
+                      "description": "Filename only, without directory information.",
+                      "pattern": "^[^/\\\\]+$"
                     }
                   },
                   "conditioning": {
@@ -1198,7 +1202,8 @@
                   "filename": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "Filename only, without directory information."
+                    "description": "Filename only, without directory information.",
+                    "pattern": "^[^/\\\\]+$"
                   }
                 },
                 "required": [
@@ -1216,16 +1221,19 @@
             "sourceImage": {
               "type": "string",
               "minLength": 1,
-              "description": "Filename only, without directory information."
+              "description": "Filename only, without directory information.",
+              "pattern": "^[^/\\\\]+$"
             },
             "maskImage": {
               "type": "string",
               "minLength": 1,
-              "description": "Filename only, without directory information."
+              "description": "Filename only, without directory information.",
+              "pattern": "^[^/\\\\]+$"
             },
             "controlImage": {
               "type": "string",
-              "description": "Filename only, without directory information."
+              "description": "Filename only, without directory information.",
+              "pattern": "^[^/\\\\]+$"
             }
           },
           "required": [],
@@ -1245,6 +1253,72 @@
         },
         "control": {
           "$ref": "#/definitions/ControlProvenance"
+        },
+        "writer": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "picpatchsdk"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "caller": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "fingerprints": {
+          "type": "array",
+          "description": "Original encoded input file bytes, before normalization; ordered by preparation.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "enum": [
+                  "source",
+                  "mask",
+                  "reference",
+                  "control"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "role",
+              "sha256",
+              "bytes"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
@@ -1258,7 +1332,9 @@
         "modelRevision",
         "runtime",
         "seed",
-        "effectiveParameters"
+        "effectiveParameters",
+        "writer",
+        "fingerprints"
       ],
       "additionalProperties": false
     },

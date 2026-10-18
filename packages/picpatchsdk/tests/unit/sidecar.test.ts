@@ -52,8 +52,8 @@ beforeEach(async () => {
 });
 afterEach(async () => { await editor.dispose(); await fs.rm(directory, { recursive: true, force: true }); });
 async function record(saved: EditResult): Promise<ArtifactRecord> {
-  expect(saved.sidecar).toEqual({ status: 'saved', path: `${output}.json` });
-  const json = await fs.readFile(`${output}.json`, 'utf8');
+  expect(saved.sidecar).toEqual({ status: 'saved', path: join(directory, 'out-picpatchsdk.json') });
+  const json = await fs.readFile(join(directory, 'out-picpatchsdk.json'), 'utf8');
   const data = JSON.parse(json) as ArtifactRecord;
   expect(contractValidator('ArtifactRecord')(data)).toBe(true);
   const image = await fs.readFile(output);
@@ -65,7 +65,7 @@ async function record(saved: EditResult): Promise<ArtifactRecord> {
   expect(data.effectiveParameters.steps).toBe(7);
   expect(data.seed).toBe(42);
   expect(json).not.toContain('.picpatch-');
-  expect((await fs.stat(`${output}.json`)).mode & 0o777).toBe(0o600);
+  expect((await fs.stat(join(directory, 'out-picpatchsdk.json'))).mode & 0o777).toBe(0o600);
   expect((await fs.readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
   return data;
 }
@@ -75,6 +75,8 @@ it.each(['edit', 'generate'] as const)('writes no sidecar unless %s explicitly r
     : await editor.generate({ prompt: 'private-prompt', outputPath: output });
     if ('status' in saved) throw new Error(saved.code);
   expect(saved).not.toHaveProperty('sidecar');
+  expect(saved.record.writer).toEqual({ name: 'picpatchsdk', version: '0.0.0' });
+  expect(saved.record.fingerprints).toHaveLength(verb === 'edit' ? 1 : 0);
   expect(await fs.readdir(directory)).toEqual(['out.png', 'source.png']);
 });
 
@@ -113,21 +115,21 @@ it('rejects malformed sidecar options through both public request validators', (
   }
 });
 
-it.each(['file', 'symlink'])('rejects an existing sidecar %s before inference', async kind => {
-  if (kind === 'file') await fs.writeFile(`${output}.json`, 'existing');
-  else await fs.symlink(join(directory, 'absent.json'), `${output}.json`);
+it.each(['file', 'symlink'])('keeps an existing sidecar %s while publishing the image', async kind => {
+  if (kind === 'file') await fs.writeFile(join(directory, 'out-picpatchsdk.json'), 'existing');
+  else await fs.symlink(join(directory, 'absent.json'), join(directory, 'out-picpatchsdk.json'));
   beforeRender = vi.fn();
-  await expect(editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} })).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
-  expect(beforeRender).not.toHaveBeenCalled();
-  await expect(fs.stat(output)).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} })).resolves.toMatchObject({ sidecar: { status: 'failed', code: 'OUTPUT_CONFLICT' }, record: { writer: { name: 'picpatchsdk' } } });
+  expect(beforeRender).toHaveBeenCalled();
+  expect((await sharp(output).metadata()).format).toBe('png');
 });
 
 it('reports a racing sidecar conflict without overwriting it or deleting the saved PNG', async () => {
-  beforeRender = () => fs.writeFile(`${output}.json`, 'another writer');
+  beforeRender = () => fs.writeFile(join(directory, 'out-picpatchsdk.json'), 'another writer');
   const saved = await editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} });
   if ('status' in saved) throw new Error(saved.code);
-  expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'OUTPUT_CONFLICT', effect: 'none', path: `${output}.json` });
-  expect(await fs.readFile(`${output}.json`, 'utf8')).toBe('another writer');
+  expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'OUTPUT_CONFLICT', effect: 'none', path: join(directory, 'out-picpatchsdk.json') });
+  expect(await fs.readFile(join(directory, 'out-picpatchsdk.json'), 'utf8')).toBe('another writer');
   expect((await sharp(output).metadata()).format).toBe('png');
   expect((await fs.readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
 });
@@ -142,7 +144,7 @@ it('reports a metadata write error as partial success with safe copy', async () 
   expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'DISK_FULL', effect: 'none' });
   expect(JSON.stringify(saved.sidecar)).not.toContain('private filesystem detail');
   expect((await sharp(output).metadata()).format).toBe('png');
-  await expect(fs.stat(`${output}.json`)).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(fs.stat(join(directory, 'out-picpatchsdk.json'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it('cancels before publication without artifacts, but settles both files after the image commit', async () => {
@@ -182,5 +184,5 @@ it('reports uncertain sidecar publication without deleting either complete file'
   if ('status' in saved) throw new Error(saved.code);
   expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'IO_ERROR', effect: 'unknown' });
   expect((await sharp(output).metadata()).format).toBe('png');
-  expect(JSON.parse(await fs.readFile(`${output}.json`, 'utf8')).version).toBe(1);
+  expect(JSON.parse(await fs.readFile(join(directory, 'out-picpatchsdk.json'), 'utf8')).version).toBe(1);
 });

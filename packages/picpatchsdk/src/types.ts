@@ -4,6 +4,8 @@ export type { GenerateRequest, EditRequest, EditResult, InputGeometry, ImageArti
 
 export interface OperationOptions extends EventOptions {
   readonly signal?: AbortSignal;
+  /** Optional calling app identity, separate from the SDK record writer. */
+  readonly caller?: import('./contracts.generated.ts').ArtifactRecord['caller'];
   /** Total budget from submission, including time waiting on this editor. */
   readonly timeoutMs?: number;
   readonly onProgress?: (event: ProgressEvent) => void;
@@ -21,4 +23,5 @@ export interface OperationRefusal {
   subject: string;
   details: import('./errors.ts').ErrorDetails;
 }
-export type ImageOutcome = import('./contracts.generated.ts').EditResult | OperationRefusal;
+export type ImageResult = import('./contracts.generated.ts').EditResult & { record: import('./contracts.generated.ts').ArtifactRecord };
+export type ImageOutcome = ImageResult | OperationRefusal;
