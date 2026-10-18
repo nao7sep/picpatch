@@ -3,13 +3,16 @@ import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { listModels, prepareModel, inspectReadiness } from '../../src/index.ts';
-import { prepareCatalogModel } from '../../src/models/preparation.ts';
+import { listModels, prepareModel as preparePublicModel, inspectReadiness } from '../../src/index.ts';
+import { prepareCatalogModel as prepareCatalog } from '../../src/models/preparation.ts';
 import { downloadFile } from '../../src/models/download.ts';
 import type { CatalogModel } from '../../src/models/catalog.ts';
 
 let directory: string;
 let entry: CatalogModel;
+const storage = () => ({ modelsDirectory: join(directory, 'models') });
+const prepareModel: typeof preparePublicModel = (id, options = {}) => preparePublicModel(id, { storage: storage(), ...options });
+const prepareCatalogModel: typeof prepareCatalog = (entry, options, fetcher) => prepareCatalog(entry, { storage: storage(), ...options }, fetcher);
 const bytes = Buffer.from('small fixture');
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-prepare-'));

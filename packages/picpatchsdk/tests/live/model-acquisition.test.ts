@@ -31,17 +31,18 @@ it.each([false, true])('acquires a tiny HTTP fixture through the production stre
   vi.stubGlobal('fetch', vi.fn(fetcher));
   vi.stubEnv('PICPATCH_DATA_DIR', directory);
   vi.stubEnv('PICPATCH_MODELS_DIR', join(directory, 'models'));
+  const storage = { modelsDirectory: join(directory, 'models') };
   const events: DiagnosticEvent[] = [];
   try {
-    await expect(prepareModel(entry.id)).rejects.toMatchObject({ code: 'MODEL_IO' });
+    await expect(prepareModel(entry.id, { storage })).rejects.toMatchObject({ code: 'MODEL_IO' });
     expect(fetch).not.toHaveBeenCalled();
-    const preparation = prepareModel(entry.id, { download: true, signal: controller.signal, onDiagnostic: event => events.push(event) });
+    const preparation = prepareModel(entry.id, { storage, download: true, signal: controller.signal, onDiagnostic: event => events.push(event) });
     if (cancel) await expect(preparation).rejects.toMatchObject({ code: 'CANCELLED' });
     else {
       const prepared = await preparation;
       expect(prepared).toMatchObject({ origin: 'download', integrity: 'matches-manifest' });
       expect((await verifyModel(prepared.model.directory, prepared.model.manifest)).status).toBe('matches-manifest');
-      expect((await prepareModel(entry.id)).origin).toBe('cache');
+      expect((await prepareModel(entry.id, { storage })).origin).toBe('cache');
       expect(fetch).toHaveBeenCalledTimes(1);
     }
     expect(events.at(-1)?.stage).toBe(cancel ? 'cancelled' : 'succeeded');

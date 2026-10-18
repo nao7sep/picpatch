@@ -10,10 +10,10 @@ const config = JSON.parse(await readFile(process.argv[2]!, 'utf8')) as {
   pythonExecutable: string; modelId: string; outputDirectory: string; modelsDirectory: string;
   native: { directory: string; executable: string; checkpoint: string; photoMaker: string; sd15InpaintCheckpoint: string };
 };
-assert.equal(resolveStoragePaths().modelsDirectory, config.modelsDirectory);
-assert.equal((await discoverModels()).models.length, 1);
+assert.equal(resolveStoragePaths({ modelsDirectory: config.modelsDirectory }).modelsDirectory, config.modelsDirectory);
+assert.equal((await discoverModels([config.modelsDirectory])).models.length, 1);
 // Explicit opt-in still reuses the verified cache without attempting a network request.
-const prepared = await prepareModel(config.modelId, { download: true });
+const prepared = await prepareModel(config.modelId, { download: true, storage: { modelsDirectory: config.modelsDirectory } });
 assert.equal(prepared.origin, 'cache');
 const defaults = { outputDirectory: config.outputDirectory, size: { width: 256, height: 256 }, seed: 42 };
 async function artifact(result: EditResult) {

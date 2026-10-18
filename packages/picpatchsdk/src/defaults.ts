@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { absolutePath } from './operations.ts';
 import { PicPatchUsageError } from './errors.ts';
 import { validateEditRequest, validateGenerateRequest } from './validation.ts';
@@ -25,8 +25,8 @@ export function resolveEditRequest(input: EditInput, defaults: EditDefaults, mod
   let outputPath = input.outputPath;
   if (outputPath === undefined) {
     if (input.sourceImage !== undefined) absolutePath(input.sourceImage);
-    const destination = outputDirectory ?? defaults.outputDirectory ?? (input.sourceImage ? dirname(input.sourceImage) : undefined);
-    if (!destination) throw new PicPatchUsageError('INVALID_REQUEST', 'Reference-only edits require an output path or directory.');
+    const destination = outputDirectory ?? defaults.outputDirectory;
+    if (!destination) throw new PicPatchUsageError('INVALID_REQUEST', 'Edits require an output path or directory.');
     outputPath = join(destination, `edit-${randomUUID()}.png`);
   }
   const { outputDirectory: _directory, ...settings } = defaults;

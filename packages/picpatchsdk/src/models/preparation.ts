@@ -95,7 +95,6 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
       if (await exists(directory)) { await verified(directory); return result(options.directory ? 'external' : 'cache'); }
       checkSignal(signal);
       if (options.directory || !options.download) throw new PicPatchRuntimeError('MODEL_IO', 'Model bundle is missing. Supply a local directory or explicitly enable download.');
-      await privateDirectory(paths.dataDirectory);
       await privateDirectory(paths.modelsDirectory);
       const parent = dirname(directory);
       if (await exists(parent) && (await lstat(parent)).isSymbolicLink()) throw new PicPatchRuntimeError('MODEL_IO', 'A managed model directory cannot be a symbolic link.');

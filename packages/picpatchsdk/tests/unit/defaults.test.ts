@@ -13,16 +13,16 @@ it('inherits the model and settings while per-edit options take precedence', () 
   expect(resolved.outputPath).toMatch(/^\/outputs\/edit-[a-f0-9-]+\.png$/);
   expect(resolveEditRequest({ instruction: 'Edit', sourceImage: '/source.png', size: { width: 256, height: 256 }, outputPath: '/chosen.png' }, defaults, 'selected')).toMatchObject({ outputPath: '/chosen.png', size: { width: 256, height: 256 } });
 });
-it('uses unique source siblings, while reference-only edits require a destination', () => {
-  const request = { instruction: 'Edit', sourceImage: '/authored/source.jpg' };
+it('uses unique names only inside an explicit destination', () => {
+  const request = { instruction: 'Edit', sourceImage: '/authored/source.jpg', outputDirectory: '/destination' };
   const a = resolveEditRequest(request, {}, 'selected'); const b = resolveEditRequest(request, {}, 'selected');
-  expect(a.outputPath).toMatch(/^\/authored\/edit-/); expect(a.outputPath).not.toBe(b.outputPath);
+  expect(a.outputPath).toMatch(/^\/destination\/edit-/); expect(a.outputPath).not.toBe(b.outputPath);
   const references: [import('../../src/types.ts').ReferenceGroup] = [{ id: 'style', role: 'style' as const, images: ['/reference.png'] as [string] }];
   expect(() => resolveEditRequest({ instruction: 'Edit', references }, {}, 'selected')).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
   expect(resolveEditRequest({ instruction: 'Edit', references, outputDirectory: '/destination' }, {}, 'selected').outputPath).toMatch(/^\/destination\/edit-/);
 });
 it('rejects conflicting model/destination settings and invalid defaults', () => {
-  expect(() => resolveEditRequest({ instruction: 'Edit', model: 'different', sourceImage: '/in.png' }, {}, 'selected')).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
+  expect(() => resolveEditRequest({ instruction: 'Edit', model: 'different', sourceImage: '/in.png', outputDirectory: '/outputs' }, {}, 'selected')).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
   expect(() => resolveEditRequest({ instruction: 'Edit', sourceImage: '/in.png', outputPath: '/out.png', outputDirectory: '/elsewhere' }, {}, 'selected')).toThrow();
   for (const defaults of [{ seed: -1 }, { size: { width: 0, height: 1 } }, { outputDirectory: 'relative' }, { unknown: true }, null]) {
     expect(() => validateDefaults(defaults as never)).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
@@ -32,7 +32,7 @@ it('snapshots session defaults and keeps absent inference settings absent', () =
   const input = { size: { width: 256, height: 256 } };
   const defaults = validateDefaults(input); input.size.width = 32;
   expect(defaults.size?.width).toBe(256);
-  const resolved = resolveEditRequest({ instruction: 'Edit', sourceImage: '/in.png' }, {}, 'selected');
+  const resolved = resolveEditRequest({ instruction: 'Edit', sourceImage: '/in.png', outputDirectory: '/outputs' }, {}, 'selected');
   expect(resolved).not.toHaveProperty('size'); expect(resolved).not.toHaveProperty('seed');
 });
 it('resolves uv project environments deterministically without system Python selection', async () => {
