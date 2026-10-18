@@ -1,3 +1,4 @@
+import type { ModelRegistration } from './opening.ts';
 import { validateProfile, type PicPatchProfile } from '../profile.ts';
 import { attachMfluxLoras, validateMfluxLoras } from '../backends/mflux/loras.ts';
 import { prepareNativeModel } from '../backends/stable-diffusion-cpp/preparation.ts';
@@ -32,7 +33,7 @@ export interface PrepareModelOptions extends ModelOperationOptions {
   download?: boolean;
   storage?: StorageOptions;
 }
-export interface PreparedModel {
+export interface PreparedModel extends ModelRegistration {
   model: LocalEditingModel;
   origin: 'external' | 'cache' | 'download';
   integrity: 'matches-manifest' | 'locally-fingerprinted';
@@ -99,7 +100,7 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
         const result = await verifyModel(path, entry.manifest, { signal, timeoutMs: budget, onProgress: event => emitProgress(operation, event) });
         if (result.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_IO', 'Model files do not match the catalog. Existing files were preserved; choose a complete bundle or a new cache location.');
       };
-      const result = (origin: PreparedModel['origin']): PreparedModel => ({ model: { variant: entry.variant, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });
+      const result = (origin: PreparedModel['origin']): PreparedModel => ({ version: 1, model: { variant: entry.variant, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });
       if (await exists(directory)) { await verified(directory); return result(options.directory ? 'external' : 'cache'); }
       checkSignal(signal);
       if (options.directory || !options.download) throw new PicPatchSdkError('MODEL_IO', 'Model bundle is missing. Supply a local directory or explicitly enable download.');

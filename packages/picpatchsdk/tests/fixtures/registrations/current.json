@@ -1,0 +1,1 @@
+{"version":1,"model":{"variant":"flux2-klein-4b","directory":"/models/example","manifest":{"version":1,"model":"fixture","source":{"repository":"local","revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"components":[{"path":"weights.safetensors","role":"weights","bytes":4,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}}}

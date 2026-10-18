@@ -71,7 +71,7 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
         const after = await stat(target, { bigint: true });
         if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new PicPatchSdkError('MODEL_IO', 'Native weights changed during preparation.');
       }
-      return { model, origin: 'external', integrity: 'locally-fingerprinted' };
+      return { version: 1, model, origin: 'external', integrity: 'locally-fingerprinted' };
     } catch (cause) {
       checkSignal(signal);
       if (cause instanceof PicPatchSdkError) throw cause;

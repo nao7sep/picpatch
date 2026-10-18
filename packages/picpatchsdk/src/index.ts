@@ -45,3 +45,6 @@ export type { WorkerTimeouts } from './worker/process.ts';
 export type { ImagePlan, GenerateImagePlan, EditImagePlan, PlannedImageInput } from './images/planning.ts';
 export type { ImageFingerprint } from './images/fingerprint.ts';
 export type { PlannedDestination } from './images/output.ts';
+
+export { openModel, inspectModels, readModelRegistration, validateModelRegistration } from './models/opening.ts';
+export type { ModelRegistration, ModelOpenOptions, ModelPresenceIssue, OpenedModel, ModelOpenRefusal, ModelOpenResult, ManagedModelInventory } from './models/opening.ts';

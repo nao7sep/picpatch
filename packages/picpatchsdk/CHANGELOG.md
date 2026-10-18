@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add presence-only `openModel`, managed catalog inventory and versioned caller-owned model registrations; preparation remains the integrity boundary.
+
 - Read-only versioned profiles bundle resource locations, timeouts and editor defaults; explicit arguments win without ambient configuration.
 - Editors can plan generation/editing without launching inference, then execute the immutable decision with fixed parameters, seed, geometry and content fingerprints. Changed inputs or destinations return refusals.
 

@@ -67,7 +67,7 @@ export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'va
       // Reuse shard-index, containment and snapshot validation before accepting the bundle.
       const verified = await verifyModel(directory, manifest, { signal, timeoutMs: timeBudget(options.timeoutMs, 3_600_000), onProgress: event => emitProgress(operation, event) });
       if (verified.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_IO', 'The local bundle changed or has invalid shard references.');
-      return { model: { variant: entry.variant, directory, manifest }, origin: 'external', integrity: 'locally-fingerprinted' };
+      return { version: 1, model: { variant: entry.variant, directory, manifest }, origin: 'external', integrity: 'locally-fingerprinted' };
     } catch (cause) {
       checkSignal(signal);
       if (cause instanceof PicPatchSdkError) throw cause;
