@@ -23,5 +23,5 @@ callback.call_before_loop(seed=42, prompt='A mug.', latents=mx.zeros((1,)), conf
 assert pipeline.text_encoder is None and pipeline.transformer is transformer
 callback.call_after_loop(seed=42, prompt='A mug.', latents=mx.zeros((1,)), config=None)
 assert pipeline.transformer is None and pipeline.vae is vae
-`], { timeout: 30_000 });
+`], { timeout: 30_000, env: { ...process.env, PYTHONPATH: fileURLToPath(new URL('../../runtimes/mflux/src', import.meta.url)) } });
 }, 60_000);
