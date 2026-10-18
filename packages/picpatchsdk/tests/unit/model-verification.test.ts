@@ -63,7 +63,7 @@ it.each([
 });
 it('supports cancellation and ignores callback failures', async () => {
   const controller = new AbortController();
-  await expect(verifyModel(directory, manifest, { signal: controller.signal, onProgress: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(verifyModel(directory, manifest, { signal: controller.signal, onEvent: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
   await expect(verifyModel(directory, manifest, { onProgress: () => { throw new Error('listener'); } })).resolves.toHaveProperty('components');
 });
 it('preserves filesystem failures instead of claiming missing models', async () => {

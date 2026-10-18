@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { open } from '../../storage.ts';
 import { join } from 'node:path';
 import { contractValidator } from '../../contracts.ts';
 import type { LocalLora } from '../../contracts.generated.ts';
 import { PicPatchSdkError } from '../../errors.ts';
 import { checkSignal, emitProgress } from '../../operations.ts';
 import { safetensorsHeader } from '../../models/safetensors.ts';
-import { validateModelManifest, verifyModel } from '../../models/verification.ts';
+import { validateModelManifest, verifyModelOperation as verifyModel } from '../../models/verification.ts';
 import type { PreparedModel, PrepareModelOptions } from '../../models/preparation.ts';
 
 export function validateMfluxLoras(loras: unknown): asserts loras is [LocalLora, ...LocalLora[]] {
@@ -24,7 +24,7 @@ export async function attachMfluxLoras(prepared: PreparedModel, loras: [LocalLor
     const path = join(model.directory, lora.path);
     const header = await safetensorsHeader(path, options.signal);
     validateLoraHeader(header);
-    emitProgress(options, { type: 'progress', verb: 'prepareModel', stage: 'verifying', message: 'Fingerprinting local LoRA weights.', path: lora.path });
+    emitProgress(options, { type: 'progress', verb: 'prepareModel', stage: 'loras', completed: loras.indexOf(lora), total: loras.length, message: 'Fingerprinting local LoRA weights.', path: lora.path });
     const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
     try {
       const before = await file.stat({ bigint: true });

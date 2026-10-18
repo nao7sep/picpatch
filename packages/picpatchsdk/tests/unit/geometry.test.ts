@@ -81,3 +81,16 @@ it('does not accept truncated image content when a crop is required', async () =
   await writeFile(source, bytes.subarray(0, bytes.length - 20));
   await expect(prepareImage(source, join(directory, 'in.tmp'), join(directory, 'ready.png'), false, undefined, 'klein-reference')).rejects.toMatchObject({ code: 'INVALID_IMAGE' });
 });
+
+it('keeps generated oriented geometry contained, aligned and stable on re-preparation', () => {
+  for (let i = 1; i <= 120; i++) {
+    const width = 32 + (i * 137) % 4000; const height = 32 + (i * 211) % 3000;
+    for (const orientation of [1, 3, 6, 8]) {
+      const geometry = inputGeometry(width, height, orientation, 'klein-reference');
+      expect(geometry.preparedSize.width % 16).toBe(0); expect(geometry.preparedSize.height % 16).toBe(0);
+      expect(geometry.crop.left + geometry.preparedSize.width).toBeLessThanOrEqual(geometry.scaledSize.width);
+      expect(geometry.crop.top + geometry.preparedSize.height).toBeLessThanOrEqual(geometry.scaledSize.height);
+      expect(inputGeometry(geometry.preparedSize.width, geometry.preparedSize.height, 1, 'klein-reference').preparedSize).toEqual(geometry.preparedSize);
+    }
+  }
+});

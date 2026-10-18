@@ -95,7 +95,7 @@ class Session:
             nonlocal phase
             if event['stage'] in {'loading', 'editing', 'generating', 'saving'}:
                 phase = event['stage']
-            self.emit({**envelope, 'type': 'progress', 'event': event})
+            self.emit({**envelope, 'type': 'progress' if 'completed' in event else 'event', 'event': event})
 
         try:
             operation = self.adapter.generate if request['type'] == 'generate' else self.adapter.edit

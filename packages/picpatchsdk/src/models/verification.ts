@@ -2,7 +2,7 @@ import { isNativeVariant } from '../backends/stable-diffusion-cpp/models.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { open, realpath, stat, type FileHandle } from '../storage.ts';
 import { dirname, isAbsolute, join, posix, relative, sep } from 'node:path';
 import { parser } from 'stream-json';
 import { pipeline } from 'node:stream/promises';
@@ -141,7 +141,7 @@ async function verifyComponent(root: string, component: ModelComponent, manifest
   }
 }
 /** Matches caller-supplied pins; does not establish upstream trust or inference support. */
-async function verifyModelOperation(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<ModelVerification> {
+export async function verifyModelOperation(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<ModelVerification> {
   absolutePath(path); validateOperation(options, ['timeoutMs']); const manifest = validateModelManifest(input);
   checkSignal(options.signal);
   const budget = timeBudget(options.timeoutMs, 600_000);
@@ -152,9 +152,10 @@ async function verifyModelOperation(path: string, input: ModelManifest, options:
       if (!(await stat(root)).isDirectory()) throw new PicPatchSdkError('INVALID_REQUEST', 'Model verification requires a directory.');
       const components: VerifiedComponent[] = [];
       for (const component of manifest.components) {
-        emitProgress(operation, { type: 'progress', verb: 'verifyModel', stage: 'verifying', message: 'Verifying a model component.', path: join(path, component.path) });
+        emitProgress(operation, { type: 'progress', verb: 'verifyModel', stage: 'verifying', completed: components.length, total: manifest.components.length, message: 'Verifying a model component.', path: join(path, component.path) });
         components.push(await verifyComponent(root, component, manifest, operation));
       }
+      emitProgress(operation, { stage: 'verifying', completed: components.length, total: manifest.components.length });
       checkSignal(operation.signal);
       return { path, manifest, components, status: components.every(c => c.status === 'verified') ? 'matches-manifest' : 'invalid', compatibility: 'unknown' };
     } catch (cause) {
@@ -165,6 +166,6 @@ async function verifyModelOperation(path: string, input: ModelManifest, options:
   });
 }
 
-export function verifyModel(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<ModelVerification> {
+export function verifyModel(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<import('../logging.ts').Logged<ModelVerification>> {
   return withDiagnostics('verifyModel', options, operation => verifyModelOperation(path, input, operation));
 }

@@ -20,8 +20,8 @@ async function artifact(result: EditResult) {
   assert.equal(result.sidecar?.status, 'saved');
   const bytes = await readFile(result.image.path);
   const parsed = await readArtifactRecord(result.sidecar!.path);
-  if ('status' in parsed) throw new Error(parsed.code);
-  assert.equal((await verifyArtifact(result.image.path, parsed)).status, 'verified');
+  if (parsed.status === 'refused') throw new Error(parsed.code);
+  assert.equal((await verifyArtifact(result.image.path, parsed.record)).status, 'verified');
   const text = await readFile(result.sidecar!.path, 'utf8');
   const record = JSON.parse(text);
   assert.equal(record.image.filename, basename(result.image.path));
@@ -35,8 +35,9 @@ async function artifact(result: EditResult) {
 }
 const profilePath = join(config.outputDirectory, 'consumer-profile.json');
 await writeFile(profilePath, JSON.stringify({ version: 1, engineDirectory: config.engineDirectory, nativeExecutable: config.native.executable, defaults }));
-const profile = await readProfile(profilePath);
-if ('status' in profile) throw new Error(profile.code);
+const loadedProfile = await readProfile(profilePath);
+if (loadedProfile.status === 'refused') throw new Error(loadedProfile.code);
+const profile = loadedProfile.profile;
 const opened = await openModel(prepared);
 if (opened.status !== 'ready') throw new Error(opened.code);
 const editor = createEditor({ profile, model: opened.model });

@@ -2,7 +2,7 @@ import { inspectNativeAssets } from './assets.ts';
 import type { BigIntStats } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open, realpath, stat } from 'node:fs/promises';
+import { open, realpath, stat } from '../../storage.ts';
 import { dirname, extname, join } from 'node:path';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../../operations.ts';
 import { PicPatchSdkError } from '../../errors.ts';
@@ -42,7 +42,7 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
         try {
           const before = await file.stat({ bigint: true });
           if (!before.isFile() || before.size <= 0n || before.size > BigInt(Number.MAX_SAFE_INTEGER)) throw new PicPatchSdkError('MODEL_IO', 'Select nonempty regular weight files.');
-          emitProgress({ ...options, signal }, { type: 'progress', verb: 'prepareModel', stage: 'verifying', message: 'Fingerprinting native model weights.', path });
+          emitProgress({ ...options, signal }, { type: 'progress', verb: 'prepareModel', stage: 'verifying', completed: components.length, total: selected.length, message: 'Fingerprinting native model weights.', path });
           const hash = createHash('sha256'); const buffer = Buffer.allocUnsafe(64 * 1024);
           let position = 0;
           while (position <= Number(before.size)) {
@@ -59,6 +59,7 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
       }
       const revision = createHash('sha256').update(JSON.stringify({ variant, components })).digest('hex');
       const manifest = validateModelManifest({ version: 1, model: variant, source: { repository: 'local', revision }, components });
+      emitProgress({ ...options, signal }, { stage: 'verifying', completed: selected.length, total: selected.length });
       const model = validateLocalEditingModel({ variant, directory, manifest, ...assets });
       await inspectNativeAssets({ ...model, directory: root }, signal);
       // The hashing read already checks file identity and mutation. Recheck every earlier file

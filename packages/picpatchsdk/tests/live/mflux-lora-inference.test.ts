@@ -26,7 +26,7 @@ it('applies local LoRAs to real quantized Klein generation and editing without b
       try {
         if (scale === 1) {
           const abort = new AbortController();
-          await expect(editor.generate({ prompt: 'A bowl.' }, { signal: abort.signal, onProgress: event => { if (event.stage === 'generating') abort.abort(); } })).rejects.toMatchObject({ code: 'CANCELLED' });
+          await expect(editor.generate({ prompt: 'A bowl.' }, { signal: abort.signal, onEvent: event => { if (event.stage === 'generating') abort.abort(); } })).rejects.toMatchObject({ code: 'CANCELLED' });
         }
         const result = scale === -1
           ? await editor.edit({ instruction: 'Make the bowl green.', sourceImage: outputs[0]!, sidecar: { includeInputs: true } })

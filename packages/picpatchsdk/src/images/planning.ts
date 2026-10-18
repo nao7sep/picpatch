@@ -1,3 +1,4 @@
+import type { LogResult } from '../logging.ts';
 import { randomInt } from 'node:crypto';
 import type { ImageRequest, GenerateRequest, EditRequest, InputGeometry, ModelCapabilities } from '../types.ts';
 import { PicPatchSdkError } from '../errors.ts';
@@ -15,7 +16,7 @@ export interface PlannedImageInput {
   fingerprint: ImageFingerprint;
   geometry: Omit<InputGeometry, 'path'>;
 }
-interface PlanData {
+interface PlanData extends LogResult {
   status: 'planned';
   inputs: PlannedImageInput[];
   destination: PlannedDestination;

@@ -1,9 +1,10 @@
+import { storageCleanup, storageRecovery, storageStalled } from '../storage.ts';
 import type { ModelRegistration } from './opening.ts';
 import { validateProfile, type PicPatchProfile } from '../profile.ts';
 import { attachMfluxLoras, validateMfluxLoras } from '../backends/mflux/loras.ts';
 import { prepareNativeModel } from '../backends/stable-diffusion-cpp/preparation.ts';
 import { withDiagnostics } from '../diagnostics.ts';
-import { chmod, lstat, mkdir, mkdtemp, open, rename, rm } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, open, rename, rm } from '../storage.ts';
 import { dirname, join } from 'node:path';
 import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
@@ -12,7 +13,7 @@ import type { LocalEditingModel } from '../contracts.generated.ts';
 import { catalogModel, type CatalogModel } from './catalog.ts';
 import { prepareExternalModel } from './external.ts';
 import { downloadFile } from './download.ts';
-import { validateModelManifest, verifyModel } from './verification.ts';
+import { validateModelManifest, verifyModelOperation as verifyModel } from './verification.ts';
 import type { ModelOperationOptions } from './types.ts';
 
 export interface PrepareModelOptions extends ModelOperationOptions {
@@ -110,10 +111,11 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
       await privateDirectory(parent);
       checkSignal(signal);
       const staging = await mkdtemp(join(parent, '.prepare-'));
+      storageRecovery(staging);
       let failure: unknown;
       try {
         for (const component of entry.manifest.components) {
-          emitProgress(operation, { type: 'progress', verb: 'prepareModel', stage: 'downloading', message: 'Downloading a pinned model component.', path: component.path });
+          emitProgress(operation, { type: 'progress', verb: 'prepareModel', stage: 'downloading', completed: entry.manifest.components.indexOf(component), total: entry.manifest.components.length, message: 'Downloading a pinned model component.', path: component.path });
           const path = join(staging, component.path);
           await mkdir(dirname(path), { recursive: true, mode: 0o700 });
           const source = entry.manifest.source;
@@ -140,7 +142,7 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
         return committed;
       } catch (cause) { failure = cause; throw cause; }
       finally {
-        try { await rm(staging, { recursive: true, force: true }); }
+        try { if (!storageStalled()) await storageCleanup(() => rm(staging, { recursive: true, force: true })); }
         catch (cause) {
           if (committed) committed.cleanupWarning = { directory: staging, message: 'Model is prepared; staging cleanup failed.' };
           else { const error = new PicPatchSdkError('CLEANUP_FAILED', 'Model preparation staging could not be removed.', { cause: failure ?? cause }); error.details.recoveryDirectory = staging; error.effect = 'unknown'; throw error; }
@@ -154,6 +156,6 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
   }
 }
 
-export function prepareModel(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
+export function prepareModel(id: string, options: PrepareModelOptions = {}): Promise<import('../logging.ts').Logged<PreparedModel>> {
   return withDiagnostics('prepareModel', options, operation => prepareModelOperation(id, operation));
 }

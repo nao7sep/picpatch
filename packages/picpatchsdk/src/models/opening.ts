@@ -1,8 +1,8 @@
 import { constants } from 'node:fs';
-import { open, realpath, stat } from 'node:fs/promises';
+import { open, realpath, stat } from '../storage.ts';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { withDiagnostics, type EventOptions } from '../diagnostics.ts';
-import { PicPatchSdkError } from '../errors.ts';
+import { PicPatchSdkError, sdkError, type PicPatchSdkErrorData } from '../errors.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { resolveStoragePaths } from '../paths.ts';
 import { validateProfile, type PicPatchProfile } from '../profile.ts';
@@ -39,7 +39,8 @@ export interface ModelOpenRefusal {
   issues: ModelPresenceIssue[];
 }
 export type ModelOpenResult = OpenedModel | ModelOpenRefusal;
-export interface ManagedModelInventory { models: { id: string; directory: string; status: 'present' | 'missing' | 'incomplete'; result: ModelOpenResult }[] }
+export interface ModelInventoryFailure { status: 'failed'; error: PicPatchSdkErrorData }
+export interface ManagedModelInventory { models: { id: string; directory: string; status: 'present' | 'missing' | 'incomplete' | 'failed'; result: ModelOpenResult | ModelInventoryFailure }[] }
 
 export function validateModelRegistration(value: unknown): ModelRegistration {
   if (!value || typeof value !== 'object' || Array.isArray(value) || (value as ModelRegistration).version !== 1) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model registration.');
@@ -96,14 +97,14 @@ function select(input: string | ModelRegistration, options: ModelOpenOptions): M
   return { version: 1, model: { variant: entry.variant, directory: options.directory ?? join(root(options), entry.id, entry.manifest.source.revision), manifest: entry.manifest } };
 }
 /** Cheap presence only: never reads model contents, installs packages or starts inference. */
-export function openModel(input: string | ModelRegistration, options: ModelOpenOptions = {}): Promise<ModelOpenResult> {
+export function openModel(input: string | ModelRegistration, options: ModelOpenOptions = {}): Promise<import('../logging.ts').Logged<ModelOpenResult>> {
   return withDiagnostics('openModel', options, operation => boundary(operation, async signal => {
     const registration = select(input, operation);
     return 'status' in registration ? registration : presence(registration, signal);
   }));
 }
 /** Reads only the explicitly selected registration file. The caller owns its persistence. */
-export function readModelRegistration(path: string, options: ModelOpenOptions = {}): Promise<ModelRegistration | ModelOpenRefusal> {
+export function readModelRegistration(path: string, options: ModelOpenOptions = {}): Promise<import('../logging.ts').Logged<{ status: 'read'; registration: ModelRegistration } | ModelOpenRefusal>> {
   return withDiagnostics('readModelRegistration', options, operation => boundary(operation, async signal => {
     absolutePath(path); checkSignal(signal);
     const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -114,19 +115,26 @@ export function readModelRegistration(path: string, options: ModelOpenOptions = 
       checkSignal(signal);
       let value: unknown;
       try { value = JSON.parse(bytes); } catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model registration JSON.', { cause, subject: path }); }
-      return unsupported(value) ?? validateModelRegistration(value);
+      return unsupported(value) ?? { status: 'read' as const, registration: validateModelRegistration(value) };
     } finally { await file.close(); }
   }));
 }
 /** Catalog inventory in one selected SDK resource root; arbitrary folders use discoverModels. */
-export function inspectModels(options: ModelOpenOptions = {}): Promise<ManagedModelInventory> {
+export function inspectModels(options: ModelOpenOptions = {}): Promise<import('../logging.ts').Logged<ManagedModelInventory>> {
   return withDiagnostics('inspectModels', options, operation => boundary(operation, async signal => {
     if (operation.directory !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Inventory takes a model root, not one bundle directory.');
     const models: ManagedModelInventory['models'] = [];
     for (const entry of listModels()) {
       if (entry.acquisition !== 'pinned') continue;
       const registration = select(entry.id, operation) as ModelRegistration;
-      const result = await presence(registration, signal);
+      let result: ModelOpenResult;
+      try { result = await presence(registration, signal); }
+      catch (cause) {
+        checkSignal(signal);
+        const error = sdkError(cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('MODEL_IO', 'Could not inspect this model bundle.', { cause, subject: registration.model.directory }));
+        models.push({ id: entry.id, directory: registration.model.directory, status: 'failed', result: { status: 'failed', error: error.toJSON() } });
+        continue;
+      }
       const missing = result.status === 'refused' && result.issues.every(issue => issue.code === 'MODEL_FILE_MISSING');
       models.push({ id: entry.id, directory: registration.model.directory, status: result.status === 'ready' ? 'present' : missing ? 'missing' : 'incomplete', result });
     }

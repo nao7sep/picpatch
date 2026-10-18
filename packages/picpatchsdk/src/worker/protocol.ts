@@ -1,8 +1,10 @@
+import type { ProgressEvent } from '../contracts.generated.ts';
 import type { WorkerDiagnostic } from '../diagnostics.ts';
 import { contractAjv } from '../contracts.ts';
 import { PicPatchSdkError, isPicPatchSdkError, type PicPatchSdkErrorData } from '../errors.ts';
 import { validateEditRequest, validateGenerateRequest } from '../validation.ts';
-import type { GenerateRequest, EditRequest, EditResult, ModelCapabilities, ProgressEvent } from '../types.ts';
+import type { GenerateRequest, EditRequest, ModelCapabilities } from '../types.ts';
+import type { EditResult } from '../contracts.generated.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
 import schema from '../../protocol/worker.schema.json' with { type: 'json' };
 
@@ -12,7 +14,7 @@ type Envelope<T extends string> = { version: 1; id: number; type: T };
 export type WorkerRequest = Envelope<'shutdown'> | (Envelope<'hello'> & { model?: LocalEditingModel; runtimeCheck?: 'imports' | 'load' }) |
   (Envelope<'generate'> & { request: GenerateRequest }) | (Envelope<'edit'> & { request: EditRequest }) | (Envelope<'cancel'> & { targetId: number });
 export type WorkerResponse = (Envelope<'ready'> & { workerVersion: string; models: ModelCapabilities[]; runtimeCheck?: RuntimeCheck }) |
-  (Envelope<'progress'> & { event: ProgressEvent }) | (Envelope<'result'> & { result: EditResult }) |
+  (Envelope<'progress' | 'event'> & { event: ProgressEvent }) | (Envelope<'result'> & { result: EditResult }) |
   (Envelope<'error'> & { error: PicPatchSdkErrorData }) |
   (Envelope<'cancelAck'> & { targetId: number; accepted: boolean }) | Envelope<'shutdownAck'>;
 contractAjv.addSchema(schema, 'worker.schema.json');
@@ -70,11 +72,11 @@ export class ProtocolSession {
     const response = decodeResponse(line);
     const request = this.pending.get(response.id);
     if (!request) return fail('Response has no pending request.');
-    const expected = { hello: ['ready'], edit: ['progress', 'result'], generate: ['progress', 'result'], cancel: ['cancelAck'], shutdown: ['shutdownAck'] };
+    const expected = { hello: ['ready'], edit: ['progress', 'event', 'result'], generate: ['progress', 'event', 'result'], cancel: ['cancelAck'], shutdown: ['shutdownAck'] };
     if (response.type !== 'error' && !expected[request.type].includes(response.type)) fail('Response does not match the request operation.');
     if (response.type === 'cancelAck' && request.type === 'cancel' && response.targetId !== request.targetId) fail('Cancellation acknowledgement targets the wrong edit.');
-    if (response.type === 'progress' && response.event.verb !== request.type) fail('Progress does not match the requested operation.');
-    if (response.type !== 'progress') this.pending.delete(response.id);
+    if ((response.type === 'progress' || response.type === 'event') && response.event.verb !== request.type) fail('Progress does not match the requested operation.');
+    if (response.type !== 'progress' && response.type !== 'event') this.pending.delete(response.id);
     if (request.type === 'hello') this.state = response.type === 'ready' ? 'ready' : 'closed';
     if (request.type === 'shutdown') this.state = 'closed';
     return response;

@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { open } from '../storage.ts';
 import { contractValidator } from '../contracts.ts';
 import type { ArtifactRecord } from '../contracts.generated.ts';
 import { withDiagnostics, type EventOptions } from '../diagnostics.ts';
@@ -21,7 +21,7 @@ export function validateArtifactRecord(value: unknown): ArtifactRecord {
   if (!value.inputsIncluded && (value.inputs !== undefined || value.effectiveParameters.negativePrompt !== undefined)) throw new PicPatchSdkError('INVALID_REQUEST', 'Private input fields require explicit retention.');
   return structuredClone(value);
 }
-export function readArtifactRecord(path: string, options: ArtifactReadOptions = {}): Promise<ArtifactRecord | ArtifactRefusal> {
+export function readArtifactRecord(path: string, options: ArtifactReadOptions = {}): Promise<import('../logging.ts').Logged<{ status: 'read'; record: ArtifactRecord } | ArtifactRefusal>> {
   return withDiagnostics('readArtifactRecord', options, async operation => {
     absolutePath(path); validateOperation(operation);
     return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 30_000), 'Artifact record read timed out.', async signal => {
@@ -37,7 +37,7 @@ export function readArtifactRecord(path: string, options: ArtifactReadOptions = 
         checkSignal(signal);
         const version = (value as { version?: unknown } | null)?.version;
         if (Number.isInteger(version) && version !== 1) return { status: 'refused', code: 'ARTIFACT_VERSION_UNSUPPORTED', message: 'This artifact record version is unsupported.', effect: 'none', subject: path };
-        return validateArtifactRecord(value);
+        return { status: 'read' as const, record: validateArtifactRecord(value) };
       } catch (cause) {
         checkSignal(signal);
         if (cause instanceof PicPatchSdkError) throw cause;
@@ -47,7 +47,7 @@ export function readArtifactRecord(path: string, options: ArtifactReadOptions = 
   });
 }
 /** Confirms correspondence with file bytes and decoded dimensions, never creator authenticity. */
-export function verifyArtifact(imagePath: string, input: ArtifactRecord, options: ArtifactReadOptions = {}): Promise<ArtifactVerification | ArtifactRefusal> {
+export function verifyArtifact(imagePath: string, input: ArtifactRecord, options: ArtifactReadOptions = {}): Promise<import('../logging.ts').Logged<ArtifactVerification | ArtifactRefusal>> {
   return withDiagnostics('verifyArtifact', options, async operation => {
     absolutePath(imagePath); validateOperation(operation);
     const record = validateArtifactRecord(input);

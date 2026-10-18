@@ -6,11 +6,11 @@ export { PicPatchSdkError, isPicPatchSdkError, errorCodes } from './errors.ts';
 export type { PicPatchSdkErrorData, SdkErrorOptions, ErrorCode, ErrorKind, ErrorEffect, ErrorDetails } from './errors.ts';
 
 export { inspectModel, discoverModels } from './models/inspection.ts';
-export type { ModelInspection, LocalModelFile, ModelIssue, ModelDiscovery, ModelOperationOptions, ModelProgressEvent } from './models/types.ts';
+export type { ModelInspection, LocalModelFile, ModelIssue, ModelDiscovery, ModelOperationOptions } from './models/types.ts';
 export { validateModelManifest, verifyModel } from './models/verification.ts';
 export type { ModelManifest, ModelComponent, ModelVerification, ModelVerificationOptions, VerifiedComponent } from './models/types.ts';
 export { inspectRuntime } from './runtime/inspection.ts';
-export type { RuntimeInspection, RuntimeOperationOptions, RuntimeProgressEvent } from './runtime/types.ts';
+export type { RuntimeInspection, RuntimeOperationOptions } from './runtime/types.ts';
 
 export type { LocalEditingModel } from './contracts.generated.ts';
 export { resolveStoragePaths } from './paths.ts';
@@ -47,7 +47,9 @@ export type { ImageFingerprint } from './images/fingerprint.ts';
 export type { PlannedDestination } from './images/output.ts';
 
 export { openModel, inspectModels, readModelRegistration, validateModelRegistration } from './models/opening.ts';
-export type { ModelRegistration, ModelOpenOptions, ModelPresenceIssue, OpenedModel, ModelOpenRefusal, ModelOpenResult, ManagedModelInventory } from './models/opening.ts';
+export type { ModelRegistration, ModelOpenOptions, ModelPresenceIssue, OpenedModel, ModelOpenRefusal, ModelOpenResult, ManagedModelInventory, ModelInventoryFailure } from './models/opening.ts';
 
 export { readArtifactRecord, verifyArtifact, validateArtifactRecord } from './images/records.ts';
 export type { ArtifactReadOptions, ArtifactRefusal, ArtifactVerification } from './images/records.ts';
+
+export type { Logged, LogResult, LogOutcome } from './logging.ts';

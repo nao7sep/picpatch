@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Bound stalled filesystem/native-image waits while retaining pending-write ownership and recovery locations. Late completion cannot resume expired work; optional sidecar settlement remains independent of the saved image.
+
+- Separate stage events from throttled counted progress, add optional exclusive JSONL logs with bounded best-effort flush, and return parsed profile/record/registration data in named read-result fields. Enforce Python worker package/ambient-state boundaries and declare directly imported runtime dependencies.
+
 - Return private versioned artifact records on every saved image, with SDK/caller identity and encoded input/output hashes. Add record reading and artifact verification; optional sidecars use `-picpatchsdk.json` and fail independently of images.
 
 - Add presence-only `openModel`, managed catalog inventory and versioned caller-owned model registrations; preparation remains the integrity boundary.

@@ -3,7 +3,7 @@ import type { LocalEditingModel } from '../contracts.generated.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { ProtocolSession, type WorkerRequest, type WorkerResponse } from './protocol.ts';
 import { PicPatchSdkError } from '../errors.ts';
-import type { ProgressEvent } from '../types.ts';
+import type { ProgressEvent } from '../contracts.generated.ts';
 
 export interface WorkerLaunch {
   executable: string;
@@ -120,8 +120,8 @@ export class WorkerProcess {
         this.remainder = this.remainder.slice(newline + 1);
         const response = this.protocol.receive(line);
         const pending = this.pending.get(response.id)!;
-        if (response.type === 'progress') {
-          emitProgress(pending.onProgress ? { onProgress: pending.onProgress } : {}, response.event);
+        if (response.type === 'progress' || response.type === 'event') {
+          pending.onProgress?.(response.event);
         } else {
           if (pending.request.type === 'hello' && response.type !== 'ready') throw new PicPatchSdkError('PROTOCOL_ERROR', 'Worker rejected its startup handshake.');
           if (response.type === 'result' && (pending.request.type === 'edit' || pending.request.type === 'generate')) {

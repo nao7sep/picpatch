@@ -8,7 +8,7 @@ import { ProtocolSession } from '../../src/worker/protocol.ts';
 it('emits one invocation ID and one safe terminal error without serializing exception text or paths', async () => {
   const events: SdkEvent[] = [];
   await expect(inspectModel('/missing/private-sentinel', { onEvent: event => events.push(event) })).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
-  expect(events.map(event => event.stage)).toEqual(['started', 'progress', 'failed']);
+  expect(events.map(event => event.stage)).toEqual(['started', 'inspecting', 'failed']);
   expect(new Set(events.map(event => event.operationId)).size).toBe(1);
   expect(JSON.stringify(events)).not.toContain('private-sentinel');
   expect(events.at(-1)?.error?.code).toBe('FILE_NOT_FOUND');
@@ -16,15 +16,15 @@ it('emits one invocation ID and one safe terminal error without serializing exce
 it('routes progress and diagnostics from the same event owner without letting sink failures mask results', async () => {
   const stages: string[] = [];
   const result = await withDiagnostics('fixture', { onEvent: (event: SdkEvent) => { stages.push(event.stage); throw new Error('sink'); } }, async options => {
-    emitProgress(options, { stage: 'working' }); return 42;
+    emitProgress(options, { stage: 'working', completed: 1, total: 1 }); return 42;
   });
-  expect(result).toBe(42); expect(stages).toEqual(['started', 'progress', 'succeeded']);
+  expect(result).toBe(42); expect(stages).toEqual(['started', 'working', 'succeeded']);
 });
 it('ignores progress errors and preserves the original failure when an event sink fails', async () => {
   const error = new PicPatchSdkError('MODEL_IO', 'private sentinel');
   await expect(withDiagnostics('fixture', { onEvent: () => { throw new Error('sink'); } }, async () => { throw error; })).rejects.toBe(error);
   await expect(withDiagnostics('fixture', {}, async options => {
-    emitProgress({ ...options, onProgress: () => { throw error; } }, { stage: 'working' });
+    emitProgress({ ...options, onProgress: () => { throw error; } }, { stage: 'working', completed: 1, total: 1 });
   })).resolves.toBeUndefined();
 });
 it('does not await blocked caller logging and reports cancellation as cancellation', async () => {
@@ -42,8 +42,8 @@ it('rejects malformed worker diagnostics instead of forwarding arbitrary private
 it('contains rejected progress hooks and reports them once through the separate event hook', async () => {
   const events: SdkEvent[] = [];
   const result = await withDiagnostics('fixture', { onEvent: (event: SdkEvent) => events.push(event), onProgress: async () => { throw new Error('private hook failure'); } }, async options => {
-    emitProgress(options, { stage: 'working' });
-    emitProgress(options, { stage: 'working' });
+    emitProgress(options, { stage: 'working', completed: 1, total: 1 });
+    emitProgress(options, { stage: 'working', completed: 1, total: 1 });
     await Promise.resolve();
     return 42;
   });
@@ -55,7 +55,7 @@ it('contains rejected progress hooks and reports them once through the separate 
 it('does not recurse into a failed asynchronous event hook or wait for progress sinks', async () => {
   let calls = 0;
   expect(await withDiagnostics('fixture', { onEvent: async () => { calls++; throw new Error('sink'); }, onProgress: () => new Promise<void>(() => {}) }, async options => {
-    emitProgress(options, { stage: 'working' }); return 1;
+    emitProgress(options, { stage: 'working', completed: 1, total: 1 }); return 1;
   })).toBe(1);
   await Promise.resolve();
   expect(calls).toBe(3);

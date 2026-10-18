@@ -1,9 +1,10 @@
+import type { EditResult } from '../../src/contracts.generated.ts';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { listModels, validateEditRequest, validateGenerateRequest, type EditRequest, type EditResult } from '../../src/index.ts';
+import { listModels, validateEditRequest, validateGenerateRequest, type EditRequest } from '../../src/index.ts';
 import { ImageWorkspace } from '../../src/images/output.ts';
 import { ImageEditor } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
@@ -100,4 +101,25 @@ it('publishes geometry and path-free sidecar through the session, and cleans can
     expect(execute).toHaveBeenCalledTimes(1);
     expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
   } finally { await editor.dispose(); }
+});
+
+it('preserves every source pixel and marks exactly the added area across generated asymmetric canvases', async () => {
+  const source = await sharp(request.sourceImage!).ensureAlpha().raw().toBuffer();
+  for (let index = 0; index < 12; index++) {
+    const left = index % 5; const top = (index * 3) % 4;
+    const width = 13 + left + 1 + index % 7; const height = 9 + top + 1 + index % 3;
+    const work = await ImageWorkspace.create({ ...request, outputPath: join(directory, `result-${index}.png`), outpaint: { size: { width, height }, left, top } });
+    try {
+      await work.prepare();
+      const pixels = await sharp(work.workerRequest.sourceImage!).ensureAlpha().raw().toBuffer();
+      const mask = await sharp(work.workerRequest.maskImage!).toColourspace('b-w').raw().toBuffer();
+      let preserved = 0;
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        const inside = x >= left && x < left + 13 && y >= top && y < top + 9;
+        expect(mask[y * width + x]).toBe(inside ? 0 : 255);
+        if (inside) { preserved++; expect(pixels.subarray((y * width + x) * 4, (y * width + x + 1) * 4)).toEqual(source.subarray(((y - top) * 13 + x - left) * 4, ((y - top) * 13 + x - left + 1) * 4)); }
+      }
+      expect(preserved).toBe(13 * 9);
+    } finally { await work.cleanup(); }
+  }
 });

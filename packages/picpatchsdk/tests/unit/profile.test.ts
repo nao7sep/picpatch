@@ -10,7 +10,7 @@ beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-prof
 afterEach(async () => { vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/profiles/${name}.json`, import.meta.url));
 it('reads the current format without writing, and preserves unsupported versions', async () => {
-  expect(await readProfile(fixture('current'))).toEqual(validateProfile(JSON.parse(await readFile(fixture('current'), 'utf8'))));
+  expect(await readProfile(fixture('current'))).toEqual({ status: 'read', profile: validateProfile(JSON.parse(await readFile(fixture('current'), 'utf8'))) });
   const path = join(directory, 'profile.json'); const bytes = await readFile(fixture('newer'));
   await writeFile(path, bytes);
   expect(await readProfile(path)).toMatchObject({ status: 'refused', code: 'PROFILE_VERSION_UNSUPPORTED', version: 2, effect: 'none' });

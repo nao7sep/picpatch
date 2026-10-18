@@ -82,7 +82,7 @@ it('runs SD1.5 generation, variation and trained inpainting with thresholded mas
       phase = 'inpaint cancellation';
       const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await expect(inpaint.edit({ instruction: 'A red vase.', sourceImage, maskImage, parameters: { steps: 10000 } }, { signal: controller.signal, onProgress: event => {
+        await expect(inpaint.edit({ instruction: 'A red vase.', sourceImage, maskImage, parameters: { steps: 10000 } }, { signal: controller.signal, onEvent: event => {
           if (event.stage === 'editing') timer = setTimeout(() => controller.abort(), 1500);
         } })).rejects.toMatchObject({ code: 'CANCELLED' });
       } finally { clearTimeout(timer); }

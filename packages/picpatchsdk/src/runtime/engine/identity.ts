@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile } from '../../storage.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PicPatchSdkError } from '../../errors.ts';

@@ -1,3 +1,4 @@
+import type { EditResult } from '../../src/contracts.generated.ts';
 import type { EditBackend as Editor } from '../../src/execution/backend.ts';
 import { mkdtemp, rm, readFile, writeFile, readdir, symlink, link, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -6,7 +7,7 @@ import sharp from 'sharp';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ImageWorkspace } from '../../src/images/output.ts';
 import { ImageEditor } from '../../src/execution/session.ts';
-import { PicPatchSdkError, type EditRequest, type EditResult } from '../../src/index.ts';
+import { PicPatchSdkError, type EditRequest } from '../../src/index.ts';
 let directory: string;
 let request: EditRequest;
 beforeEach(async () => {
@@ -100,7 +101,7 @@ describe('safe image publication', () => {
   });
   it('queues reentrant edits from progress callbacks', async () => {
     const editor = new ImageEditor(backend()); let reentrant: Promise<unknown> | undefined;
-    await editor.edit(request, { onProgress: () => { reentrant = expect(editor.edit(request)).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' }); } });
+    await editor.edit(request, { onEvent: event => { if (event.stage !== 'preparing') return; reentrant = expect(editor.edit(request)).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' }); } });
     await reentrant; await editor.dispose();
   });
   it('does not publish if cancellation arrives after the worker finishes', async () => {

@@ -1,3 +1,4 @@
+import type { ProgressEvent } from '../types.ts';
 import type { EventOptions } from '../diagnostics.ts';
 /** Local presence is not integrity verification or runtime compatibility. */
 export interface LocalModelFile {
@@ -19,18 +20,12 @@ export interface ModelIssue {
   path: string;
   code: 'MISSING_FILE' | 'EMPTY_FILE' | 'PARTIAL_FILE' | 'SKIPPED_DIRECTORY_LINK';
 }
-export interface ModelProgressEvent {
-  type: 'progress';
-  verb: 'inspectModel' | 'discoverModels' | 'verifyModel' | 'prepareModel';
-  stage: 'inspecting' | 'verifying' | 'downloading';
-  message: string;
-  path: string;
-}
+
 export interface ModelOperationOptions extends EventOptions {
   /** Whole operation budget: one minute for inspection/discovery, ten for verification. */
   timeoutMs?: number;
   signal?: AbortSignal;
-  onProgress?: (event: ModelProgressEvent) => void;
+  onProgress?: (event: ProgressEvent) => void;
 }
 export interface ModelDiscovery {
   models: ModelInspection[];

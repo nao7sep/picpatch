@@ -1,7 +1,7 @@
 import { withDiagnostics } from '../diagnostics.ts';
 import { resolveStoragePaths } from '../paths.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
-import { lstat, stat, realpath, opendir } from 'node:fs/promises';
+import { lstat, stat, realpath, opendir } from '../storage.ts';
 import { basename, extname, isAbsolute, join, normalize, relative, sep } from 'node:path';
 import { PicPatchSdkError } from '../errors.ts';
 import type { LocalModelFile, ModelDiscovery, ModelInspection, ModelIssue, ModelOperationOptions } from './types.ts';
@@ -144,10 +144,10 @@ async function discoverModelsOperation(roots?: string[], options: ModelOperation
   });
 }
 
-export function inspectModel(path: string, options: ModelOperationOptions = {}): Promise<ModelInspection> {
+export function inspectModel(path: string, options: ModelOperationOptions = {}): Promise<import('../logging.ts').Logged<ModelInspection>> {
   return withDiagnostics('inspectModel', options, operation => inspectModelOperation(path, operation));
 }
 
-export function discoverModels(roots?: string[], options: ModelOperationOptions = {}): Promise<ModelDiscovery> {
+export function discoverModels(roots?: string[], options: ModelOperationOptions = {}): Promise<import('../logging.ts').Logged<ModelDiscovery>> {
   return withDiagnostics('discoverModels', options, operation => discoverModelsOperation(roots, operation));
 }

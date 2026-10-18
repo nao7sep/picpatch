@@ -37,7 +37,7 @@ export async function referenceWorkload(options: EditorOptions, directory: strin
       let previousStage: string | undefined;
       const result = await editor.edit({ model: options.model.manifest.model,
         instruction: 'Place the red teapot and the yellow backpack together on a wooden table. Each group shows different views of one object. Show exactly one of each object, preserving their colors and shapes. Natural product photograph.',
-        references, outputPath, seed: 42, size: { width: outputSize, height: outputSize } }, { ...(signal ? { signal } : {}), onProgress: event => {
+        references, outputPath, seed: 42, size: { width: outputSize, height: outputSize } }, { ...(signal ? { signal } : {}), onEvent: event => {
           if (event.stage === previousStage) return;
           previousStage = event.stage;
           record({ kind: 'phase', index, stage: event.stage, elapsedSeconds: (performance.now() - started) / 1000 });

@@ -12,6 +12,7 @@ authors = [{ name = "Yoshinao Inoguchi", email = "yoshinao@inoguchi.com" }]
 dependencies = [
     "jsonschema>=4.23,<5",
     "referencing>=0.37,<1",
+    "packaging>=26.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -25,7 +26,7 @@ dev = [
 
 [project.optional-dependencies]
 # Direct declaration lets uv route this MFLUX dependency to its official index.
-inference = ["mflux==0.22.0", "torch>=2.13.0,<3.0"]
+inference = ["mflux==0.22.0", "torch>=2.13.0,<3.0", "mlx>=0.32.4", "pillow>=12.3.0", "safetensors>=0.8.0"]
 
 # The inference extra is never installed by default; models are always supplied locally.
 

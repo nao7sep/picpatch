@@ -1,4 +1,5 @@
-import type { ImageRequest, GenerateRequest, EditRequest, EditResult, ModelCapabilities, OperationOptions } from '../types.ts';
+import type { ImageRequest, GenerateRequest, EditRequest, ModelCapabilities, OperationOptions } from '../types.ts';
+import type { EditResult } from '../contracts.generated.ts';
 
 export interface EditBackend {
   /** Bundled capability admission without starting a runtime. Available on production adapters. */

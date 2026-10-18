@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open, readdir, realpath, stat } from 'node:fs/promises';
+import { open, readdir, realpath, stat } from '../storage.ts';
 import { join } from 'node:path';
 import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import type { ModelComponent, ModelManifest } from '../contracts.generated.ts';
 import type { PrepareModelOptions, PreparedModel } from './preparation.ts';
 import { modelDefinition, type ExternalModel } from './variants.ts';
-import { validateModelManifest, verifyModel } from './verification.ts';
+import { validateModelManifest, verifyModelOperation as verifyModel } from './verification.ts';
 
 /** Fingerprint a caller-selected MFLUX bundle. This records bytes, not upstream authenticity. */
 export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'variant'>, options: PrepareModelOptions): Promise<PreparedModel> {

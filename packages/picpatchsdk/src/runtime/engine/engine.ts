@@ -1,6 +1,7 @@
+import { storageCleanup, storageStalled } from '../../storage.ts';
 import { validateProfile } from '../../profile.ts';
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from '../../storage.ts';
 import { join, dirname } from 'node:path';
 import { resolveStoragePaths } from '../../paths.ts';
 import { PicPatchSdkError } from '../../errors.ts';
@@ -62,7 +63,7 @@ async function inspect(root: string, identity: EngineIdentity, signal: AbortSign
   return result;
 }
 /** Read-only: checks actual interpreter/dependency imports; never installs or loads weights. */
-export function inspectEngine(options: EngineOptions = {}): Promise<EngineInspection> {
+export function inspectEngine(options: EngineOptions = {}): Promise<import('../../logging.ts').Logged<EngineInspection>> {
   return withDiagnostics('inspectEngine', options, async operation => {
     const root = validate(operation, false);
     return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Engine inspection timed out.', async signal => {
@@ -86,7 +87,7 @@ async function syncDirectory(path: string): Promise<void> {
   try { await handle.sync(); } finally { await handle.close(); }
 }
 /** Explicit install-or-reuse. Environments stay at stable paths; only complete readiness references are replaced. */
-export function installEngine(options: InstallEngineOptions): Promise<EngineInstallation> {
+export function installEngine(options: InstallEngineOptions): Promise<import('../../logging.ts').Logged<EngineInstallation>> {
   return withDiagnostics('installEngine', options, async operation => {
     const root = validate(operation, true);
     absolutePath(operation.uvExecutable);
@@ -140,10 +141,10 @@ export function installEngine(options: InstallEngineOptions): Promise<EngineInst
         return completed;
       } catch (cause) {
         // Unconfirmed termination/publication must never trigger deletion of an environment still in use.
-        if (!publicationAttempted && !(cause instanceof PicPatchSdkError && cause.code === 'TERMINATION_FAILED')) {
+        if (!storageStalled() && !publicationAttempted && !(cause instanceof PicPatchSdkError && cause.code === 'TERMINATION_FAILED')) {
           try {
-            await rm(temporary, { force: true });
-            if (owned) await rm(installation, { recursive: true, force: true });
+            await storageCleanup(async () => { await rm(temporary, { force: true });
+              if (owned) await rm(installation, { recursive: true, force: true }); });
           } catch (cleanup) {
             const error = new PicPatchSdkError('CLEANUP_FAILED', 'Engine installation failed and its private files could not be removed.', { cause: new AggregateError([cause, cleanup]) });
             error.details.recoveryDirectory = installation;
@@ -152,7 +153,7 @@ export function installEngine(options: InstallEngineOptions): Promise<EngineInst
           }
         }
         const error = cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('ENGINE_IO', 'Could not prepare or publish the engine.', { cause });
-        if (publicationAttempted || error.code === 'TERMINATION_FAILED') { error.details.recoveryDirectory = installation; error.effect = 'unknown'; }
+        if (storageStalled() || publicationAttempted || error.code === 'TERMINATION_FAILED') { error.details.recoveryDirectory = installation; error.effect = 'unknown'; }
         throw error;
       }
     }).catch(error => { if (completed) return completed; throw error; });

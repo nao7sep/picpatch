@@ -75,7 +75,7 @@ it('supports cancellation before reads and from progress', async () => {
   const controller = new AbortController(); controller.abort();
   await expect(inspectModel('/not-read', { signal: controller.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
   const active = new AbortController();
-  await expect(discoverModels([directory], { signal: active.signal, onProgress: () => active.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(discoverModels([directory], { signal: active.signal, onEvent: () => active.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
 });
 it('continues inspection when progress callbacks fail', async () => {
   const cause = new Error('callback');

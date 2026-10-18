@@ -1,10 +1,11 @@
+import { storageScope, storageStalled } from '../storage.ts';
 import { planImage, type ImagePlan, type GenerateImagePlan, type EditImagePlan } from '../images/planning.ts';
 import { resolveGenerateRequest, resolveEditRequest, type GenerateInput, type EditDefaults, type EditInput } from '../defaults.ts';
 import { emitProgress, validateOperation, timeBudget, withDeadline } from '../operations.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import type { Editor } from '../client.ts';
 import type { EditBackend } from './backend.ts';
-import type { ImageRequest, ImageOutcome, EditResult, OperationOptions, OperationRefusal } from '../types.ts';
+import type { ImageRequest, ImageOutcome, OperationOptions, OperationRefusal } from '../types.ts';
 import { PicPatchSdkError, sdkError } from '../errors.ts';
 import { checkCancellation } from '../images/validation.ts';
 import { ImageWorkspace } from '../images/output.ts';
@@ -48,12 +49,12 @@ export class ImageEditor implements Editor {
       try {
         if (!this.backend.describe) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This backend cannot plan without a registered model.');
         const result = await planImage(request, this.backend.describe(request), signal);
-        this.plans.add(result);
         return result;
       } catch (error) { const refused = refusal(error); if (refused) return refused; throw error; }
     })));
-    this.tail = Promise.allSettled([this.tail, pending]).then(() => {});
-    return pending;
+    const accepted = pending.then(result => { if (result.status === 'planned') { Object.freeze(result); this.plans.add(result); } return result; });
+    this.tail = Promise.allSettled([this.tail, accepted]).then(() => {});
+    return accepted;
   }
 
   private acceptPlan(value: unknown, operation: ImagePlan['operation']): ImagePlan | PicPatchSdkError | undefined {
@@ -81,7 +82,7 @@ export class ImageEditor implements Editor {
       try {
         await waitForTurn(previous, signal);
         checkCancellation(signal);
-        return await this.run(request, signal, scoped, plan);
+        return await storageScope(signal, () => this.run(request, signal, scoped, plan));
       } catch (error) {
         if (deadline.signal.aborted && (error instanceof PicPatchSdkError && error.kind === 'cancelled') && !this.lifetime.signal.aborted && !callerSignal?.aborted) {
           throw new PicPatchSdkError('TIMEOUT', 'Image operation timed out.', { cause: error, effect: error.effect, details: error.details, ...(error.subject ? { subject: error.subject } : {}) });
@@ -117,6 +118,10 @@ export class ImageEditor implements Editor {
         error.details.recoveryDirectory = workspace.directory;
         error.effect = 'unknown';
       }
+    }
+    if (storageStalled() && workspace) {
+      workspace.preserve();
+      if (result) result.cleanupWarning = { directory: workspace.directory, message: 'Image was saved; private files were retained because storage work may still settle.' };
     }
     try { await workspace?.cleanup(); }
     catch (cause) {

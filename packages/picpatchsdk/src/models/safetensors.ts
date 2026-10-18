@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { open } from '../storage.ts';
 import { checkSignal } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 

@@ -55,7 +55,7 @@ fs.writeFileSync(value('--output'),Buffer.from('${png.toString('base64')}','base
       expect(sidecar).not.toContain(directory);
       expect(JSON.parse(sidecar).conditioning).toEqual(result.conditioning);
       const controller = new AbortController();
-      await expect(editor.edit({ ...request, references: request.references as [typeof request.references[number]] }, { signal: controller.signal, onProgress: event => { if (event.stage === 'editing') controller.abort(); } })).rejects.toMatchObject({ code: 'CANCELLED' });
+      await expect(editor.edit({ ...request, references: request.references as [typeof request.references[number]] }, { signal: controller.signal, onEvent: event => { if (event.stage === 'editing') controller.abort(); } })).rejects.toMatchObject({ code: 'CANCELLED' });
       expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
     } finally { await editor.dispose(); }
   } finally { await rm(directory, { recursive: true, force: true }); }

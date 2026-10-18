@@ -46,7 +46,7 @@ it('records the failure but stops when disposal cannot establish settlement', as
 it('reports actual SDK stages without serializing progress messages', async () => {
   const path = await reportPath(); const events: Record<string, unknown>[] = [];
   vi.mocked(createEditor).mockReturnValue({ plan: vi.fn(), generate: async (_request, options) => {
-    for (const stage of ['loading', 'loading', 'generating', 'saving'] as const) options?.onProgress?.({ type: 'progress', verb: 'generate', stage, message: 'private text' });
+    for (const stage of ['loading', 'loading', 'generating', 'saving'] as const) options?.onEvent?.({ type: 'event', operationId: 'test', time: new Date().toISOString(), level: 'info', verb: 'generate', stage, message: 'private text' });
     return result;
   }, edit: vi.fn(), dispose: vi.fn().mockResolvedValue(undefined) });
   await compare([{ id: 'stages', options: {}, operations: [{ operation: 'generate', request: { prompt: 'private' } }] }], path, undefined, event => events.push(event));

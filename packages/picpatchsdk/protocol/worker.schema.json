@@ -371,6 +371,9 @@
         },
         {
           "$ref": "#/definitions/ShutdownAck"
+        },
+        {
+          "$ref": "#/definitions/StageEvent"
         }
       ]
     },
@@ -478,6 +481,32 @@
         "id",
         "type",
         "request"
+      ],
+      "additionalProperties": false
+    },
+    "StageEvent": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "const": "event"
+        },
+        "event": {
+          "$ref": "contracts.schema.json#/definitions/ProgressEvent"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "type",
+        "event"
       ],
       "additionalProperties": false
     }

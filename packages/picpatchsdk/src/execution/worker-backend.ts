@@ -1,6 +1,9 @@
+import { withDiagnostics } from '../diagnostics.ts';
+import type { ProgressEvent } from '../contracts.generated.ts';
 import type { EditBackend } from './backend.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
-import type { ImageRequest, GenerateRequest, EditRequest, EditResult, ModelCapabilities, ProgressEvent, OperationOptions } from '../types.ts';
+import type { ImageRequest, GenerateRequest, EditRequest, ModelCapabilities, OperationOptions } from '../types.ts';
+import type { EditResult } from '../contracts.generated.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { validateEditRequest, validateGenerateRequest } from '../validation.ts';
 import { emitProgress, validateOperation } from '../operations.ts';
@@ -22,11 +25,11 @@ export class ProcessEditor implements EditBackend {
   constructor(worker: WorkerProcess, model?: LocalEditingModel) { this.worker = worker; this.model = model; }
 
   async edit(input: EditRequest, options: OperationOptions = {}): Promise<EditResult> {
-    return this.execute(validateEditRequest(input), options);
+    return withDiagnostics('edit', options, operation => this.execute(validateEditRequest(input), operation));
   }
 
   async generate(input: GenerateRequest, options: OperationOptions = {}): Promise<EditResult> {
-    return this.execute(validateGenerateRequest(input), options);
+    return withDiagnostics('generate', options, operation => this.execute(validateGenerateRequest(input), operation));
   }
 
   private async execute(request: ImageRequest, options: OperationOptions): Promise<EditResult> {

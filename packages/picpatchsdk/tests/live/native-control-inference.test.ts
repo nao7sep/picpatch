@@ -37,7 +37,7 @@ it('runs Canny generation and source editing with local LoRA composition and pat
       expect((await sharp(outputs[0]!).raw().toBuffer()).equals(await sharp(outputs[1]!).raw().toBuffer())).toBe(false);
       const request = { instruction: 'A green ceramic tile on a table.', sourceImage: outputs[1]!, control: { kind: 'canny' as const, image: map }, parameters: { strength: 0.8 }, sidecar: {} };
       const abort = new AbortController();
-      await expect(editor.edit(request, { signal: abort.signal, onProgress: event => { if (event.stage === 'editing') abort.abort(); } })).rejects.toMatchObject({ code: 'CANCELLED' });
+      await expect(editor.edit(request, { signal: abort.signal, onEvent: event => { if (event.stage === 'editing') abort.abort(); } })).rejects.toMatchObject({ code: 'CANCELLED' });
       const edit = await editor.edit(request);
       if ('status' in edit) throw new Error(edit.code);
       expect(edit.control?.strength).toBe(0.9);

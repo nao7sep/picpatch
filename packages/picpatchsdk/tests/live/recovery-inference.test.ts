@@ -42,7 +42,7 @@ it('recovers native sessions after real loading cancellation and protects prior 
     const controller = new AbortController();
     const started = Promise.withResolvers<void>();
     const cancelled = expect(editor.generate({ prompt: 'A ceramic bowl.', parameters: { steps: 10000 }, outputPath: join(directory, 'cancelled.png') }, {
-      signal: controller.signal, onProgress: event => { if (event.stage === 'generating') started.resolve(); }, onEvent: event => events.push(event),
+      signal: controller.signal, onEvent: event => { events.push(event); if (event.stage === 'generating') started.resolve(); },
     })).rejects.toMatchObject({ code: 'CANCELLED' });
     await Promise.race([started.promise, cancelled]);
     // Observe the actual owned process before cancelling, rather than guessing load duration.

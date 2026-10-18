@@ -58,7 +58,7 @@ describe('owned worker lifecycle', () => {
     expect(spawn).not.toHaveBeenCalled();
     const base = child.onRequest;
     child.onRequest = message => { base(message); if (message.type === 'edit') {
-      child.reply(message.id, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing' } });
+      child.reply(message.id, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing', completed: 1, total: 1 } });
       child.result(message.id);
     } };
     const onProgress = vi.fn();
@@ -144,7 +144,7 @@ describe('owned worker lifecycle', () => {
   it('contains progress callback exceptions without stopping the producer', async () => {
     const { editor, child } = setup(); const active = editor.edit(request, { onProgress: () => { throw new Error('caller'); } });
     await tick();
-    child.reply(2, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing' } });
+    child.reply(2, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing', completed: 1, total: 1 } });
     child.result(2);
     await expect(active).resolves.toMatchObject({ seed: 1 }); expect(child.closed).toBe(false); await editor.dispose();
   });
@@ -173,10 +173,10 @@ describe('transport boundaries', () => {
   it('decodes split UTF-8 bytes and multiple frames', async () => {
     const { editor, child } = setup();
     const onProgress = vi.fn(); const active = editor.edit(request, { onProgress }); await tick();
-    const frame = Buffer.from(JSON.stringify({ version: 1, id: 2, type: 'progress', event: { type: 'progress', verb: 'edit', stage: 'editing', message: '日本語' } })+'\n');
+    const frame = Buffer.from(JSON.stringify({ version: 1, id: 2, type: 'progress', event: { type: 'progress', verb: 'edit', stage: 'editing', message: '日本語', completed: 1, total: 1 } })+'\n');
     const split = frame.indexOf(Buffer.from('日')) + 1;
     child.stdout.write(frame.subarray(0, split)); child.stdout.write(frame.subarray(split)); child.result(2);
-    await active; expect(onProgress.mock.calls[0]![0].message).toBe('日本語'); await editor.dispose();
+    await active; expect(onProgress.mock.calls[0]![0].completed).toBe(1); await editor.dispose();
   });
   it('rejects invalid UTF-8 and cleans up', async () => {
     const { editor, child } = setup(); const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'PROTOCOL_ERROR' });
@@ -202,9 +202,9 @@ describe('transport boundaries', () => {
   });
   it('stops processing buffered results when a callback disposes the editor', async () => {
     const { editor, child } = setup(); let disposal: Promise<void> | undefined;
-    const active = editor.edit(request, { onProgress: () => { disposal = editor.dispose(); } });
+    const active = editor.edit(request, { onEvent: event => { if (event.stage !== 'editing') return; disposal = editor.dispose(); } });
     const caught = expect(active).rejects.toMatchObject({ code: 'CANCELLED' }); await tick();
-    child.reply(2, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing' } });
+    child.reply(2, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing', completed: 1, total: 1 } });
     await caught; await disposal; expect(child.closed).toBe(true);
   });
 });
@@ -290,13 +290,13 @@ it('allows cancellation from progress without turning it into a callback failure
   const base = child.onRequest;
   child.onRequest = message => {
     base(message);
-    if (message.type === 'edit') child.reply(message.id, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing' } });
+    if (message.type === 'edit') child.reply(message.id, 'progress', { event: { type: 'progress', verb: 'edit', stage: 'editing', message: 'Editing', completed: 1, total: 1 } });
     if (message.type === 'cancel') {
       child.reply(message.id, 'cancelAck', { targetId: message.targetId, accepted: true });
       child.reply(message.targetId, 'error', { error: { code: 'CANCELLED', kind: 'cancelled', effect: 'none', details: {}, message: 'Cancelled' } });
     }
   };
-  await expect(editor.edit(request, { signal: controller.signal, onProgress: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(editor.edit(request, { signal: controller.signal, onEvent: event => { if (event.stage === 'editing') controller.abort(); } })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(child.signals).toEqual([]);
   await editor.dispose();
 });

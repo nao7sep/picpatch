@@ -1,10 +1,11 @@
+import type { EditResult } from '../../src/contracts.generated.ts';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readdir, readFile, rm, symlink, unlink, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createEditor, listModels, type ModelCapabilities, type EditResult, type EditInput } from '../../src/index.ts';
+import { createEditor, listModels, type ModelCapabilities, type EditInput } from '../../src/index.ts';
 import { ImageEditor } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
 import type { ImageRequest } from '../../src/types.ts';

@@ -11,7 +11,7 @@ const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/artifacts/$
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-record-')); });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
 it('reads pinned records, preserves newer ones and rejects malformed/path-bearing records', async () => {
-  const record = await readArtifactRecord(fixture('current')); if ('status' in record) throw new Error(record.code);
+  const read = await readArtifactRecord(fixture('current')); if (read.status === 'refused') throw new Error(read.code); const record = read.record;
   expect(validateArtifactRecord(record)).toEqual(record);
   const path = fixture('newer'); const original = await readFile(path);
   expect(await readArtifactRecord(path)).toMatchObject({ status: 'refused', code: 'ARTIFACT_VERSION_UNSUPPORTED' });
@@ -25,7 +25,7 @@ it('checks final file bytes and full decoding without trusting names or touching
   const bytes = await readFile(image);
   const record = await createArtifactRecord({ model: 'fixture', prompt: 'private', outputPath: image }, { image: { path: image, mimeType: 'image/png', size: { width: 8, height: 8 } }, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, effectiveParameters: { steps: 4 }, references: [] }, image, [], { name: 'ExampleApp', version: '1' });
   expect(record).toMatchObject({ writer: { name: 'picpatchsdk', version: '0.0.0' }, caller: { name: 'ExampleApp', version: '1' }, fingerprints: [] });
-  const pinned = await readArtifactRecord(fixture('current')); if ('status' in pinned) throw new Error(pinned.code);
+  const read = await readArtifactRecord(fixture('current')); if (read.status === 'refused') throw new Error(read.code); const pinned = read.record;
   expect({ ...record, caller: undefined, sha256: pinned.sha256, bytes: pinned.bytes, image: pinned.image }).toEqual({ ...pinned, caller: undefined });
   expect(await verifyArtifact(image, record)).toMatchObject({ status: 'verified' });
   expect(await verifyArtifact(image, { ...record, bytes: record.bytes + 1 })).toMatchObject({ status: 'refused', code: 'ARTIFACT_MISMATCH' });

@@ -1,9 +1,10 @@
+import type { EditResult } from '../../src/contracts.generated.ts';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createEditor, validateGenerateRequest, type SdkEvent, type GenerateRequest, type EditResult, type ModelCapabilities } from '../../src/index.ts';
+import { createEditor, validateGenerateRequest, type SdkEvent, type GenerateRequest, type ModelCapabilities } from '../../src/index.ts';
 import { resolveGenerateRequest } from '../../src/defaults.ts';
 import { ImageEditor } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';

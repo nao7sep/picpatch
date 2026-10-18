@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { open } from './storage.ts';
 import { validateDefaults, type EditDefaults } from './defaults.ts';
 import { PicPatchSdkError } from './errors.ts';
 import { withDiagnostics, type EventOptions } from './diagnostics.ts';
@@ -17,7 +17,7 @@ export interface PicPatchProfile {
 }
 export interface ProfileReadOptions extends EventOptions { signal?: AbortSignal; timeoutMs?: number }
 export interface ProfileRefusal { status: 'refused'; code: 'PROFILE_VERSION_UNSUPPORTED'; message: string; effect: 'none'; subject: string; version: number }
-export type ProfileReadResult = PicPatchProfile | ProfileRefusal;
+export type ProfileReadResult = import('./logging.ts').Logged<{ status: 'read'; profile: PicPatchProfile } | ProfileRefusal>;
 
 export function validateTimeouts(value: unknown): Partial<WorkerTimeouts> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid worker timeouts.');
@@ -62,7 +62,7 @@ export function readProfile(path: string, options: ProfileReadOptions = {}): Pro
         catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Profile contains invalid JSON.', { cause, subject: path }); }
         const version = (value as { version?: unknown } | null)?.version;
         if (typeof version === 'number' && Number.isInteger(version) && version !== 1) return { status: 'refused', code: 'PROFILE_VERSION_UNSUPPORTED', message: 'This profile version is unsupported.', effect: 'none', subject: path, version };
-        return validateProfile(value);
+        return { status: 'read' as const, profile: validateProfile(value) };
       } catch (cause) {
         checkSignal(signal);
         if (cause instanceof PicPatchSdkError) throw cause;

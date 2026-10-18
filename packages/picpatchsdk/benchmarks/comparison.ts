@@ -2,7 +2,7 @@ import { appendFile, open } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { arch, cpus, platform, release, totalmem } from 'node:os';
 import { performance } from 'node:perf_hooks';
-import { createEditor, PicPatchSdkError, type EditorOptions, type EditInput, type GenerateInput, type EditResult, type ProgressEvent } from 'picpatchsdk';
+import { createEditor, PicPatchSdkError, type EditorOptions, type EditInput, type GenerateInput, type EditResult, type SdkEvent } from 'picpatchsdk';
 
 export type ComparisonOperation = { operation: 'generate'; request: Omit<GenerateInput, 'sidecar'> } |
   { operation: 'edit'; request: Omit<EditInput, 'sidecar'>; sourceFromPrevious?: boolean };
@@ -51,7 +51,7 @@ export async function compare(cases: ComparisonCase[], report: string, signal?: 
             try {
               editor ??= createEditor(entry.options);
               let stage: string | undefined;
-              const operationOptions = { ...(signal ? { signal } : {}), onProgress: (progress: ProgressEvent) => {
+              const operationOptions = { ...(signal ? { signal } : {}), onEvent: (progress: SdkEvent) => {
                 if (stage !== progress.stage) {
                   stage = progress.stage;
                   event({ kind: 'phase', index: record.measurementIndex, stage, elapsedSeconds: (performance.now() - started) / 1000 });

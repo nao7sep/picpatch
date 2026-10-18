@@ -37,7 +37,7 @@ it('detects mutation of an earlier hashed file by a later preparation callback',
   const { writeFileSync } = await import('node:fs');
   let changed = false;
   await expect(prepareModel('sd15-ip-adapter', { ...options, onProgress: event => {
-    if (event.path === options.clipVision && !changed) { changed = true; writeFileSync(join(directory, options.checkpoint), 'changed'); }
+    if (event.completed === event.total && !changed) { changed = true; writeFileSync(join(directory, options.checkpoint), 'changed'); }
   } })).rejects.toMatchObject({ code: 'MODEL_IO' });
   expect(changed).toBe(true);
 });

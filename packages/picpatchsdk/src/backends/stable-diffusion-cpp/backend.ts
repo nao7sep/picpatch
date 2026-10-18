@@ -1,10 +1,11 @@
 import { inspectNativeAssets } from './assets.ts';
 import { randomInt } from 'node:crypto';
-import { writeFile, mkdir, copyFile, symlink } from 'node:fs/promises';
+import { writeFile, mkdir, copyFile, symlink } from '../../storage.ts';
 import { basename, dirname, join } from 'node:path';
 import type { EditBackend } from '../../execution/backend.ts';
 import type { LocalEditingModel, ModelCapabilities } from '../../contracts.generated.ts';
-import type { ImageRequest, EditRequest, GenerateRequest, EditResult, OperationOptions } from '../../types.ts';
+import type { ImageRequest, EditRequest, GenerateRequest, OperationOptions } from '../../types.ts';
+import type { EditResult } from '../../contracts.generated.ts';
 import { validateEditRequest, validateGenerateRequest } from '../../validation.ts';
 import { resolveParameters } from '../../parameters.ts';
 import { checkSignal, emitProgress } from '../../operations.ts';

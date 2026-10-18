@@ -1,3 +1,4 @@
+import { storageRecovery, storageCleanup } from '../storage.ts';
 import type { ArtifactRecord } from '../contracts.generated.ts';
 import type { ImageResult } from '../types.ts';
 import type { ImagePlan } from './planning.ts';
@@ -5,9 +6,10 @@ import { prepareControl } from './control.ts';
 import { prepareOutpaint } from './outpaint.ts';
 import { createArtifactRecord, publishSidecar, sidecarPath } from './sidecar.ts';
 import { basename, dirname, join } from 'node:path';
-import { chmod, link, lstat, mkdtemp, open, realpath, rm, stat } from 'node:fs/promises';
+import { chmod, link, lstat, mkdtemp, open, realpath, rm, stat } from '../storage.ts';
 import { PicPatchSdkError } from '../errors.ts';
-import type { ImageRequest, EditResult, InputGeometry, ModelCapabilities } from '../types.ts';
+import type { ImageRequest, InputGeometry, ModelCapabilities } from '../types.ts';
+import type { EditResult } from '../contracts.generated.ts';
 import type { GeometryPolicy } from './geometry.ts';
 import { checkCancellation, normalizeImage, prepareImage, snapshotImage } from './validation.ts';
 
@@ -22,6 +24,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   private readonly fingerprints: ArtifactRecord['fingerprints'] = [];
   private outpaint: EditResult['outpaint'];
   private constructor(directory: string, destination: string, request: T) {
+    storageRecovery(directory);
     this.directory = directory; this.destination = destination; this.request = request;
     this.workerRequest = { ...structuredClone(request), outputPath: join(directory, 'worker.png') };
     // Artifact retention belongs to this process, never to an inference runtime.
@@ -148,7 +151,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
 
   preserve(): void { this.retain = true; }
   async cleanup(): Promise<void> {
-    if (!this.retain) await rm(this.directory, { recursive: true, force: true });
+    if (!this.retain) await storageCleanup(() => rm(this.directory, { recursive: true, force: true }));
   }
 }
 

@@ -44,7 +44,7 @@ describe('real model-free worker processes', () => {
   });
   it('forcibly closes a worker that ignores cancellation and SIGTERM', async () => {
     const editor = fixtureEditor('ignore-cancel'); const controller = new AbortController();
-    await expect(editor.edit(request, { signal: controller.signal, onProgress: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(editor.edit(request, { signal: controller.signal, onEvent: event => { if (event.stage === 'editing') controller.abort(); } })).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(children[0]!.signalCode).toBe('SIGKILL');
   });
   it.each(['malformed', 'exit'])('cleans up after %s output', async mode => {

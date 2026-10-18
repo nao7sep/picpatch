@@ -8,7 +8,7 @@ vi.mock('node:fs/promises', async importOriginal => {
 });
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
-it.each([inspectModel, (path: string, options: Parameters<typeof inspectModel>[1]) => discoverModels([path], options)])('waits for active filesystem work before reporting a deadline', async operation => {
+it.each([inspectModel, (path: string, options: Parameters<typeof inspectModel>[1]) => discoverModels([path], options)])('bounds the caller wait while retaining ownership and starting no later storage work', async operation => {
   vi.useFakeTimers();
   let release!: (path: string) => void;
   const read = vi.spyOn(fs, 'realpath').mockImplementation(() => new Promise<string>(resolve => { release = resolve; }));
@@ -17,7 +17,7 @@ it.each([inspectModel, (path: string, options: Parameters<typeof inspectModel>[1
   const result = operation('/selected', { timeoutMs: 10 }).finally(() => { settled = true; });
   const assertion = expect(result).rejects.toMatchObject({ code: 'TIMEOUT' });
   await vi.advanceTimersByTimeAsync(10);
-  expect(read).toHaveBeenCalledOnce(); expect(settled).toBe(false);
+  expect(read).toHaveBeenCalledOnce(); expect(settled).toBe(true);
   release('/selected');
   await assertion;
   expect(nextRead).not.toHaveBeenCalled();

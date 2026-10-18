@@ -14,7 +14,7 @@ try {
     ...(values.steps !== undefined ? { steps: Number(values.steps) } : {}),
     ...(values.guidance !== undefined ? { guidance: Number(values.guidance) } : {}),
   }, ...(values.mask ? { maskImage: resolve(values.mask) } : {}) }, {
-    onProgress: event => console.error(event.message),
+    onEvent: event => console.error(event.message),
   });
   if ('status' in result) throw new Error(result.code);
   console.log(result.image.path);

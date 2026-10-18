@@ -42,7 +42,7 @@ it('rejects implicit acquisition, ambiguous files and bad registration before ex
 
 it('cancels preparation and rejects directory indirection without mutating external files', async () => {
   const controller = new AbortController();
-  await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors', signal: controller.signal, onProgress: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors', signal: controller.signal, onEvent: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
   await mkdir(join(directory, 'actual'));
   await writeFile(join(directory, 'actual/weights.gguf'), 'test');
   await symlink(join(directory, 'actual'), join(directory, 'linked'));

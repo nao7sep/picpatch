@@ -44,6 +44,6 @@ it('rechecks metadata after preparation callbacks and honors cancellation', asyn
   await tensorFile(join(directory, 'adapter.safetensors'), shapes);
   await expect(prepareModel('flux2-klein-4b', { directory, loras: [{ path: 'adapter.safetensors' }], signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
   await expect(prepareModel('flux2-klein-4b', { directory, loras: [{ path: 'adapter.safetensors' }], onProgress: event => {
-    if (event.path === 'adapter.safetensors') writeFileSync(join(directory, 'adapter.safetensors'), 'invalid');
+    if (event.stage === 'loras') writeFileSync(join(directory, 'adapter.safetensors'), 'invalid');
   } })).rejects.toMatchObject({ code: 'MODEL_IO' });
 });

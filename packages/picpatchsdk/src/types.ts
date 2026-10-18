@@ -1,6 +1,6 @@
 import type { EventOptions } from './diagnostics.ts';
-import type { ProgressEvent } from './contracts.generated.ts';
-export type { GenerateRequest, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, ProgressEvent, ReferenceGroup } from './contracts.generated.ts';
+export interface ProgressEvent { type: 'progress'; stage: string; completed: number; total: number }
+export type { GenerateRequest, EditRequest, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, ReferenceGroup } from './contracts.generated.ts';
 
 export interface OperationOptions extends EventOptions {
   readonly signal?: AbortSignal;
@@ -12,7 +12,8 @@ export interface OperationOptions extends EventOptions {
 }
 
 /** Generation returns the same artifact/provenance, with empty references and inputGeometry. */
-export type GenerateResult = import('./contracts.generated.ts').EditResult;
+export type GenerateResult = ImageResult;
+export type EditResult = ImageResult;
 export type ImageRequest = import('./contracts.generated.ts').EditRequest | import('./contracts.generated.ts').GenerateRequest;
 
 export interface OperationRefusal {
@@ -24,4 +25,4 @@ export interface OperationRefusal {
   details: import('./errors.ts').ErrorDetails;
 }
 export type ImageResult = import('./contracts.generated.ts').EditResult & { record: import('./contracts.generated.ts').ArtifactRecord };
-export type ImageOutcome = ImageResult | OperationRefusal;
+export type ImageOutcome = import('./logging.ts').Logged<ImageResult | OperationRefusal>;

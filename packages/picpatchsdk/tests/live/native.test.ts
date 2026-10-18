@@ -102,7 +102,7 @@ it.each(['sd15', 'sdxl'])('runs repeated %s source variations with default/sessi
       expect(await readFile(result.image.path)).toEqual(png);
     }
     const controller = new AbortController();
-    await expect(editor.edit({ instruction: 'hold', sourceImage }, { signal: controller.signal, onProgress: event => {
+    await expect(editor.edit({ instruction: 'hold', sourceImage }, { signal: controller.signal, onEvent: event => {
       if (event.stage === 'editing') controller.abort();
     } })).rejects.toMatchObject({ code: 'CANCELLED' });
     await editor.edit({ instruction: 'variation:0.75', sourceImage });

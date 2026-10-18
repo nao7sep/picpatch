@@ -45,7 +45,7 @@ it('runs native SDXL generation, repeated variation and each dedicated condition
       phase = 'native loading cancellation';
       const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await expect(editor.generate({ prompt: 'A blue ceramic bowl.', parameters: { steps: 10000 } }, { signal: controller.signal, onProgress: event => {
+        await expect(editor.generate({ prompt: 'A blue ceramic bowl.', parameters: { steps: 10000 } }, { signal: controller.signal, onEvent: event => {
           if (event.stage === 'generating') timer = setTimeout(() => controller.abort(), 1500);
         } })).rejects.toMatchObject({ code: 'CANCELLED' });
       } finally { clearTimeout(timer); }

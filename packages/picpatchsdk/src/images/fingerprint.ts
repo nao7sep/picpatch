@@ -1,8 +1,9 @@
+import { storageWait } from '../storage.ts';
 import { pipeline } from 'node:stream/promises';
 import { Writable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open, stat } from 'node:fs/promises';
+import { open, stat } from '../storage.ts';
 import sharp from 'sharp';
 import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal } from '../operations.ts';
@@ -23,8 +24,8 @@ export async function inspectImage(path: string, signal?: AbortSignal, decode = 
     checkSignal(signal);
     let metadata;
     try {
-      metadata = await sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).metadata();
-      if (decode) await pipeline(sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).raw(), new Writable({ write(_chunk, _encoding, done) { done(); } }), { signal });
+      metadata = await storageWait(() => sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).metadata(), path);
+      if (decode) await storageWait(() => pipeline(sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).raw(), new Writable({ write(_chunk, _encoding, done) { done(); } }), { signal }), path);
     }
     catch (cause) { throw new PicPatchSdkError('INVALID_IMAGE', 'Image headers could not be decoded.', { cause, subject: path }); }
     const after = await stat(path, { bigint: true });

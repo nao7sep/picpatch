@@ -2,10 +2,10 @@ import { NativeBackend } from '../backends/stable-diffusion-cpp/backend.ts';
 import { isNativeVariant, nativeCapabilities, nativeRevision } from '../backends/stable-diffusion-cpp/models.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import type { EventOptions } from '../diagnostics.ts';
-import { stat } from 'node:fs/promises';
+import { stat } from '../storage.ts';
 import { join } from 'node:path';
 import type { LocalEditingModel, ModelCapabilities } from '../contracts.generated.ts';
-import { validateLocalEditingModel, verifyModel } from '../models/verification.ts';
+import { validateLocalEditingModel, verifyModelOperation as verifyModel } from '../models/verification.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { WorkerProcess } from '../worker/process.ts';
@@ -19,7 +19,7 @@ export interface ReadinessOptions extends EventOptions {
   verify?: boolean;
   /** Loads existing weights without inference, then releases the process. May consume substantial memory. */
   load?: boolean;
-  onProgress?: (event: { type: 'progress'; verb: 'inspectReadiness'; stage: 'files' | 'runtime'; message: string }) => void;
+  onProgress?: (event: import('../types.ts').ProgressEvent) => void;
 }
 export interface ModelReadiness {
   files: 'present' | 'incomplete';
@@ -79,6 +79,6 @@ async function inspectReadinessOperation(executable: string, input: LocalEditing
   });
 }
 
-export function inspectReadiness(executable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
+export function inspectReadiness(executable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<import('../logging.ts').Logged<ModelReadiness>> {
   return withDiagnostics('inspectReadiness', options, operation => inspectReadinessOperation(executable, input, operation));
 }

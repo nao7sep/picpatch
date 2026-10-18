@@ -9,7 +9,7 @@ const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/registratio
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-opening-')); });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
 it('opens a persisted registration using presence alone while explicit verification detects wrong content', async () => {
-  const registration = await readModelRegistration(fixture('current')); if ('status' in registration) throw new Error(registration.code);
+  const read = await readModelRegistration(fixture('current')); if (read.status === 'refused') throw new Error(read.code); const registration = read.registration;
   registration.model.directory = directory;
   await writeFile(join(directory, 'weights.safetensors'), 'test');
   expect(await openModel(registration)).toMatchObject({ status: 'ready', integrity: 'presence-only', compatibility: 'unknown', version: 1 });
