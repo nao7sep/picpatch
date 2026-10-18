@@ -1,3 +1,4 @@
+import { testEngineDirectory } from '../helpers/engine.ts';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -16,7 +17,7 @@ it.each(['qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1', 'flux1-kontext-
     version: 1, model: adapter, source: { repository: 'fixture', revision: 'a'.repeat(40) },
     components: [{ path: 'fixture.bin', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
   } };
-  const editor = createEditor({ pythonExecutable, model });
+  const editor = createEditor({ engineDirectory: testEngineDirectory, model });
   try {
     await writeFile(join(directory, 'fixture.bin'), bytes);
     const readiness = await inspectReadiness(pythonExecutable, model);

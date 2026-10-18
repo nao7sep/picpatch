@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "identity": {
+    "id": "ca897634a06f4d47d75eb01511a8a5a9a76d1e4766ac16fd8110a68cb1db521c",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "python": "3.15.0",
+    "dependencies": "inference",
+    "lockSha256": "105fb84489dda864b45fe1607202cec9202b519fe5ce7a089767bd8272d3ff90",
+    "manifestSha256": "aba0bf3012ea92cfa4883c4cde27ece5af96e7fd33c476ee9995ec74756cd81f"
+  },
+  "installation": "ca897634a06f4d47d75eb01511a8a5a9a76d1e4766ac16fd8110a68cb1db521c-12345678-1234-4123-8123-123456789abc"
+}

@@ -1,3 +1,4 @@
+import { testEngineDirectory } from '../helpers/engine.ts';
 import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { copyFile, mkdtemp, mkdir, readFile, rm, stat, symlink } from 'node:fs/promises';
@@ -26,7 +27,7 @@ it.each(assets)('applies the pinned trained $family pixel-art adapter through th
       }
       await symlink(resolve(adapter), join(directory, asset.filename));
       const prepared = await prepareModel(config.model!.manifest.model, { directory, loras: [{ path: asset.filename }] });
-      options = { pythonExecutable: config.pythonExecutable!, model: prepared.model };
+      options = { engineDirectory: testEngineDirectory, model: prepared.model };
     } else {
       const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(cache, 'native-inference-config.json'), 'utf8'));
       await symlink(join(config.directory, config.checkpoint), join(directory, 'base.safetensors'));

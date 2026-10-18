@@ -1,0 +1,66 @@
+import { spawn } from 'node:child_process';
+import { PicPatchCancelledError, PicPatchRuntimeError } from '../../errors.ts';
+import { checkSignal } from '../../operations.ts';
+
+/** Own the installer process group until closure. Never expose package-manager output to caller streams. */
+export function runCommand(executable: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, signal: AbortSignal, timeoutMs: number): Promise<string> {
+  checkSignal(signal);
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    let output = ''; let diagnostic = ''; let failure: Error | undefined; let closed = false;
+    let escalation: ReturnType<typeof setTimeout> | undefined;
+    let termination: ReturnType<typeof setTimeout> | undefined;
+    const kill = (value: NodeJS.Signals) => {
+      if (!child.pid) return;
+      try { process.kill(-child.pid, value); }
+      catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') failure = new PicPatchRuntimeError('TERMINATION_FAILED', 'Could not signal the engine process.', { cause }); }
+    };
+    const stop = (reason: Error) => {
+      if (closed || escalation) return;
+      failure ??= reason;
+      kill('SIGTERM');
+      escalation = setTimeout(() => {
+        kill('SIGKILL');
+        termination = setTimeout(() => {
+          cleanup();
+          reject(new PicPatchRuntimeError('TERMINATION_FAILED', 'Engine process closure could not be confirmed.', { cause: failure }));
+        }, 2_000);
+      }, 2_000);
+    };
+    const abort = () => stop(new PicPatchCancelledError());
+    const timer = setTimeout(() => stop(new PicPatchRuntimeError('TIMEOUT', 'Engine process timed out.')), timeoutMs);
+    const cleanup = () => { clearTimeout(timer); clearTimeout(escalation); clearTimeout(termination); signal.removeEventListener('abort', abort); };
+    signal.addEventListener('abort', abort, { once: true });
+    child.once('error', cause => { failure ??= new PicPatchRuntimeError('ENGINE_UNAVAILABLE', 'Could not start the engine tool.', { cause }); });
+    child.stdout.on('data', (bytes: Buffer) => { if (output.length < 65536) output += bytes.toString('utf8').slice(0, 65536 - output.length); });
+    child.stderr.on('data', (bytes: Buffer) => { diagnostic = (diagnostic + bytes.toString('utf8')).slice(-8192); });
+    child.stdout.on('error', cause => stop(new PicPatchRuntimeError('ENGINE_UNAVAILABLE', 'Engine output pipe failed.', { cause })));
+    child.stderr.on('error', cause => stop(new PicPatchRuntimeError('ENGINE_UNAVAILABLE', 'Engine diagnostic pipe failed.', { cause })));
+    child.once('close', (code, exitSignal) => {
+      closed = true; cleanup();
+      if (!failure && code !== 0) {
+        // Tool diagnostics contain only installation facts: no caller credentials/environment are passed.
+        const error = new PicPatchRuntimeError('INSTALL_FAILED', 'The engine tool exited unsuccessfully.', { cause: new Error(diagnostic) });
+        error.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(exitSignal ? { signal: exitSignal } : {}) };
+        failure = error;
+      }
+      if (!failure) { resolve(output); return; }
+      // uv may close its pipes before a compiler child stops. Settle the whole owned group
+      // before the installer is allowed to delete its private environment.
+      kill('SIGKILL');
+      void confirmGroupStopped(child.pid).then(() => reject(failure), cause => reject(new PicPatchRuntimeError('TERMINATION_FAILED', 'Engine subprocess group termination could not be confirmed.', { cause })));
+    });
+    if (signal.aborted) abort();
+  });
+}
+
+async function confirmGroupStopped(pid: number | undefined): Promise<void> {
+  if (!pid) return;
+  const deadline = performance.now() + 2_000;
+  for (;;) {
+    try { process.kill(-pid, 0); }
+    catch (cause) { if ((cause as NodeJS.ErrnoException).code === 'ESRCH') return; throw cause; }
+    if (performance.now() >= deadline) throw new Error('An engine subprocess still exists.');
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+}

@@ -14,7 +14,7 @@ export interface SdkEvent {
   verb: string;
   time: string;
   level: 'debug' | 'info' | 'warn' | 'error';
-  stage: 'started' | 'progress' | 'succeeded' | 'failed' | 'cancelled' | 'hook-failed';
+  stage: 'started' | 'progress' | 'succeeded' | 'failed' | 'cancelled' | 'hook-failed' | 'checking' | 'installing' | 'publishing';
   message: string;
   progress?: { stage: string; completed?: number; total?: number };
   error?: { code: string; causes: { kind: string; code?: string }[]; worker?: WorkerDiagnostic };
@@ -32,6 +32,9 @@ function deliver(options: Scoped, event: Omit<SdkEvent, 'type' | 'operationId' |
     // Do not await caller-owned asynchronous logging or leave rejected sinks unhandled.
     void Promise.resolve(returned).catch(() => { /* No fallback to the hook that failed. */ });
   } catch { /* Diagnostic delivery must not replace a saved result or its original failure. */ }
+}
+export function operationStage(options: EventOptions, stage: 'checking' | 'installing' | 'publishing', message: string): void {
+  deliver(options, { level: 'info', stage, message });
 }
 /** Reports progress-sink failure through the separate event sink, at most once per call. */
 export function progressHookFailed(options: EventOptions): void {

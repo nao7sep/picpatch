@@ -1,3 +1,4 @@
+import { inferenceOptions, testEngineDirectory } from '../helpers/engine.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -73,7 +74,7 @@ it('recovers native sessions after real loading cancellation and protects prior 
 it('recovers from cooperative MFLUX cancellation and survives failing progress hooks for real 512px inference', async () => {
   const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(root, 'inference-config.json'), 'utf8')) as EditorOptions;
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-mflux-recovery-'));
-  const options: EditorOptions = { ...config, defaults: { outputDirectory: directory, size: { width: 512, height: 512 }, seed: 42 } };
+  const options: EditorOptions = { ...inferenceOptions(config), defaults: { outputDirectory: directory, size: { width: 512, height: 512 }, seed: 42 } };
   let editor = createEditor(options);
   const pids: number[] = [];
   try {

@@ -1,15 +1,15 @@
 import { NativeBackend } from './backends/stable-diffusion-cpp/backend.ts';
 import { isNativeVariant } from './backends/stable-diffusion-cpp/models.ts';
 import { validateDefaults, type EditDefaults, type GenerateInput, type EditInput } from './defaults.ts';
-import { defaultPythonExecutable, workerLaunch } from './backends/mflux/launch.ts';
+import { ManagedBackend } from './backends/mflux/managed.ts';
+import { resolveStoragePaths } from './paths.ts';
 import { validateLocalEditingModel } from './models/verification.ts';
 import type { LocalEditingModel } from './contracts.generated.ts';
 import { ImageEditor } from './execution/session.ts';
 import { isAbsolute } from 'node:path';
 import type { EditResult, OperationOptions } from './types.ts';
 import { PicPatchUsageError } from './errors.ts';
-import { WorkerProcess, workerTimeouts, type WorkerTimeouts } from './worker/process.ts';
-import { ProcessEditor } from './execution/worker-backend.ts';
+import { workerTimeouts, type WorkerTimeouts } from './worker/process.ts';
 
 export interface Editor {
   generate(request: GenerateInput, options?: OperationOptions): Promise<EditResult>;
@@ -17,8 +17,8 @@ export interface Editor {
   dispose(): Promise<void>;
 }
 export interface EditorOptions {
-  /** An existing interpreter with the worker's locked dependencies installed. */
-  pythonExecutable?: string;
+  /** Managed engine resource root. Defaults to ~/.picpatchsdk/engine; never installs implicitly. */
+  engineDirectory?: string;
   /** Prepared sd-cli executable at the supported native revision. Never installed automatically. */
   nativeExecutable?: string;
   defaults?: EditDefaults;
@@ -31,7 +31,7 @@ const defaults = workerTimeouts;
 /** Creates a lazy editor. Does not install Python, packages, or models. */
 export function createEditor(options: EditorOptions = {}): Editor {
   if (!options || typeof options !== 'object' || Array.isArray(options)) throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid editor options.');
-  if (Object.keys(options).some(key => !['pythonExecutable', 'nativeExecutable', 'timeouts', 'model', 'defaults'].includes(key)) ||
+  if (Object.keys(options).some(key => !['engineDirectory', 'nativeExecutable', 'timeouts', 'model', 'defaults'].includes(key)) ||
       (options.timeouts !== undefined && (typeof options.timeouts !== 'object' || options.timeouts === null || Array.isArray(options.timeouts)))) {
     throw new PicPatchUsageError('INVALID_REQUEST', 'Invalid editor options.');
   }
@@ -46,14 +46,10 @@ export function createEditor(options: EditorOptions = {}): Editor {
     model = validateLocalEditingModel(options.model);
   }
   if (model && isNativeVariant(model.variant)) {
-    if (options.pythonExecutable !== undefined || typeof options.nativeExecutable !== 'string' || !isAbsolute(options.nativeExecutable) || options.nativeExecutable.includes('\0')) throw new PicPatchUsageError('INVALID_REQUEST', 'Native models require an absolute nativeExecutable, without pythonExecutable.');
+    if (options.engineDirectory !== undefined || typeof options.nativeExecutable !== 'string' || !isAbsolute(options.nativeExecutable) || options.nativeExecutable.includes('\0')) throw new PicPatchUsageError('INVALID_REQUEST', 'Native models require an absolute nativeExecutable, without engineDirectory.');
     return new ImageEditor(new NativeBackend(options.nativeExecutable, model, timeouts), validateDefaults(options.defaults), model.manifest.model);
   }
   if (options.nativeExecutable !== undefined) throw new PicPatchUsageError('INVALID_REQUEST', 'nativeExecutable requires a native model.');
-  const pythonExecutable = options.pythonExecutable === undefined ? defaultPythonExecutable() : options.pythonExecutable;
-  if (typeof pythonExecutable !== 'string' || !isAbsolute(pythonExecutable) || pythonExecutable.includes('\0')) {
-    throw new PicPatchUsageError('INVALID_REQUEST', 'pythonExecutable must be an absolute interpreter path.');
-  }
-  const worker = new WorkerProcess({ ...workerLaunch(pythonExecutable), ...(model ? { model } : {}) }, timeouts);
-  return new ImageEditor(new ProcessEditor(worker, model), validateDefaults(options.defaults), model?.manifest.model);
+  const root = resolveStoragePaths(options.engineDirectory === undefined ? {} : { engineDirectory: options.engineDirectory }).engineDirectory;
+  return new ImageEditor(new ManagedBackend(root, model, timeouts), validateDefaults(options.defaults), model?.manifest.model);
 }

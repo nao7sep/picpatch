@@ -9,6 +9,7 @@ export interface WorkerLaunch {
   executable: string;
   args: string[];
   cwd: string;
+  env?: NodeJS.ProcessEnv;
   model?: LocalEditingModel;
   runtimeCheck?: 'imports' | 'load';
 }
@@ -23,7 +24,7 @@ export interface WorkerTimeouts {
 export const workerTimeouts: WorkerTimeouts = { startupMs: 30_000, editMs: 1_800_000, generateMs: 1_800_000, cancellationMs: 5_000, shutdownMs: 5_000, terminationMs: 2_000 };
 export type SpawnWorker = (launch: WorkerLaunch) => ChildProcessWithoutNullStreams;
 const spawnWorker: SpawnWorker = launch => spawn(launch.executable, launch.args, {
-  cwd: launch.cwd, stdio: 'pipe', detached: process.platform !== 'win32',
+  cwd: launch.cwd, env: launch.env ?? {}, stdio: 'pipe', detached: process.platform !== 'win32',
 });
 interface Pending {
   resolve: (response: WorkerResponse) => void;

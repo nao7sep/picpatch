@@ -1,3 +1,4 @@
+import { testEngineDirectory } from '../helpers/engine.ts';
 import { mkdtemp, mkdir, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -21,7 +22,7 @@ it('applies local LoRAs to real quantized Klein generation and editing without b
     const prepared = await prepareModel(config.model!.manifest.model, { directory, loras: [{ path: 'adapter.safetensors' }] });
     const outputs: string[] = [];
     for (const scale of [0, 1, -1]) {
-      const editor = createEditor({ pythonExecutable: config.pythonExecutable!, model: { ...prepared.model, loras: [{ path: 'adapter.safetensors', scale }] }, defaults: { size: { width: 256, height: 256 }, seed: 42, outputDirectory: directory, parameters: { steps: 2 } } });
+      const editor = createEditor({ engineDirectory: testEngineDirectory, model: { ...prepared.model, loras: [{ path: 'adapter.safetensors', scale }] }, defaults: { size: { width: 256, height: 256 }, seed: 42, outputDirectory: directory, parameters: { steps: 2 } } });
       try {
         if (scale === 1) {
           const abort = new AbortController();

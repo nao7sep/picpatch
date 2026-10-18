@@ -1,11 +1,11 @@
 import { createEditor, PicPatchUsageError } from 'picpatchsdk';
 import { resolve } from 'node:path';
 
-const pythonExecutable = process.argv[2];
+const engineDirectory = process.argv[2];
 const sourceImage = process.argv[3];
 const outputPath = process.argv[4];
-if (!pythonExecutable || !sourceImage || !outputPath) throw new Error('Pass an absolute Python interpreter path, a source image, and an unused PNG output path.');
-const editor = createEditor({ pythonExecutable });
+if (!engineDirectory || !sourceImage || !outputPath) throw new Error('Pass an absolute managed engine directory, a source image, and an unused PNG output path.');
+const editor = createEditor({ engineDirectory });
 try {
   await editor.edit({
     model: 'model-to-be-selected-after-evaluation',

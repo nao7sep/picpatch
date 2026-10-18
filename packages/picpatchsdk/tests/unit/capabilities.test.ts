@@ -1,3 +1,4 @@
+import { fixtureEditor } from '../helpers/editor.ts';
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createEditor, validateEditRequest, type ModelCapabilities, type EditRequest } from '../../src/index.ts';
@@ -18,11 +19,11 @@ it('validates the full capability advertisement across the worker boundary', () 
   expect(() => validateEditRequest(fixture.cases[1]!.request, { ...fixture.capabilities, sourceImageRequired: true })).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
   expect(() => validateEditRequest(fixture.cases[0]!.request, { ...fixture.capabilities, referenceConditioning: 'native-role-controls' } as never)).toThrow(expect.objectContaining({ code: 'INVALID_CAPABILITIES' }));
 });
-it.each([{ size: { width: 17, height: 32 } }])('public editing rejects unsupported metadata before image I/O (%j)', async change => {
+it.each([{ size: { width: 17, height: 32 } }])('editing rejects unsupported metadata before image I/O (%j)', async change => {
   vi.spyOn(WorkerProcess.prototype, 'start').mockResolvedValue({ version: 1, id: 1, type: 'ready', workerVersion: 'test', models: [fixture.capabilities] });
   const edit = vi.spyOn(WorkerProcess.prototype, 'edit');
   vi.spyOn(WorkerProcess.prototype, 'dispose').mockResolvedValue();
-  const editor = createEditor({ pythonExecutable: '/unused-python' });
+  const editor = fixtureEditor({ pythonExecutable: '/unused-python' });
   const progress = vi.fn();
   try {
     await expect(editor.edit({ ...fixture.cases[0]!.request, ...change }, { onProgress: progress })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });

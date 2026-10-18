@@ -1,3 +1,4 @@
+import { fixtureEditor } from '../helpers/editor.ts';
 import { testPython } from '../helpers/python.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -26,12 +27,12 @@ it('accepts a local registration then returns a missing-runtime failure over rea
     await promisify(execFile)(uvExecutable, ['sync', '--project', 'runtimes/mflux', '--python', testPython,
       '--no-python-downloads', '--no-dev', '--no-install-project', '--locked', '--no-build', '--offline',
       '--cache-dir', cacheDirectory], { env: { ...process.env, UV_PROJECT_ENVIRONMENT: runtimeDirectory }, timeout: 30_000 });
-    const options: EditorOptions = { pythonExecutable: join(runtimeDirectory, 'bin/python'),
+    const options: Omit<EditorOptions, 'engineDirectory'> & { pythonExecutable: string } = { pythonExecutable: join(runtimeDirectory, 'bin/python'),
       model: { variant: 'flux2-klein-4b', directory, manifest: {
         version: 1, model: 'test', source: { repository: 'test', revision: 'a'.repeat(40) },
         components: [{ path: 'weights.safetensors', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
       } } };
-    editor = createEditor(options);
+    editor = fixtureEditor(options);
     await writeFile(join(directory, 'weights.safetensors'), bytes);
     expect(await inspectReadiness(options.pythonExecutable!, options.model!)).toMatchObject({ files: 'present', integrity: 'not-verified', runtime: { status: 'missing-package' } });
     const sourceImage = join(directory, 'source.png');
@@ -43,7 +44,7 @@ it('accepts a local registration then returns a missing-runtime failure over rea
 
 it('uses the model-free handshake to reject unsupported sizes before opening images', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-capabilities-'));
-  const editor = createEditor({ pythonExecutable: testPython, model: {
+  const editor = fixtureEditor({ pythonExecutable: testPython, model: {
     variant: 'flux2-klein-4b', directory, manifest: {
       version: 1, model: 'fixture', source: { repository: 'fixture', revision: 'a'.repeat(40) },
       components: [{ path: 'absent.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }],

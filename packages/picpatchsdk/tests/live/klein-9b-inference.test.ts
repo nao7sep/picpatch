@@ -1,3 +1,4 @@
+import { inferenceOptions, testEngineDirectory } from '../helpers/engine.ts';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,7 +9,7 @@ import { createEditor, prepareModel, type EditorOptions } from 'picpatchsdk';
 
 it.each([['base', 'flux2-klein-base-9b', 4, 'PICPATCH_KLEIN_BASE_CONFIG'], ['distilled', 'flux2-klein-9b', 1, 'PICPATCH_KLEIN_9B_CONFIG']] as const)('prepares the pinned %s 9B bundle and generates then edits through the public SDK', async (name, variant, guidance, variable) => {
   const configuration = process.env[variable] ?? fileURLToPath(new URL(`../../../../node_modules/.cache/picpatch-live/klein-${name}-9b-config.json`, import.meta.url));
-  const options: EditorOptions = JSON.parse(await readFile(configuration, 'utf8'));
+  const options: EditorOptions = inferenceOptions(JSON.parse(await readFile(configuration, 'utf8')));
   const prepared = await prepareModel(`${variant}-4bit`, { directory: options.model!.directory });
   expect(prepared.integrity).toBe('matches-manifest');
   expect(prepared.model.variant).toBe(variant);

@@ -1,3 +1,4 @@
+import { testEngineDirectory } from '../helpers/engine.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { copyFile, link, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
@@ -20,6 +21,7 @@ it('packs a source SDK and runs its public worker journey from an unrelated cons
     expect(files).toContain('protocol/worker.schema.json');
     expect(files).toContain('runtimes/mflux/src/picpatch_worker/backends/models.json');
     expect(files).toContain('runtimes/mflux/uv.lock');
+    expect(files).toContain('runtimes/mflux/engine_probe.py');
     expect(files).not.toContain('benchmarks/comparison.ts');
     expect(files.some(path => /(?:\.venv|node_modules|__pycache__|\.safetensors|\.gguf|\.pyc|inference-config)/.test(path))).toBe(false);
     await exec('tar', ['-xzf', join(directory, packed.filename), '-C', directory], { timeout: 30_000 });
@@ -30,10 +32,12 @@ it('packs a source SDK and runs its public worker journey from an unrelated cons
     for (const dependency of Object.keys(pkg.dependencies)) await symlink(join(workspace, 'node_modules', dependency), join(modules, dependency));
     const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(workspace, 'node_modules/.cache/picpatch-live/inference-config.json'), 'utf8'));
     const script = join(directory, 'consumer.ts');
-    await writeFile(script, `import { inspectRuntime, createEditor, listModels } from 'picpatchsdk';
-const result = await inspectRuntime(${JSON.stringify(config.pythonExecutable)});
+    await writeFile(script, `import { inspectEngine, inspectRuntime, createEditor, listModels } from 'picpatchsdk';
+const engine = await inspectEngine({engineDirectory:${JSON.stringify(testEngineDirectory)}});
+if(engine.status !== 'ready') throw new Error('Shared engine unavailable');
+const result = await inspectRuntime(engine.pythonExecutable);
 if(result.status !== 'worker-ready' || !listModels().some(model => model.id === 'sdxl-photomaker-v1')) throw new Error('Relocated runtime unavailable');
-const editor = createEditor({pythonExecutable:${JSON.stringify(config.pythonExecutable)}});
+const editor = createEditor({engineDirectory:${JSON.stringify(testEngineDirectory)}});
 try { await editor.generate({model:'unavailable',prompt:'neutral',outputPath:${JSON.stringify(join(directory, 'out.png'))}}); throw new Error('Unsupported operation accepted'); }
 catch(error) { if(error.code !== 'UNSUPPORTED_CAPABILITY') throw error; }
 finally { await editor.dispose(); }
@@ -54,7 +58,7 @@ console.log('consumer passed');\n`);
     const outputDirectory = join(directory, 'images'); await mkdir(outputDirectory);
     const native = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(workspace, 'node_modules/.cache/picpatch-live/native-inference-config.json'), 'utf8'));
     const inputs = join(directory, 'inputs.json');
-    await writeFile(inputs, JSON.stringify({ pythonExecutable: config.pythonExecutable, modelId: model.manifest.model, modelsDirectory, outputDirectory, native }));
+    await writeFile(inputs, JSON.stringify({ engineDirectory: testEngineDirectory, modelId: model.manifest.model, modelsDirectory, outputDirectory, native }));
     const journey = join(directory, 'journey.ts');
     await copyFile(join(root, 'tests/fixtures/package-consumer.ts'), journey);
     const inference = await exec(process.execPath, [journey, inputs], {

@@ -7,7 +7,7 @@ import sharp from 'sharp';
 import { createEditor, prepareModel, discoverModels, resolveStoragePaths, type EditResult } from 'picpatchsdk';
 
 const config = JSON.parse(await readFile(process.argv[2]!, 'utf8')) as {
-  pythonExecutable: string; modelId: string; outputDirectory: string; modelsDirectory: string;
+  engineDirectory: string; modelId: string; outputDirectory: string; modelsDirectory: string;
   native: { directory: string; executable: string; checkpoint: string; photoMaker: string; sd15InpaintCheckpoint: string };
 };
 assert.equal(resolveStoragePaths({ modelsDirectory: config.modelsDirectory }).modelsDirectory, config.modelsDirectory);
@@ -30,7 +30,7 @@ async function artifact(result: EditResult) {
   assert.ok((await sharp(bytes).stats()).channels.some(channel => channel.stdev > 1));
   return record;
 }
-const editor = createEditor({ pythonExecutable: config.pythonExecutable, model: prepared.model, defaults });
+const editor = createEditor({ engineDirectory: config.engineDirectory, model: prepared.model, defaults });
 let source: string;
 try {
   const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a white table.', parameters: { steps: 2 }, sidecar: {} });

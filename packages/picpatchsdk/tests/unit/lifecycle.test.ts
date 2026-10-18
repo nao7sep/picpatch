@@ -163,9 +163,9 @@ describe('owned worker lifecycle', () => {
     await vi.advanceTimersByTimeAsync(20); await caught; expect(child.closed).toBe(true);
   });
   it('validates public factory configuration without starting a process', async () => {
-    expect(() => createEditor({ pythonExecutable: 'python' })).toThrow();
-    expect(() => createEditor({ pythonExecutable: '/python', timeouts: { startupMs: 0 } })).toThrow();
-    await createEditor({ pythonExecutable: '/python' }).dispose();
+    expect(() => createEditor({ engineDirectory: 'python' })).toThrow();
+    expect(() => createEditor({ engineDirectory: '/python', timeouts: { startupMs: 0 } })).toThrow();
+    await createEditor({ engineDirectory: '/python' }).dispose();
   });
 });
 

@@ -46,8 +46,8 @@
     "protocol/*.json",
     "runtimes/mflux/pyproject.toml",
     "runtimes/mflux/uv.lock",
-    "runtimes/mflux/.python-version",
     "runtimes/mflux/src/**/*.py",
-    "runtimes/mflux/src/**/*.json"
+    "runtimes/mflux/src/**/*.json",
+    "runtimes/mflux/engine_probe.py"
   ]
 }

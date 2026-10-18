@@ -80,7 +80,7 @@ it('shares busy/disposal ownership across edit and generation and waits before c
   await expect(editor.generate(request())).rejects.toMatchObject({ code: 'DISPOSED' });
 });
 it('rejects invalid public calls and pre-cancellation without starting Python', async () => {
-  const editor = createEditor({ pythonExecutable: '/absent/python' });
+  const editor = createEditor({ engineDirectory: '/absent/python' });
   try {
     await expect(editor.generate({ ...request(), prompt: '' })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     await expect(editor.generate({ ...request(), outputPath: null } as unknown as GenerateRequest)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });

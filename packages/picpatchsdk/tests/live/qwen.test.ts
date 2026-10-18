@@ -1,3 +1,4 @@
+import { fixtureEditor } from '../helpers/editor.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -10,7 +11,7 @@ import { testPython } from '../helpers/python.ts';
 
 it('rejects Qwen total-image and geometry violations over worker pipes before image I/O', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-qwen-admission-'));
-  const editor = createEditor({ pythonExecutable: testPython, model: {
+  const editor = fixtureEditor({ pythonExecutable: testPython, model: {
     variant: 'qwen-image-2.1', directory, manifest: { version: 1, model: 'qwen', source: { repository: 'fixture', revision: 'a'.repeat(40) },
       components: [{ path: 'missing.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] },
   } });

@@ -1,3 +1,5 @@
+import { inspectEngine } from '../../src/index.ts';
+import { inferenceOptions, testEngineDirectory } from '../helpers/engine.ts';
 import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +15,7 @@ async function localOptions(): Promise<EditorOptions> {
   try { options = JSON.parse(await readFile(path, 'utf8')) as EditorOptions; }
   catch (cause) { throw new Error('Prepare the local inference test cache or set PICPATCH_INFERENCE_CONFIG to an editor-options JSON file. This test never downloads models.', { cause }); }
   if (!options.model) throw new Error('PICPATCH_INFERENCE_CONFIG must include a local model configuration.');
-  return options;
+  return inferenceOptions(options);
 }
 
 it('completes the catalog-to-edit consumer journey with existing weights and isolated owned storage', async () => {
@@ -33,10 +35,10 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
     await expect(prepareModel(selected.id, { storage })).rejects.toMatchObject({ code: 'MODEL_IO' });
     const prepared = await prepareModel(selected.id, { directory: options.model!.directory });
     expect(prepared).toMatchObject({ origin: 'external', integrity: 'matches-manifest' });
-    expect(await inspectReadiness(options.pythonExecutable!, prepared.model)).toMatchObject({
+    expect(await inspectReadiness((await managedPython()), prepared.model)).toMatchObject({
       files: 'present', runtime: { status: 'imports-ready' },
     });
-    editor = createEditor({ pythonExecutable: options.pythonExecutable!, model: prepared.model,
+    editor = createEditor({ engineDirectory: testEngineDirectory, model: prepared.model,
       defaults: { size: { width: 256, height: 256 }, seed: 42, outputDirectory: directory } });
     const images = [join(directory, 'red.png'), join(directory, 'blue.png')];
     await sharp({ create: { width: 271, height: 289, channels: 3, background: 'red' } }).png().toFile(images[0]!);
@@ -126,7 +128,7 @@ it('prepares existing catalog weights and checks actual model loading without ac
   const { prepareModel, inspectReadiness } = await import('../../src/index.ts');
   const options = await localOptions();
   const prepared = await prepareModel(options.model!.manifest.model, { directory: options.model!.directory });
-  const readiness = await inspectReadiness(options.pythonExecutable!, prepared.model, { load: true });
+  const readiness = await inspectReadiness((await managedPython()), prepared.model, { load: true });
   expect(prepared.integrity).toBe('matches-manifest');
   expect(readiness).toMatchObject({ files: 'present', integrity: 'not-verified', runtime: { status: 'load-ready', version: '0.22.0' } });
   expect(readiness.capabilities[0]?.maskMode).toBe('composite');
@@ -213,3 +215,9 @@ it('outpaints an asymmetric canvas while preserving normalized source pixels inc
     expect((await readdir(directory)).sort()).toEqual(['out.png', 'source.png']);
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
 }, 600_000);
+
+async function managedPython(): Promise<string> {
+  const engine = await inspectEngine({ engineDirectory: testEngineDirectory });
+  if (engine.status !== 'ready') throw new Error('Prepare the managed engine before the full gate.');
+  return engine.pythonExecutable;
+}

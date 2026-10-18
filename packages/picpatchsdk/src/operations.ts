@@ -39,6 +39,8 @@ export async function withDeadline<T>(signal: AbortSignal | undefined, milliseco
     checkSignal(combined);
     return result;
   } catch (cause) {
+    // Cancellation cannot erase evidence that a writer or its private files remain unsettled.
+    if (cause instanceof PicPatchRuntimeError && (cause.code === 'TERMINATION_FAILED' || cause.code === 'CLEANUP_FAILED' || cause.recoveryDirectory !== undefined)) throw cause;
     checkSignal(signal);
     if (deadline.signal.aborted) throw new PicPatchRuntimeError('TIMEOUT', message, { cause });
     throw cause;

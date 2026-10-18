@@ -33,3 +33,6 @@ export type { OutpaintCanvas, OutpaintGeometry } from './contracts.generated.ts'
 
 export type { LocalLora, LoraProvenance } from './contracts.generated.ts';
 export type { LocalControlNet, StructuralControl, ControlProvenance } from './contracts.generated.ts';
+
+export { installEngine, inspectEngine } from './runtime/engine/engine.ts';
+export type { EngineOptions, InstallEngineOptions, EngineIdentity, EngineRecord, ReadyEngine, EngineInspection, EngineInstallation } from './runtime/engine/types.ts';

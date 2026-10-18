@@ -20,7 +20,7 @@ export class NativeProcess {
     this.active = Promise.resolve().then(() => {
       checkSignal(combined);
       return new Promise<string>((resolve, reject) => {
-        const child = spawn(this.executable, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+        const child = spawn(this.executable, args, { cwd, env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'en_US.UTF-8' }, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
         let failure: Error | undefined; let output = Buffer.alloc(0); let closed = false;
         let escalation: ReturnType<typeof setTimeout> | undefined;
         let termination: ReturnType<typeof setTimeout> | undefined;

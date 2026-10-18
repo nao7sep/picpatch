@@ -7,17 +7,17 @@ const model: LocalEditingModel = {
     components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] },
 };
 it.each(['relative', '/models/\0bad'])('rejects invalid local model directory %s synchronously', directory => {
-  expect(() => createEditor({ pythonExecutable: '/python', model: { ...model, directory } })).toThrow();
+  expect(() => createEditor({ engineDirectory: '/python', model: { ...model, directory } })).toThrow();
 });
 it('rejects unsupported adapters and invalid manifests without spawning', () => {
-  expect(() => createEditor({ pythonExecutable: '/python', model: { ...model, variant: 'unknown' } as unknown as LocalEditingModel })).toThrow();
-  expect(() => createEditor({ pythonExecutable: '/python', model: { ...model, manifest: { ...model.manifest, components: [{ path: '../weights', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } } })).toThrow();
+  expect(() => createEditor({ engineDirectory: '/python', model: { ...model, variant: 'unknown' } as unknown as LocalEditingModel })).toThrow();
+  expect(() => createEditor({ engineDirectory: '/python', model: { ...model, manifest: { ...model.manifest, components: [{ path: '../weights', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } } })).toThrow();
 });
 it('validates a model registration through the shared handshake schema', () => {
   const session = new ProtocolSession();
   expect(JSON.parse(session.send({ version: 1, id: 1, type: 'hello', model }))).toEqual({ version: 1, id: 1, type: 'hello', model });
 });
 it('creating and disposing a configured editor does no file IO or inference', async () => {
-  const editor = createEditor({ pythonExecutable: '/does-not-exist', model });
+  const editor = createEditor({ engineDirectory: '/does-not-exist', model });
   await editor.dispose();
 });

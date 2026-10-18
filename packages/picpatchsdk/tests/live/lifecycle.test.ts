@@ -1,3 +1,4 @@
+import { testEngineDirectory } from '../helpers/engine.ts';
 import { testPython } from '../helpers/python.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -59,7 +60,7 @@ describe('real model-free worker processes', () => {
     await editor.dispose(); expect(children[0]!.exitCode).toBe(0);
   });
   it('exercises the public factory with the installed Python environment', async () => {
-    const editor = createEditor({ pythonExecutable: testPython });
+    const editor = createEditor({ engineDirectory: testEngineDirectory });
     editors.push(editor);
     const directory = await mkdtemp(join(tmpdir(), 'picpatch-live-'));
     const source = join(directory, 'source.png');

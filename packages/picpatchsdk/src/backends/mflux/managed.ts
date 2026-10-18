@@ -1,0 +1,41 @@
+import { dirname } from 'node:path';
+import type { EditBackend } from '../../execution/backend.ts';
+import { ProcessEditor } from '../../execution/worker-backend.ts';
+import { WorkerProcess, type WorkerTimeouts } from '../../worker/process.ts';
+import { resolveEngine } from '../../runtime/engine/engine.ts';
+import type { LocalEditingModel } from '../../contracts.generated.ts';
+import type { ImageRequest, GenerateRequest, EditRequest, OperationOptions } from '../../types.ts';
+import { PicPatchUsageError } from '../../errors.ts';
+import { checkSignal } from '../../operations.ts';
+import { workerLaunch } from './launch.ts';
+
+/** Lazy selection binds this editor to one immutable environment. Installation is always explicit. */
+export class ManagedBackend implements EditBackend {
+  private backend: ProcessEditor | undefined;
+  private opening: Promise<ProcessEditor> | undefined;
+  private disposed = false;
+  private readonly root: string;
+  private readonly model: LocalEditingModel | undefined;
+  private readonly timeouts: WorkerTimeouts;
+  constructor(root: string, model: LocalEditingModel | undefined, timeouts: WorkerTimeouts) { this.root = root; this.model = model; this.timeouts = timeouts; }
+  private open(signal?: AbortSignal): Promise<ProcessEditor> {
+    if (this.disposed) return Promise.reject(new PicPatchUsageError('DISPOSED', 'Editor has been disposed.'));
+    this.opening ??= (async () => {
+      const engine = await resolveEngine(this.root, signal);
+      checkSignal(signal);
+      if (this.disposed) throw new PicPatchUsageError('DISPOSED', 'Editor has been disposed.');
+      const installation = dirname(dirname(dirname(engine.pythonExecutable)));
+      this.backend = new ProcessEditor(new WorkerProcess({ ...workerLaunch(engine.pythonExecutable, installation), ...(this.model ? { model: this.model } : {}) }, this.timeouts), this.model);
+      return this.backend;
+    })().catch(error => { this.opening = undefined; throw error; });
+    return this.opening;
+  }
+  async validate(request: ImageRequest, options: OperationOptions = {}) { return (await this.open(options.signal)).validate(request, options); }
+  async generate(request: GenerateRequest, options: OperationOptions = {}) { return (await this.open(options.signal)).generate(request, options); }
+  async edit(request: EditRequest, options: OperationOptions = {}) { return (await this.open(options.signal)).edit(request, options); }
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    try { await this.opening; } catch { /* Admission failure started no worker. */ }
+    await this.backend?.dispose();
+  }
+}
