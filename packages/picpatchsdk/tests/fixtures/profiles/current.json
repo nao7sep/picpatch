@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "engineDirectory": "/resources/engine",
+  "modelsDirectory": "/resources/models",
+  "nativeExecutable": "/tools/sd-cli",
+  "defaults": { "seed": 42, "size": { "width": 512, "height": 512 }, "parameters": { "steps": 4 } },
+  "timeouts": { "startupMs": 30000 }
+}

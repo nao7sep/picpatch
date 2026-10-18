@@ -33,5 +33,8 @@
   "OUT_OF_MEMORY": "unavailable",
   "INTERNAL": "internal",
   "ENGINE_MISSING": "unavailable",
-  "ENGINE_INCOMPATIBLE": "unavailable"
+  "ENGINE_INCOMPATIBLE": "unavailable",
+  "PROFILE_IO": "unavailable",
+  "INPUTS_CHANGED": "invalid",
+  "DESTINATION_CHANGED": "invalid"
 }

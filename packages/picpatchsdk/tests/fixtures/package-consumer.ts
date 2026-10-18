@@ -1,10 +1,10 @@
 // Copied outside the checkout by the package gate. Only public SDK exports are available.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import sharp from 'sharp';
-import { createEditor, prepareModel, discoverModels, resolveStoragePaths, type EditResult } from 'picpatchsdk';
+import { createEditor, readProfile, prepareModel, discoverModels, resolveStoragePaths, type EditResult } from 'picpatchsdk';
 
 const config = JSON.parse(await readFile(process.argv[2]!, 'utf8')) as {
   engineDirectory: string; modelId: string; outputDirectory: string; modelsDirectory: string;
@@ -30,15 +30,23 @@ async function artifact(result: EditResult) {
   assert.ok((await sharp(bytes).stats()).channels.some(channel => channel.stdev > 1));
   return record;
 }
-const editor = createEditor({ engineDirectory: config.engineDirectory, model: prepared.model, defaults });
+const profilePath = join(config.outputDirectory, 'consumer-profile.json');
+await writeFile(profilePath, JSON.stringify({ version: 1, engineDirectory: config.engineDirectory, nativeExecutable: config.native.executable, defaults }));
+const profile = await readProfile(profilePath);
+if ('status' in profile) throw new Error(profile.code);
+const editor = createEditor({ profile, model: prepared.model });
 let source: string;
 try {
-  const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a white table.', parameters: { steps: 2 }, sidecar: {} });
+  const generation = await editor.plan({ prompt: 'A blue ceramic bowl on a white table.', parameters: { steps: 2 }, sidecar: {} });
+  if (generation.status !== 'planned') throw new Error(generation.code);
+  const generated = await editor.generate(generation);
   if ('status' in generated) throw new Error(generated.code);
   const record = await artifact(generated);
   assert.equal(record.effectiveParameters.steps, 2); assert.equal(record.inputs, undefined);
   source = generated.image.path;
-  const edited = await editor.edit({ instruction: 'Make the bowl green.', sourceImage: source, parameters: { steps: 2 }, sidecar: { includeInputs: true } });
+  const edit = await editor.plan({ instruction: 'Make the bowl green.', sourceImage: source, parameters: { steps: 2 }, sidecar: { includeInputs: true } });
+  if (edit.status !== 'planned') throw new Error(edit.code);
+  const edited = await editor.edit(edit);
   if ('status' in edited) throw new Error(edited.code);
   assert.equal((await artifact(edited)).inputs.sourceImage, basename(source));
 } finally { await editor.dispose(); }
@@ -48,9 +56,11 @@ await sharp({ create: { width: 256, height: 256, channels: 3, background: 'white
 const masked = await prepareModel('sd15-inpaint', { directory: config.native.directory, checkpoint: config.native.sd15InpaintCheckpoint });
 assert.equal(masked.origin, 'external');
 assert.equal(masked.integrity, 'locally-fingerprinted');
-const inpaint = createEditor({ nativeExecutable: config.native.executable, model: masked.model, defaults });
+const inpaint = createEditor({ profile, model: masked.model });
 try {
-  const result = await inpaint.edit({ instruction: 'A red ceramic bowl on a white table.', sourceImage: source!, maskImage, parameters: { steps: 4 }, sidecar: { includeInputs: true } });
+  const plan = await inpaint.plan({ instruction: 'A red ceramic bowl on a white table.', sourceImage: source!, maskImage, parameters: { steps: 4 }, sidecar: { includeInputs: true } });
+  if (plan.status !== 'planned') throw new Error(plan.code);
+  const result = await inpaint.edit(plan);
   if ('status' in result) throw new Error(result.code);
   const record = await artifact(result);
   assert.equal(record.inputs.maskImage, basename(maskImage));

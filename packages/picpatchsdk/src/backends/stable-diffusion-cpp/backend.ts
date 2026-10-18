@@ -30,11 +30,15 @@ export class NativeBackend implements EditBackend {
     if (!match || !nativeRevision.startsWith(match[1]!)) throw new PicPatchSdkError('BACKEND_UNAVAILABLE', 'Use the documented stable-diffusion.cpp revision.');
     this.checked = true;
   }
-  async validate(request: ImageRequest, options: OperationOptions = {}): Promise<ModelCapabilities> {
+  describe(request: ImageRequest): ModelCapabilities {
     const capabilities = nativeCapabilities(this.model.variant, this.model.manifest.model);
     if (/<lora:/i.test('prompt' in request ? request.prompt : request.instruction)) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'Prompt-embedded LoRA loading is unsupported; use prepareModel loras.');
     if ('prompt' in request) validateGenerateRequest(request, capabilities); else validateEditRequest(request, capabilities);
     if (request.control && (!this.model.controlNet || request.control.kind !== this.model.controlNet.kind)) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'Prepare the matching ControlNet asset before supplying a control map.');
+    return capabilities;
+  }
+  async validate(request: ImageRequest, options: OperationOptions = {}): Promise<ModelCapabilities> {
+    const capabilities = this.describe(request);
     await this.inspect(options.signal);
     return capabilities;
   }

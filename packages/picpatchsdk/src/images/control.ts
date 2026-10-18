@@ -1,3 +1,4 @@
+import type { ImageFingerprint } from './fingerprint.ts';
 import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -6,9 +7,9 @@ import type { ImageSize } from '../types.ts';
 import { checkCancellation, normalizeImage, snapshotImage } from './validation.ts';
 
 /** A control map describes the output coordinate system; never silently crop or resize it. */
-export async function prepareControl(image: string, directory: string, size: ImageSize, signal?: AbortSignal) {
+export async function prepareControl(image: string, directory: string, size: ImageSize, signal?: AbortSignal, expected?: ImageFingerprint) {
   const snapshot = join(directory, 'control.tmp'); const target = join(directory, 'control.png');
-  await snapshotImage(image, snapshot, signal);
+  await snapshotImage(image, snapshot, signal, false, expected);
   try {
     const metadata = await sharp(snapshot, { limitInputPixels: false, sequentialRead: true }).metadata();
     if (metadata.format !== 'png' || metadata.hasAlpha) throw new PicPatchSdkError('INVALID_IMAGE', 'Control maps must be opaque PNG images.');

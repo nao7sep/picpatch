@@ -1,3 +1,5 @@
+import { modelCapabilities } from '../../models/variants.ts';
+import { validateEditRequest, validateGenerateRequest } from '../../validation.ts';
 import { dirname } from 'node:path';
 import type { EditBackend } from '../../execution/backend.ts';
 import { ProcessEditor } from '../../execution/worker-backend.ts';
@@ -18,6 +20,12 @@ export class ManagedBackend implements EditBackend {
   private readonly model: LocalEditingModel | undefined;
   private readonly timeouts: WorkerTimeouts;
   constructor(root: string, model: LocalEditingModel | undefined, timeouts: WorkerTimeouts) { this.root = root; this.model = model; this.timeouts = timeouts; }
+  describe(request: ImageRequest) {
+    if (!this.model) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'Planning requires a prepared model.');
+    const capabilities = modelCapabilities(this.model.variant, this.model.manifest.model);
+    if ('prompt' in request) validateGenerateRequest(request, capabilities); else validateEditRequest(request, capabilities);
+    return capabilities;
+  }
   private open(signal?: AbortSignal): Promise<ProcessEditor> {
     if (this.disposed) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
     this.opening ??= (async () => {

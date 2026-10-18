@@ -2,6 +2,7 @@ import type { EventOptions } from '../../diagnostics.ts';
 
 /** Engine storage is local-disk storage. No shared-network filesystem semantics are promised. */
 export interface EngineOptions extends EventOptions {
+  profile?: import('../../profile.ts').PicPatchProfile;
   engineDirectory?: string;
   signal?: AbortSignal;
   timeoutMs?: number;

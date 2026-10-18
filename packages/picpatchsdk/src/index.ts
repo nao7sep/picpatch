@@ -37,3 +37,11 @@ export type { LocalControlNet, StructuralControl, ControlProvenance } from './co
 
 export { installEngine, inspectEngine } from './runtime/engine/engine.ts';
 export type { EngineOptions, InstallEngineOptions, EngineIdentity, EngineRecord, ReadyEngine, EngineInspection, EngineInstallation } from './runtime/engine/types.ts';
+
+export { readProfile, validateProfile } from './profile.ts';
+export type { PicPatchProfile, ProfileReadOptions, ProfileReadResult, ProfileRefusal } from './profile.ts';
+export type { WorkerTimeouts } from './worker/process.ts';
+
+export type { ImagePlan, GenerateImagePlan, EditImagePlan, PlannedImageInput } from './images/planning.ts';
+export type { ImageFingerprint } from './images/fingerprint.ts';
+export type { PlannedDestination } from './images/output.ts';

@@ -15,7 +15,7 @@ export type ImageRequest = import('./contracts.generated.ts').EditRequest | impo
 
 export interface OperationRefusal {
   status: 'refused';
-  code: 'OUTPUT_CONFLICT';
+  code: 'OUTPUT_CONFLICT' | 'INPUTS_CHANGED' | 'DESTINATION_CHANGED';
   message: string;
   effect: import('./errors.ts').ErrorEffect;
   subject: string;

@@ -31,7 +31,7 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
   }
   if (extname(request.outputPath).toLowerCase() !== '.png') throw new PicPatchSdkError('INVALID_REQUEST', 'Output must have a .png extension.');
   if (inputs.some(path => resolve(path) === resolve(request.outputPath))) {
-    throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output must not replace an input image.');
+    throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output must not replace an input image.', { subject: request.outputPath });
   }
   if (new Set(references.map(path => resolve(path))).size !== references.length) {
     throw new PicPatchSdkError('INVALID_REQUEST', 'Reference image paths must be unique across groups.');
@@ -99,6 +99,6 @@ export function validateGenerateRequest(input: unknown, capabilities?: ModelCapa
 function validateControl(request: ImageRequest, capabilities?: ModelCapabilities): void {
   if (!request.control) return;
   if (!isAbsolute(request.control.image)) throw new PicPatchSdkError('INVALID_REQUEST', 'Control image paths must be absolute.');
-  if (resolve(request.control.image) === resolve(request.outputPath)) throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output must not replace the control image.');
+  if (resolve(request.control.image) === resolve(request.outputPath)) throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output must not replace the control image.', { subject: request.outputPath });
   if (capabilities && !capabilities.controlKinds?.includes(request.control.kind)) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This model does not support the requested structural control.');
 }

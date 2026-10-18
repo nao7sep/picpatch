@@ -1,9 +1,10 @@
+import { planImage, type ImagePlan, type GenerateImagePlan, type EditImagePlan } from '../images/planning.ts';
 import { resolveGenerateRequest, resolveEditRequest, type GenerateInput, type EditDefaults, type EditInput } from '../defaults.ts';
-import { emitProgress, validateOperation, timeBudget } from '../operations.ts';
+import { emitProgress, validateOperation, timeBudget, withDeadline } from '../operations.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import type { Editor } from '../client.ts';
 import type { EditBackend } from './backend.ts';
-import type { ImageRequest, ImageOutcome, EditResult, OperationOptions } from '../types.ts';
+import type { ImageRequest, ImageOutcome, EditResult, OperationOptions, OperationRefusal } from '../types.ts';
 import { PicPatchSdkError, sdkError } from '../errors.ts';
 import { checkCancellation } from '../images/validation.ts';
 import { ImageWorkspace } from '../images/output.ts';
@@ -14,19 +15,54 @@ export class ImageEditor implements Editor {
   private readonly lifetime = new AbortController();
   private tail: Promise<void> = Promise.resolve();
   private disposal: Promise<void> | undefined;
+  private readonly plans = new WeakSet<ImagePlan>();
   private readonly defaults: EditDefaults;
   private readonly model: string | undefined;
   constructor(backend: EditBackend, defaults: EditDefaults = {}, model?: string) { this.backend = backend; this.defaults = defaults; this.model = model; }
 
-  edit(input: EditInput, options: OperationOptions = {}): Promise<ImageOutcome> {
-    return this.submit(() => resolveEditRequest(input, this.defaults, this.model), options);
+  edit(input: EditInput | EditImagePlan, options: OperationOptions = {}): Promise<ImageOutcome> {
+    const plan = this.acceptPlan(input, 'edit');
+    if (plan instanceof PicPatchSdkError) return Promise.reject(plan);
+    return this.submit(() => plan ? structuredClone(plan.request) : resolveEditRequest(input as EditInput, this.defaults, this.model), options, plan);
   }
 
-  generate(input: GenerateInput, options: OperationOptions = {}): Promise<ImageOutcome> {
-    return this.submit(() => resolveGenerateRequest(input, this.defaults, this.model), options);
+  generate(input: GenerateInput | GenerateImagePlan, options: OperationOptions = {}): Promise<ImageOutcome> {
+    const plan = this.acceptPlan(input, 'generate');
+    if (plan instanceof PicPatchSdkError) return Promise.reject(plan);
+    return this.submit(() => plan ? structuredClone(plan.request) : resolveGenerateRequest(input as GenerateInput, this.defaults, this.model), options, plan);
   }
 
-  private submit(resolve: () => ImageRequest, options: OperationOptions): Promise<ImageOutcome> {
+  plan(input: GenerateInput, options?: OperationOptions): Promise<GenerateImagePlan | OperationRefusal>;
+  plan(input: EditInput, options?: OperationOptions): Promise<EditImagePlan | OperationRefusal>;
+  plan(input: GenerateInput | EditInput, options?: OperationOptions): Promise<ImagePlan | OperationRefusal>;
+  plan(input: GenerateInput | EditInput, options: OperationOptions = {}): Promise<ImagePlan | OperationRefusal> {
+    if (this.lifetime.signal.aborted) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
+    let request: ImageRequest;
+    try {
+      validateOperation(options);
+      request = structuredClone(input && typeof input === 'object' && 'prompt' in input
+        ? resolveGenerateRequest(input, this.defaults, this.model) : resolveEditRequest(input as EditInput, this.defaults, this.model));
+    } catch (error) { const refused = refusal(error); return refused ? Promise.resolve(refused) : Promise.reject(error); }
+    const captured = { ...options, signal: AbortSignal.any([this.lifetime.signal, ...(options.signal ? [options.signal] : [])]) };
+    const pending = Promise.resolve().then(() => withDiagnostics('plan', captured, operation => withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Image planning timed out.', async signal => {
+      try {
+        if (!this.backend.describe) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This backend cannot plan without a registered model.');
+        const result = await planImage(request, this.backend.describe(request), signal);
+        this.plans.add(result);
+        return result;
+      } catch (error) { const refused = refusal(error); if (refused) return refused; throw error; }
+    })));
+    this.tail = Promise.allSettled([this.tail, pending]).then(() => {});
+    return pending;
+  }
+
+  private acceptPlan(value: unknown, operation: ImagePlan['operation']): ImagePlan | PicPatchSdkError | undefined {
+    if (!value || typeof value !== 'object' || !('status' in value)) return undefined;
+    if (!this.plans.has(value as ImagePlan) || (value as ImagePlan).operation !== operation) return new PicPatchSdkError('INVALID_REQUEST', 'Use an unchanged plan from this editor with its matching verb.');
+    return value as ImagePlan;
+  }
+
+  private submit(resolve: () => ImageRequest, options: OperationOptions, plan?: ImagePlan): Promise<ImageOutcome> {
     if (this.lifetime.signal.aborted) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
     let request: ImageRequest;
     let budget: number;
@@ -34,7 +70,7 @@ export class ImageEditor implements Editor {
       request = structuredClone(resolve());
       validateOperation(options);
       budget = timeBudget(options.timeoutMs, 1_800_000);
-    } catch (error) { return Promise.reject(error); }
+    } catch (error) { const refused = refusal(error); return refused ? Promise.resolve(refused) : Promise.reject(error); }
     const callerSignal = options.signal;
     const deadline = new AbortController();
     const signal = AbortSignal.any([this.lifetime.signal, deadline.signal, ...(options.signal ? [options.signal] : [])]);
@@ -45,7 +81,7 @@ export class ImageEditor implements Editor {
       try {
         await waitForTurn(previous, signal);
         checkCancellation(signal);
-        return await this.run(request, signal, scoped);
+        return await this.run(request, signal, scoped, plan);
       } catch (error) {
         if (deadline.signal.aborted && (error instanceof PicPatchSdkError && error.kind === 'cancelled') && !this.lifetime.signal.aborted && !callerSignal?.aborted) {
           throw new PicPatchSdkError('TIMEOUT', 'Image operation timed out.', { cause: error, effect: error.effect, details: error.details, ...(error.subject ? { subject: error.subject } : {}) });
@@ -58,17 +94,18 @@ export class ImageEditor implements Editor {
     return operation;
   }
 
-  private async run(request: ImageRequest, signal: AbortSignal, options: OperationOptions): Promise<ImageOutcome> {
+  private async run(request: ImageRequest, signal: AbortSignal, options: OperationOptions, plan?: ImagePlan): Promise<ImageOutcome> {
     let workspace: ImageWorkspace | undefined;
     let result: EditResult | undefined;
     let failure: unknown;
     try {
       checkCancellation(signal);
-      const capabilities = await this.backend.validate(request, options);
+      const capabilities = plan?.capabilities ?? await this.backend.validate(request, options);
       checkCancellation(signal);
       emitProgress(options, { type: 'progress', verb: 'prompt' in request ? 'generate' : 'edit', stage: 'preparing', message: 'Preparing image operation.' });
-      workspace = await ImageWorkspace.create(request, signal);
-      await workspace.prepare(signal, capabilities.inputGeometry, capabilities.maskMode, capabilities.defaultOutputSize);
+      workspace = await ImageWorkspace.create(request, signal, plan);
+      await workspace.prepare(signal, capabilities.inputGeometry, capabilities.maskMode, capabilities.defaultOutputSize, plan);
+      if (plan) await this.backend.validate(workspace.workerRequest, options);
       const response = 'prompt' in workspace.workerRequest
         ? await this.backend.generate(workspace.workerRequest, options)
         : await this.backend.edit(workspace.workerRequest, options);
@@ -93,8 +130,8 @@ export class ImageEditor implements Editor {
     }
     if (result) return result;
     const error = sdkError(failure ?? new PicPatchSdkError('CANCELLED', 'The operation was cancelled.'));
-    if (error.code === 'OUTPUT_CONFLICT') return { status: 'refused', code: 'OUTPUT_CONFLICT', message: error.message,
-      effect: error.effect, subject: error.subject ?? request.outputPath, details: error.details };
+    const refused = refusal(error, request.outputPath);
+    if (refused) return refused;
     throw error;
   }
 
@@ -117,4 +154,9 @@ function waitForTurn(previous: Promise<void>, signal: AbortSignal): Promise<void
     void previous.then(() => { signal.removeEventListener('abort', abort); resolve(); });
     if (signal.aborted) abort();
   });
+}
+
+function refusal(value: unknown, subject = ''): OperationRefusal | undefined {
+  if (!(value instanceof PicPatchSdkError) || !['OUTPUT_CONFLICT', 'INPUTS_CHANGED', 'DESTINATION_CHANGED'].includes(value.code)) return undefined;
+  return { status: 'refused', code: value.code as OperationRefusal['code'], message: value.message, effect: value.effect, subject: value.subject ?? subject, details: value.details };
 }

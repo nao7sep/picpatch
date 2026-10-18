@@ -12,8 +12,8 @@ async function records(path: string): Promise<ComparisonRecord[]> { return (awai
 const result: EditResult = { model: 'test', modelRevision: 'revision', runtime: { name: 'mflux', version: 'test' }, seed: 1, effectiveParameters: { steps: 2, negativePrompt: 'private words' }, image: { path: '/private/output.png', mimeType: 'image/png', size: { width: 16, height: 16 } }, references: [], sidecar: { status: 'saved', path: '/private/output.png.json' } };
 it('persists success, skips unsupported and dependent cases, and recreates a failed session', async () => {
   const path = await reportPath();
-  const first = { generate: vi.fn().mockResolvedValue(result), edit: vi.fn().mockRejectedValue(new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'private details')), dispose: vi.fn().mockResolvedValue(undefined) };
-  const next = { generate: vi.fn().mockResolvedValue(result), edit: vi.fn(), dispose: vi.fn().mockResolvedValue(undefined) };
+  const first = { plan: vi.fn(), generate: vi.fn().mockResolvedValue(result), edit: vi.fn().mockRejectedValue(new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'private details')), dispose: vi.fn().mockResolvedValue(undefined) };
+  const next = { plan: vi.fn(), generate: vi.fn().mockResolvedValue(result), edit: vi.fn(), dispose: vi.fn().mockResolvedValue(undefined) };
   vi.mocked(createEditor).mockReturnValueOnce(first).mockReturnValueOnce(next);
   await compare([{ id: 'neutral', options: {}, operations: [
     { operation: 'generate', request: { prompt: 'private prompt' } },
@@ -37,14 +37,14 @@ it('marks cancelled remainder untested without starting editors', async () => {
 });
 it('records the failure but stops when disposal cannot establish settlement', async () => {
   const path = await reportPath(); const failure = new Error('unsettled');
-  vi.mocked(createEditor).mockReturnValue({ generate: vi.fn().mockRejectedValue(new Error('failed')), edit: vi.fn(), dispose: vi.fn().mockRejectedValue(failure) });
+  vi.mocked(createEditor).mockReturnValue({ plan: vi.fn(), generate: vi.fn().mockRejectedValue(new Error('failed')), edit: vi.fn(), dispose: vi.fn().mockRejectedValue(failure) });
   await expect(compare([{ id: 'failure', options: {}, operations: [{ operation: 'generate', request: { prompt: 'neutral' } }, { operation: 'generate', request: { prompt: 'another' } }] }], path)).rejects.toBe(failure);
   expect((await records(path)).map(row => row.outcome)).toEqual(['failed']);
 });
 
 it('reports actual SDK stages without serializing progress messages', async () => {
   const path = await reportPath(); const events: Record<string, unknown>[] = [];
-  vi.mocked(createEditor).mockReturnValue({ generate: async (_request, options) => {
+  vi.mocked(createEditor).mockReturnValue({ plan: vi.fn(), generate: async (_request, options) => {
     for (const stage of ['loading', 'loading', 'generating', 'saving'] as const) options?.onProgress?.({ type: 'progress', verb: 'generate', stage, message: 'private text' });
     return result;
   }, edit: vi.fn(), dispose: vi.fn().mockResolvedValue(undefined) });

@@ -1,3 +1,4 @@
+import { validateProfile } from '../../profile.ts';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
@@ -11,9 +12,11 @@ import type { EngineIdentity, EngineInspection, EngineInstallation, EngineOption
 
 const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException)?.code ?? '');
 function validate(options: EngineOptions, install: boolean): string {
-  validateOperation(options, ['engineDirectory', 'timeoutMs', ...(install ? ['uvExecutable', 'cacheDirectory', 'pythonDirectory', 'toolDirectories', 'offline'] : [])]);
+  validateOperation(options, ['profile', 'engineDirectory', 'timeoutMs', ...(install ? ['uvExecutable', 'cacheDirectory', 'pythonDirectory', 'toolDirectories', 'offline'] : [])]);
   if ('onProgress' in options) throw new PicPatchSdkError('INVALID_REQUEST', 'Engine operations report stages through onEvent, not invented progress counts.');
-  return resolveStoragePaths(options.engineDirectory === undefined ? {} : { engineDirectory: options.engineDirectory }).engineDirectory;
+  const profile = options.profile === undefined ? undefined : validateProfile(options.profile);
+  const engineDirectory = options.engineDirectory ?? profile?.engineDirectory;
+  return resolveStoragePaths(engineDirectory === undefined ? {} : { engineDirectory }).engineDirectory;
 }
 /** Isolated environment for package managers/probes. No ambient credentials, config or cache selection. */
 function environment(installation: string): NodeJS.ProcessEnv {

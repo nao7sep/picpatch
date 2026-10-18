@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Read-only versioned profiles bundle resource locations, timeouts and editor defaults; explicit arguments win without ambient configuration.
+- Editors can plan generation/editing without launching inference, then execute the immutable decision with fixed parameters, seed, geometry and content fingerprints. Changed inputs or destinations return refusals.
+
 - Calls on an editor run in submission order, capturing arguments and applying cancellation/time budgets while waiting. Confirmed worker death allows a fresh worker on a later explicit call; failed inference is never replayed.
 - `PicPatchSdkError` replaces the separate usage/runtime/cancellation classes. `errorCodes` and `isPicPatchSdkError` expose a data-first contract with kind, effect, subject and typed details across process boundaries.
 - Image calls return `ImageOutcome`: a completed image or an `OUTPUT_CONFLICT` refusal. Sidecar failures report their own effect and never remove a published image.

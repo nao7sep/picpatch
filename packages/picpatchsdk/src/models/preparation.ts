@@ -1,3 +1,4 @@
+import { validateProfile, type PicPatchProfile } from '../profile.ts';
 import { attachMfluxLoras, validateMfluxLoras } from '../backends/mflux/loras.ts';
 import { prepareNativeModel } from '../backends/stable-diffusion-cpp/preparation.ts';
 import { withDiagnostics } from '../diagnostics.ts';
@@ -14,6 +15,7 @@ import { validateModelManifest, verifyModel } from './verification.ts';
 import type { ModelOperationOptions } from './types.ts';
 
 export interface PrepareModelOptions extends ModelOperationOptions {
+  profile?: PicPatchProfile;
   /** Use an external bundle in place, with no copying or acquisition. */
   directory?: string;
   /** Native checkpoint and optional VAE paths relative to directory. */
@@ -51,6 +53,12 @@ async function syncDirectory(path: string): Promise<void> {
 
 /** Explicit preparation only. Reuses and verifies files; never repairs existing bundles. */
 async function prepareModelOperation(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
+  if (options.profile !== undefined) {
+    const { profile: input, ...explicit } = options;
+    const profile = validateProfile(input);
+    const modelsDirectory = explicit.storage?.modelsDirectory ?? profile.modelsDirectory;
+    options = { ...explicit, storage: { ...explicit.storage, ...(modelsDirectory === undefined ? {} : { modelsDirectory }) } };
+  }
   const entry = catalogModel(id);
   if (entry.runtime.name === 'stable-diffusion.cpp') return prepareNativeModel(entry.variant, options);
   if (options.loras !== undefined) {

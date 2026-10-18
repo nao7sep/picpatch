@@ -14,9 +14,9 @@ import { WorkerProcess, type WorkerLaunch } from '../../src/worker/process.ts';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const fixture = fileURLToPath(new URL('../fixtures/lifecycle-worker.ts', import.meta.url));
 const request: EditRequest = { model: 'test', instruction: 'Edit', sourceImage: '/in.png', outputPath: '/out.png', seed: 1 };
-const editors: Editor[] = [];
+const editors: Pick<Editor, 'dispose'>[] = [];
 const children: ChildProcessWithoutNullStreams[] = [];
-function tracked(launch: WorkerLaunch): Editor {
+function tracked(launch: WorkerLaunch): ProcessEditor {
   const worker = new WorkerProcess(launch, { startupMs: 5_000, editMs: 5_000, cancellationMs: 100, shutdownMs: 1_000, terminationMs: 100 }, config => {
     const child = spawn(config.executable, config.args, { cwd: config.cwd, stdio: 'pipe', detached: process.platform !== 'win32' });
     children.push(child); return child;
