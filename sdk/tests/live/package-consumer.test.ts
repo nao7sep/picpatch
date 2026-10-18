@@ -4,13 +4,15 @@ import { promisify } from 'node:util';
 import { copyFile, link, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
+import { existsSync } from 'node:fs';
 import type { EditorOptions } from 'picpatchsdk';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import pkg from '../../package.json' with { type: 'json' };
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const workspace = fileURLToPath(new URL('../../../../', import.meta.url));
+const require = createRequire(import.meta.url);
 
 it('packs a source SDK and runs its public worker journey from an unrelated consumer directory', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-package-'));
@@ -29,8 +31,13 @@ it('packs a source SDK and runs its public worker journey from an unrelated cons
     await rename(join(directory, 'package'), join(directory, 'sdk'));
     await symlink(join(directory, 'sdk'), join(modules, 'picpatchsdk'));
     // Reuse already installed dependency packages; installing the consumer needs no network.
-    for (const dependency of Object.keys(pkg.dependencies)) await symlink(join(workspace, 'node_modules', dependency), join(modules, dependency));
-    const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(workspace, 'node_modules/.cache/picpatch-live/inference-config.json'), 'utf8'));
+    for (const dependency of Object.keys(pkg.dependencies)) {
+      const installed = require.resolve.paths(dependency)!.map(directory => join(directory, dependency))
+        .find(directory => existsSync(join(directory, 'package.json')));
+      if (!installed) throw new Error(`Install the declared dependency: ${dependency}`);
+      await symlink(installed, join(modules, dependency));
+    }
+    const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(root, 'node_modules/.cache/picpatch-live/inference-config.json'), 'utf8'));
     const script = join(directory, 'consumer.ts');
     await writeFile(script, `import { inspectEngine, inspectRuntime, createEditor, listModels } from 'picpatchsdk';
 const engine = await inspectEngine({engineDirectory:${JSON.stringify(testEngineDirectory)}});
@@ -56,7 +63,7 @@ console.log('consumer passed');\n`);
       await link(await realpath(join(model.directory, component.path)), destination);
     }
     const outputDirectory = join(directory, 'images'); await mkdir(outputDirectory);
-    const native = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(workspace, 'node_modules/.cache/picpatch-live/native-inference-config.json'), 'utf8'));
+    const native = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(root, 'node_modules/.cache/picpatch-live/native-inference-config.json'), 'utf8'));
     const inputs = join(directory, 'inputs.json');
     await writeFile(inputs, JSON.stringify({ engineDirectory: testEngineDirectory, modelId: model.manifest.model, modelsDirectory, outputDirectory, native }));
     const journey = join(directory, 'journey.ts');

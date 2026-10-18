@@ -7,7 +7,7 @@ import { expect, it } from 'vitest';
 import { createEditor, prepareModel } from 'picpatchsdk';
 import { loraWeights } from '../helpers/lora-weights.ts';
 it.each(['sd15', 'sdxl'])('applies a local LoRA at distinct scales during real native inference with path-free provenance', async variant => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/native-inference-config.json', import.meta.url)), 'utf8'));
+  const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/native-inference-config.json', import.meta.url)), 'utf8'));
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-lora-inference-'));
   try {
     await symlink(join(config.directory, variant === 'sdxl' ? config.checkpoint : config.sd15Checkpoint), join(directory, 'base.safetensors'));

@@ -29,7 +29,7 @@ async function gone(pids: number[]) {
   for (const pid of pids) expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
   expect(await children()).toEqual([]);
 }
-const root = fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/', import.meta.url));
+const root = fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/', import.meta.url));
 
 it('recovers native sessions after real loading cancellation and protects prior artifacts through repeated 512px edits', async () => {
   const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(root, 'native-inference-config.json'), 'utf8'));

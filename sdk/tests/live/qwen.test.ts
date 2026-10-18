@@ -24,7 +24,7 @@ it('rejects Qwen total-image and geometry violations over worker pipes before im
 });
 
 it('binds Qwen adapter calls to installed APIs and preserves synthetic RGBA output without weights', async () => {
-  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
   const config = JSON.parse(await readFile(path, 'utf8')) as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-qwen-api-'));
   const worker = fileURLToPath(new URL('../../runtimes/mflux/src', import.meta.url));

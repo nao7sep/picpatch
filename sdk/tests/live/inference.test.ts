@@ -10,7 +10,7 @@ import { referenceWorkload } from '../../benchmarks/reference-workload.ts';
 import { createEditor, listModels, prepareModel, inspectReadiness, discoverModels, resolveStoragePaths, type EditorOptions, type SdkEvent } from '../../src/index.ts';
 
 async function localOptions(): Promise<EditorOptions> {
-  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
   let options: EditorOptions;
   try { options = JSON.parse(await readFile(path, 'utf8')) as EditorOptions; }
   catch (cause) { throw new Error('Prepare the local inference test cache or set PICPATCH_INFERENCE_CONFIG to an editor-options JSON file. This test never downloads models.', { cause }); }

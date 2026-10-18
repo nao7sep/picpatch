@@ -9,7 +9,7 @@ import { createEditor, prepareModel, type EditorOptions } from 'picpatchsdk';
 import { kleinLoraWeights } from '../helpers/lora-weights.ts';
 
 it('applies local LoRAs to real quantized Klein generation and editing without baking or leaking paths', async () => {
-  const config: EditorOptions = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url)), 'utf8'));
+  const config: EditorOptions = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url)), 'utf8'));
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-mflux-lora-'));
   try {
     for (const component of config.model!.manifest.components) {

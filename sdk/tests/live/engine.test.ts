@@ -39,7 +39,7 @@ it('installs independent locked environments, shares only complete readiness, an
       expect(check.stdout.trim()).toBe('ok');
       expect(await readFile(join(dirname(dirname(engine.pythonExecutable)), 'pyvenv.cfg'), 'utf8')).not.toContain('/opt/homebrew');
     }
-    const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+    const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
     const config = JSON.parse(await readFile(configPath, 'utf8'));
     const editor = createEditor({ engineDirectory: options.engineDirectory, model: config.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42, parameters: { steps: 2 } } });
     try {

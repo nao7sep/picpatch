@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { it } from 'vitest';
 
 it('uses the installed Klein memory callback to release dead model stages', async () => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url)), 'utf8'));
+  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url)), 'utf8'));
   await promisify(execFile)(config.pythonExecutable, ['-c', `
 from types import SimpleNamespace
 import mlx.core as mx

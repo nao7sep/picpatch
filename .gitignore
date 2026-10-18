@@ -16,4 +16,3 @@ __pycache__/
 *.gguf
 *.ckpt
 benchmarks/results/
-packages/picpatchsdk/benchmarks/results/

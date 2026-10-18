@@ -9,7 +9,7 @@ import assets from '../fixtures/native-sdxl-assets.json' with { type: 'json' };
 
 interface Configuration { directory: string; executable: string; checkpoint: string; photoMaker: string; ipAdapter: string; ipAdapterPlus: string; clipVision: string }
 async function configuration(): Promise<Configuration> {
-  const path = process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/native-inference-config.json', import.meta.url));
+  const path = process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/native-inference-config.json', import.meta.url));
   try { return JSON.parse(await readFile(path, 'utf8')) as Configuration; }
   catch (cause) { throw new Error('Prepare the documented native SDXL test assets and PICPATCH_NATIVE_INFERENCE_CONFIG. This test never downloads weights or builds the runtime.', { cause }); }
 }

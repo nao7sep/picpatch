@@ -12,7 +12,7 @@ const prepared = await prepareModel(values.model ?? listModels()[0]!.id, {
   download: values.download,
   ...(values.directory ? { directory: values.directory } : {}),
 });
-const cache = fileURLToPath(new URL('../../../node_modules/.cache/picpatch-live/', import.meta.url));
+const cache = fileURLToPath(new URL('../node_modules/.cache/picpatch-live/', import.meta.url));
 await mkdir(cache, { recursive: true, mode: 0o700 });
 const staging = await mkdtemp(join(cache, '.config-'));
 try {

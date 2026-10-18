@@ -8,7 +8,7 @@ import sharp from 'sharp';
 import { expect, it } from 'vitest';
 
 it('composites black, white and soft masks with exact sRGB and alpha channel endpoints', async () => {
-  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
   const config = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-mask-pixels-'));
   try {
@@ -43,7 +43,7 @@ with Image.open(root / 'generated.png') as generated:
 }, 45_000);
 
 it('uses installed Fill mask conditioning with white-to-edit polarity and aligned resizing', async () => {
-  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
   const config = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-fill-conditioning-'));
   try {
