@@ -6,7 +6,7 @@ export { PicPatchSdkError, isPicPatchSdkError, errorCodes } from './errors.ts';
 export type { PicPatchSdkErrorData, SdkErrorOptions, ErrorCode, ErrorKind, ErrorEffect, ErrorDetails } from './errors.ts';
 
 export { inspectModel, discoverModels } from './models/inspection.ts';
-export type { ModelInspection, LocalModelFile, ModelIssue, ModelDiscovery, ModelOperationOptions } from './models/types.ts';
+export type { ModelInspection, LocalModelFile, ModelIssue, ModelDiscovery, ModelDiscoveryFailure, ModelOperationOptions } from './models/types.ts';
 export { validateModelManifest, verifyModel } from './models/verification.ts';
 export type { ModelManifest, ModelComponent, ModelVerification, ModelVerificationOptions, VerifiedComponent } from './models/types.ts';
 export { inspectRuntime } from './runtime/inspection.ts';
@@ -57,3 +57,6 @@ export type { Logged, LogResult, LogOutcome } from './logging.ts';
 
 export { saveArtifact } from './images/saving.ts';
 export type { SaveArtifactOptions, SavedArtifact, SaveArtifactRefusal } from './images/saving.ts';
+
+export { removeModel } from './models/managed.ts';
+export type { ManagedModelEntry, RemoveModelResult } from './models/managed.ts';

@@ -29,7 +29,9 @@ export interface ModelOperationOptions extends EventOptions {
 }
 export interface ModelDiscovery {
   models: ModelInspection[];
+  failures?: ModelDiscoveryFailure[];
 }
+export interface ModelDiscoveryFailure { path: string; error: import('../errors.ts').PicPatchSdkErrorData }
 
 export type { ModelManifest, ModelComponent } from '../contracts.generated.ts';
 export interface ModelVerification {

@@ -80,7 +80,8 @@ export function saveArtifact(imagePath: string, outputPath: string, input: Artif
         status: 'refused', code: cause.code === 'OUTPUT_CONFLICT' ? 'OUTPUT_CONFLICT' : 'ARTIFACT_MISMATCH', message: cause.message,
         effect: cause.effect, subject: cause.subject ?? imagePath, details: cause.details,
       };
-      throw cause;
+      if (cause instanceof PicPatchSdkError) throw cause;
+      throw new PicPatchSdkError('OUTPUT_IO', 'Could not save the image artifact.', { cause, subject: outputPath });
     }
   });
 }

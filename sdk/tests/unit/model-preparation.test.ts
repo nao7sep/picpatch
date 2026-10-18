@@ -11,8 +11,8 @@ import type { CatalogModel } from '../../src/models/catalog.ts';
 let directory: string;
 let entry: CatalogModel;
 const storage = () => ({ modelsDirectory: join(directory, 'models') });
-const prepareModel: typeof preparePublicModel = (id, options = {}) => preparePublicModel(id, { storage: storage(), ...options });
-const prepareCatalogModel: typeof prepareCatalog = (entry, options, fetcher) => prepareCatalog(entry, { storage: storage(), ...options }, fetcher);
+const prepareModel: typeof preparePublicModel = (id, options = {}) => preparePublicModel(id, { ...storage(), ...options });
+const prepareCatalogModel: typeof prepareCatalog = (entry, options, fetcher) => prepareCatalog(entry, { ...storage(), ...options }, fetcher);
 const bytes = Buffer.from('small fixture');
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-prepare-'));

@@ -11,7 +11,7 @@ import { validateModelManifest, verifyModelOperation as verifyModel } from './ve
 
 /** Fingerprint a caller-selected MFLUX bundle. This records bytes, not upstream authenticity. */
 export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'variant'>, options: PrepareModelOptions): Promise<PreparedModel> {
-  validateOperation(options, ['timeoutMs', 'directory', 'download', 'storage']);
+  validateOperation(options, ['timeoutMs', 'directory', 'download', 'modelsDirectory']);
   if (options.download !== undefined && typeof options.download !== 'boolean') throw new PicPatchSdkError('INVALID_REQUEST', 'download must be a boolean.');
   if (!options.directory || options.download) throw new PicPatchSdkError('INVALID_REQUEST', 'This variant requires a local directory and does not offer downloads.');
   absolutePath(options.directory);

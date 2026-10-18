@@ -1,11 +1,11 @@
+import { managedEntries, managedRoot as root, type ManagedModelEntry } from './managed.ts';
 import { constants } from 'node:fs';
 import { open, realpath, stat } from '../storage.ts';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { withDiagnostics, type EventOptions } from '../diagnostics.ts';
 import { PicPatchSdkError, sdkError, type PicPatchSdkErrorData } from '../errors.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
-import { resolveStoragePaths } from '../paths.ts';
-import { validateProfile, type PicPatchProfile } from '../profile.ts';
+import type { PicPatchProfile } from '../profile.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
 import { catalogModel, listModels } from './catalog.ts';
 import { validateLocalEditingModel } from './verification.ts';
@@ -40,7 +40,7 @@ export interface ModelOpenRefusal {
 }
 export type ModelOpenResult = OpenedModel | ModelOpenRefusal;
 export interface ModelInventoryFailure { status: 'failed'; error: PicPatchSdkErrorData }
-export interface ManagedModelInventory { models: { id: string; directory: string; status: 'present' | 'missing' | 'incomplete' | 'failed'; result: ModelOpenResult | ModelInventoryFailure }[] }
+export interface ManagedModelInventory { entries: ManagedModelEntry[]; models: { id: string; directory: string; status: 'present' | 'missing' | 'incomplete' | 'failed'; result: ModelOpenResult | ModelInventoryFailure }[] }
 
 export function validateModelRegistration(value: unknown): ModelRegistration {
   if (!value || typeof value !== 'object' || Array.isArray(value) || (value as ModelRegistration).version !== 1) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model registration.');
@@ -49,11 +49,6 @@ export function validateModelRegistration(value: unknown): ModelRegistration {
 function unsupported(value: unknown): ModelOpenRefusal | undefined {
   const version = (value as { version?: unknown } | null)?.version;
   if (typeof version === 'number' && Number.isInteger(version) && version !== 1) return { status: 'refused', code: 'MODEL_REGISTRATION_VERSION_UNSUPPORTED', message: 'This model registration version is unsupported.', effect: 'none', issues: [] };
-}
-function root(options: ModelOpenOptions): string {
-  const profile = options.profile === undefined ? undefined : validateProfile(options.profile);
-  const modelsDirectory = options.modelsDirectory ?? profile?.modelsDirectory;
-  return resolveStoragePaths(modelsDirectory === undefined ? {} : { modelsDirectory }).modelsDirectory;
 }
 async function presence(registration: ModelRegistration, signal?: AbortSignal): Promise<ModelOpenResult> {
   const model = registration.model;
@@ -124,11 +119,15 @@ export function inspectModels(options: ModelOpenOptions = {}): Promise<import('.
   return withDiagnostics('inspectModels', options, operation => boundary(operation, async signal => {
     if (operation.directory !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Inventory takes a model root, not one bundle directory.');
     const models: ManagedModelInventory['models'] = [];
+    const entries: ManagedModelEntry[] = [];
     for (const entry of listModels()) {
       if (entry.acquisition !== 'pinned') continue;
       const registration = select(entry.id, operation) as ModelRegistration;
       let result: ModelOpenResult;
-      try { result = await presence(registration, signal); }
+      try {
+        entries.push(...await managedEntries(root(operation), entry.id, entry.manifest.source.revision, signal));
+        result = await presence(registration, signal);
+      }
       catch (cause) {
         checkSignal(signal);
         const error = sdkError(cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('MODEL_IO', 'Could not inspect this model bundle.', { cause, subject: registration.model.directory }));
@@ -138,6 +137,6 @@ export function inspectModels(options: ModelOpenOptions = {}): Promise<import('.
       const missing = result.status === 'refused' && result.issues.every(issue => issue.code === 'MODEL_FILE_MISSING');
       models.push({ id: entry.id, directory: registration.model.directory, status: result.status === 'ready' ? 'present' : missing ? 'missing' : 'incomplete', result });
     }
-    return { models };
+    return { models, entries };
   }));
 }

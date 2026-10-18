@@ -24,7 +24,7 @@ it('keeps explicit roots independent, literal and usable side by side', async ()
 });
 it('does not treat a broken explicit directory link as an empty cache', async () => {
   const path = join(directory, 'broken'); await symlink(join(directory, 'absent'), path);
-  await expect(discoverModels([path])).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
+  expect(await discoverModels([path])).toMatchObject({ models: [], failures: [{ path, error: { code: 'FILE_NOT_FOUND' } }] });
 });
 it.each([null, [], { unknown: true }, { engineDirectory: null }, { modelsDirectory: '' }, { modelsDirectory: 'relative' }, { modelsDirectory: '~/models' }, { engineDirectory: '\0' }])('rejects invalid resource locations %j', options => {
   expect(() => resolveStoragePaths(options as never)).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));

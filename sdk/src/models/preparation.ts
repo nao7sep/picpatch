@@ -8,7 +8,7 @@ import { chmod, lstat, mkdir, mkdtemp, open, rename, rm } from '../storage.ts';
 import { dirname, join } from 'node:path';
 import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
-import { resolveStoragePaths, type StorageOptions } from '../paths.ts';
+import { resolveStoragePaths } from '../paths.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
 import { catalogModel, type CatalogModel } from './catalog.ts';
 import { prepareExternalModel } from './external.ts';
@@ -32,7 +32,7 @@ export interface PrepareModelOptions extends ModelOperationOptions {
   loras?: import('../contracts.generated.ts').LocalLora[];
   /** Explicit opt-in for a missing catalog bundle; false by default. */
   download?: boolean;
-  storage?: StorageOptions;
+  modelsDirectory?: string;
 }
 export interface PreparedModel extends ModelRegistration {
   model: LocalEditingModel;
@@ -55,20 +55,20 @@ async function syncDirectory(path: string): Promise<void> {
 
 /** Explicit preparation only. Reuses and verifies files; never repairs existing bundles. */
 async function prepareModelOperation(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
-  validateOperation(options, ['profile', 'directory', 'download', 'storage', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'loras', 'controlNet']);
-  if (options.storage !== undefined) resolveStoragePaths(options.storage);
+  validateOperation(options, ['profile', 'directory', 'download', 'modelsDirectory', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'loras', 'controlNet']);
+  if (options.modelsDirectory !== undefined) absolutePath(options.modelsDirectory);
   const entry = catalogModel(id);
   if (options.profile !== undefined) {
     const { profile: input, ...explicit } = options;
     const profile = validateProfile(input);
-    const modelsDirectory = explicit.storage?.modelsDirectory ?? profile.modelsDirectory;
+    const modelsDirectory = explicit.modelsDirectory ?? profile.modelsDirectory;
     options = entry.acquisition === 'pinned'
-      ? { ...explicit, storage: { ...explicit.storage, ...(modelsDirectory === undefined ? {} : { modelsDirectory }) } }
+      ? { ...explicit, ...(modelsDirectory === undefined ? {} : { modelsDirectory }) }
       : explicit;
   }
   if (entry.runtime.name === 'stable-diffusion.cpp') {
     // Resource defaults do not redirect a caller-owned native bundle.
-    const { storage: _storage, ...nativeOptions } = options;
+    const { modelsDirectory: _modelsDirectory, ...nativeOptions } = options;
     return prepareNativeModel(entry.variant, nativeOptions);
   }
   if (options.loras !== undefined) {
@@ -92,11 +92,11 @@ async function prepareModelOperation(id: string, options: PrepareModelOptions = 
 /** Internal catalog/transport boundary used with tiny fixture bundles in acquisition tests. */
 export async function prepareCatalogModel(entry: CatalogModel, options: PrepareModelOptions, fetcher: typeof fetch = fetch): Promise<PreparedModel> {
   entry = { ...entry, manifest: validateModelManifest(entry.manifest) };
-  validateOperation(options, ['timeoutMs', 'directory', 'download', 'storage']);
+  validateOperation(options, ['timeoutMs', 'directory', 'download', 'modelsDirectory']);
   if (options.download !== undefined && typeof options.download !== 'boolean') throw new PicPatchSdkError('INVALID_REQUEST', 'download must be a boolean.');
   if (options.directory !== undefined) absolutePath(options.directory);
   if (options.directory !== undefined && options.download) throw new PicPatchSdkError('INVALID_REQUEST', 'External bundles cannot be downloaded or repaired in place.');
-  const paths = resolveStoragePaths(options.storage);
+  const paths = resolveStoragePaths(options.modelsDirectory === undefined ? {} : { modelsDirectory: options.modelsDirectory });
   const budget = timeBudget(options.timeoutMs, 3_600_000);
   // Catalog identity, not caller-controlled filesystem syntax, determines the cache key.
   if (!/^[a-z0-9-]+$/.test(entry.id)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid catalog ID.');

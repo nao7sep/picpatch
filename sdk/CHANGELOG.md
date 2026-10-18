@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Model preparation now takes modelsDirectory directly, matching opening and inventory. Discovery reports individual inaccessible locations without discarding other results. Managed inventory includes older revisions and incomplete attempts; removeModel explicitly detaches and removes one managed directory without traversing external links.
+
 - Add saveArtifact for verified byte-preserving PNG saves with independently published private sidecars, using the same exclusive publication boundary as inference.
 
 - Shared profiles work with native model preparation without redirecting external bundles. Undefined profile timeouts inherit defaults, malformed preparation options report invalid calls, and runtime-readiness and external-model types are available from the public entry.

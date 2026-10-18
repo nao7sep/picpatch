@@ -23,7 +23,7 @@ it('imports and uses the public read-only journey without creating owned storage
   expect(sdk.resolveStoragePaths({ modelsDirectory: join(directory, 'models'), engineDirectory: join(directory, 'engine') })).toEqual({ engineDirectory: join(directory, 'engine'), modelsDirectory: join(directory, 'models') });
   await mkdir(join(directory, 'models'));
   expect(await sdk.discoverModels([join(directory, 'models')])).toEqual({ models: [] });
-  await expect(sdk.prepareModel(selected.id, { download: false, storage: { modelsDirectory: join(directory, 'models') } })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(sdk.prepareModel(selected.id, { download: false, modelsDirectory: join(directory, 'models') })).rejects.toMatchObject({ code: 'MODEL_IO' });
   const editor = sdk.createEditor({ engineDirectory: join(directory, 'absent-python') });
   await editor.dispose();
   expect(await readdir(directory)).toEqual(['models']);

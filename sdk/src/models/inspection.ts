@@ -3,7 +3,7 @@ import { resolveStoragePaths } from '../paths.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { lstat, stat, realpath, opendir } from '../storage.ts';
 import { basename, extname, isAbsolute, join, normalize, relative, sep } from 'node:path';
-import { PicPatchSdkError } from '../errors.ts';
+import { PicPatchSdkError, sdkError } from '../errors.ts';
 import type { LocalModelFile, ModelDiscovery, ModelInspection, ModelIssue, ModelOperationOptions } from './types.ts';
 
 const validatePath: typeof absolutePath = absolutePath;
@@ -89,11 +89,12 @@ async function discoverModelsOperation(roots?: string[], options: ModelOperation
   return withDeadline(options.signal, timeBudget(options.timeoutMs, 60_000), 'Model discovery timed out.', signal => {
     const operation = { ...options, signal };
     return boundary(async () => {
-      const models: ModelInspection[] = []; const visited = new Set<string>();
+      const models: ModelInspection[] = []; const failures: NonNullable<ModelDiscovery['failures']> = []; const visited = new Set<string>();
       const pending = [...selected].reverse();
       while (pending.length) {
         check(operation);
         const path = pending.pop()!;
+        try {
         let resolved: string;
         try { resolved = await realpath(path); }
         catch (cause) {
@@ -131,6 +132,11 @@ async function discoverModelsOperation(roots?: string[], options: ModelOperation
           models.push(await inspect(path, operation, 'discoverModels'));
           // The whole candidate is one model bundle, not one model per component.
         } else pending.push(...children.sort().reverse());
+        } catch (cause) {
+          check(operation);
+          const error = sdkError(cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('MODEL_IO', 'Could not inspect this model location.', { cause, subject: path }));
+          failures.push({ path, error: error.toJSON() });
+        }
       }
       check(operation);
       // Overlapping explicit roots must not return a component twice.
@@ -139,7 +145,7 @@ async function discoverModelsOperation(roots?: string[], options: ModelOperation
         const child = relative(other.resolvedPath, model.resolvedPath);
         return child !== '' && child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
       }));
-      return { models: bundles.sort((a, b) => a.path.localeCompare(b.path)) };
+      return { models: bundles.sort((a, b) => a.path.localeCompare(b.path)), ...(failures.length ? { failures } : {}) };
     }, operation);
   });
 }
