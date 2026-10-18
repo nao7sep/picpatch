@@ -1,7 +1,9 @@
+import { nativeRelease } from '../../runtime/engine/native-release.ts';
 import type { ModelCapabilities } from '../../contracts.generated.ts';
 
 /** Source-audited CLI contract; native inference evidence remains separate. */
-export const nativeRevision = '68285df319457e2d79310b48513e4ba1bf8ebe9a';
+export { nativeRevision };
+const nativeRevision = nativeRelease.revision;
 export const nativeVariants = ['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint', 'sdxl-photomaker-v1', 'sd15-ip-adapter', 'sdxl-ip-adapter', 'sd15-ip-adapter-plus', 'sdxl-ip-adapter-plus'] as const;
 export function isNativeVariant(variant: string): boolean { return (nativeVariants as readonly string[]).includes(variant); }
 export function nativeCapabilities(variant: string, model: string = variant): ModelCapabilities {

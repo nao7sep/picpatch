@@ -7,7 +7,7 @@ import { expect, it } from 'vitest';
 import { createEditor, prepareModel, inspectReadiness } from '../../src/index.ts';
 import { nativeRevision } from '../../src/backends/stable-diffusion-cpp/models.ts';
 
-async function fixture(revision = nativeRevision) {
+async function fixture(revision: string = nativeRevision) {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-native-pipes-'));
   const png = await sharp({ create: { width: 16, height: 16, channels: 3, background: 'blue' } }).png().toBuffer();
   const executable = join(directory, 'sd-cli');

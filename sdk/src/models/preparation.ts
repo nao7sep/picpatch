@@ -12,7 +12,7 @@ import { resolveStoragePaths } from '../paths.ts';
 import type { LocalEditingModel } from '../contracts.generated.ts';
 import { catalogModel, type CatalogModel } from './catalog.ts';
 import { prepareExternalModel } from './external.ts';
-import { downloadFile } from './download.ts';
+import { downloadFile } from '../runtime/download.ts';
 import { validateModelManifest, verifyModelOperation as verifyModel } from './verification.ts';
 import type { ModelOperationOptions } from './types.ts';
 

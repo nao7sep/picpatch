@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add explicit native engine inspection and installation for the pinned official Apple Silicon build (macOS 26+), with integrity/architecture checks and complete-directory publication. Model and runtime acquisition share bounded HTTPS transport.
+
 - Model preparation now takes modelsDirectory directly, matching opening and inventory. Discovery reports individual inaccessible locations without discarding other results. Managed inventory includes older revisions and incomplete attempts; removeModel explicitly detaches and removes one managed directory without traversing external links.
 
 - Add saveArtifact for verified byte-preserving PNG saves with independently published private sidecars, using the same exclusive publication boundary as inference.

@@ -60,3 +60,6 @@ export type { SaveArtifactOptions, SavedArtifact, SaveArtifactRefusal } from './
 
 export { removeModel } from './models/managed.ts';
 export type { ManagedModelEntry, RemoveModelResult } from './models/managed.ts';
+
+export { inspectNativeEngine, installNativeEngine } from './runtime/engine/native.ts';
+export type { ReadyNativeEngine, NativeEngineInspection, NativeEngineInstallation } from './runtime/engine/native.ts';
