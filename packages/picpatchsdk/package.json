@@ -1,0 +1,53 @@
+{
+  "name": "picpatchsdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PicPatchSdk: local image generation and editing.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@12.2.0",
+  "license": "GPL-3.0-or-later",
+  "author": "Yoshinao Inoguchi <yoshinao@inoguchi.com>",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "npm run contracts:check && npm run typecheck && vitest run && npm run test:python",
+    "test:coverage": "npm run contracts:check && npm run typecheck && vitest run --coverage",
+    "example:request": "tsx examples/edit-request.ts",
+    "contracts:generate": "node scripts/generate-contracts.mjs",
+    "contracts:check": "node scripts/generate-contracts.mjs --check",
+    "test:python": "uv run --project runtimes/mflux --locked pytest tests/unit/worker",
+    "test:python:coverage": "uv run --project runtimes/mflux --locked pytest tests/unit/worker --cov=picpatch_worker --cov-report=term-missing --cov-config=runtimes/mflux/pyproject.toml --cov-report=html:coverage/python",
+    "test:full": "npm test && vitest run --config vitest.live.config.ts",
+    "example:worker": "tsx examples/worker-session.ts"
+  },
+  "devDependencies": {
+    "@babel/parser": "^7.29.9",
+    "@types/node": "^26.6.5",
+    "@vitest/coverage-v8": "^5.0.5",
+    "json-schema-to-typescript": "^16.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "sharp": "^0.35.5",
+    "stream-json": "^3.7.0"
+  },
+  "files": [
+    "src/",
+    "protocol/*.json",
+    "runtimes/mflux/pyproject.toml",
+    "runtimes/mflux/uv.lock",
+    "runtimes/mflux/.python-version",
+    "runtimes/mflux/src/**/*.py",
+    "runtimes/mflux/src/**/*.json"
+  ]
+}
