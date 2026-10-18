@@ -13,6 +13,16 @@ beforeEach(async () => {
 });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
 
+it('uses a shared profile for native preparation without redirecting or creating model storage', async () => {
+  const options = { directory, checkpoint: 'custom.safetensors' };
+  const expected = await prepareModel('sdxl', options);
+  const profile = { version: 1 as const, modelsDirectory: join(directory, 'profile-models'), engineDirectory: join(directory, 'engine') };
+  expect(await prepareModel('sdxl', { ...options, profile })).toEqual(expected);
+  expect(await prepareModel('sdxl', { ...options, profile, storage: { modelsDirectory: join(directory, 'explicit-models') } })).toEqual(expected);
+  await expect(prepareModel('sdxl', { ...options, storage: { modelsDirectory: 'relative' } })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  expect((await readdir(directory)).sort()).toEqual(['custom.safetensors', 'vae.gguf']);
+});
+
 it.each(['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint'])('prepares explicit %s files without copying, installing or claiming inference evidence', async id => {
   await nativeCheckpoint(join(directory, 'custom.safetensors'), id);
   const before = await readdir(directory);

@@ -33,8 +33,8 @@ export function validateProfile(value: unknown): PicPatchProfile {
   if (profile.version !== 1) throw new PicPatchSdkError('INVALID_REQUEST', 'Unsupported profile version.');
   for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) if (profile[key] !== undefined) absolutePath(profile[key]);
   if (profile.defaults !== undefined) validateDefaults(profile.defaults);
-  if (profile.timeouts !== undefined) validateTimeouts(profile.timeouts);
-  return structuredClone(profile);
+  const timeouts = profile.timeouts === undefined ? undefined : validateTimeouts(profile.timeouts);
+  return { ...structuredClone(profile), ...(timeouts ? { timeouts } : {}) };
 }
 
 /** Undefined explicit values inherit; nested sampling and timeout overrides merge by field. */

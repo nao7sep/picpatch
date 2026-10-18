@@ -38,6 +38,10 @@ it('requires explicit acquisition and rejects unknown catalog IDs without creati
   await expect(prepareModel('unknown', { download: true })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   expect(await readdir(directory)).toEqual([]);
 });
+it.each([null, [], 1])('classifies malformed preparation options as invalid input: %j', async options => {
+  await expect(preparePublicModel('sdxl', options as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST', kind: 'invalid', effect: 'none' });
+  expect(await readdir(directory)).toEqual([]);
+});
 it('publishes only verified bundles, tightens permissions and reuses without fetching', async () => {
   const fetcher = source();
   await mkdir(join(directory, 'models'), { mode: 0o755 });

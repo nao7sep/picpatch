@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Shared profiles work with native model preparation without redirecting external bundles. Undefined profile timeouts inherit defaults, malformed preparation options report invalid calls, and runtime-readiness and external-model types are available from the public entry.
+
 - Bound stalled filesystem/native-image waits while retaining pending-write ownership and recovery locations. Late completion cannot resume expired work; optional sidecar settlement remains independent of the saved image.
 
 - Separate stage events from throttled counted progress, add optional exclusive JSONL logs with bounded best-effort flush, and return parsed profile/record/registration data in named read-result fields. Enforce Python worker package/ambient-state boundaries and declare directly imported runtime dependencies.

@@ -34,6 +34,11 @@ it('uses explicit resource paths ahead of profiles and never discovers ambient s
   await expect(prepareModel(listModels()[0]!.id, { profile })).rejects.toMatchObject({ code: 'MODEL_IO' });
   expect(await readdir(directory)).toEqual([]);
 });
+it('omits undefined profile timeout fields so they cannot erase worker defaults', () => {
+  const profile = { version: 1, timeouts: { startupMs: undefined, editMs: 50 } };
+  expect(validateProfile(profile)).toEqual({ version: 1, timeouts: { editMs: 50 } });
+  expect(Object.hasOwn(profile.timeouts, 'startupMs')).toBe(true);
+});
 it('contains missing, malformed, relative and cancelled profile reads', async () => {
   await expect(readProfile('relative')).rejects.toMatchObject({ kind: 'invalid' });
   await expect(readProfile(join(directory, 'absent'))).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });

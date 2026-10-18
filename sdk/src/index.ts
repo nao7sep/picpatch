@@ -16,12 +16,13 @@ export type { LocalEditingModel } from './contracts.generated.ts';
 export { resolveStoragePaths } from './paths.ts';
 export type { StorageOptions, StoragePaths } from './paths.ts';
 export { listModels } from './models/catalog.ts';
-export type { ModelVariant } from './models/variants.ts';
+export type { ModelVariant, ExternalModel } from './models/variants.ts';
 export type { CatalogModel, ModelSelection } from './models/catalog.ts';
 export { prepareModel } from './models/preparation.ts';
 export type { PrepareModelOptions, PreparedModel } from './models/preparation.ts';
 export { inspectReadiness } from './runtime/readiness.ts';
 export type { ReadinessOptions, ModelReadiness } from './runtime/readiness.ts';
+export type { RuntimeCheck } from './worker/protocol.ts';
 
 export type { GenerateInput, EditInput, EditDefaults } from './defaults.ts';
 export type { SdkEvent, EventOptions, WorkerDiagnostic } from './diagnostics.ts';

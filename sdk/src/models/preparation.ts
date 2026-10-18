@@ -55,14 +55,22 @@ async function syncDirectory(path: string): Promise<void> {
 
 /** Explicit preparation only. Reuses and verifies files; never repairs existing bundles. */
 async function prepareModelOperation(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
+  validateOperation(options, ['profile', 'directory', 'download', 'storage', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'loras', 'controlNet']);
+  if (options.storage !== undefined) resolveStoragePaths(options.storage);
+  const entry = catalogModel(id);
   if (options.profile !== undefined) {
     const { profile: input, ...explicit } = options;
     const profile = validateProfile(input);
     const modelsDirectory = explicit.storage?.modelsDirectory ?? profile.modelsDirectory;
-    options = { ...explicit, storage: { ...explicit.storage, ...(modelsDirectory === undefined ? {} : { modelsDirectory }) } };
+    options = entry.acquisition === 'pinned'
+      ? { ...explicit, storage: { ...explicit.storage, ...(modelsDirectory === undefined ? {} : { modelsDirectory }) } }
+      : explicit;
   }
-  const entry = catalogModel(id);
-  if (entry.runtime.name === 'stable-diffusion.cpp') return prepareNativeModel(entry.variant, options);
+  if (entry.runtime.name === 'stable-diffusion.cpp') {
+    // Resource defaults do not redirect a caller-owned native bundle.
+    const { storage: _storage, ...nativeOptions } = options;
+    return prepareNativeModel(entry.variant, nativeOptions);
+  }
   if (options.loras !== undefined) {
     validateMfluxLoras(options.loras);
     const loras = structuredClone(options.loras);
