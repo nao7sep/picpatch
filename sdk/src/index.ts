@@ -54,3 +54,6 @@ export { readArtifactRecord, verifyArtifact, validateArtifactRecord } from './im
 export type { ArtifactReadOptions, ArtifactRefusal, ArtifactVerification } from './images/records.ts';
 
 export type { Logged, LogResult, LogOutcome } from './logging.ts';
+
+export { saveArtifact } from './images/saving.ts';
+export type { SaveArtifactOptions, SavedArtifact, SaveArtifactRefusal } from './images/saving.ts';

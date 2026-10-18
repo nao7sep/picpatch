@@ -1,3 +1,4 @@
+import { publishComplete } from './publication.ts';
 import { storageRecovery, storageCleanup } from '../storage.ts';
 import type { ArtifactRecord } from '../contracts.generated.ts';
 import type { ImageResult } from '../types.ts';
@@ -6,7 +7,7 @@ import { prepareControl } from './control.ts';
 import { prepareOutpaint } from './outpaint.ts';
 import { createArtifactRecord, publishSidecar, sidecarPath } from './sidecar.ts';
 import { basename, dirname, join } from 'node:path';
-import { chmod, link, lstat, mkdtemp, open, realpath, rm, stat } from '../storage.ts';
+import { lstat, mkdtemp, realpath, rm, stat } from '../storage.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import type { ImageRequest, InputGeometry, ModelCapabilities } from '../types.ts';
 import type { EditResult } from '../contracts.generated.ts';
@@ -126,23 +127,10 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     if (this.outpaint) saved.outpaint = structuredClone(this.outpaint);
     const record = await createArtifactRecord(this.request, saved, complete, this.fingerprints, caller);
     const published: ImageResult = { ...saved, record };
-    try {
-      await chmod(complete, 0o600);
-      const file = await open(complete, 'r');
-      try { await file.sync(); } finally { await file.close(); }
-      checkCancellation(signal);
-      // A hard link atomically publishes a complete file and fails if any entry already exists.
-      // No overwriting rename or copy fallback is permitted.
-      await link(complete, this.destination);
-    } catch (cause) {
-      if ((cause instanceof PicPatchSdkError && cause.kind === 'cancelled')) throw cause;
-      this.retain = true;
-      const error = (cause as NodeJS.ErrnoException).code === 'EEXIST'
-        ? new PicPatchSdkError('OUTPUT_CONFLICT', 'Output appeared during the operation; the completed image was retained.', { cause })
-        : new PicPatchSdkError('OUTPUT_IO', 'Could not publish atomically; the completed image was retained.', { cause });
-      error.details.recoveryDirectory = this.directory;
-      error.effect = 'unknown';
-      throw error;
+    try { await publishComplete(complete, this.destination, this.directory, signal); }
+    catch (cause) {
+      if (cause instanceof PicPatchSdkError && cause.details.recoveryDirectory) this.retain = true;
+      throw cause;
     }
     // Publication wins later cancellation. Sidecar failure cannot undo the image.
     if (this.request.sidecar) published.sidecar = await publishSidecar(record, sidecarPath(this.request.outputPath), sidecarPath(this.destination), this.directory);
@@ -157,7 +145,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
 
 export interface PlannedDestination { path: string; identity: string }
 /** Read-only preflight; exclusive publication remains the authority over racing writers. */
-export async function inspectDestination(request: ImageRequest, signal?: AbortSignal): Promise<PlannedDestination> {
+export async function inspectDestination(request: Pick<ImageRequest, 'outputPath'>, signal?: AbortSignal): Promise<PlannedDestination> {
   checkCancellation(signal);
   let parent: string;
   try { parent = await realpath(dirname(request.outputPath)); }

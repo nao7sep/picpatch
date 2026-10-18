@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add saveArtifact for verified byte-preserving PNG saves with independently published private sidecars, using the same exclusive publication boundary as inference.
+
 - Shared profiles work with native model preparation without redirecting external bundles. Undefined profile timeouts inherit defaults, malformed preparation options report invalid calls, and runtime-readiness and external-model types are available from the public entry.
 
 - Bound stalled filesystem/native-image waits while retaining pending-write ownership and recovery locations. Late completion cannot resume expired work; optional sidecar settlement remains independent of the saved image.
