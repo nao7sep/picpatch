@@ -16,4 +16,4 @@ dialog[open]{display:flex;flex-direction:column}.modalHeader,.modalFooter{flex:n
 #canvas.dropTarget{outline:2px solid var(--accent);outline-offset:-4px;background:color-mix(in srgb,var(--accent) 18%,var(--bg))}
 #sessionList button{overflow:hidden;text-overflow:ellipsis;text-align:left;min-width:0}.reference{display:flex;flex-wrap:wrap;gap:8px}.reference>label{flex-basis:100%;margin:0}.reference>input,.reference>select{min-width:0;max-width:100%}
 
-#discardSettings{width:440px}.danger{background:light-dark(#b42318,#a12620);border-color:transparent;color:white}.danger:hover{background:light-dark(#9e2118,#8e211c)}.danger:active{background:#781c17}
+#appMessage{width:440px}.danger{background:light-dark(#b42318,#a12620);border-color:transparent;color:white}.danger:hover{background:light-dark(#9e2118,#8e211c)}.danger:active{background:#781c17}

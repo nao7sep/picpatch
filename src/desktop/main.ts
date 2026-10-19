@@ -1,5 +1,8 @@
+import { rendererRequests } from './renderer-requests.ts';
+import { quitFlow } from './quit.ts';
+import type { Message } from '../shared/i18n/index.ts';
 import { bootstrapLanguage, selectLanguage, localeState, prepareChromiumLanguage } from './language.ts';
-import { t, term, number, errorText, errorNotice, UiError } from '../shared/i18n/index.ts';
+import { t, term, number, errorText, errorNotice, UiError, message } from '../shared/i18n/index.ts';
 import { Records, errorRecord } from '../app/records.ts';
 import { readPaneState, savePaneState } from '../app/layout-state.ts';
 import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor, nativeTheme } from 'electron';
@@ -17,7 +20,7 @@ app.setName('PicPatch');
 prepareChromiumLanguage(resolveAppPaths().config);
 const here = dirname(fileURLToPath(import.meta.url));
 protocol.registerSchemesAsPrivileged([{ scheme: 'picpatch-image', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
-let window: BrowserWindow | undefined; let service: Application; let quitting = false; let closing = false;
+let window: BrowserWindow | undefined; let service: Application; let quitting = false;
 let backup: Worker | undefined;
 let records: Records | undefined;
 let managed: { controller: AbortController; task: Promise<unknown> } | undefined;
@@ -29,15 +32,65 @@ const qualification = qualificationIndex < 0 ? undefined : process.argv[qualific
 const localizationSmoke = process.argv.includes('--smoke-localization');
 const smoke = process.argv.includes('--smoke') || qualificationIndex >= 0 || localizationSmoke;
 let smokeTimer: ReturnType<typeof setTimeout> | undefined;
-let flushReply: ((reply: { ok: boolean; message?: string }) => void) | undefined;
-ipcMain.on('picpatch:flushed', (event, reply) => { if (event.sender === window?.webContents) flushReply?.(reply); });
+let rendererReady = false;
+let closing = false;
+const requests = rendererRequests((id, request) => {
+  if ((quitting && request.kind !== 'flush') || !rendererReady || !window || window.isDestroyed() || window.webContents.isDestroyed()) throw new Error('Editor unavailable.');
+  window.webContents.send('picpatch:request', id, request);
+});
+ipcMain.on('picpatch:reply', (event, reply) => {
+  if (event.sender === window?.webContents && event.senderFrame === window.webContents.mainFrame) requests.reply(reply);
+});
+async function ask(options: { message: Message; detail?: Message; buttons: Message[]; destructive?: boolean; duringClose?: boolean }) {
+  if (closing && !options.duringClose) return { response: undefined };
+  const response = await requests.request({ kind: 'message', message: {
+    title: options.message, detail: options.detail,
+    actions: options.buttons.map((label, index) => ({ label, destructive: options.destructive !== false && index > 0 && index === options.buttons.length - 1 })),
+  } });
+  return { response };
+}
+const lifetime = quitFlow({
+  freeze: value => { closing = value; command(value ? 'beginClose' : 'endClose'); },
+  flush: async () => { await requests.request({ kind: 'flush' }, 5000); },
+  drafts: async () => await requests.request({ kind: 'closeDrafts' }) === true,
+  saveFailure: async error => {
+    records?.write('error', 'Pending editor saves did not complete.', { error: errorRecord(error) });
+    return (await ask({ duringClose: true, message: message('ui.pending_changes_could_not_be_saved'), buttons: [message('ui.keep_working'), message('ui.retry_save'), message('ui.quit_without_pending_changes')] })).response;
+  },
+  work: async () => {
+    if (managed && (await ask({ duringClose: true, message: message('ui.cancel_the_installation_or_verification_and_quit'), buttons: [message('ui.keep_working'), message('ui.cancel_and_quit')] })).response !== 1) return false;
+    if (service.queue.busy() && (await ask({ duringClose: true, message: message('ui.cancel_the_remaining_work_and_quit'), buttons: [message('ui.keep_working'), message('ui.cancel_work_and_quit')] })).response !== 1) return false;
+    return true;
+  },
+  finish: async () => {
+    const pending = managed; pending?.controller.abort(); await pending?.task.catch(() => {});
+    await service.queue.stop();
+    if (quitting) return;
+    if (backup) { await new Promise<void>(resolve => { const timer = setTimeout(resolve, 500); const done = (reply: any) => { if (reply.flushed === 'quit') { clearTimeout(timer); backup?.off('message', done); resolve(); } }; backup!.on('message', done); backup!.postMessage({ flush: 'quit' }); }); await backup.terminate(); }
+    records?.write('info', 'PicPatch closed normally.'); await records?.close();
+    quitting = true; app.quit();
+  },
+  failed: async error => {
+    records?.write('error', 'Closing did not complete.', { error: errorRecord(error) });
+    try { await ask({ duringClose: true, message: message('ui.picpatch_could_not_finish_closing'), buttons: [message('ui.keep_working')] }); }
+    catch { /* No usable message surface: ordinary quit remains cancelled. */ }
+  },
+  interrupt: () => { quitting = true; command('shutdown'); requests.cancelAll(); managed?.controller.abort(); },
+  shutdownSave: async () => { await requests.request({ kind: 'flush' }, 800); await service.sessions.settled(); },
+  exit: () => app.exit(0),
+});
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { window?.show(); window?.focus(); });
   app.on('activate', () => { window?.show(); });
-  void app.whenReady().then(start).catch(async error => { await dialog.showMessageBox({ type: 'error', message: t('ui.picpatch_could_not_start'), detail: errorText(error) }); app.exit(1); });
+  void app.whenReady().then(start).catch(startupFailure);
 }
-function command(id: string) { window?.webContents.send('picpatch:command', id); }
+// Existing pre-workspace fallback: the app message host is unavailable if startup fails.
+async function startupFailure(error: unknown) {
+  await dialog.showMessageBox({ type: 'error', message: t('ui.picpatch_could_not_start'), detail: errorText(error) });
+  app.exit(1);
+}
+function command(id: string) { if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('picpatch:command', id); }
 async function start() {
   await bootstrapLanguage(paths.config);
   records = new Records(paths.root, join(here, 'records-worker.mjs'));
@@ -76,47 +129,25 @@ async function start() {
   window.webContents.session.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' picpatch-image: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"] } }));
   window.once('ready-to-show', () => { if (!smoke) window?.show(); });
   if (smoke) smokeTimer = setTimeout(() => { app.exit(1); }, qualification ? 300_000 : localizationSmoke ? 60_000 : 15000);
-  window.on('close', event => { if (!quitting) { event.preventDefault(); void close(); } });
-  process.on('SIGTERM', () => { void close(); });
-  app.on('before-quit', event => { if (!quitting) { event.preventDefault(); void close(); } });
-  powerMonitor.on('shutdown', () => { records?.write('info', 'OS shutdown requested.'); quitting = true; managed?.controller.abort(); service.queue.stop().catch(() => {}); app.exit(0); });
+  window.on('close', event => { if (!quitting) { event.preventDefault(); void lifetime.close(); } });
+  process.on('SIGTERM', () => lifetime.shutdown());
+  window.on('query-session-end', () => lifetime.shutdown());
+  window.on('session-end', () => lifetime.shutdown());
+  app.on('before-quit', event => { if (!quitting) { event.preventDefault(); void lifetime.close(); } });
+  powerMonitor.on('shutdown', () => { records?.write('info', 'OS shutdown requested.'); lifetime.shutdown(); });
+  window.webContents.on('render-process-gone', () => { rendererReady = false; requests.cancelAll(); });
+  window.webContents.on('did-start-loading', () => { rendererReady = false; requests.cancelAll(); });
+  window.on('closed', () => { rendererReady = false; requests.cancelAll(); });
   await window.loadURL(renderer);
-}
-async function close() {
-  if (closing) return; closing = true;
-  try {
-    for (;;) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => { flushReply = undefined; reject(new UiError('ui.the_editor_did_not_confirm_its_pending_draft_save')); }, 5000);
-          flushReply = reply => { clearTimeout(timer); flushReply = undefined; if (reply.ok) resolve(); else reject(new Error(reply.message)); };
-          window?.webContents.send('picpatch:flush');
-        });
-        break;
-      } catch (error) {
-        const answer = await dialog.showMessageBox(window!, { message: t('ui.pending_changes_could_not_be_saved'), detail: errorText(error), buttons: [t('ui.keep_working'), t('ui.retry_save'), t('ui.quit_without_pending_changes')], defaultId: 0, cancelId: 0 });
-        if (answer.response === 0) return;
-        if (answer.response === 2) break;
-      }
-    }
-    if (managed) { const result = await dialog.showMessageBox(window!, { message: t('ui.cancel_the_installation_or_verification_and_quit'), buttons: [t('ui.keep_working'), t('ui.cancel_and_quit')], defaultId: 0, cancelId: 0 }); if (result.response === 0) return; const pending = managed; pending.controller.abort(); await pending.task.catch(() => {}); }
-    if (service.queue.busy()) { const result = await dialog.showMessageBox(window!, { message: t('ui.cancel_the_remaining_work_and_quit'), buttons: [t('ui.keep_working'), t('ui.cancel_work_and_quit')], defaultId: 0, cancelId: 0 }); if (result.response === 0) return; }
-    await service.queue.stop(); await service.sessions.settled();
-    quitting = true;
-    if (backup) { await new Promise<void>(resolve => { const timer = setTimeout(resolve, 500); const done = (message: any) => { if (message.flushed === 'quit') { clearTimeout(timer); backup?.off('message', done); resolve(); } }; backup!.on('message', done); backup!.postMessage({ flush: 'quit' }); }); await backup.terminate(); }
-    records?.write('info', 'PicPatch closed normally.'); await records?.close();
-    app.quit();
-  } catch (error) { await dialog.showMessageBox(window!, { message: t('ui.picpatch_could_not_finish_closing'), detail: errorText(error) }); }
-  finally { closing = false; }
 }
 async function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections')[], title: string) {
   const result = await dialog.showOpenDialog(window!, { title, properties }); return result.canceled ? [] : result.filePaths;
 }
 async function dispatch(action: string, payload: any, signal?: AbortSignal) {
   switch (action) {
-    case 'closeWindow': void close(); return;
+    case 'closeWindow': void lifetime.close(); return;
     case 'records': return records?.list() ?? [];
-    case 'ready': if (smoke) { if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, join(here, 'tools/uv')); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
+    case 'ready': rendererReady = true; if (smoke) { if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, join(here, 'tools/uv')); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
     case 'paneState': if (payload.requestWidth !== undefined) { await savePaneState(paths.state, payload); return; } return readPaneState(paths.state);
     case 'layout': { const size = minimum(payload.sidebar === true); const [outerWidth, outerHeight] = window!.getSize(); const [contentWidth, contentHeight] = window!.getContentSize(); const height = Number.isFinite(payload.height) ? Math.max(size.height, payload.height) : size.height; window!.setMinimumSize(size.width + outerWidth - contentWidth, height + outerHeight - contentHeight); return; }
     case 'locale': return localeState();
@@ -125,7 +156,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'get': return service.sessions.get(payload.id);
     case 'draft': return service.draft(payload.id, payload.draft as Draft);
     case 'rename': if (typeof payload.name !== 'string' || !payload.name.trim()) throw new UiError('ui.enter_a_session_name'); return service.sessions.update(payload.id, session => { session.name = payload.name; });
-    case 'delete': { const answer = await dialog.showMessageBox(window!, { message: t('ui.delete_this_session_and_its_retained_images'), detail: t('ui.exported_images_and_original_files_are_kept'), buttons: [t('ui.keep_session'), t('ui.delete_session')], cancelId: 0, defaultId: 0 }); if (answer.response !== 1) return false; await service.remove(payload.id); return true; }
+    case 'delete': { const answer = await ask({ message: message('ui.delete_this_session_and_its_retained_images'), detail: message('ui.exported_images_and_original_files_are_kept'), buttons: [message('ui.keep_session'), message('ui.delete_session')] }); if (answer.response !== 1) return false; await service.remove(payload.id); return true; }
     case 'import': { const files = payload.path ? [payload.path] : await pick(['openFile', 'multiSelections'], t('ui.add_images')); const assets = []; for (const path of files) assets.push(await service.importImage(payload.id, path)); return assets; }
     case 'mask': return service.mask(payload.id, payload.bytes);
     case 'submit': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.submit(payload.id, payload.draft, payload.samples, payload.parent);
@@ -142,11 +173,11 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     }
     case 'verify': return service.verify(payload.modelId, signal);
     case 'removeManaged': {
-      const answer = await dialog.showMessageBox(window!, { message: t('ui.remove_this_managed_model_revision'), detail: t('ui.other_apps_using_this_shared_model_may_fail_sessions'), buttons: [t('ui.keep_model'), t('ui.remove_revision')], defaultId: 0, cancelId: 0 });
+      const answer = await ask({ message: message('ui.remove_this_managed_model_revision'), detail: message('ui.other_apps_using_this_shared_model_may_fail_sessions'), buttons: [message('ui.keep_model'), message('ui.remove_revision')] });
       if (answer.response === 1) return service.removeManaged(payload.modelId, payload.name, signal); return;
     }
     case 'models': return service.models();
-    case 'prepare': { if (payload.download) { const model = (await service.overview()).models.find(m => m.id === payload.modelId); if (!model || model.acquisition !== 'pinned') throw new UiError('ui.no_downloadable_bundle_for_this_selection'); const answer = await dialog.showMessageBox(window!, { message: t('management.download', { model: model.id }), detail: t('management.downloadScope', { size: number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 }) }), buttons: [t('ui.cancel'), t('ui.download')], cancelId: 0, defaultId: 0 }); if (answer.response !== 1) return; return service.prepare(model.id, undefined, undefined, true, {}, signal); }
+    case 'prepare': { if (payload.download) { const model = (await service.overview()).models.find(m => m.id === payload.modelId); if (!model || model.acquisition !== 'pinned') throw new UiError('ui.no_downloadable_bundle_for_this_selection'); const answer = await ask({ message: message('management.download', { model: model.id }), detail: message('management.downloadScope', { size: number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 }) }), buttons: [message('ui.cancel'), message('ui.download')], destructive: false }); if (answer.response !== 1) return; return service.prepare(model.id, undefined, undefined, true, {}, signal); }
       const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return; let checkpoint: string | undefined = payload.checkpoint;
       if (!checkpoint && (await service.overview()).models.find(m => m.id === payload.modelId)?.runtime.name === 'stable-diffusion.cpp') { const files = await pick(['openFile'], t('ui.select_the_checkpoint_inside_that_bundle')); if (!files[0] || dirname(files[0]) !== paths[0]) throw new UiError('ui.choose_a_checkpoint_in_the_selected_bundle'); checkpoint = basename(files[0]); }
       return service.prepare(payload.modelId, paths[0], checkpoint, false, payload.components, signal); }
@@ -160,7 +191,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
 
 function menus() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'PicPatch', submenu: [{ label: t('ui.settings'), accelerator: 'CmdOrCtrl+,', click: () => command('settingsButton') }, { type: 'separator' }, { label: t('ui.about_picpatch'), click: () => { void dialog.showMessageBox(window!, { message: 'PicPatch', detail: t('ui.generate_and_refine_images_with_local_aigpl30orlater') }); } }, { type: 'separator' }, { role: 'services', label: t('native.services') }, { role: 'hide', label: t('native.hide') }, { role: 'hideOthers', label: t('native.hideOthers') }, { role: 'unhide', label: t('native.showAll') }, { type: 'separator' }, { role: 'quit', label: t('native.quit') }] },
+    { label: 'PicPatch', submenu: [{ label: t('ui.settings'), accelerator: 'CmdOrCtrl+,', click: () => command('settingsButton') }, { type: 'separator' }, { label: t('ui.about_picpatch'), click: () => { void ask({ message: message('ui.about_picpatch'), detail: message('ui.generate_and_refine_images_with_local_aigpl30orlater') , buttons: [message('ui.close')], destructive: false }).catch(error => records?.write('warn', 'About could not open.', { error: errorRecord(error) })); } }, { type: 'separator' }, { role: 'services', label: t('native.services') }, { role: 'hide', label: t('native.hide') }, { role: 'hideOthers', label: t('native.hideOthers') }, { role: 'unhide', label: t('native.showAll') }, { type: 'separator' }, { role: 'quit', label: t('native.quit') }] },
     { label: t('ui.file'), submenu: [{ label: t('ui.new_session_2'), accelerator: 'CmdOrCtrl+N', click: () => command('new') }, { label: t('ui.open_source_image'), accelerator: 'CmdOrCtrl+O', click: () => command('import') }, { label: t('ui.save_image_2'), accelerator: 'CmdOrCtrl+S', click: () => command('save') }, { label: t('ui.save_image_with_settings'), accelerator: 'CmdOrCtrl+Shift+S', click: () => command('saveSettings') }, { type: 'separator' }, { label: t('ui.generate_or_edit'), accelerator: 'CmdOrCtrl+Enter', click: () => command('run') }] },
     { label: t('native.edit'), submenu: [{ role: 'undo', label: t('native.undo') }, { role: 'redo', label: t('native.redo') }, { type: 'separator' }, { role: 'cut', label: t('native.cut') }, { role: 'copy', label: t('native.copy') }, { role: 'paste', label: t('native.paste') }, { role: 'pasteAndMatchStyle', label: t('native.pasteMatch') }, { role: 'delete', label: t('native.delete') }, { role: 'selectAll', label: t('native.selectAll') }] },
     { label: t('native.view'), submenu: [{ role: 'reload', label: t('native.reload') }, { role: 'forceReload', label: t('native.forceReload') }, { role: 'toggleDevTools', label: t('native.developerTools') }, { type: 'separator' }, { role: 'zoomIn', label: t('native.zoomIn') }, { role: 'zoomOut', label: t('native.zoomOut') }, { role: 'resetZoom', label: t('native.resetZoom') }, { role: 'togglefullscreen', label: t('native.fullscreen') }] },

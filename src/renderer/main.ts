@@ -1,3 +1,4 @@
+import { messageModal } from './MessageModal.ts';
 import { closeTopModal } from './Modal.ts';
 import { isComposing } from './ime.ts';
 import { localize } from './localization.ts';
@@ -243,7 +244,11 @@ action('collection', async () => { await saveMask(); await flush(); if (await ap
 input('sessionName').oninput = () => { session!.name = input('sessionName').value; renamePending = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => { void flush().then(refresh).catch(issue); }, 350); };
 for (const id of ['mode','text','width','height','seed','expand','outWidth','outHeight','outLeft','outTop']) input(id).addEventListener('input', () => { scheduleSave(); if (id === 'mode') capabilities(); });
 element('issue').querySelector('button')!.onclick = () => { currentIssue = undefined; element('issue').hidden = true; };
-managementModal(api, refresh); settingsModal(api, refresh); recordsModal(api);
+let closing = false;
+let closeFocus: HTMLElement | undefined;
+let flushing: Promise<void> | undefined;
+const messages = messageModal();
+managementModal(api, refresh); const settings = settingsModal(api, refresh, messages); recordsModal(api);
 let pan: { x: number; y: number; left: number; top: number } | undefined;
 const viewport = element('canvas');
 viewport.addEventListener('pointerdown', event => { if (!event.altKey || drawing) return; pan = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop }; viewport.setPointerCapture(event.pointerId); event.preventDefault(); });
@@ -253,6 +258,29 @@ sourceDrop(viewport, file => command(async () => { await saveMask(); await flush
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 api.onChange(() => { if (refreshTimer) return; refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh().catch(issue); }, 100); });
 async function start() { await refresh(); const first = overview.sessions[0] ?? await api.call('create'); await open(first.id); }
-api.onFlush(async () => { await commands; if (session) session.draft = collect(); await saveMask(); await flush(); });
-api.onCommand(id => { if (isComposing()) return; if (id === 'closeWindow') { if (!closeTopModal()) void api.call('closeWindow').catch(issue); return; } const target = document.getElementById(id); if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click(); });
+api.onRequest(async request => {
+  if (request.kind === 'message') return messages.ask(request.message);
+  if (request.kind === 'closeDrafts') return settings.approveQuit();
+  flushing ??= (async () => { await commands; if (session) session.draft = collect(); await saveMask(); await flush(); await settings.settleSave(); })().finally(() => { flushing = undefined; });
+  return flushing;
+});
+api.onCommand(id => {
+  if (id === 'beginClose' || id === 'endClose' || id === 'shutdown') {
+    if (!closing && id !== 'endClose') closeFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    closing = id !== 'endClose';
+    if (closing) messages.dismissAll();
+    for (const element of document.querySelectorAll<HTMLElement>('body > :not(#appMessage)')) element.inert = id !== 'endClose';
+    if (!closing && closeFocus?.isConnected) closeFocus.focus();
+    return;
+  }
+  if (isComposing()) return;
+  if (id === 'closeWindow') {
+    if (closing) { if (document.querySelector('#appMessage[open]')) closeTopModal(); return; }
+    if (!closeTopModal()) void api.call('closeWindow').catch(issue);
+    return;
+  }
+  if (closing) return;
+  const target = document.getElementById(id);
+  if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click();
+});
 void api.call('locale').then(locale => localize(locale ?? { language: 'en', format: 'en' })).then(() => paneLayout(api, issue)).then(start).then(() => api.call('ready')).catch(async error => { await localize({ language: 'en', format: 'en' }); issue(error); });

@@ -8,6 +8,7 @@ import type { Session } from '../../src/app/types.ts';
 let session: Session;
 let call: ReturnType<typeof vi.fn<(action: string, payload?: any) => Promise<any>>>;
 let flush: () => Promise<void>;
+let request: (request: import('../../src/shared/messages.ts').RendererRequest) => Promise<unknown>;
 let menuCommand: (id: string) => void;
 beforeEach(async () => {
   vi.resetModules();
@@ -22,7 +23,7 @@ beforeEach(async () => {
     if (action === 'draft') { session.draft = structuredClone(payload.draft); return session; }
     if (action === 'import') return [{ id: '22222222-2222-4222-8222-222222222222', name: 'photo.png' }];
   });
-  window.picpatch = { call, onChange: () => () => {}, onCommand: listener => { menuCommand = listener; return () => {}; }, onFlush: listener => { flush = listener; }, droppedFile: () => '/fixture/photo.png' };
+  window.picpatch = { call, onChange: () => () => {}, onCommand: listener => { menuCommand = listener; return () => {}; }, onRequest: listener => { flush = async () => { await listener({ kind: 'flush' }); }; request = listener; }, droppedFile: () => '/fixture/photo.png' };
   await import('../../src/renderer/main.ts');
   await vi.waitFor(() => expect(call).toHaveBeenCalledWith('ready'));
 });
@@ -77,14 +78,15 @@ it('guards dirty settings dismissal and only saves valid changed values', async 
   field('engineDirectory').value = '/engine'; field('engineDirectory').dispatchEvent(new Event('input', { bubbles: true }));
   expect(field('saveSettingsDialog').disabled).toBe(false);
   menuCommand('closeWindow');
-  await vi.waitFor(() => expect((field('discardSettings') as unknown as HTMLDialogElement).open).toBe(true));
-  expect(document.activeElement).toBe(field('keepSettings'));
-  field('keepSettings').click();
-  await vi.waitFor(() => expect((field('discardSettings') as unknown as HTMLDialogElement).open).toBe(false));
+  await vi.waitFor(() => expect((field('appMessage') as unknown as HTMLDialogElement).open).toBe(true));
+  expect(document.activeElement).toBe(field('messageCancel'));
+  field('messageCancel').click();
+  await vi.waitFor(() => expect((field('appMessage') as unknown as HTMLDialogElement).open).toBe(false));
   expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true); expect(field('engineDirectory').value).toBe('/engine');
+  await new Promise(resolve => setTimeout(resolve, 0));
   field('cancelSettings').click();
-  await vi.waitFor(() => expect((field('discardSettings') as unknown as HTMLDialogElement).open).toBe(true));
-  field('discardSettingsConfirm').click();
+  await vi.waitFor(() => expect((field('appMessage') as unknown as HTMLDialogElement).open).toBe(true));
+  (document.querySelector('#appMessage footer button:last-child') as HTMLButtonElement).click();
   await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(false));
   expect(document.activeElement).toBe(field('settingsButton'));
   expect(call.mock.calls.some(([action]) => action === 'preferences' || action === 'closeWindow')).toBe(false);
@@ -114,4 +116,48 @@ it('keeps the current editor when deletion or collection selection is cancelled'
   field('collection').click(); await vi.waitFor(() => expect(call).toHaveBeenCalledWith('collection'));
   await flush(); expect(field('text').value).toBe('Keep this draft');
   expect(call.mock.calls.filter(([action]) => action === 'get')).toHaveLength(loads);
+});
+
+it('routes window quit through the dirty Settings decision without saving or closing the draft', async () => {
+  field('settingsButton').click(); await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+  field('engineDirectory').value = '/unsaved'; field('engineDirectory').dispatchEvent(new Event('input', { bubbles: true }));
+  menuCommand('beginClose'); menuCommand('closeWindow');
+  expect((field('appMessage') as unknown as HTMLDialogElement).open).toBe(false);
+  await flush();
+  const decision = request({ kind: 'closeDrafts' });
+  await vi.waitFor(() => expect((field('appMessage') as unknown as HTMLDialogElement).open).toBe(true));
+  field('messageCancel').click(); expect(await decision).toBe(false);
+  menuCommand('endClose');
+  expect(field('engineDirectory').value).toBe('/unsaved'); expect(field('settings').inert).toBe(false);
+  expect(call.mock.calls.some(([action]) => action === 'preferences')).toBe(false);
+});
+it('queues app messages, defaults to keeping work, and interrupts all pending decisions', async () => {
+  const message = { title: { key: 'ui.delete_this_session_and_its_retained_images' }, actions: [{ label: { key: 'ui.keep_session' } }, { label: { key: 'ui.delete_session' }, destructive: true }] };
+  const first = request({ kind: 'message', message }); const second = request({ kind: 'message', message });
+  expect(document.activeElement).toBe(field('messageCancel'));
+  expect(document.querySelector('#appMessage .danger')?.textContent).toBe('Delete session');
+  menuCommand('shutdown'); expect(await first).toBeUndefined(); expect(await second).toBeUndefined();
+  menuCommand('endClose');
+});
+it('waits for submitted Settings and retries only the submitted values after save failure', async () => {
+  field('settingsButton').click(); await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+  const original = call.getMockImplementation()!; let fail = true;
+  call.mockImplementation(async (action, payload) => { if (action === 'preferences' && fail) throw new Error('disk failed'); return original(action, payload); });
+  field('engineDirectory').value = '/submitted'; field('engineDirectory').dispatchEvent(new Event('input', { bubbles: true }));
+  field('saveSettingsDialog').click(); await vi.waitFor(() => expect(field('settingsIssue').textContent).not.toBe(''));
+  field('engineDirectory').value = '/new-draft'; field('engineDirectory').dispatchEvent(new Event('input', { bubbles: true }));
+  await expect(flush()).rejects.toThrow('disk failed'); fail = false; await flush();
+  expect(call.mock.calls.filter(([action]) => action === 'preferences').map(([, payload]) => payload.engineDirectory)).toEqual(['/submitted', '/submitted']);
+  expect(field('engineDirectory').value).toBe('/new-draft'); expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true);
+});
+it('retires a failed Settings submission after explicit discard', async () => {
+  field('settingsButton').click(); await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+  const original = call.getMockImplementation()!;
+  call.mockImplementation(async (action, payload) => { if (action === 'preferences') throw new Error('disk failed'); return original(action, payload); });
+  field('engineDirectory').value = '/discarded'; field('engineDirectory').dispatchEvent(new Event('input', { bubbles: true }));
+  field('saveSettingsDialog').click(); await vi.waitFor(() => expect(field('settingsIssue').textContent).not.toBe(''));
+  field('cancelSettings').click(); await vi.waitFor(() => expect((field('appMessage') as unknown as HTMLDialogElement).open).toBe(true));
+  (document.querySelector('#appMessage footer button:last-child') as HTMLButtonElement).click();
+  await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(false));
+  await flush(); expect(call.mock.calls.filter(([action]) => action === 'preferences')).toHaveLength(1);
 });
