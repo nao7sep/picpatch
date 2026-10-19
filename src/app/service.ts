@@ -51,15 +51,15 @@ export class Application {
   async importImage(sessionId: string, path: string) { const asset = await this.sessions.importImage(sessionId, path); this.backup(await this.sessions.imagePath(sessionId, asset.id), undefined, asset.sha256); return asset; }
   async mask(sessionId: string, bytes: Uint8Array) {
     // Authored mask pixels belong to the GUI; the SDK validates their image semantics on execution.
-    if (!(bytes instanceof Uint8Array) || bytes.byteLength > 64 * 1024 * 1024) throw new Error('Invalid mask image.');
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength > 64 * 1024 * 1024) throw new UiError('error.invalid_mask_image');
     const temporary = join(this.sessions.directory(sessionId), `mask-${randomUUID()}.tmp`);
     try { await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 }); return await this.importImage(sessionId, temporary); }
     finally { await rm(temporary, { force: true }); }
   }
-  async remove(sessionId: string) { if (this.queue.busy(sessionId)) throw new Error('Cancel this session’s work before deleting it.'); await this.sessions.remove(sessionId); }
+  async remove(sessionId: string) { if (this.queue.busy(sessionId)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); await this.sessions.remove(sessionId); }
   async export(sessionId: string, runId: string, destination: string, sidecar: boolean, includeInputs: boolean) {
     const session = await this.sessions.get(sessionId); const run = session.runs.find(r => r.id === runId);
-    if (!run?.record || !run.output) throw new Error('Select a completed image.');
+    if (!run?.record || !run.output) throw new UiError('error.select_a_completed_image');
     const record = structuredClone(run.record);
     if (!includeInputs) { delete record.inputs; delete record.effectiveParameters.negativePrompt; record.inputsIncluded = false; }
     const result = await saveArtifact(await this.sessions.imagePath(sessionId, runId), destination, record, { sidecar, onEvent: this.sdkEvents({ sessionId, runId, action: 'export' }) });
@@ -68,7 +68,7 @@ export class Application {
   }
   async models() { return inspectModels({ profile: this.settings.profile, onEvent: this.sdkEvents({ action: 'models' }) }); }
   async prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelOptions, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}, signal?: AbortSignal) {
-    if (this.queue.busy()) throw new Error('Finish or cancel queued work before changing prepared models.');
+    if (this.queue.busy()) throw new UiError('error.finish_or_cancel_queued_work_before_changing_prepared_models');
     const prepared = await prepareModel(modelId, { ...components, onEvent: this.sdkEvents({ action: 'prepare', modelId }), signal, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
     await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
   }
@@ -77,7 +77,7 @@ export class Application {
   }
   async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string; uiFont?: string }) {
     if (this.queue.busy() && this.resourcesChanged(value)) throw new UiError('error.finish_or_cancel_queued_work_before_changing_resource_settings');
-    if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new Error('Invalid theme.');
+    if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new UiError('error.invalid_theme');
     await this.updateSettings(next => {
       for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) {
         if (value[key]) next.profile[key] = value[key]; else delete next.profile[key];
@@ -93,7 +93,7 @@ export class Application {
     return verifyModel(opened.model.directory, opened.model.manifest, { signal, onEvent: this.sdkEvents({ modelId }) });
   }
   async removeManaged(modelId: string, name: string, signal?: AbortSignal) {
-    if (this.queue.busy()) throw new Error('Finish or cancel queued work before removing models.');
+    if (this.queue.busy()) throw new UiError('error.finish_or_cancel_queued_work_before_removing_models');
     return removeModel(modelId, name, { profile: this.settings.profile, signal, onEvent: this.sdkEvents({ modelId }) });
   }
   private updateSettings(change: (value: Settings) => void): Promise<void> {
@@ -105,7 +105,7 @@ export class Application {
     this.settingsTail = next.catch(() => {}); return next;
   }
   async collection(directory: string) {
-    if (this.queue.busy()) throw new Error('Finish or cancel queued work before changing collections.');
+    if (this.queue.busy()) throw new UiError('error.finish_or_cancel_queued_work_before_changing_collections');
     const selected = new Sessions(directory, (path, bytes) => this.backup(path, bytes), true); await selected.list();
     await this.updateSettings(value => { value.sessionsDirectory = directory; });
     this.sessions = selected; this.queue = new Queue(selected, this.runner(), this.changed);

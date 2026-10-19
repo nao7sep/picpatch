@@ -1,3 +1,4 @@
+import { UiError } from '../shared/i18n/index.ts';
 import { normalizeZoom } from '../shared/appearance.ts';
 import { readFile } from 'node:fs/promises';
 import { writeJson } from './files.ts';
@@ -13,6 +14,6 @@ export async function readPaneState(path: string): Promise<PaneState> {
   } catch { return initialPaneState(); } // Disposable layout must never prevent opening authored work.
 }
 export async function savePaneState(path: string, state: PaneState) {
-  if (!Number.isFinite(state.requestWidth) || state.requestWidth < layout.request || typeof state.sidebar !== 'boolean') throw new Error('Invalid pane layout.');
+  if (!Number.isFinite(state.requestWidth) || state.requestWidth < layout.request || typeof state.sidebar !== 'boolean') throw new UiError('error.invalid_pane_layout');
   await writeJson(path, state);
 }

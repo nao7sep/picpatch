@@ -42,7 +42,7 @@ it('renders retained errors and nested values in the current language without tr
   try {
     await useLocale({ language:'ja',format:'ja' }); expect(errorText(error)).not.toBe(englishMessage); expect(error.message).toBe(englishMessage);
     expect(t('common.detail', {status:{key:'status.failed'},detail:'user-authored prompt'})).toContain('user-authored prompt');
-    expect(errorText(new Error('/private/runtime failed with secret detail'))).toBe(t('ui.the_operation_could_not_finish'));
+    expect(errorText(new Error('/private/runtime failed with secret detail'))).toBe(t('error.unknown'));
     expect(errorText({ code: 'CANCELLED', message: 'private runtime path' })).toBe(t('status.cancelled'));
     const transported = { notice: errorNotice(new Error('Select a completed image.')) };
     await useLocale({language:'de',format:'de-DE'});
@@ -56,4 +56,15 @@ it('does not apply a stale asynchronous locale after a later choice', async () =
   const earlier = useLocale({language:'ja',format:'ja'});
   await useLocale({language:'en',format:'en'}); await earlier;
   expect(t('ui.settings')).toBe('Settings');
+});
+
+it('maps real SDK errors by cause and keeps hostile text out of operation fallbacks', async () => {
+  const { PicPatchSdkError } = await import('picpatchsdk');
+  for (const [code, key] of [['OUT_OF_MEMORY','error.memory'], ['ENGINE_MISSING','error.engine'], ['INVALID_IMAGE','error.input']] as const) {
+    const error = new PicPatchSdkError(code, 'TypeError EACCES /private/SENTINEL');
+    expect(errorNotice(error).key).toBe(key);
+    expect(errorText(error)).not.toContain('SENTINEL');
+  }
+  expect(errorNotice(new Error('Select a completed image.'), 'error.generate').key).toBe('error.generate');
+  expect(errorNotice(new UiError('error.select_a_completed_image')).key).toBe('error.select_a_completed_image');
 });

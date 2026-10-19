@@ -168,6 +168,11 @@ function results() {
     b.append(inputs);
     if (run.output) { const img = document.createElement('img'); img.src = imageUrl(run.id); img.alt = ''; img.loading = 'lazy'; b.append(img); }
     const text = document.createElement('div'); text.textContent = t('run.card', { model: run.modelId, seed: String(run.seed), status: term('status', run.status) }); b.append(text);
+    if (run.issue) {
+      b.classList.add('unsuccessful');
+      const reason = document.createElement('p'); reason.className = 'runIssue';
+      reason.textContent = errorText(run.issue, run.draft.mode === 'edit' ? 'error.edit' : 'error.generate'); b.append(reason);
+    }
     items.push({ key: run.id, label: t('common.lines', { first: heading.textContent, rest: t('common.lines', { first: run.draft.text, rest: text.textContent }) }), element: b });
   }
   renderCollection(holder, items, { label: t('ui.results'), empty: t('ui.generated_images_and_queued_attempts_appear_here'), selected, multiple: true, select: keys => { void command(async () => {
@@ -187,7 +192,11 @@ function show() {
   if (asset !== image.dataset.asset) { painting = false; mask.classList.remove('painting'); element('paint').textContent = t('ui.paint_mask'); }
   element('empty').hidden = Boolean(asset); element('imageStage').hidden = !asset;
   if (asset && image.dataset.asset !== asset) { image.dataset.asset = asset; image.src = imageUrl(asset); maskDirty = false; undo.length = 0; redo.length = 0; }
-  element('resultInfo').textContent = run ? [t('run.summary', { status: term('status', run.status), model: run.modelId, seed: String(run.seed) }), ...(run.issue ? [errorText(run.issue)] : []), ...(run.notices ?? []).map(errorText)].reduce((first, rest) => t('common.lines', { first, rest })) : '';
+  const resultCopy = run ? [t('run.summary', { status: term('status', run.status), model: run.modelId, seed: String(run.seed) }), ...(run.issue ? [errorText(run.issue, run.draft.mode === 'edit' ? 'error.edit' : 'error.generate')] : []), ...(run.notices ?? []).map(value => errorText(value))].reduce((first, rest) => t('common.lines', { first, rest })) : '';
+  const info = element('resultInfo');
+  info.classList.toggle('unsuccessful', Boolean(run?.issue));
+  info.setAttribute('role', run?.issue && run.status !== 'cancelled' ? 'alert' : 'status');
+  if (info.textContent !== resultCopy) info.textContent = resultCopy;
   input('compare').disabled = selected.length !== 2 || !selected.every(id => session!.runs.some(run => run.id === id && run.output));
   input('delete').disabled = session!.runs.some(run => ['queued','running'].includes(run.status));
   input('cancelSelected').disabled = !session!.runs.some(run => selected.includes(run.id) && ['queued', 'running'].includes(run.status));

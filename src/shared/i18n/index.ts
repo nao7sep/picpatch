@@ -52,16 +52,27 @@ export class UiError extends Error {
   readonly notice: Message;
   constructor(key: string, values?: Message['values']) { super(render(key, values, english, 'en')); this.notice = message(key, values); }
 }
-const phrases = new Map(Object.entries(english).filter((entry): entry is [Key, string] => typeof entry[1] === 'string').map(([key, value]) => [value, key]));
-/** Fixed application errors can stay English in diagnostics; only presentation translates them. */
-export function errorNotice(value: unknown): Message {
-  if (value && typeof value === 'object' && 'notice' in value && value.notice && typeof value.notice === 'object' && 'key' in value.notice) { const note = value.notice as Message; return note; }
-  if (value && typeof value === 'object' && 'code' in value) {
-    const keys: Record<string, Key> = { MODEL_IO: 'error.prepare_this_model_in_managed_models_before_running_it', CANCELLED: 'status.cancelled' };
-    const key = keys[String(value.code)]; if (key) return message(key);
+/** Explicit app notices and structured runtime causes are the only presentation inputs. */
+export function errorNotice(value: unknown, fallback: Key = 'error.unknown'): Message {
+  if (value && typeof value === 'object' && 'notice' in value && value.notice && typeof value.notice === 'object' && 'key' in value.notice) return value.notice as Message;
+  if (value && typeof value === 'object') {
+    const error = value as { code?: string; kind?: string };
+    const keys: Record<string, Key> = {
+      MODEL_IO: 'error.prepare_this_model_in_managed_models_before_running_it',
+      ENGINE_IO: 'error.engine', ENGINE_MISSING: 'error.engine', ENGINE_UNAVAILABLE: 'error.engine', ENGINE_INCOMPATIBLE: 'error.engine',
+      DEPENDENCY_MISSING: 'error.engine', DEPENDENCY_INCOMPATIBLE: 'error.engine', BACKEND_UNAVAILABLE: 'error.engine', WORKER_UNAVAILABLE: 'error.engine',
+      OUT_OF_MEMORY: 'error.memory', TIMEOUT: 'error.timeout',
+      TERMINATION_FAILED: 'error.worker_termination_is_unconfirmed_restart_picpatch_before_starting_more_work',
+      INTERRUPTED: 'error.interrupted', CANCELLED: 'status.cancelled',
+      OUTPUT_CONFLICT: 'error.conflict', DESTINATION_CHANGED: 'error.conflict',
+      FILE_NOT_FOUND: 'error.storage', PERMISSION_DENIED: 'error.storage', DISK_FULL: 'error.storage', IO_ERROR: 'error.storage', IMAGE_IO: 'error.storage', OUTPUT_IO: 'error.storage',
+      INVALID_REQUEST: 'error.input', INVALID_IMAGE: 'error.input', INVALID_MASK: 'error.input', INPUTS_CHANGED: 'error.input', UNSUPPORTED_CAPABILITY: 'error.input',
+    };
+    const key = error.code && keys[error.code];
+    if (key) return message(key);
+    if (error.kind === 'invalid') return message('error.input');
+    if (error.kind === 'cancelled') return message('status.cancelled');
   }
-  const text = value && typeof value === 'object' && 'message' in value ? String(value.message) : String(value);
-  const key = phrases.get(text); return message(key ?? 'ui.the_operation_could_not_finish');
+  return message(fallback);
 }
-
-export function errorText(value: unknown): string { const notice = errorNotice(value); return t(notice.key, notice.values); }
+export function errorText(value: unknown, fallback?: Key): string { const notice = errorNotice(value, fallback); return t(notice.key, notice.values); }

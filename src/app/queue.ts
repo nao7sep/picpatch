@@ -1,3 +1,4 @@
+import { UiError } from '../shared/i18n/index.ts';
 import { randomInt, randomUUID } from 'node:crypto';
 import type { ImageOutcome, ProgressEvent, SdkEvent } from 'picpatchsdk';
 import type { Draft, Run } from './types.ts';
@@ -18,13 +19,13 @@ export class Queue {
   constructor(private sessions: Sessions, private run: Runner, private changed: () => void = () => {}) {}
   async submit(sessionId: string, draft: Draft, samples: number): Promise<Run[]> {
     draft = imageCommand(validateDraft(draft));
-    if (!Number.isSafeInteger(samples) || samples < 1 || samples > 100 || !draft.modelIds.length) throw new Error('Choose 1–100 samples and at least one model.');
+    if (!Number.isSafeInteger(samples) || samples < 1 || samples > 100 || !draft.modelIds.length) throw new UiError('error.choose_1100_samples_and_at_least_one_model');
     // The same sample seed across selected models makes the comparison intent visible, not identical noise.
     const seeds = Array.from({ length: samples }, (_, i) => draft.seed === undefined ? randomInt(0, 2 ** 32) : (draft.seed + i) % 2 ** 32);
     const created = new Date().toISOString();
     const runs: Run[] = seeds.flatMap(seed => draft.modelIds.map(modelId => ({ id: randomUUID(), modelId, seed, draft: structuredClone(draft), status: 'queued' as const, created })));
     await this.sessions.update(sessionId, session => {
-      if (!commandTargetReady(session, draft)) throw new Error('The target image is not ready. Wait, select another image, or choose New image.');
+      if (!commandTargetReady(session, draft)) throw new UiError('conversation.waiting');
       const parent = session.runs.find(run => run.id === draft.source && run.output)?.id;
       if (parent) runs.forEach(run => { run.parent = parent; });
       session.runs.push(...runs);
@@ -35,7 +36,7 @@ export class Queue {
     this.changed(); this.start(); return structuredClone(runs);
   }
   async resume(sessionId: string): Promise<void> {
-    if (this.terminationUnconfirmed) throw new Error('Worker termination is unconfirmed. Restart PicPatch before starting more work.');
+    if (this.terminationUnconfirmed) throw new UiError('error.worker_termination_is_unconfirmed_restart_picpatch_before_starting_more_work');
     const session = await this.sessions.get(sessionId);
     for (const run of session.runs) if (run.status === 'queued' && !this.pending.some(item => item.sessionId === sessionId && item.runId === run.id)) this.pending.push({ sessionId, runId: run.id });
     this.state.paused = false; delete this.state.issue; this.start();
@@ -52,7 +53,7 @@ export class Queue {
       try {
         const session = await this.sessions.update(selected.sessionId, value => {
           const run = value.runs.find(r => r.id === selected.runId)!;
-          if (run.status !== 'queued') throw new Error('Attempt is no longer queued.');
+          if (run.status !== 'queued') throw new UiError('error.attempt_is_no_longer_queued');
           run.status = 'running'; run.started = new Date().toISOString();
         });
         const attempt = session.runs.find(r => r.id === selected.runId)!;
@@ -79,7 +80,7 @@ export class Queue {
         await this.sessions.update(selected.sessionId, value => {
           const run = value.runs.find(r => r.id === selected.runId)!; run.ended = new Date().toISOString();
           if ('status' in outcome) { run.status = 'refused'; run.issue = { code: outcome.code, message: outcome.message, effect: outcome.effect }; }
-          else { run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record; const notices = [outcome.sidecar?.status === 'failed' ? 'Image saved; its settings sidecar could not be saved.' : undefined, outcome.cleanupWarning?.message].filter((value): value is string => Boolean(value)); if (notices.length) run.notices = notices; }
+          else { run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record; const notices = [outcome.sidecar?.status === 'failed' ? { notice: { key: 'ui.image_saved_its_settings_sidecar_could_not_be_saved' } } : undefined, outcome.cleanupWarning ? { code: 'CLEANUP_FAILED' } : undefined].filter(value => value !== undefined); if (notices.length) run.notices = notices; }
           value.draft = recoverCommand(value.draft, value.runs);
         });
         if (completion.stopIssue) { this.terminationUnconfirmed = true; throw new Error(completion.stopIssue); }

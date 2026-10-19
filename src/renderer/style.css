@@ -37,3 +37,8 @@ dialog[open]{display:flex;flex-direction:column}.modalHeader,.modalFooter{flex:n
 .commandTarget img{width:48px;height:48px;object-fit:contain}
 #text{min-height:64px;max-height:180px}
 main{grid-template-rows:auto minmax(0,1fr) auto}
+
+/* Failed results retain their consequence beside the image and in history. */
+#resultInfo{white-space:pre-wrap;overflow-wrap:anywhere;max-height:25vh;overflow:auto}
+.unsuccessful{border-color:light-dark(#b54b38,#d38a78);background:light-dark(#fff2ed,#362624)}
+.runIssue{white-space:pre-wrap;line-height:1.5;margin:8px 0}

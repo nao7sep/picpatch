@@ -11,7 +11,7 @@ export interface Run {
   id: string; modelId: string; seed: number; draft: Draft; parent?: string;
   status: 'queued' | 'running' | 'completed' | 'refused' | 'failed' | 'cancelled' | 'interrupted';
   created: string; started?: string; ended?: string; output?: string; record?: ArtifactRecord;
-  notices?: string[];
+  notices?: (string | { notice?: import('../shared/i18n/index.ts').Message; code?: string })[];
   issue?: { code: string; message: string; effect: 'none' | 'unknown' };
 }
 export interface Session {
