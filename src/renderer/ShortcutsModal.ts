@@ -11,6 +11,11 @@ export function shortcutsModal() {
       const chord = document.createElement('dd'); const keys = document.createElement('kbd'); keys.textContent = shortcutText(entry, /Mac/.test(navigator.platform)); chord.append(keys);
       rows.append(label, chord);
     }
+    const maskRows = surface.querySelector('#maskShortcuts')!; maskRows.replaceChildren();
+    for (const [labelKey, chord] of [['ui.undo_stroke', 'Z'], ['ui.redo_stroke', 'Shift+Z']]) {
+      const label = document.createElement('dt'); label.textContent = t(labelKey!);
+      const value = document.createElement('dd'); const keys = document.createElement('kbd'); keys.textContent = `${/Mac/.test(navigator.platform) ? 'Cmd' : 'Ctrl'}+${chord}`; value.append(keys); maskRows.append(label, value);
+    }
     shell.open();
   };
 }

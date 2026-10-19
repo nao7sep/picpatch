@@ -1,3 +1,4 @@
+import { exportModal } from './ExportModal.ts';
 import { appMenu } from './AppMenu.ts';
 import { afterCommand, recoverCommand, commandTargetReady, hasImage, imageCommand, newImage, targetImage } from '../shared/image-command.ts';
 import { aboutModal } from './AboutModal.ts';
@@ -23,6 +24,7 @@ import type { Session, Draft, Asset, Run } from '../app/types.ts';
 import type { ModelCapabilities } from 'picpatchsdk/types';
 declare global { interface Window { picpatch: Bridge } }
 const api = window.picpatch;
+const chooseExport = exportModal();
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const input = (id: string) => element<HTMLInputElement>(id);
 let session: Session | undefined;
@@ -198,6 +200,7 @@ function show() {
   info.classList.toggle('unsuccessful', Boolean(run?.issue));
   info.setAttribute('role', run?.issue && run.status !== 'cancelled' ? 'alert' : 'status');
   if (info.textContent !== resultCopy) info.textContent = resultCopy;
+  element('compare').title = t('comparison.hint', { modifier: /Mac/.test(navigator.platform) ? 'Cmd' : 'Ctrl' });
   input('compare').disabled = selected.length !== 2 || !selected.every(id => session!.runs.some(run => run.id === id && run.output));
   input('delete').disabled = session!.runs.some(run => ['queued','running'].includes(run.status));
   input('cancelSelected').disabled = !session!.runs.some(run => selected.includes(run.id) && ['queued', 'running'].includes(run.status));
@@ -243,7 +246,7 @@ function stroke(event: PointerEvent) {
   context.fillStyle = '#ffffff'; context.beginPath(); context.arc(p.x, p.y, context.lineWidth / 2, 0, Math.PI * 2); context.fill();
   lastStroke = p; maskDirty = true; maskRevision++;
 }
-mask.onpointerdown = event => { if (!painting || event.altKey) return; undo.push(context.getImageData(0,0,mask.width,mask.height)); while (undo.length > 1 && undo.length * mask.width * mask.height * 4 > 64 * 1024 * 1024) undo.shift(); redo.length = 0; drawing = true; lastStroke = undefined; mask.setPointerCapture(event.pointerId); stroke(event); };
+mask.onpointerdown = event => { if (!painting || event.altKey) return; mask.focus(); undo.push(context.getImageData(0,0,mask.width,mask.height)); while (undo.length > 1 && undo.length * mask.width * mask.height * 4 > 64 * 1024 * 1024) undo.shift(); redo.length = 0; drawing = true; lastStroke = undefined; mask.setPointerCapture(event.pointerId); stroke(event); };
 mask.onpointermove = event => { if (drawing) stroke(event); };
 mask.onpointerup = () => { drawing = false; void saveMask().then(flush).catch(error => requestIssues.show('mask', error)); };
 mask.onpointercancel = () => { drawing = false; void saveMask().then(flush).catch(error => requestIssues.show('mask', error)); };
@@ -319,9 +322,13 @@ action('fit', () => scale(true)); action('actual', () => { input('zoom').value =
 action('paint', () => { show(); painting = !painting; mask.classList.toggle('painting', painting); element('paint').textContent = painting ? t('ui.finish_painting') : t('ui.paint_mask'); });
 action('clearMask', async () => { context.clearRect(0,0,mask.width,mask.height); delete session!.draft.mask; maskDirty = false; await flush(); });
 action('undoMask', () => { const previous = undo.pop(); if (previous) { redo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(previous,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
+mask.addEventListener('keydown', event => {
+  if (!painting || isComposing(event) || event.altKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
+  event.preventDefault(); event.stopPropagation(); if (!event.repeat) element(event.shiftKey ? 'redoMask' : 'undoMask').click();
+});
 action('redoMask', () => { const next = redo.pop(); if (next) { undo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(next,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
-action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { comparisonVisible(false); scale(true); return; } if (selected.length !== 2) throw new UiError('ui.commandclick_two_completed_results_to_compare'); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new UiError('ui.choose_completed_results'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); comparisonVisible(true); });
-for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const result = await api.call('export', { id: session!.id, runId: selected.at(-1), sidecar, includeInputs: input('includePrompts').checked }); if (result?.status === 'refused') throw Object.assign(new Error(result.message), { code: result.code, effect: result.effect }); if (result?.sidecar?.status === 'failed') throw new UiError('ui.image_saved_its_settings_sidecar_could_not_be_saved'); if (result?.status === 'saved') element('status').textContent = sidecar ? t('ui.image_and_settings_saved') : t('ui.image_saved'); });
+action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { comparisonVisible(false); scale(true); return; } if (selected.length !== 2) throw new UiError('comparison.hint', { modifier: /Mac/.test(navigator.platform) ? 'Cmd' : 'Ctrl' }); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new UiError('ui.choose_completed_results'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); comparisonVisible(true); });
+for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const id = session!.id, runId = selected.at(-1); const includeInputs = sidecar ? await chooseExport() : false; if (includeInputs === undefined) return; const result = await api.call('export', { id, runId, sidecar, includeInputs }); if (result?.status === 'refused') throw Object.assign(new Error(result.message), { code: result.code, effect: result.effect }); if (result?.sidecar?.status === 'failed') throw new UiError('ui.image_saved_its_settings_sidecar_could_not_be_saved'); if (result?.status === 'saved') element('status').textContent = sidecar ? t('ui.image_and_settings_saved') : t('ui.image_saved'); });
 action('delete', async () => { const id = session!.id; if (await api.call('delete', { id })) { session = undefined; await start(); } });
 action('collection', async () => { await saveMask(); await flush(); if (await api.call('collection')) { session = undefined; await start(); } });
 async function renameSession() {

@@ -68,7 +68,7 @@ export function errorNotice(value: unknown, fallback: Key = 'error.unknown'): Me
       FILE_NOT_FOUND: 'error.storage', PERMISSION_DENIED: 'error.storage', DISK_FULL: 'error.storage', IO_ERROR: 'error.storage', IMAGE_IO: 'error.storage', OUTPUT_IO: 'error.storage',
       INVALID_REQUEST: 'error.input', INVALID_IMAGE: 'error.input', INVALID_MASK: 'error.input', INPUTS_CHANGED: 'error.input', UNSUPPORTED_CAPABILITY: 'error.input',
     };
-    const key = error.code && keys[error.code];
+    const key = error.code && Object.hasOwn(keys, error.code) && keys[error.code];
     if (key) return message(key);
     if (error.kind === 'invalid') return message('error.input');
     if (error.kind === 'cancelled') return message('status.cancelled');

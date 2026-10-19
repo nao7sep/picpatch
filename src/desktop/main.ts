@@ -1,3 +1,4 @@
+import { exportName } from '../shared/export-name.ts';
 import { menuTemplate } from './menu-template.ts';
 import { pythonRuntime } from '../app/engines.ts';
 import { RecordsReader } from '../app/records-reader.ts';
@@ -210,7 +211,17 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'submit': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.submit(payload.id, payload.draft, payload.samples);
     case 'cancel': return service.queue.cancel(payload.id, payload.runId);
     case 'resume': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.resume(payload.id);
-    case 'export': { const result = await dialog.showSaveDialog(window!, { title: t('ui.save_image'), defaultPath: 'image.png', filters: [{ name: t('ui.png_image'), extensions: ['png'] }] }); if (result.canceled || !result.filePath) return; return service.export(payload.id, payload.runId, result.filePath, payload.sidecar === true, payload.includeInputs === true); }
+    case 'export': {
+      const session = await service.sessions.get(payload.id);
+      const index = session.runs.filter(run => run.output).findIndex(run => run.id === payload.runId);
+      if (index < 0) throw new UiError('ui.choose_completed_results');
+      const name = exportName(session.name, index + 1);
+      const result = await dialog.showSaveDialog(window!, { title: t('ui.save_image'), defaultPath: paneState.exportDirectory ? join(paneState.exportDirectory, name) : name, filters: [{ name: t('ui.png_image'), extensions: ['png'] }] });
+      if (result.canceled || !result.filePath) return;
+      const saved = await service.export(payload.id, payload.runId, result.filePath, payload.sidecar === true, payload.includeInputs === true);
+      if (saved.status === 'saved') await storePane({ exportDirectory: dirname(result.filePath) }).catch(error => records?.write('warn', 'Export destination could not be retained.', { error: errorRecord(error) }));
+      return saved;
+    }
     case 'cancelManaged': managed?.controller.abort(); return;
     case 'preferences': if (managed && service.resourcesChanged(payload)) throw new UiError('ui.wait_for_the_current_resource_operation'); await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
     case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location')))[0];

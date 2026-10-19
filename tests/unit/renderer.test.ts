@@ -173,7 +173,7 @@ it('opens the shortcut reference through its binding, lists real commands and cl
   field('shortcutsButton').focus();
   field('shortcutsButton').dispatchEvent(new KeyboardEvent('keydown',{key:'/',ctrlKey:true,shiftKey:true,bubbles:true,cancelable:true}));
   expect((field('shortcuts') as unknown as HTMLDialogElement).open).toBe(true);
-  expect([...document.querySelectorAll('#shortcuts dd')].map(row => row.textContent)).toEqual(shortcuts.map(entry => shortcutText(entry,/Mac/.test(navigator.platform))));
+  expect([...document.querySelectorAll('#shortcuts dl:first-of-type dd')].map(row => row.textContent)).toEqual(shortcuts.map(entry => shortcutText(entry,/Mac/.test(navigator.platform))));
   expect(document.activeElement).toBe(field('closeShortcuts'));
   field('closeShortcuts').dispatchEvent(new KeyboardEvent('keydown',{key:'w',metaKey:true,bubbles:true,cancelable:true}));
   await vi.waitFor(() => expect((field('shortcuts') as unknown as HTMLDialogElement).open).toBe(false));
@@ -370,4 +370,18 @@ it('keeps Settings tab navigation and font reset inside its unsaved draft', asyn
   field('uiFont').value='Example'; field('uiFont').dispatchEvent(new Event('input',{bubbles:true}));
   (document.querySelector('#settings .modalClose') as HTMLButtonElement).click();
   await vi.waitFor(() => expect((field('appMessage') as unknown as HTMLDialogElement).open).toBe(true));
+});
+it('asks for sidecar privacy each time and dismissal does not export', async () => {
+  const run = { id: '33333333-3333-4333-8333-333333333333', modelId: models[0]!.id, seed: 1, draft: structuredClone(session.draft), status: 'completed' as const, created: new Date().toISOString(), output: 'output.png' };
+  session.runs.push(run as never); session.selection = [run.id]; changed();
+  await vi.waitFor(() => expect(document.querySelector('#results [role=option]')).not.toBeNull());
+  (document.querySelector('#results [role=option]') as HTMLButtonElement).click();
+  await vi.waitFor(() => expect(field('saveSettings').disabled).toBe(false));
+  field('saveSettings').click(); await vi.waitFor(() => expect((field('exportOptions') as unknown as HTMLDialogElement).open).toBe(true));
+  expect(field('includePrompts').checked).toBe(false);
+  field('cancelExport').click(); await vi.waitFor(() => expect((field('exportOptions') as unknown as HTMLDialogElement).open).toBe(false));
+  expect(call.mock.calls.some(([action]) => action === 'export')).toBe(false);
+  field('saveSettings').click(); await vi.waitFor(() => expect((field('exportOptions') as unknown as HTMLDialogElement).open).toBe(true));
+  field('includePrompts').checked = true; field('confirmExport').click();
+  await vi.waitFor(() => expect(call).toHaveBeenCalledWith('export', expect.objectContaining({ runId: run.id, sidecar: true, includeInputs: true })));
 });
