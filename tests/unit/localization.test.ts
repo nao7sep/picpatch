@@ -3,11 +3,11 @@ import { expect, it } from 'vitest';
 import { catalogues, languages, resolveLocale, useLocale, t, UiError, errorText, errorNotice, number } from '../../src/shared/i18n/index.ts';
 const literalKeys = ['component.clipL','component.clipG','component.t5','ui.vae','ui.photomaker','ui.ipadapter','ui.controlnet','component.vae','component.photoMaker','component.ipAdapter','component.controlNet'];
 const identical: Record<string, string[]> = {
-  de: ['logs.info','control.pose','shortcuts.navigation','ui.prompt','ui.seed','ui.zoom','ui.system','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint'],
-  fr: ['conversation.image','control.pose','shortcuts.navigation','ui.sessions','ui.zoom','role.style','native.services'],
-  es: ['logs.error','control.pose',], ja: [], ko: [], 'zh-Hans': [],
-  it: ['logs.debug','run.summary','ui.prompt','ui.seed','ui.zoom','ui.checkpoint','ui.file','conditioning.prompt','component.checkpoint'],
-  'pt-BR': ['control.pose','ui.prompt','ui.zoom','ui.checkpoint','conditioning.prompt','component.checkpoint'], ru: [],
+  de: ['setup.size','ui.checkpoint','logs.info','control.pose','shortcuts.navigation','ui.prompt','ui.seed','ui.zoom','ui.system','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint'],
+  fr: ['menu.open','logs.action','logs.session','logs.message','conversation.image','control.pose','shortcuts.navigation','ui.sessions','ui.zoom','role.style','native.services'],
+  es: ['settings.general','logs.error','control.pose',], ja: [], ko: [], 'zh-Hans': [],
+  it: ['menu.open','about.repository','setup.size','logs.debug','run.summary','ui.prompt','ui.seed','ui.zoom','ui.checkpoint','ui.file','conditioning.prompt','component.checkpoint'],
+  'pt-BR': ['menu.open','setup.size','control.pose','ui.prompt','ui.zoom','ui.checkpoint','conditioning.prompt','component.checkpoint'], ru: [],
 };
 it('ships independently reviewed catalogues with matching keys, placeholders, punctuation and intentional literals', async () => {
   const en = await catalogues.en();
