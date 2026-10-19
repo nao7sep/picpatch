@@ -40,6 +40,7 @@ await mkdir(join(paths.root, 'browser'), { recursive: true, mode: 0o700 });
 const qualificationIndex = process.argv.indexOf('--smoke-inference');
 const qualification = qualificationIndex < 0 ? undefined : process.argv[qualificationIndex + 1];
 const localizationSmoke = process.argv.includes('--smoke-localization');
+const backgroundReload = !app.isPackaged && process.argv.includes('--background-reload');
 const smoke = process.argv.includes('--smoke') || qualificationIndex >= 0 || localizationSmoke;
 let smokeTimer: ReturnType<typeof setTimeout> | undefined;
 let paneState: PaneState;
@@ -114,7 +115,7 @@ const lifetime = quitFlow({
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { window?.show(); window?.focus(); });
-  app.on('activate', () => { window?.show(); });
+  app.on('activate', () => { if (!backgroundReload || rendererReady) window?.show(); });
   void app.whenReady().then(start).catch(startupFailure);
 }
 // Existing pre-workspace fallback: the app message host is unavailable if startup fails.
@@ -165,7 +166,7 @@ async function start() {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => { if (url !== renderer) event.preventDefault(); });
   window.webContents.session.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' picpatch-image: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"] } }));
-  window.once('ready-to-show', () => { if (!smoke) window?.show(); });
+  window.once('ready-to-show', () => { if (!smoke) { if (backgroundReload) window?.showInactive(); else window?.show(); } });
   if (smoke) smokeTimer = setTimeout(() => { app.exit(1); }, qualification ? 300_000 : localizationSmoke ? 60_000 : 15000);
   window.on('close', event => { if (!quitting) { event.preventDefault(); void lifetime.close(); } });
   process.on('SIGTERM', () => lifetime.shutdown());

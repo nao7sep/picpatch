@@ -3,7 +3,7 @@ set -euo pipefail
 script_dir="${0:A:h}"
 function failed() {
   local result=$?
-  if (( result != 0 && result != 130 )); then
+  if (( result != 0 && result != 129 && result != 130 && result != 143 )); then
     print -u2 "PicPatch launcher failed. Read the message above."
     if [[ -t 0 ]]; then read '?Press Enter to close…'; fi
   fi
