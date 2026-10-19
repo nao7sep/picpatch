@@ -1,20 +1,34 @@
+# Dependencies
 node_modules/
-coverage/
+
+# Build output
 dist/
+out/
+*.tgz
+
+# Python environments and caches (the SDK's engine runtimes)
 .venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .coverage
 *.egg-info/
-.DS_Store
-.env
-.env.*
-!.env.example
+
 # Model weights and authored reference photos must not enter source control.
 *.safetensors
 *.gguf
 *.ckpt
-benchmarks/results/
+sdk/benchmarks/results/
 
-/out/
+# Local environment
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+
+# Logs and test output (generated)
+*.log
+coverage/
+.vitest/

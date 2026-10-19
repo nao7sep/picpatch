@@ -1,9 +1,68 @@
+PicPatch third-party notices
+
 PicPatch
 Copyright (C) 2026 Yoshinao Inoguchi
-Project license: GPL-3.0-or-later; see LICENSE.
+Project licence: GPL-3.0-or-later; see LICENSE.
 
-This source repository does not vendor or bundle third-party inference code,
-model weights, or a Python runtime. Runtime validation and development
-dependencies are obtained separately through npm and uv and retain their
-upstream licenses. Dependency versions and license metadata are recorded
-in the package manifests and lockfiles.
+This file highlights the third-party components the packaged app distributes.
+The package manifests and lockfiles identify the full dependency graph.
+Unmodified upstream licence files remain in the packaged modules where their
+packages supply them. Model weights and Python engine environments are not
+distributed: the user downloads or registers models and installs engines
+explicitly, and each keeps its upstream licence.
+
+Electron 44.9.0
+
+Copyright (c) Electron contributors and GitHub Inc.
+Licensed under the MIT License; the packaged app carries electron/LICENSE and,
+for Chromium and its components, electron/LICENSES.chromium.html.
+
+Source: https://github.com/electron/electron/tree/v44.9.0
+
+React 19.3.1 and React DOM 19.3.1
+
+Copyright (c) Meta Platforms, Inc. and affiliates.
+Licensed under the MIT License.
+
+Source: https://github.com/facebook/react
+
+sharp 0.35.5
+
+Copyright 2013 Lovell Fuller and contributors.
+Licensed under the Apache License 2.0.
+
+Source: https://github.com/lovell/sharp/tree/v0.35.5
+Licence: https://github.com/lovell/sharp/blob/v0.35.5/LICENSE
+
+Prebuilt libvips bundle 1.3.4
+
+The @img/sharp-libvips platform package contains libvips 8.18.7 and its native
+dependencies. The bundle is distributed under LGPL-3.0-or-later and the
+compatible component licences recorded by its upstream notice. Libraries that
+use the LGPL do so through their "or later" clauses.
+
+Build source: https://github.com/lovell/sharp-libvips/tree/v1.3.4
+Upstream notices:
+https://github.com/lovell/sharp-libvips/blob/v1.3.4/THIRD-PARTY-NOTICES.md
+LGPLv3 terms: https://www.gnu.org/licenses/lgpl-3.0.html
+
+Ajv 8.20.0 and stream-json 3.7.0
+
+Ajv: Copyright (c) 2015-2021 Evgeny Poberezkin. Licensed under the MIT License.
+stream-json: Copyright 2005-2026 Eugene Lazutkin. Licensed under the BSD
+3-Clause License.
+
+uv 0.13.1
+
+The packaged app bundles the uv executable (Apache-2.0 or MIT, Astral Software
+Inc.) to install Python engines on the user's request. Its notices ship beside
+it in tools/THIRD_PARTY_NOTICES.
+
+Source: https://github.com/astral-sh/uv/tree/0.13.1
+
+DreamO
+
+The DreamO engine's sources include modified files from DreamO (Apache-2.0,
+Bytedance Ltd. and/or its affiliates) and Diffusers (Apache-2.0, Black Forest
+Labs and The HuggingFace Team). Their notices and the full licence text ship
+beside them in out/main/sdk/runtimes/dreamo/THIRD_PARTY_NOTICES.

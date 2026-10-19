@@ -1,60 +1,146 @@
 appId: io.github.nao7sep.picpatch
 productName: PicPatch
 copyright: Copyright © 2026 Yoshinao Inoguchi
+
 directories:
   output: dist
   buildResources: build
+
+# Ship the built app bundle (electron-vite's out/). Production dependencies and
+# package.json are included automatically; source and tests are not.
 files:
   - out/**
   - package.json
+  # Runtime never consumes source maps or TypeScript declarations. Keep the
+  # packaged dependency tree focused on executable code and required metadata.
   - "!**/*.map"
+  - "!**/*.d.ts"
+  - "!**/*.d.mts"
+  - "!**/*.d.cts"
+  - "!**/.DS_Store"
+
 # The bundled SDK starts its Python worker from source files beside its own modules
 # (out/main/sdk/runtimes), and Python cannot read inside an asar archive.
 asar: false
+
 extraResources:
+  # Tahoe "Liquid Glass" icon: a pre-compiled asset catalog. CFBundleIconName points
+  # macOS 26 at it; older macOS reads CFBundleIconFile, the classic build/icon.icns.
+  - from: build/Assets.car
+    to: Assets.car
   - from: LICENSE
-    to: LICENSE
+    to: LICENSE.txt
   - from: THIRD_PARTY_NOTICES
     to: THIRD_PARTY_NOTICES
+  - from: node_modules/electron/dist/LICENSE
+    to: electron/LICENSE
+  - from: node_modules/electron/dist/LICENSES.chromium.html
+    to: electron/LICENSES.chromium.html
   # uv runs explicit engine setup; scripts/prepare-tools.mjs provides the pinned build.
   - from: node_modules/.cache/picpatch-desktop/uv-0.13.1/uv
     to: tools/uv
   - from: node_modules/.cache/picpatch-desktop/uv-0.13.1/THIRD_PARTY_NOTICES
     to: tools/THIRD_PARTY_NOTICES
-  # The Tahoe "Liquid Glass" icon: a pre-compiled asset catalog. CFBundleIconName points
-  # macOS 26 at it; older macOS reads CFBundleIconFile, the classic build/icon.icns.
-  - from: build/Assets.car
-    to: Assets.car
   # The window icon Windows and Linux paint in the title bar and taskbar.
   - from: build/icon.png
     to: icon.png
+
 mac:
   category: public.app-category.graphics-design
   icon: build/icon.icns
   # Ad-hoc signed ("-"): no developer certificate, but a valid seal and a stable
   # bundle identity, which the dock name and per-app defaults rely on.
+  # macOS still shows "unidentified developer" until a Developer ID cert + notarization.
   identity: "-"
   # No notarization, so the hardened runtime would only add library-validation
   # failures for an ad-hoc seal.
   hardenedRuntime: false
-  electronLanguages: [en, de, es, fr, it, pt_BR, ru, ja, ko, zh_CN]
+  electronLanguages:
+    - en
+    - de
+    - es
+    - fr
+    - it
+    - pt_BR
+    - ru
+    - ja
+    - ko
+    - zh_CN
+  # Apple Silicon only: local inference runs on Metal.
   target:
     - target: dmg
-      arch: arm64
+      arch:
+        - arm64
     - target: zip
-      arch: arm64
+      arch:
+        - arm64
+  # Release names are fixed (app-release-conventions): electron-builder's default
+  # appends the arch whenever it is not x64, which would ship "-arm64" names.
+  # This is the portable zip's name; dmg below overrides it for the image.
+  artifactName: ${productName}-${version}-mac.${ext}
   extendInfo:
     CFBundleIconName: PicPatch
-    CFBundleLocalizations: [en, de, es, fr, it, pt-BR, ru, ja, ko, zh-Hans]
+    # The interface languages (src/shared/i18n/index.ts), so AppKit offers
+    # its own menu items (Services, Emoji & Symbols, Start Dictation) in them.
+    CFBundleLocalizations:
+      - en
+      - de
+      - es
+      - fr
+      - it
+      - pt-BR
+      - ru
+      - ja
+      - ko
+      - zh-Hans
+
+dmg:
+  artifactName: ${productName}-${version}.${ext}
+
 win:
   icon: build/icon.png
-  electronLanguages: [en-US, de, es, fr, it, pt-BR, ru, ja, ko, zh-CN]
+  electronLanguages:
+    - en-US
+    - de
+    - es
+    - fr
+    - it
+    - pt-BR
+    - ru
+    - ja
+    - ko
+    - zh-CN
   target:
     - target: nsis
-      arch: x64
+      arch:
+        - x64
     - target: zip
-      arch: x64
+      arch:
+        - x64
+  # The portable zip's name; nsis below overrides it for the installer.
+  artifactName: ${productName}-${version}-win.${ext}
+
+# Clean, predictable installer filename (electron-builder's default is
+# "PicPatch Setup X.Y.Z.exe", with a space).
 nsis:
   oneClick: false
+  perMachine: false
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  runAfterFinish: true
+  artifactName: ${productName}-${version}-setup.${ext}
   multiLanguageInstaller: true
-  installerLanguages: [en_US, de_DE, es_ES, fr_FR, it_IT, pt_BR, ru_RU, ja_JP, ko_KR, zh_CN]
+  # The installer speaks the interface languages, picked from Windows' own
+  # language; English, first, is the fallback.
+  installerLanguages:
+    - en_US
+    - de_DE
+    - es_ES
+    - fr_FR
+    - it_IT
+    - pt_BR
+    - ru_RU
+    - ja_JP
+    - ko_KR
+    - zh_CN
