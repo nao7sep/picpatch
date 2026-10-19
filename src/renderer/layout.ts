@@ -12,10 +12,19 @@ export async function paneLayout(api: Bridge, report: (error: unknown) => void) 
     request.style.width = `${Math.max(layout.request, Math.min(state.requestWidth, maximum))}px`;
     splitter.setAttribute('aria-valuenow', String(Math.round(request.getBoundingClientRect().width)));
   }
-  async function save() { await api.call('paneState', state); }
+  let saving = Promise.resolve();
+  function save() { const snapshot = { ...state }; saving = saving.catch(() => {}).then(() => api.call('paneState', snapshot)); return saving; }
+  let lastMinimum = '';
+  function measure() {
+    paint();
+    const chromeHeight = ['header', 'footer', '.canvasToolbar', '#resultInfo', '#results'].reduce((height, selector) => height + (document.querySelector(selector)?.getBoundingClientRect().height ?? 0), 0);
+    const size = { sidebar: !sidebar.hidden, height: Math.ceil(chromeHeight + layout.canvasHeight) };
+    const key = JSON.stringify(size); if (key === lastMinimum) return; lastMinimum = key;
+    void api.call('layout', size).catch(report);
+  }
   document.getElementById('sessionsToggle')!.onclick = () => {
     sidebar.hidden = !sidebar.hidden; state.sidebar = !sidebar.hidden; paint();
-    void api.call('layout', { sidebar: state.sidebar }).then(save).catch(report);
+    measure(); void save().catch(report);
   };
   let dragging = false;
   splitter.addEventListener('pointerdown', event => { dragging = true; splitter.setPointerCapture(event.pointerId); event.preventDefault(); });
@@ -31,6 +40,7 @@ export async function paneLayout(api: Bridge, report: (error: unknown) => void) 
     if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
     event.preventDefault(); state.requestWidth = event.key === 'Home' ? layout.request : Math.max(layout.request, state.requestWidth + (event.key === 'ArrowRight' ? 20 : -20)); paint(); void save().catch(report);
   });
-  new ResizeObserver(paint).observe(workspace);
-  paint(); await api.call('layout', { sidebar: state.sidebar });
+  const observer = new ResizeObserver(measure);
+  for (const target of [workspace, ...document.querySelectorAll('header, footer, .canvasToolbar, #resultInfo, #results')]) observer.observe(target);
+  measure();
 }

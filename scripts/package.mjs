@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { packager } from '@electron/packager';
 import { transform } from 'esbuild';
 import { cp, mkdir, readFile, readdir, writeFile, rm } from 'node:fs/promises';
@@ -10,7 +11,14 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const staging = join(root, 'dist', 'package');
 await rm(staging, { recursive: true, force: true }); await mkdir(staging, { recursive: true });
 await mkdir(join(staging,'dist'),{recursive:true});
-for (const file of ['main.mjs','preload.cjs','backup-worker.mjs','records-worker.mjs','renderer.js','index.html','style.css']) await cp(join(root,'dist',file),join(staging,'dist',file));
+for (const file of ['main.mjs','preload.cjs','backup-worker.mjs','records-worker.mjs','renderer.js','index.html','style.css','icon.png']) await cp(join(root,'dist',file),join(staging,'dist',file));
+if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new Error('Desktop dependency delivery is currently qualified for Apple Silicon macOS only.');
+const uvCache = join(root, 'node_modules/.cache/picpatch-desktop/uv-0.13.1');
+await mkdir(join(staging, 'dist/tools'), { recursive: true });
+try { await cp(join(uvCache, 'uv-aarch64-apple-darwin/uv'), join(staging, 'dist/tools/uv')); }
+catch (error) { throw new Error('Prepare the bundled setup tool with npm run prepare:tools before packaging.', { cause: error }); }
+await cp(join(root, 'LICENSE'), join(staging, 'LICENSE'));
+await writeFile(join(staging, 'THIRD_PARTY_NOTICES'), 'uv 0.13.1 — https://github.com/astral-sh/uv/tree/0.13.1\n\n' + await readFile(join(uvCache, 'LICENSE-MIT'), 'utf8') + '\n' + await readFile(join(uvCache, 'LICENSE-APACHE'), 'utf8'));
 const sdk = JSON.parse(await readFile(join(root,'sdk','package.json'),'utf8'));
 // The app's distribution compiles its bundled source dependency; the standalone SDK remains source-only.
 async function compile(directory, target) {
@@ -31,9 +39,19 @@ const app=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
 await writeFile(join(staging,'package.json'),JSON.stringify({name:app.name,productName:app.productName,version:app.version,private:true,type:'module',main:'dist/main.mjs',dependencies:{picpatchsdk:'file:./sdk'}}));
 await execute('npm',['install','--offline','--omit=dev','--ignore-scripts','--no-audit','--no-fund'],{cwd:staging,maxBuffer:1024*1024});
 const version=JSON.parse(await readFile(join(root,'node_modules','electron','package.json'),'utf8')).version;
-const zipDirectory=join(root,'node_modules','.cache','picpatch-desktop');await mkdir(zipDirectory,{recursive:true});
-const zip=join(zipDirectory,`electron-v${version}-darwin-arm64.zip`);
-// Reuse the already authorized development runtime rather than downloading another Electron archive.
-await execute('/usr/bin/ditto',['-c','-k','--sequesterRsrc','--keepParent',join(root,'node_modules','electron','dist','Electron.app'),zip]);
-const paths=await packager({dir:staging,out:join(root,'dist'),name:'PicPatch',platform:'darwin',arch:'arm64',electronVersion:version,electronZipDir:zipDirectory,overwrite:true,asar:false,prune:true});
+let electronZipDir;
+let icon = join(root, 'dist', 'icon.png');
+if (process.platform === 'darwin') {
+  const iconset = join(root, 'dist', 'PicPatch.iconset'); await mkdir(iconset, { recursive: true });
+  for (const size of [16, 32, 128, 256, 512]) {
+    for (const scale of [1, 2]) await sharp(join(root, 'assets', 'picpatch.svg')).resize(size * scale).png().toFile(join(iconset, `icon_${size}x${size}${scale === 2 ? '@2x' : ''}.png`));
+  }
+  icon = join(root, 'dist', 'PicPatch.icns');
+  await execute('/usr/bin/iconutil', ['-c', 'icns', iconset, '-o', icon]);
+  electronZipDir = join(root, 'node_modules', '.cache', 'picpatch-desktop'); await mkdir(electronZipDir, { recursive: true });
+  const zip = join(electronZipDir, `electron-v${version}-darwin-${process.arch}.zip`);
+  await execute('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', join(root, 'node_modules', 'electron', 'dist', 'Electron.app'), zip]);
+}
+const paths = await packager({ dir: staging, out: join(root, 'dist'), name: 'PicPatch', appBundleId: 'picpatch.desktop', platform: process.platform, arch: process.arch, electronVersion: version, ...(electronZipDir ? { electronZipDir } : {}), ...(process.platform === 'darwin' ? { icon } : {}), overwrite: true, asar: false, prune: true });
+if (process.platform === 'darwin') await execute('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', join(paths[0], 'PicPatch.app')]);
 console.log(paths[0]);

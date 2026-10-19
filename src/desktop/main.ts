@@ -3,13 +3,15 @@ import { readPaneState, savePaneState } from '../app/layout-state.ts';
 import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor } from 'electron';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, join, basename, relative, isAbsolute } from 'node:path';
+import { dirname, join, basename, relative, isAbsolute, delimiter } from 'node:path';
 import { mkdir } from 'node:fs/promises';
+import { qualifyInference } from './qualification.ts';
 import { installEngine, installNativeEngine, inspectEngine, inspectNativeEngine } from 'picpatchsdk';
 import { appPaths } from '../app/paths.ts';
 import { Application } from '../app/service.ts';
 import { minimum } from '../shared/layout.ts';
 import type { Draft } from '../app/types.ts';
+app.setName('PicPatch');
 const here = dirname(fileURLToPath(import.meta.url));
 protocol.registerSchemesAsPrivileged([{ scheme: 'picpatch-image', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 let window: BrowserWindow | undefined; let service: Application; let quitting = false; let closing = false;
@@ -19,7 +21,9 @@ let managed: { controller: AbortController; task: Promise<unknown> } | undefined
 const paths = await appPaths();
 app.setPath('userData', paths.root); app.setPath('sessionData', join(paths.root, 'browser'));
 await mkdir(join(paths.root, 'browser'), { recursive: true, mode: 0o700 });
-const smoke = process.argv.includes('--smoke');
+const qualificationIndex = process.argv.indexOf('--smoke-inference');
+const qualification = qualificationIndex < 0 ? undefined : process.argv[qualificationIndex + 1];
+const smoke = process.argv.includes('--smoke') || qualificationIndex >= 0;
 let smokeTimer: ReturnType<typeof setTimeout> | undefined;
 let flushReply: ((reply: { ok: boolean; message?: string }) => void) | undefined;
 ipcMain.on('picpatch:flushed', (event, reply) => { if (event.sender === window?.webContents) flushReply?.(reply); });
@@ -58,17 +62,18 @@ async function start() {
     catch (error) { records?.write('error', 'Command failed.', { action, error: errorRecord(error) }); return { ok: false, message: error instanceof Error ? error.message : 'The operation could not finish.' }; }
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'PicPatch', submenu: [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => command('settingsButton') }, { type: 'separator' }, { label: 'About PicPatch', click: () => { void dialog.showMessageBox(window!, { message: 'PicPatch', detail: 'Generate and refine images with local AI.' }); } }, { type: 'separator' }, { role: 'services' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
-    { label: 'File', submenu: [{ label: 'New Session', accelerator: 'CmdOrCtrl+N', click: () => command('new') }, { label: 'Open Source Image…', accelerator: 'CmdOrCtrl+O', click: () => command('import') }, { label: 'Save Image…', accelerator: 'CmdOrCtrl+S', click: () => command('save') }, { label: 'Save Image with Settings…', accelerator: 'CmdOrCtrl+Shift+S', click: () => command('saveSettings') }, { type: 'separator' }, { label: 'Generate or Edit', accelerator: 'CmdOrCtrl+Enter', click: () => command('run') }] },
+    { label: 'PicPatch', submenu: [{ label: 'Settings', accelerator: 'CmdOrCtrl+,', click: () => command('settingsButton') }, { type: 'separator' }, { label: 'About PicPatch', click: () => { void dialog.showMessageBox(window!, { message: 'PicPatch', detail: 'Generate and refine images with local AI.\nGPL-3.0-or-later' }); } }, { type: 'separator' }, { role: 'services' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
+    { label: 'File', submenu: [{ label: 'New Session', accelerator: 'CmdOrCtrl+N', click: () => command('new') }, { label: 'Open Source Image', accelerator: 'CmdOrCtrl+O', click: () => command('import') }, { label: 'Save Image', accelerator: 'CmdOrCtrl+S', click: () => command('save') }, { label: 'Save Image with Settings', accelerator: 'CmdOrCtrl+Shift+S', click: () => command('saveSettings') }, { type: 'separator' }, { label: 'Generate or Edit', accelerator: 'CmdOrCtrl+Enter', click: () => command('run') }] },
     { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
   ]));
-  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', show: false, backgroundColor: '#17191c', webPreferences: { preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', icon: join(here, 'icon.png'), show: false, backgroundColor: '#17191c', webPreferences: { preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => { if (url !== renderer) event.preventDefault(); });
   window.webContents.session.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' picpatch-image: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"] } }));
   window.once('ready-to-show', () => { if (!smoke) window?.show(); });
-  if (smoke) smokeTimer = setTimeout(() => { app.exit(1); }, 15000);
+  if (smoke) smokeTimer = setTimeout(() => { app.exit(1); }, qualification ? 300_000 : 15000);
   window.on('close', event => { if (!quitting) { event.preventDefault(); void close(); } });
+  process.on('SIGTERM', () => { void close(); });
   app.on('before-quit', event => { if (!quitting) { event.preventDefault(); void close(); } });
   powerMonitor.on('shutdown', () => { records?.write('info', 'OS shutdown requested.'); quitting = true; managed?.controller.abort(); service.queue.stop().catch(() => {}); app.exit(0); });
   await window.loadURL(renderer);
@@ -106,9 +111,9 @@ async function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections
 async function dispatch(action: string, payload: any, signal?: AbortSignal) {
   switch (action) {
     case 'records': return records?.list() ?? [];
-    case 'ready': if (smoke) { clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
+    case 'ready': if (smoke) { if (qualification) { try { await qualifyInference(service, qualification, join(here, 'tools/uv')); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
     case 'paneState': if (payload.requestWidth !== undefined) { await savePaneState(paths.state, payload); return; } return readPaneState(paths.state);
-    case 'layout': { const size = minimum(payload.sidebar === true); window!.setMinimumSize(size.width, size.height); return; }
+    case 'layout': { const size = minimum(payload.sidebar === true); const [outerWidth, outerHeight] = window!.getSize(); const [contentWidth, contentHeight] = window!.getContentSize(); const height = Number.isFinite(payload.height) ? Math.max(size.height, payload.height) : size.height; window!.setMinimumSize(size.width + outerWidth - contentWidth, height + outerHeight - contentHeight); return; }
     case 'overview': return service.overview();
     case 'create': return service.sessions.create();
     case 'get': return service.sessions.get(payload.id);
@@ -117,9 +122,9 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'delete': { const answer = await dialog.showMessageBox(window!, { message: 'Delete this session and its retained images?', detail: 'Exported images and original files are kept.', buttons: ['Keep session', 'Delete session'], cancelId: 0, defaultId: 0 }); if (answer.response === 1) await service.remove(payload.id); return; }
     case 'import': { const files = payload.path ? [payload.path] : await pick(['openFile', 'multiSelections'], 'Add images'); const assets = []; for (const path of files) assets.push(await service.importImage(payload.id, path)); return assets; }
     case 'mask': return service.mask(payload.id, payload.bytes);
-    case 'submit': return service.queue.submit(payload.id, payload.draft, payload.samples, payload.parent);
+    case 'submit': if (managed) throw new Error('Wait for the current resource operation.'); return service.queue.submit(payload.id, payload.draft, payload.samples, payload.parent);
     case 'cancel': return service.queue.cancel(payload.id, payload.runId);
-    case 'resume': return service.queue.resume(payload.id);
+    case 'resume': if (managed) throw new Error('Wait for the current resource operation.'); return service.queue.resume(payload.id);
     case 'export': { const result = await dialog.showSaveDialog(window!, { title: 'Save image', defaultPath: 'image.png', filters: [{ name: 'PNG image', extensions: ['png'] }] }); if (result.canceled || !result.filePath) return; return service.export(payload.id, payload.runId, result.filePath, payload.sidecar === true, payload.includeInputs === true); }
     case 'cancelManaged': managed?.controller.abort(); return;
     case 'preferences': if (managed) throw new Error('Wait for the current resource operation.'); await service.preferences(payload); return service.overview();
@@ -141,7 +146,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       return service.prepare(payload.modelId, paths[0], checkpoint, false, payload.components, signal); }
     case 'engines': return { mflux: await inspectEngine({ profile: service.settings.profile }), native: await inspectNativeEngine({ profile: service.settings.profile }) };
     case 'installNative': return installNativeEngine({ profile: service.settings.profile, signal });
-    case 'installPython': { const files = await pick(['openFile'], 'Select uv to install the Python engine'); if (!files[0]) return; return installEngine({ profile: service.settings.profile, uvExecutable: files[0], signal }); }
+    case 'installPython': { const uvExecutable = app.isPackaged ? join(here, 'tools/uv') : join(here, '../node_modules/.cache/picpatch-desktop/uv-0.13.1/uv-aarch64-apple-darwin/uv'); return installEngine({ profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
     case 'collection': { const paths = await pick(['openDirectory'], 'Open sessions collection'); if (paths[0]) await service.collection(paths[0]); return; }
     default: throw new Error('Unknown action.');
   }

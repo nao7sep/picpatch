@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="back" x2="1" y2="1"><stop stop-color="#253b4a"/><stop offset="1" stop-color="#12232c"/></linearGradient>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#95d9da"/><stop offset="1" stop-color="#e6f2df"/></linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#back)"/>
+  <rect x="194" y="212" width="636" height="600" rx="58" fill="#f3f1e5"/>
+  <rect x="232" y="250" width="560" height="524" rx="26" fill="url(#sky)"/>
+  <circle cx="635" cy="382" r="63" fill="#f3bc79"/>
+  <path d="M232 660 430 431 620 646 699 562 792 662V748Q792 774 766 774H258Q232 774 232 748Z" fill="#3b787b"/>
+  <path d="M232 721 438 580 627 774H258Q232 774 232 748Z" fill="#244e5d"/>
+  <rect x="609" y="593" width="234" height="234" rx="39" fill="#f3bc79" stroke="#213a45" stroke-width="20"/>
+  <path d="M659 646H794M659 775H794M656 646V775M796 646V775" fill="none" stroke="#6d4d33" stroke-width="10" stroke-linecap="round" stroke-dasharray="14 19"/>
+  <path d="M691 711H762M727 676V747" fill="none" stroke="#233d47" stroke-width="18" stroke-linecap="round"/>
+</svg>

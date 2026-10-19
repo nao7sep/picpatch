@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 import { expect, it } from 'vitest';
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -22,3 +23,19 @@ it('packages and starts the real renderer from outside the checkout without mode
     expect(session.version).toBe(1); expect(session.runs).toEqual([]);
   } finally { await rm(home, { recursive: true, force: true }); }
 });
+
+it('runs generation and saves its sidecar through the packaged application with existing model weights', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'picpatch-inference-'));
+  try {
+    const executable = join(root, 'dist/PicPatch-darwin-arm64/PicPatch.app/Contents/MacOS/PicPatch');
+    const environment: NodeJS.ProcessEnv = { ...process.env, PICPATCH_DATA_DIR: home, PATH: '/usr/bin:/bin' }; delete environment.ELECTRON_RUN_AS_NODE;
+    await execute(executable, ['--smoke-inference', join(root, 'sdk/node_modules/.cache/picpatch-live/native-inference-config.json')], { cwd: tmpdir(), env: environment, timeout: 310_000, maxBuffer: 1024 * 1024 });
+    const { readdir } = await import('node:fs/promises');
+    const sessions = await readdir(join(home, 'sessions'));
+    const completed = (await Promise.all(sessions.map(async id => JSON.parse(await readFile(join(home, 'sessions', id, 'session.json'), 'utf8'))))).find(session => session.runs.length);
+    expect(completed.runs[0].status).toBe('completed');
+    const image = join(home, 'sessions', completed.id, completed.runs[0].output);
+    expect(await sharp(image).metadata()).toMatchObject({ format: 'png', width: 512, height: 512 });
+    expect(JSON.parse(await readFile(image.slice(0, -4) + '-picpatchsdk.json', 'utf8'))).toHaveProperty('seed', 42);
+  } finally { await rm(home, { recursive: true, force: true }); }
+}, 330_000);

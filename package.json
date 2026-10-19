@@ -22,10 +22,11 @@
     "test:full": "npm run test:app && npm run test:full --workspace picpatchsdk && vitest run --config vitest.live.config.ts",
     "example:worker": "npm run example:worker --workspace picpatchsdk",
     "build": "node scripts/build.mjs",
-    "start": "npm run build && electron .",
+    "start": "node scripts/launch.mjs dev",
     "typecheck:app": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && tsc -p tsconfig.test.json",
     "test:app": "npm run typecheck:app && vitest run && npm run build",
-    "package": "npm run build && node scripts/package.mjs"
+    "package": "npm run build && node scripts/package.mjs",
+    "prepare:tools": "node scripts/prepare-tools.mjs"
   },
   "productName": "PicPatch",
   "license": "GPL-3.0-or-later",
@@ -38,6 +39,7 @@
     "electron": "^44.9.0",
     "esbuild": "^0.28.2",
     "happy-dom": "^21.0.3",
+    "sharp": "^0.35.5",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   },

@@ -62,7 +62,13 @@ export function management(api: Bridge, changed: () => Promise<void>) {
   action('cancelManaged', () => api.call('cancelManaged'));
   action('closeManagement', () => dialog.close());
   action('chooseBundle', async () => { const path = await api.call('pickPath'); if (path) { field('bundleDirectory').value = path; components.forEach(key => { field(`component-${key}`).value = ''; }); loras = []; renderLoras(); } });
-  for (const key of components) action(`choose-${key}`, async () => { const path = await api.call('pickComponent', { directory: field('bundleDirectory').value }); if (path) field(`component-${key}`).value = path; });
+  for (const key of components) {
+    action(`choose-${key}`, async () => { const path = await api.call('pickComponent', { directory: field('bundleDirectory').value }); if (path) field(`component-${key}`).value = path; });
+    if (key !== 'checkpoint') {
+      const clear = document.createElement('button'); clear.textContent = 'Clear'; clear.setAttribute('aria-label', `Clear ${key}`);
+      clear.onclick = () => { field(`component-${key}`).value = ''; }; el(`choose-${key}`).after(clear);
+    }
+  }
   action('addLora', async () => { const path = await api.call('pickComponent', { directory: field('bundleDirectory').value }); if (path) { loras.push({ path }); renderLoras(); } });
   action('register', () => operation(() => {
     const extras: any = {};

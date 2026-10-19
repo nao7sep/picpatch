@@ -1,3 +1,4 @@
+import { renderCollection } from './collection.ts';
 import { paneLayout } from './layout.ts';
 import { fitScale, imagePoint, wipeCompatible } from '../shared/viewport.ts';
 import { management } from './management.ts';
@@ -16,6 +17,10 @@ let parent: string | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saves = Promise.resolve();
 let renamePending = false;
+let commands = Promise.resolve();
+function command(work: () => unknown) {
+  const next = commands.then(work).then(() => {}); commands = next.catch(issue); return next;
+}
 let painting = false, drawing = false;
 const undo: ImageData[] = [], redo: ImageData[] = [];
 const mask = element<HTMLCanvasElement>('mask'); const context = mask.getContext('2d')!;
@@ -26,9 +31,9 @@ let fitting = true;
 const comparison = element<HTMLImageElement>('comparison');
 let lastStroke: { x: number; y: number } | undefined;
 function issue(error: unknown) { element('issue').hidden = false; element('issue').querySelector('span')!.textContent = error instanceof Error ? error.message : String(error); }
-function action(id: string, work: () => unknown) { element(id).addEventListener('click', () => { void Promise.resolve().then(work).catch(issue); }); }
+function action(id: string, work: () => unknown) { element(id).addEventListener('click', () => { void command(work).catch(() => {}); }); }
 const imageUrl = (id: string) => `picpatch-image://${session!.id}/${id}`;
-function button(text: string, work: () => unknown) { const b = document.createElement('button'); b.textContent = text; b.onclick = () => { void Promise.resolve().then(work).catch(issue); }; return b; }
+function button(text: string, work: () => unknown) { const b = document.createElement('button'); b.textContent = text; b.onclick = () => { void command(work).catch(() => {}); }; return b; }
 function collect(): Draft {
   const d = session!.draft;
   d.mode = input('mode').value as Draft['mode']; d.text = input('text').value;
@@ -108,13 +113,14 @@ function references() {
   element('sourceName').textContent = session!.draft.source ? session!.assets.find(a => a.id === session!.draft.source)?.name ?? 'Selected result' : 'No source image';
 }
 function results() {
-  const holder = element('results'); holder.replaceChildren();
+  const holder = element('results'); const items = [];
   for (const run of session!.runs) {
     const b = document.createElement('button'); b.className = `result${selected.includes(run.id) ? ' selected' : ''}`;
     if (run.output) { const img = document.createElement('img'); img.src = imageUrl(run.id); img.alt = ''; b.append(img); }
     const text = document.createElement('div'); text.textContent = `${run.modelId} · ${run.seed} · ${run.status}`; b.append(text);
-    b.onclick = event => { void (async () => { await saveMask(); await flush(); if (event.metaKey || event.ctrlKey || event.shiftKey) selected = selected.includes(run.id) ? selected.filter(id => id !== run.id) : [...selected.slice(-1), run.id]; else selected = [run.id]; results(); show(); })().catch(issue); }; holder.append(b);
+    items.push({ key: run.id, label: `${run.modelId} ${run.seed} ${run.status}`, element: b });
   }
+  renderCollection(holder, items, { label: 'Results', empty: 'Generated images and queued attempts appear here.', selected, multiple: true, horizontal: true, select: keys => { void command(async () => { await saveMask(); await flush(); selected = keys; results(); show(); }).catch(() => {}); } });
 }
 function show() {
   if (selected.length !== 2) { comparison.hidden = true; element('imageStage').classList.remove('wipe'); input('wipePosition').hidden = true; }
@@ -123,6 +129,7 @@ function show() {
   element('empty').hidden = Boolean(asset); element('imageStage').hidden = !asset;
   if (asset && image.dataset.asset !== asset) { image.dataset.asset = asset; image.src = imageUrl(asset); maskDirty = false; undo.length = 0; redo.length = 0; }
   element('resultInfo').textContent = run ? `${run.status} · ${run.modelId} · seed ${run.seed}${run.issue ? ` · ${run.issue.message}` : ''}${run.notices?.length ? ` · ${run.notices.join(' · ')}` : ''}` : '';
+  input('cancelSelected').disabled = !session!.runs.some(run => selected.includes(run.id) && ['queued', 'running'].includes(run.status));
   input('reuse').disabled = !run; input('editResult').disabled = !run?.output; input('save').disabled = !run?.output; input('saveSettings').disabled = !run?.output;
 }
 function scale(fit = fitting) {
@@ -182,10 +189,10 @@ async function persistMask() {
 async function refresh() {
   overview = await api.call('overview');
   document.documentElement.style.colorScheme = overview.settings.theme ?? 'light dark';
-  const holder = element('sessionList'); holder.replaceChildren();
-  for (const item of overview.sessions) holder.append(button(item.name, () => open(item.id)));
+  const holder = element('sessionList');
+  renderCollection(holder, overview.sessions.map((item: any) => ({ key: item.id, label: item.name, element: button(item.name, () => {}) })), { label: 'Sessions', empty: 'No saved sessions.', selected: session ? [session.id] : [], select: keys => { if (keys[0]) void command(() => open(keys[0]!)).catch(() => {}); } });
   for (const failure of overview.failures) { const p = document.createElement('p'); p.textContent = failure.message; holder.append(p); }
-  if (session) { const fresh: Session = await api.call('get', { id: session.id }); session.runs = fresh.runs; session.assets = fresh.assets; results(); show(); }
+  if (session) { const owner = session; const fresh: Session = await api.call('get', { id: owner.id }); if (session === owner) { owner.runs = fresh.runs; owner.assets = fresh.assets; results(); show(); } }
   if (overview.historyIssue) issue(overview.historyIssue);
   const active = overview.queue.active;
   element('status').textContent = overview.queue.paused ? `Queue paused: ${overview.queue.issue ?? 'Resume when ready'}` : active ? `${active.stage} · ${Math.max(0, Math.floor((Date.now() - active.startedAt) / 1000))} s elapsed` : 'Ready';
@@ -194,9 +201,12 @@ async function refresh() {
   if (active?.progress) { progress.max = active.progress.total; progress.value = active.progress.completed; }
 }
 async function open(id: string) {
+  element('request').inert = true; input('sessionName').disabled = true;
+  try {
   if (session) { await saveMask(); await flush(); }
   session = await api.call('get', { id }); renamePending = false; selected = session!.runs.filter(r => r.output).slice(-1).map(r => r.id); parent = undefined;
   fields(); results(); show();
+  } finally { element('request').inert = false; input('sessionName').disabled = false; }
 }
 action('new', async () => { await saveMask(); await flush(); const created: Session = await api.call('create'); await refresh(); await open(created.id); });
 
@@ -208,6 +218,7 @@ action('clearControl', async () => { delete session!.draft.control; capabilities
 input('controlStrength').oninput = scheduleSave;
 action('run', async () => { session!.draft = collect(); await saveMask(); await flush(); await api.call('submit', { id: session!.id, draft: session!.draft, samples: Number(input('samples').value), parent }); await refresh(); });
 action('resume', async () => { await api.call('resume', { id: session!.id }); await refresh(); });
+action('cancelSelected', async () => { const owner = session!; for (const run of owner.runs.filter(run => selected.includes(run.id) && ['queued', 'running'].includes(run.status))) await api.call('cancel', { id: owner.id, runId: run.id }); await refresh(); });
 action('cancel', async () => { const active = overview.queue.active; if (active) await api.call('cancel', { id: active.sessionId, runId: active.runId }); });
 action('reuse', async () => { await saveMask(); const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run) return; session!.draft = structuredClone(run.draft); session!.draft.seed = run.seed; session!.draft.modelIds = [run.modelId]; fields(); await flush(); });
 action('editResult', async () => { const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run?.output) return; await saveMask(); session!.draft.mode = 'edit'; session!.draft.source = run.id; delete session!.draft.mask; parent = run.id; fields(); await flush(); show(); });
@@ -230,10 +241,10 @@ viewport.addEventListener('pointerdown', event => { if (!event.altKey || drawing
 viewport.addEventListener('pointermove', event => { if (pan) { viewport.scrollLeft = pan.left - event.clientX + pan.x; viewport.scrollTop = pan.top - event.clientY + pan.y; } });
 viewport.addEventListener('pointerup', () => { pan = undefined; }); viewport.addEventListener('pointercancel', () => { pan = undefined; });
 element('canvas').ondragover = event => { event.preventDefault(); };
-element('canvas').ondrop = event => { event.preventDefault(); const file = event.dataTransfer?.files[0]; if (!file) return; void (async () => { const added: Asset[] = await api.call('import', { id: session!.id, path: api.droppedFile(file) }); session!.draft.source = added[0]!.id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); })().catch(issue); };
+element('canvas').ondrop = event => { event.preventDefault(); const file = event.dataTransfer?.files[0]; if (!file) return; void command(async () => { const added: Asset[] = await api.call('import', { id: session!.id, path: api.droppedFile(file) }); session!.draft.source = added[0]!.id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); }).catch(() => {}); };
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 api.onChange(() => { if (refreshTimer) return; refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh().catch(issue); }, 100); });
 async function start() { await refresh(); const first = overview.sessions[0] ?? await api.call('create'); await open(first.id); }
-api.onFlush(async () => { if (session) session.draft = collect(); await saveMask(); await flush(); });
+api.onFlush(async () => { await commands; if (session) session.draft = collect(); await saveMask(); await flush(); });
 api.onCommand(id => { const target = document.getElementById(id); if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click(); });
 void paneLayout(api, issue).then(start).then(() => api.call('ready')).catch(issue);
