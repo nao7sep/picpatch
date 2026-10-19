@@ -78,6 +78,7 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
 function validateSize(size: ImageSize | undefined, capabilities: ModelCapabilities): void {
   const limits = capabilities.size;
   if (size && limits && (size.width % limits.widthMultiple !== 0 || size.height % limits.heightMultiple !== 0 ||
+    (limits.minWidth !== undefined && size.width < limits.minWidth) || (limits.minHeight !== undefined && size.height < limits.minHeight) ||
     (limits.maxWidth !== undefined && size.width > limits.maxWidth) || (limits.maxHeight !== undefined && size.height > limits.maxHeight))) {
     throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The requested dimensions are unsupported by this model.');
   }

@@ -1,3 +1,4 @@
+import { isHiDream, inspectHiDreamAssets } from './hidream.ts';
 import { flowVariants, inspectFlowAssets } from './flow.ts';
 import { validateLoraTensors } from './lora.ts';
 import { safetensorsHeader as header, type Header } from '../../models/safetensors.ts';
@@ -8,6 +9,7 @@ import { PicPatchSdkError } from '../../errors.ts';
 
 /** Recognize conventional SD checkpoints and the supported conditioning exports. */
 async function inspectAssets(model: LocalModel, signal?: AbortSignal): Promise<void> {
+  if (isHiDream(model.variant)) return inspectHiDreamAssets(model, signal);
   if ((flowVariants as readonly string[]).includes(model.variant)) return inspectFlowAssets(model, signal);
   const conditioned = Boolean(model.photoMaker || model.ipAdapter);
   const required = [model.checkpoint!, ...[model.photoMaker, model.ipAdapter, model.clipVision].filter((path): path is string => path !== undefined)];

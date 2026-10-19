@@ -1,3 +1,4 @@
+import { pythonRuntime } from '../app/engines.ts';
 import { RecordsReader } from '../app/records-reader.ts';
 import { focusWorkspaceForCommand } from './workspace-command.ts';
 import { LogsWindow } from './logs-window.ts';
@@ -225,9 +226,9 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return; let checkpoint: string | undefined = payload.checkpoint;
       if (!checkpoint && (await service.overview()).models.find(m => m.id === payload.modelId)?.runtime.name === 'stable-diffusion.cpp') { const files = await pick(['openFile'], t('ui.select_the_checkpoint_inside_that_bundle')); if (!files[0] || dirname(files[0]) !== paths[0]) throw new UiError('ui.choose_a_checkpoint_in_the_selected_bundle'); checkpoint = basename(files[0]); }
       return service.prepare(payload.modelId, paths[0], checkpoint, false, payload.components, signal); }
-    case 'engines': return { python: await inspectEngine({ runtime: (await service.overview()).models.find(model => model.id === payload.modelId)?.runtime.name === 'dreamo' ? 'dreamo' : 'mflux', profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
+    case 'engines': return { python: await inspectEngine({ runtime: pythonRuntime((await service.overview()).models, payload.modelId), profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
     case 'installNative': return installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal });
-    case 'installPython': { const uvExecutable = app.isPackaged ? join(here, 'tools/uv') : join(here, '../node_modules/.cache/picpatch-desktop/uv-0.13.1/uv-aarch64-apple-darwin/uv'); return installEngine({ runtime: (await service.overview()).models.find(model => model.id === payload.modelId)?.runtime.name === 'dreamo' ? 'dreamo' : 'mflux', onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
+    case 'installPython': { const uvExecutable = app.isPackaged ? join(here, 'tools/uv') : join(here, '../node_modules/.cache/picpatch-desktop/uv-0.13.1/uv-aarch64-apple-darwin/uv'); return installEngine({ runtime: pythonRuntime((await service.overview()).models, payload.modelId), onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }

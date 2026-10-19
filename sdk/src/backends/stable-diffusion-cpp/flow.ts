@@ -1,3 +1,4 @@
+import { isHiDream, validateHiDreamAssets } from './hidream.ts';
 import { join } from 'node:path';
 import type { LocalModel, ModelCapabilities } from '../../contracts.generated.ts';
 import { PicPatchSdkError } from '../../errors.ts';
@@ -20,6 +21,7 @@ export function flowCapabilities(variant: string, model: string): ModelCapabilit
 }
 
 export function validateFlowAssets(model: LocalModel): void {
+  if (isHiDream(model.variant)) return validateHiDreamAssets(model);
   if (!isFlow(model.variant)) {
     if (model.clipL !== undefined || model.clipG !== undefined || model.t5 !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Separate text encoders require a supported native flow model.');
     return;

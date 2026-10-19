@@ -1,4 +1,4 @@
-import { modelCapabilities } from '../../models/variants.ts';
+import { modelCapabilities, modelRuntime } from '../../models/variants.ts';
 import { validateEditRequest, validateGenerateRequest } from '../../validation.ts';
 import { dirname } from 'node:path';
 import type { EditBackend } from '../../execution/backend.ts';
@@ -29,11 +29,11 @@ export class ManagedBackend implements EditBackend {
   private open(signal?: AbortSignal): Promise<ProcessEditor> {
     if (this.disposed) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Image client has been disposed.'));
     this.opening ??= (async () => {
-      const engine = await resolveEngine(this.root, signal, this.model?.variant === 'flux1-dreamo-v1.1' ? 'dreamo' : 'mflux');
+      const engine = await resolveEngine(this.root, signal, modelRuntime(this.model?.variant));
       checkSignal(signal);
       if (this.disposed) throw new PicPatchSdkError('DISPOSED', 'Image client has been disposed.');
       const installation = dirname(dirname(dirname(engine.pythonExecutable)));
-      this.backend = new ProcessEditor(new WorkerProcess({ ...workerLaunch(engine.pythonExecutable, installation, this.model?.variant === 'flux1-dreamo-v1.1' ? 'dreamo' : 'mflux'), ...(this.model ? { model: this.model } : {}) }, this.timeouts), this.model);
+      this.backend = new ProcessEditor(new WorkerProcess({ ...workerLaunch(engine.pythonExecutable, installation, modelRuntime(this.model?.variant)), ...(this.model ? { model: this.model } : {}) }, this.timeouts), this.model);
       return this.backend;
     })().catch(error => { this.opening = undefined; throw error; });
     return this.opening;

@@ -48,6 +48,11 @@ class GenerationAdapter(MfluxAdapter):
         if self.definition['family'] == 'boogu':
             from mflux.models.boogu.variants.txt2img.boogu_image import BooguImage
             return getattr(ModelConfig, self.definition['config'])(), BooguImage, mx
+        if self.definition['family'] == 'ideogram4':
+            from mflux.models.ideogram4.variants.txt2img.ideogram4 import Ideogram4
+            # Explicit steps select constant CFG, not the upstream variable-CFG
+            # presets. Both values are recorded by our sampling contract.
+            return getattr(ModelConfig, self.definition['config'])(), Ideogram4, mx
         if self.definition['family'] == 'ming-image':
             from mflux.models.ming_image.variants.ming_image import MingImage
             return getattr(ModelConfig, self.definition['config'])(), MingImage, mx

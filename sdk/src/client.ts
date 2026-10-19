@@ -1,3 +1,4 @@
+import { modelRuntime } from './models/variants.ts';
 import type { ImagePlan, GenerateImagePlan, EditImagePlan } from './images/planning.ts';
 import { validateProfile, validateTimeouts, profileDefaults, type PicPatchProfile } from './profile.ts';
 import { NativeBackend } from './backends/stable-diffusion-cpp/backend.ts';
@@ -56,5 +57,5 @@ export function createImageClient(options: ImageClientOptions = {}): ImageClient
   if (options.nativeExecutable !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'nativeExecutable requires a native model.');
   const engineDirectory = options.engineDirectory ?? profile?.engineDirectory;
   const root = resolveStoragePaths(engineDirectory === undefined ? {} : { engineDirectory }).engineDirectory;
-  return new ImageClientImpl(new ManagedBackend(root, model, timeouts), settings, model?.manifest.model, { backend: model?.variant === 'flux1-dreamo-v1.1' ? 'dreamo' : 'mflux', timeouts });
+  return new ImageClientImpl(new ManagedBackend(root, model, timeouts), settings, model?.manifest.model, { backend: modelRuntime(model?.variant), timeouts });
 }

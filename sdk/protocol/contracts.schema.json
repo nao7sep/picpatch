@@ -217,6 +217,14 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 9007199254740991
+            },
+            "minWidth": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minHeight": {
+              "type": "integer",
+              "minimum": 1
             }
           },
           "required": [
@@ -577,7 +585,10 @@
             "krea-2-raw",
             "boogu-image-turbo",
             "ming-image-design",
+            "ideogram4-fp8",
             "flux1-dreamo-v1.1",
+            "glm-image",
+            "flux2-dev",
             "sd15",
             "sdxl",
             "sd15-inpaint",
@@ -589,7 +600,9 @@
             "sdxl-ip-adapter-plus",
             "sd35-large",
             "chroma",
-            "chroma-radiance"
+            "chroma-radiance",
+            "hidream-o1",
+            "hidream-o1-dev"
           ]
         },
         "directory": {

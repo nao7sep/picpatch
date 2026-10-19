@@ -1,3 +1,4 @@
+import { isHiDream, hiDreamConditioning } from './hidream.ts';
 import { nativeWeightArguments } from './flow.ts';
 import { inspectNativeAssets } from './assets.ts';
 import { randomInt } from 'node:crypto';
@@ -53,6 +54,8 @@ export class NativeBackend implements EditBackend {
     const size = request.size ?? capabilities.defaultOutputSize!;
     const directory = dirname(request.outputPath);
     let prompt = 'prompt' in request ? request.prompt : request.instruction;
+    const ordered = isHiDream(this.model.variant) && 'instruction' in request ? hiDreamConditioning(request) : undefined;
+    if (ordered) prompt = ordered.prompt;
     const group = 'instruction' in request ? request.references?.[0] : undefined;
     if (this.model.photoMaker && group) prompt = prompt.replace(`{${group.id}}`, `${group.className} img`);
     // Keep private text out of process arguments and disable native PNG metadata.
@@ -79,7 +82,8 @@ export class NativeBackend implements EditBackend {
       '--sampling-method', effectiveParameters.sampler!, '--scheduler', effectiveParameters.scheduler!, '--lora-model-dir', directory];
     if (this.model.loras) args.push('--lora-apply-mode', 'at_runtime');
     if (request.control) args.push('--control-net', join(this.model.directory, this.model.controlNet!.path), '--control-image', request.control.image, '--control-strength', String(request.control.strength ?? 0.9));
-    if ('instruction' in request && request.sourceImage) {
+    if (ordered) for (const path of ordered.paths) args.push('--ref-image', path);
+    if (!ordered && 'instruction' in request && request.sourceImage) {
       args.push('--init-img', request.sourceImage!, '--strength', String(effectiveParameters.strength));
       if (request.maskImage) args.push('--mask', request.maskImage);
     }

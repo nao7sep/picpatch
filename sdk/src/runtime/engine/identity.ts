@@ -7,7 +7,7 @@ import type { EngineIdentity, EngineRecord, EngineRuntime } from './types.ts';
 
 const hash = (bytes: string) => createHash('sha256').update(bytes).digest('hex');
 export function runtimePaths(runtime: EngineRuntime = 'mflux') {
-  if (!['mflux', 'dreamo'].includes(runtime)) throw new PicPatchSdkError('INVALID_REQUEST', 'Unknown engine runtime.');
+  if (!['mflux', 'dreamo', 'diffusers'].includes(runtime)) throw new PicPatchSdkError('INVALID_REQUEST', 'Unknown engine runtime.');
   return { projectDirectory: fileURLToPath(new URL(`../../../runtimes/${runtime}/`, import.meta.url)), probePath: fileURLToPath(new URL(`../../../runtimes/${runtime}/engine_probe.py`, import.meta.url)) };
 }
 export async function engineDefinition(runtime: EngineRuntime = 'mflux') {
@@ -17,7 +17,7 @@ export async function engineDefinition(runtime: EngineRuntime = 'mflux') {
   return { identity: identifyEngine(manifest, lock, runtime), manifest, lock };
 }
 export function identifyEngine(manifest: string, lock: string, runtime: EngineRuntime = 'mflux'): EngineIdentity {
-  const fields = { platform: 'darwin', architecture: 'arm64', python: '3.15.0', dependencies: runtime === 'dreamo' ? 'dreamo-inference' : 'inference', lockSha256: hash(lock), manifestSha256: hash(manifest) } as const;
+  const fields = { platform: 'darwin', architecture: 'arm64', python: '3.15.0', dependencies: runtime === 'mflux' ? 'inference' : `${runtime}-inference` as const, lockSha256: hash(lock), manifestSha256: hash(manifest) } as const;
   return { id: hash(JSON.stringify({ version: 1, ...fields })), ...fields };
 }
 export function validRecord(value: unknown, identity: EngineIdentity): value is EngineRecord {

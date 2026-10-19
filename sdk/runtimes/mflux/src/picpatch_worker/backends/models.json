@@ -1068,5 +1068,59 @@
       "mllm/tokenizer.json",
       "mllm/tokenizer_config.json"
     ]
+  },
+  {
+    "id": "ideogram4-fp8",
+    "family": "ideogram4",
+    "config": "ideogram4_fp8",
+    "defaults": {
+      "num_inference_steps": 20,
+      "guidance": 7
+    },
+    "requiredDirectories": [
+      "vae",
+      "transformer",
+      "unconditional_transformer",
+      "text_encoder",
+      "tokenizer"
+    ],
+    "requiredFiles": [
+      "transformer/config.json",
+      "unconditional_transformer/config.json",
+      "text_encoder/config.json",
+      "tokenizer/tokenizer.json",
+      "tokenizer/tokenizer_config.json"
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16,
+        "minWidth": 256,
+        "minHeight": 256,
+        "maxWidth": 2048,
+        "maxHeight": 2048
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 20,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "guidance": {
+          "default": 7,
+          "minimum": 1
+        }
+      }
+    }
   }
 ]

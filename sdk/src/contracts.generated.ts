@@ -159,6 +159,8 @@ export interface ModelCapabilities {
     heightMultiple: number;
     maxWidth?: number;
     maxHeight?: number;
+    minWidth?: number;
+    minHeight?: number;
   };
   /**
    * Whether this adapter requires a source image in addition to any references. Absence means unspecified.
@@ -425,7 +427,10 @@ export interface LocalModel {
     | "krea-2-raw"
     | "boogu-image-turbo"
     | "ming-image-design"
+    | "ideogram4-fp8"
     | "flux1-dreamo-v1.1"
+    | "glm-image"
+    | "flux2-dev"
     | "sd15"
     | "sdxl"
     | "sd15-inpaint"
@@ -437,7 +442,9 @@ export interface LocalModel {
     | "sdxl-ip-adapter-plus"
     | "sd35-large"
     | "chroma"
-    | "chroma-radiance";
+    | "chroma-radiance"
+    | "hidream-o1"
+    | "hidream-o1-dev";
   directory: string;
   manifest: ModelManifest;
   quantize?: 4 | 8;

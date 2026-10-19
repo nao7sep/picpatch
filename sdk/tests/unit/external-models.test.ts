@@ -7,9 +7,10 @@ import { listModels, prepareModel, verifyModel } from '../../src/index.ts';
 let directory: string;
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-external-'));
-  for (const name of ['transformer', 'vae', 'text_encoder', 'text_encoder_2', 'tokenizer', 'tokenizer_2', 'processor', 'mllm', 'connector', 'mlp']) {
+  for (const name of ['transformer', 'vae', 'text_encoder', 'text_encoder_2', 'tokenizer', 'tokenizer_2', 'processor', 'mllm', 'connector', 'mlp', 'unconditional_transformer']) {
     await mkdir(join(directory, name));
-    if (['transformer', 'vae', 'text_encoder'].includes(name)) await writeFile(join(directory, name, 'config.json'), '{}');
+    if (['transformer', 'vae', 'text_encoder', 'unconditional_transformer'].includes(name)) await writeFile(join(directory, name, 'config.json'), '{}');
+    if (name === 'tokenizer') await writeFile(join(directory, name, 'tokenizer_config.json'), '{}');
     if (name === 'mllm') {
       for (const filename of ['tokenizer.json', 'tokenizer_config.json', 'vocab.json', 'merges.txt']) await writeFile(join(directory, name, filename), '{}');
     }
@@ -74,6 +75,9 @@ it('does not advertise Turbo without checkpoint-specific scheduler support', asy
 });
 
 it.each([
+  ['ideogram4-fp8', 'unconditional_transformer/0.safetensors'],
+  ['ideogram4-fp8', 'unconditional_transformer/config.json'],
+  ['ideogram4-fp8', 'tokenizer/tokenizer_config.json'],
   ['boogu-image-turbo', 'mllm/vocab.json'],
   ['boogu-image-turbo', 'mllm/tokenizer_config.json'],
   ['ming-image-design', 'mllm/tokenizer.json'],

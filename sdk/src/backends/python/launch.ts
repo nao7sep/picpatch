@@ -1,9 +1,10 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { EngineRuntime } from '../../runtime/engine/types.ts';
 import type { WorkerLaunch } from '../../worker/process.ts';
-export function workerLaunch(pythonExecutable: string, installation?: string, runtime: 'mflux' | 'dreamo' = 'mflux'): WorkerLaunch {
+export function workerLaunch(pythonExecutable: string, installation?: string, runtime: EngineRuntime = 'mflux'): WorkerLaunch {
   const sources = ['common', runtime].map(name => fileURLToPath(new URL(`../../../runtimes/${name}/src/`, import.meta.url)));
-  const module = runtime === 'dreamo' ? 'picpatch_dreamo.__main__' : 'picpatch_worker.__main__';
+  const module = ({ mflux: 'picpatch_worker', dreamo: 'picpatch_dreamo', diffusers: 'picpatch_diffusers' }[runtime]) + '.__main__';
   const entry = ['-c', `import sys; sys.path[:0]=${JSON.stringify(sources)}; from ${module} import run; raise SystemExit(run())`];
   return {
     executable: pythonExecutable,

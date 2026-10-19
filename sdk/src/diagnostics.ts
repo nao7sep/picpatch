@@ -29,7 +29,7 @@ export interface EventOptions {
   debug?: boolean;
   onEvent?: (event: SdkEvent) => void;
 }
-export interface RuntimeConfiguration { backend?: 'mflux' | 'dreamo' | 'stable-diffusion-cpp'; timeouts?: import('./worker/process.ts').WorkerTimeouts }
+export interface RuntimeConfiguration { backend?: 'mflux' | 'dreamo' | 'diffusers' | 'stable-diffusion-cpp'; timeouts?: import('./worker/process.ts').WorkerTimeouts }
 /** Stateless verbs share the module lifetime; editors supply their own lifetime. */
 export function diagnosticLifetime(configuration: RuntimeConfiguration = {}) { return { started: false, configuration }; }
 const moduleLifetime = diagnosticLifetime();

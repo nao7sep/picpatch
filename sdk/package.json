@@ -57,6 +57,10 @@
     "runtimes/dreamo/engine_probe.py",
     "runtimes/dreamo/THIRD_PARTY_NOTICES",
     "runtimes/common/src/**/*.py",
-    "runtimes/dreamo/THIRD_PARTY_NOTICES"
+    "runtimes/diffusers/pyproject.toml",
+    "runtimes/diffusers/uv.lock",
+    "runtimes/diffusers/src/**/*.py",
+    "runtimes/diffusers/src/**/*.json",
+    "runtimes/diffusers/engine_probe.py"
   ]
 }

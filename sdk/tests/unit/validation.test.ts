@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateEditRequest, PicPatchSdkError, type EditRequest, type ModelCapabilities } from '../../src/index.ts';
+import { validateEditRequest, validateGenerateRequest, listModels, PicPatchSdkError, type EditRequest, type ModelCapabilities } from '../../src/index.ts';
 const request = (): EditRequest => ({ model: 'test', instruction: 'Combine these subjects', outputPath: '/out.png', references: [
   { id: 'alice', role: 'subject', images: ['/alice-front.png', '/alice-side.png'] },
   { id: 'bob', role: 'subject', images: ['/bob-front.png', '/bob-side.png'] },
@@ -44,4 +44,16 @@ describe('editing contracts', () => {
     expect(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Unavailable', { cause }).cause).toBe(cause);
     expect(new PicPatchSdkError('CANCELLED', 'The operation was cancelled.')).toMatchObject({ kind: 'cancelled', code: 'CANCELLED' });
   });
+});
+
+// Geometry describes actual model support, not the host computer's memory budget.
+it('enforces the Ideogram 4 native dimension interval for generation', () => {
+  const caps = listModels().find(model => model.id === 'ideogram4-fp8')!.capabilities;
+  const input = { model: caps.model, prompt: 'A bowl.', outputPath: '/output.png' };
+  for (const size of [{ width: 256, height: 2048 }, { width: 2048, height: 256 }]) {
+    expect(validateGenerateRequest({ ...input, size }, caps).size).toEqual(size);
+  }
+  for (const size of [{ width: 240, height: 256 }, { width: 256, height: 240 }, { width: 2064, height: 256 }, { width: 256, height: 2064 }, { width: 257, height: 256 }]) {
+    expect(() => validateGenerateRequest({ ...input, size }, caps)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
+  }
 });

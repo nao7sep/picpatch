@@ -75,7 +75,7 @@ async function prepareModelOperation(id: string, options: PrepareModelOptions = 
     const { modelsDirectory: _modelsDirectory, ...nativeOptions } = options;
     return prepareNativeModel(entry.variant, nativeOptions);
   }
-  if (entry.runtime.name === 'dreamo' && options.loras !== undefined) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'DreamO uses its fixed trained components; additional LoRAs are unsupported.');
+  if (entry.runtime.name !== 'mflux' && options.loras !== undefined) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This runtime uses fixed trained components; additional LoRAs are unsupported.');
   if (options.loras !== undefined) {
     validateMfluxLoras(options.loras);
     const loras = structuredClone(options.loras);

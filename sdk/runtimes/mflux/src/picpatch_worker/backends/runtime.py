@@ -169,7 +169,9 @@ class MfluxAdapter:
         sampling, effective = self.sampling(request, operation)
         size = request.get('size', self.capabilities['defaultOutputSize'])
         limits = self.capabilities['size']
-        if any(size[axis] < limits[axis + 'Multiple'] or size[axis] % limits[axis + 'Multiple']
+        if any(size[axis] < limits.get('min' + axis.title(), limits[axis + 'Multiple'])
+               or size[axis] > limits.get('max' + axis.title(), math.inf)
+               or size[axis] % limits[axis + 'Multiple']
                for axis in ('width', 'height')):
             raise InvalidEditInput('Output dimensions must match the model geometry.')
         seed = request.get('seed')

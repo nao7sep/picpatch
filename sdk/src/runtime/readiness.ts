@@ -1,3 +1,4 @@
+import { modelRuntime } from '../models/variants.ts';
 import { NativeBackend } from '../backends/stable-diffusion-cpp/backend.ts';
 import { isNativeVariant, nativeCapabilities, nativeRevision } from '../backends/stable-diffusion-cpp/models.ts';
 import { withDiagnostics } from '../diagnostics.ts';
@@ -66,7 +67,7 @@ async function inspectReadinessOperation(executable: string, input: LocalModel, 
       } finally { await backend.dispose(); }
     }
     emitProgress(operation, { type: 'progress', verb: 'inspectReadiness', stage: 'runtime', message: options.load ? 'Loading the local model for a readiness check.' : 'Checking inference runtime imports.' });
-    const worker = new WorkerProcess({ ...workerLaunch(executable, undefined, model.variant === 'flux1-dreamo-v1.1' ? 'dreamo' : 'mflux'), model, runtimeCheck: options.load ? 'load' : 'imports' }, { ...workerTimeouts, startupMs: budget });
+    const worker = new WorkerProcess({ ...workerLaunch(executable, undefined, modelRuntime(model.variant)), model, runtimeCheck: options.load ? 'load' : 'imports' }, { ...workerTimeouts, startupMs: budget });
     const abort = () => worker.abortStartup();
     signal.addEventListener('abort', abort, { once: true });
     try {

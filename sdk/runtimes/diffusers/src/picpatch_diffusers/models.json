@@ -1,0 +1,118 @@
+[
+  {
+    "id": "glm-image",
+    "family": "glm-image",
+    "config": "glm_image",
+    "defaults": {},
+    "requiredDirectories": [
+      "tokenizer",
+      "processor",
+      "text_encoder",
+      "vision_language_encoder",
+      "vae",
+      "transformer",
+      "scheduler"
+    ],
+    "requiredFiles": [
+      "model_index.json",
+      "tokenizer/tokenizer_config.json",
+      "processor/preprocessor_config.json",
+      "text_encoder/config.json",
+      "vision_language_encoder/config.json",
+      "vae/config.json",
+      "transformer/config.json",
+      "scheduler/scheduler_config.json"
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": true,
+      "referenceRoles": [
+        "subject",
+        "object",
+        "style",
+        "background"
+      ],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 32,
+        "heightMultiple": 32
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "sourceImageRequired": false,
+      "referenceConditioning": "ordered-images-with-role-prompt",
+      "parameters": {
+        "steps": {
+          "default": 50,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "guidance": {
+          "default": 1.5,
+          "minimum": 0
+        }
+      },
+      "outpainting": false,
+      "loraFormats": []
+    }
+  },
+  {
+    "id": "flux2-dev",
+    "family": "flux2",
+    "config": "flux2_dev",
+    "defaults": {},
+    "requiredDirectories": [
+      "tokenizer",
+      "text_encoder",
+      "transformer",
+      "vae",
+      "scheduler"
+    ],
+    "requiredFiles": [
+      "model_index.json",
+      "tokenizer/tokenizer_config.json",
+      "text_encoder/config.json",
+      "transformer/config.json",
+      "vae/config.json",
+      "scheduler/scheduler_config.json"
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": true,
+      "referenceRoles": [
+        "subject",
+        "object",
+        "style",
+        "background"
+      ],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "sourceImageRequired": false,
+      "referenceConditioning": "ordered-images-with-role-prompt",
+      "parameters": {
+        "steps": {
+          "default": 50,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "guidance": {
+          "default": 4,
+          "minimum": 0
+        }
+      },
+      "outpainting": false,
+      "loraFormats": []
+    }
+  }
+]

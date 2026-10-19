@@ -1,3 +1,4 @@
+import { hiDreamCapabilities, hiDreamVariants, isHiDream } from './hidream.ts';
 import { flowCapabilities, flowVariants } from './flow.ts';
 import { nativeRelease } from '../../runtime/engine/native-release.ts';
 import type { ModelCapabilities } from '../../contracts.generated.ts';
@@ -5,9 +6,10 @@ import type { ModelCapabilities } from '../../contracts.generated.ts';
 /** Source-audited CLI contract; native inference evidence remains separate. */
 export { nativeRevision };
 const nativeRevision = nativeRelease.revision;
-export const nativeVariants = ['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint', 'sdxl-photomaker-v1', 'sd15-ip-adapter', 'sdxl-ip-adapter', 'sd15-ip-adapter-plus', 'sdxl-ip-adapter-plus', ...flowVariants] as const;
+export const nativeVariants = ['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint', 'sdxl-photomaker-v1', 'sd15-ip-adapter', 'sdxl-ip-adapter', 'sd15-ip-adapter-plus', 'sdxl-ip-adapter-plus', ...flowVariants, ...hiDreamVariants] as const;
 export function isNativeVariant(variant: string): boolean { return (nativeVariants as readonly string[]).includes(variant); }
 export function nativeCapabilities(variant: string, model: string = variant): ModelCapabilities {
+  if (isHiDream(variant)) return hiDreamCapabilities(variant, model);
   if ((flowVariants as readonly string[]).includes(variant)) return flowCapabilities(variant, model);
   const masked = variant.endsWith('-inpaint');
   const identity = variant === 'sdxl-photomaker-v1';
@@ -24,7 +26,7 @@ export function nativeCapabilities(variant: string, model: string = variant): Mo
       ...(identity ? { identityStyleStrength: { default: 20, minimum: 0, maximum: 100 } } : appearance ? { appearanceStrength: { default: 1, minimum: 0, maximum: 3.4028234663852886e38 } } : { strength: { default: masked ? 1 : 0.75, minimum: masked ? 1 : 0, maximum: 1 } }) } };
 }
 export function nativeModels() {
-  return nativeVariants.map(variant => ({ id: variant, variant, family: variant.startsWith('sdxl') ? 'sdxl' : variant.startsWith('sd15') ? 'sd15' : variant === 'sd35-large' ? 'sd3' : 'chroma',
+  return nativeVariants.map(variant => ({ id: variant, variant, family: variant.startsWith('sdxl') ? 'sdxl' : variant.startsWith('sd15') ? 'sd15' : variant === 'sd35-large' ? 'sd3' : isHiDream(variant) ? 'hidream-o1' : 'chroma',
     acquisition: 'external' as const, status: 'experimental' as const, evidence: 'source-audited' as const,
     capabilities: nativeCapabilities(variant), runtime: { name: 'stable-diffusion.cpp' as const, version: nativeRevision,
       platform: 'darwin' as const, architecture: 'arm64' as const } }));

@@ -22,14 +22,15 @@ export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'va
     try {
       const root = await realpath(directory);
       const components: ModelComponent[] = [];
-      const visit = async (relative: string): Promise<void> => {
+      const visit = async (relative: string, rootFiles?: Set<string>): Promise<void> => {
         checkSignal(signal);
         const path = join(root, relative);
         if (await realpath(path) !== path) throw new PicPatchSdkError('MODEL_IO', 'Model component directories must not be symbolic links.');
         // Do not traverse directory links. File links are allowed for HF cache blobs.
         for (const item of (await readdir(path, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
           checkSignal(signal);
-          const name = `${relative}/${item.name}`;
+          if (rootFiles && !rootFiles.has(item.name)) continue;
+          const name = relative ? `${relative}/${item.name}` : item.name;
           if (item.isDirectory()) { await visit(name); continue; }
           const file = await open(join(root, name), constants.O_RDONLY | constants.O_NONBLOCK);
           try {
@@ -57,13 +58,15 @@ export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'va
         if (await realpath(join(root, part)) !== join(root, part)) throw new PicPatchSdkError('MODEL_IO', 'Model component directories must not be symbolic links.');
         await visit(part);
         const files = components.filter(c => c.path.startsWith(`${part}/`));
-        if (!files.length || (!part.startsWith('tokenizer') && part !== 'processor' && !files.some(c => c.role === 'weights'))) throw new PicPatchSdkError('MODEL_IO', 'The selected variant requires a complete model bundle.');
+        if (!files.length || (!part.startsWith('tokenizer') && !['processor', 'scheduler'].includes(part) && !files.some(c => c.role === 'weights'))) throw new PicPatchSdkError('MODEL_IO', 'The selected variant requires a complete model bundle.');
       }
       if (entry.variant === 'flux1-dreamo-v1.1') {
         for (const part of ['transformer', 'vae', 'text_encoder', 'text_encoder_2']) {
           if (!components.some(component => component.path.startsWith(`base/${part}/`) && component.role === 'weights')) throw new PicPatchSdkError('MODEL_IO', 'DreamO requires complete local base-model component weights.');
         }
       }
+      const rootFiles = new Set((definition.requiredFiles ?? []).filter(path => !path.includes('/')));
+      if (rootFiles.size) await visit('', rootFiles);
       for (const required of definition.requiredFiles ?? []) {
         if (!components.some(component => component.path === required)) throw new PicPatchSdkError('MODEL_IO', 'The selected variant requires complete component and processor configuration files.');
       }

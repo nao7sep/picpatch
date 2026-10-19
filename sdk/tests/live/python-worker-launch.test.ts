@@ -4,9 +4,10 @@ import { WorkerProcess, workerTimeouts } from '../../src/worker/process.ts';
 import { workerLaunch } from '../../src/backends/python/launch.ts';
 import type { LocalModel } from '../../src/contracts.generated.ts';
 
-it('launches both bundled Python entries with a real model-bound handshake and confirmed shutdown without weights', async () => {
+it('launches bundled Python entries with a real model-bound handshake and confirmed shutdown without weights', async () => {
   const cases = [
     { runtime: 'mflux' as const, variant: 'flux2-klein-4b' as const, python: process.env.PICPATCH_MFLUX_PYTHON ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/runtime-py315/bin/python', import.meta.url)) },
+    { runtime: 'diffusers' as const, variant: 'glm-image' as const, python: process.env.PICPATCH_DIFFUSERS_PYTHON ?? fileURLToPath(new URL('../../node_modules/.cache/diffusers-audit/venv/bin/python', import.meta.url)) },
     { runtime: 'dreamo' as const, variant: 'flux1-dreamo-v1.1' as const, python: process.env.PICPATCH_DREAMO_PYTHON ?? fileURLToPath(new URL('../../node_modules/.cache/dreamo-audit/venv/bin/python', import.meta.url)) },
   ];
   for (const entry of cases) {

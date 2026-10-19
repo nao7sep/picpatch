@@ -48,3 +48,10 @@ export function controlNetShapes(context = 768): Record<string, number[]> {
     } : { 'input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight': [320, context] }),
   }).map(([key, value]) => [`control_model.${key}`, value]));
 }
+
+export const hiDreamShapes = {
+  'model.x_embedder.proj1.weight': [1024, 3072],
+  'model.language_model.layers.0.self_attn.q_proj.weight': [4096, 4096],
+  'model.visual.patch_embed.proj.weight': [1152, 3, 2, 16, 16],
+  'model.final_layer2.linear.weight': [3072, 4096],
+};

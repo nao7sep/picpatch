@@ -8,6 +8,7 @@ from picpatch_worker.backends import create_adapter
 from picpatch_worker.backends.errors import InvalidEditInput, Cancelled
 
 FAMILIES = [
+    ('ideogram4-fp8', 'mflux.models.ideogram4.variants.txt2img.ideogram4', 'Ideogram4', 'ideogram4_fp8'),
     ('ming-image-design', 'mflux.models.ming_image.variants.ming_image', 'MingImage', 'ming_image_design'),
     ('krea-2', 'mflux.models.krea2.variants.txt2img.krea2', 'Krea2', 'krea2'),
     ('krea-2-raw', 'mflux.models.krea2.variants.txt2img.krea2', 'Krea2', 'krea2_raw'),
@@ -24,7 +25,7 @@ def family(request, tmp_path):
 
 
 def request_for(tmp_path):
-    return {'model': 'local', 'prompt': 'A blue bowl.', 'size': {'width': 32, 'height': 16},
+    return {'model': 'local', 'prompt': 'A blue bowl.', 'size': {'width': 256, 'height': 256},
             'seed': 0, 'outputPath': str(tmp_path / 'image.png')}
 
 
@@ -35,9 +36,11 @@ def test_generation_arguments_and_result(monkeypatch, family, tmp_path):
     if adapter.definition['family'] == 'krea2':
         parameters.update(guidance=2, negativePrompt='blur', scheduler='euler')
     result = adapter.generate({**request_for(tmp_path), 'parameters': parameters}, Event(), lambda _: None)
-    expected = {'prompt': 'A blue bowl.', 'seed': 0, 'width': 32, 'height': 16, 'num_inference_steps': 7}
+    expected = {'prompt': 'A blue bowl.', 'seed': 0, 'width': 256, 'height': 256, 'num_inference_steps': 7}
     if adapter.definition['family'] == 'krea2':
         expected.update(guidance=2, negative_prompt='blur', scheduler='euler')
+    if adapter.definition['family'] == 'ideogram4':
+        expected['guidance'] = 7
     assert calls[0] == ('load', {'model_config': config, 'model_path': str(tmp_path), 'quantize': 4})
     assert calls[1] == ('generate', expected)
     assert result['seed'] == 0 and result['modelRevision'] == 'a' * 40
@@ -77,7 +80,7 @@ def test_unsupported_conditioning_never_loads(monkeypatch, family, tmp_path):
 def test_unprepared_krea_root_override_is_never_loaded(monkeypatch, tmp_path, filename):
     adapter = create_adapter({'variant': 'krea-2', 'directory': str(tmp_path),
                               'manifest': {'model': 'local', 'source': {'revision': 'a' * 40}}})
-    calls, _ = fake_runtime(monkeypatch, (adapter, *FAMILIES[1][1:]))
+    calls, _ = fake_runtime(monkeypatch, (adapter, *FAMILIES[2][1:]))
     (tmp_path / filename).write_bytes(b'unrecorded checkpoint')
     with pytest.raises(InvalidEditInput, match='root checkpoint'):
         adapter.generate(request_for(tmp_path), Event(), lambda _: None)
@@ -89,3 +92,17 @@ def test_unsupported_loras_are_rejected_before_runtime_import(family):
               'manifest': {**family[0].config['manifest'], 'components': [{'path': 'adapter.safetensors', 'role': 'weights'}]}}
     with pytest.raises(InvalidEditInput, match='does not support LoRAs'):
         create_adapter(config)
+
+
+def test_ideogram_constant_guidance_defaults_and_geometry(monkeypatch, tmp_path):
+    adapter = create_adapter({'variant': 'ideogram4-fp8', 'directory': str(tmp_path),
+                              'manifest': {'model': 'local', 'source': {'revision': 'a' * 40}}})
+    calls, _ = fake_runtime(monkeypatch, (adapter, *FAMILIES[0][1:]))
+    for width, height in [(240, 256), (256, 240), (2064, 256), (256, 2064), (257, 256)]:
+        with pytest.raises(InvalidEditInput, match='geometry'):
+            adapter.generate({**request_for(tmp_path), 'size': {'width': width, 'height': height}}, Event(), lambda _: None)
+    assert calls == []
+    result = adapter.generate(request_for(tmp_path), Event(), lambda _: None)
+    assert calls[1][1]['num_inference_steps'] == 20
+    assert calls[1][1]['guidance'] == 7
+    assert result['effectiveParameters'] == {'steps': 20, 'guidance': 7}
