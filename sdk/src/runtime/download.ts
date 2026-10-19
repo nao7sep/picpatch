@@ -34,7 +34,8 @@ export async function downloadFile(url: string, path: string, bytes: number, sig
         arm(); received += chunk.length;
         callback(received > bytes ? new PicPatchSdkError(code, 'Artifact file exceeded its pinned length.') : null, received > bytes ? undefined : chunk);
       } });
-      await pipeline(Readable.fromWeb(response.body), count, createWriteStream(path, { flags: 'wx', mode: 0o600 }), { signal: combined });
+      // Consumers may type-check with DOM libraries; both declarations describe the same WHATWG stream.
+      await pipeline(Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>), count, createWriteStream(path, { flags: 'wx', mode: 0o600 }), { signal: combined });
       if (received !== bytes) throw new PicPatchSdkError(code, 'Artifact file did not match its pinned length.');
       return;
     }
