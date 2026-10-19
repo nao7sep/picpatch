@@ -13,11 +13,12 @@ export function validateDraft(value: unknown): Draft {
   const draft = value as Draft;
   if (!draft || !['generate', 'edit'].includes(draft.mode) || typeof draft.text !== 'string' || !Array.isArray(draft.modelIds) || !draft.modelIds.every(v => typeof v === 'string' && v.length) || !Number.isSafeInteger(draft.width) || draft.width < 1 || !Number.isSafeInteger(draft.height) || draft.height < 1 || !draft.parameters || typeof draft.parameters !== 'object' || Array.isArray(draft.parameters) || !Array.isArray(draft.references)) throw new Error('Invalid session draft.');
   if (draft.seed !== undefined && (!Number.isSafeInteger(draft.seed) || draft.seed < 0)) throw new Error('Invalid seed.');
-  for (const asset of [draft.source, draft.mask]) if (asset !== undefined) id(asset);
+  for (const asset of [draft.source, draft.mask, draft.control?.image]) if (asset !== undefined) id(asset);
   for (const group of draft.references) {
     if (!group || typeof group.id !== 'string' || !Array.isArray(group.images)) throw new Error('Invalid reference group.');
     group.images.forEach(id);
   }
+  if (draft.control && (draft.control.kind !== 'canny' || (draft.control.strength !== undefined && !Number.isFinite(draft.control.strength)))) throw new Error('Invalid structural control.');
   return structuredClone(draft);
 }
 export function validateSession(value: unknown): Session {
@@ -41,7 +42,7 @@ export function validateSession(value: unknown): Session {
     if (run.record) validateArtifactRecord(run.record);
     if (run.status === 'completed' && (!run.output || !run.record)) throw new Error('Incomplete saved result.');
   }
-  const check = (draft: Draft) => { for (const key of [draft.source, draft.mask, ...draft.references.flatMap(group => group.images)]) if (key !== undefined && !ids.has(key) && !runs.has(key)) throw new Error('Session references a missing image.'); };
+  const check = (draft: Draft) => { for (const key of [draft.source, draft.mask, draft.control?.image, ...draft.references.flatMap(group => group.images)]) if (key !== undefined && !ids.has(key) && !runs.has(key)) throw new Error('Session references a missing image.'); };
   check(session.draft); session.runs.forEach(run => check(run.draft));
   return structuredClone(session);
 }

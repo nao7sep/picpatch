@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 await rm(new URL('../dist/', import.meta.url), { recursive: true, force: true });
 await mkdir(new URL('../dist/', import.meta.url), { recursive: true });
-await build({ absWorkingDir: root, entryPoints: { main: 'src/desktop/main.ts', 'backup-worker': 'src/app/backup-worker.ts' }, outdir: 'dist', outExtension: { '.js': '.mjs' }, bundle: true, platform: 'node', format: 'esm', packages: 'external', target: 'node24' });
+await build({ absWorkingDir: root, entryPoints: { main: 'src/desktop/main.ts', 'backup-worker': 'src/app/backup-worker.ts', 'records-worker': 'src/app/records-worker.ts' }, outdir: 'dist', outExtension: { '.js': '.mjs' }, bundle: true, platform: 'node', format: 'esm', packages: 'external', target: 'node24' });
 await build({ absWorkingDir: root, entryPoints: ['src/desktop/preload.ts'], outfile: 'dist/preload.cjs', bundle: true, platform: 'node', format: 'cjs', external: ['electron'] });
 await build({ absWorkingDir: root, entryPoints: ['src/renderer/main.ts'], outfile: 'dist/renderer.js', bundle: true, platform: 'browser', format: 'esm', target: 'chrome152' });
 for (const name of ['index.html', 'style.css']) await copyFile(new URL(`../src/renderer/${name}`, import.meta.url), new URL(`../dist/${name}`, import.meta.url));

@@ -22,6 +22,11 @@ it('exports through the SDK without prompts and preserves independently exported
     const saved = JSON.parse(await readFile(join(exports, 'selected-picpatchsdk.json'), 'utf8'));
     expect(saved.inputs).toBeUndefined(); expect(saved.effectiveParameters.negativePrompt).toBeUndefined();
     expect((await app.sessions.get(session.id)).runs[0]!.record!.inputs?.prompt).toBe('private prompt');
+    expect(await app.export(session.id, runId, join(exports, 'selected.png'), false, false)).toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
+    await writeFile(join(exports, 'partial-picpatchsdk.json'), 'existing sidecar');
+    expect(await app.export(session.id, runId, join(exports, 'partial.png'), true, false)).toMatchObject({ status: 'saved', sidecar: { status: 'failed', code: 'OUTPUT_CONFLICT' } });
+    expect(await readFile(join(exports, 'partial.png'))).toEqual(png);
+    expect(await readFile(join(exports, 'partial-picpatchsdk.json'), 'utf8')).toBe('existing sidecar');
     await app.remove(session.id); expect(await readFile(join(exports, 'selected.png'))).toEqual(png);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

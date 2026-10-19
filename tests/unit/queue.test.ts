@@ -49,3 +49,17 @@ it('keeps a published result when worker cleanup cannot be confirmed', async () 
   expect(queue.state.paused).toBe(true);
   await expect(queue.resume(session.id)).rejects.toThrow('termination is unconfirmed');
 });
+it('retains the actual output and pauses after a result metadata write fails', async () => {
+  const sessions = new Sessions(root); const session = await sessions.create();
+  const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
+  let produced = '';
+  const update = sessions.update.bind(sessions); let writes = 0;
+  sessions.update = async (...args) => { if (++writes === 3) throw new Error('Disk unavailable'); return update(...args); };
+  const queue = new Queue(sessions, async (_id, run) => {
+    produced = join(root, session.id, 'outputs', `${run.id}.png`); await writeFile(produced, 'published');
+    return { outcome: { model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: produced, mimeType: 'image/png', size: { width: 1, height: 1 } }, record } };
+  });
+  await queue.submit(session.id, session.draft, 2); await queue.settled();
+  expect(queue.state.paused).toBe(true); expect(await readFile(produced, 'utf8')).toBe('published');
+  expect((await new Sessions(root).get(session.id)).runs.map(run => run.status)).toEqual(['interrupted', 'queued']);
+});

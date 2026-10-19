@@ -1,3 +1,7 @@
+import { paneLayout } from './layout.ts';
+import { fitScale, imagePoint, wipeCompatible } from '../shared/viewport.ts';
+import { management } from './management.ts';
+import { incompatibilities } from '../shared/admission.ts';
 import type { Bridge } from '../shared/bridge.ts';
 import type { Session, Draft, Asset, Run } from '../app/types.ts';
 import type { ModelCapabilities } from 'picpatchsdk/types';
@@ -11,18 +15,22 @@ let selected: string[] = [];
 let parent: string | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saves = Promise.resolve();
+let renamePending = false;
 let painting = false, drawing = false;
 const undo: ImageData[] = [], redo: ImageData[] = [];
 const mask = element<HTMLCanvasElement>('mask'); const context = mask.getContext('2d')!;
 const image = element<HTMLImageElement>('image'); image.crossOrigin = 'anonymous';
 let maskDirty = false, maskRevision = 0;
 let maskSave = Promise.resolve();
+let fitting = true;
+const comparison = element<HTMLImageElement>('comparison');
+let lastStroke: { x: number; y: number } | undefined;
 function issue(error: unknown) { element('issue').hidden = false; element('issue').querySelector('span')!.textContent = error instanceof Error ? error.message : String(error); }
 function action(id: string, work: () => unknown) { element(id).addEventListener('click', () => { void Promise.resolve().then(work).catch(issue); }); }
 const imageUrl = (id: string) => `picpatch-image://${session!.id}/${id}`;
 function button(text: string, work: () => unknown) { const b = document.createElement('button'); b.textContent = text; b.onclick = () => { void Promise.resolve().then(work).catch(issue); }; return b; }
 function collect(): Draft {
-  const d = structuredClone(session!.draft);
+  const d = session!.draft;
   d.mode = input('mode').value as Draft['mode']; d.text = input('text').value;
   d.modelIds = [...element('modelList').querySelectorAll<HTMLInputElement>('input:checked')].map(item => item.value);
   d.width = Number(input('width').value); d.height = Number(input('height').value);
@@ -32,14 +40,15 @@ function collect(): Draft {
     if (field.value === '') delete (d.parameters as any)[key]; else (d.parameters as any)[key] = field.dataset.numeric ? Number(field.value) : field.value;
   }
   if (input('expand').checked) d.outpaint = { width: Number(input('outWidth').value), height: Number(input('outHeight').value), left: Number(input('outLeft').value), top: Number(input('outTop').value) }; else delete d.outpaint;
+  if (d.control) { if (input('controlStrength').value === '') delete d.control.strength; else d.control.strength = Number(input('controlStrength').value); }
   return d;
 }
-function scheduleSave() { if (!session) return; session.draft = collect(); clearTimeout(saveTimer); saveTimer = setTimeout(() => { void flush().catch(issue); }, 350); }
+function scheduleSave() { if (!session) return; session.draft = collect(); admission(); clearTimeout(saveTimer); saveTimer = setTimeout(() => { void flush().catch(issue); }, 350); }
 async function flush() {
   clearTimeout(saveTimer); saveTimer = undefined;
   if (!session) return;
-  const id = session.id, draft = structuredClone(session.draft);
-  const next = saves.then(() => api.call('draft', { id, draft })).then(() => {});
+  const id = session.id, draft = structuredClone(session.draft), name = session.name, rename = renamePending;
+  const next = saves.then(async () => { await api.call('draft', { id, draft }); if (rename) { await api.call('rename', { id, name }); if (session?.id === id && session.name === name) renamePending = false; } });
   saves = next.catch(() => {}); await next;
 }
 function fields() {
@@ -52,11 +61,21 @@ function fields() {
   for (const model of overview.models) { const label = document.createElement('label'); const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = model.id; checkbox.checked = d.modelIds.includes(model.id); label.append(checkbox, document.createTextNode(` ${model.id}`)); checkbox.onchange = () => { scheduleSave(); capabilities(); }; models.append(label); }
   capabilities(); references();
 }
+function admission() {
+  if (!session) return;
+  const messages = session.draft.modelIds.flatMap(id => { const model = overview.models.find((m: any) => m.id === id); return model ? incompatibilities(session!.draft, model.capabilities).map(message => `${id}: ${message}`) : [`${id}: model unavailable.`]; });
+  element('admission').textContent = messages.join('\n');
+  input('run').disabled = !session.draft.modelIds.length || messages.length > 0;
+}
 function capabilities() {
   const d = session!.draft; const model = overview.models.find((m: any) => m.id === d.modelIds[0]); const caps: ModelCapabilities | undefined = model?.capabilities;
   element('editControls').hidden = d.mode !== 'edit'; element('run').textContent = d.mode === 'edit' ? 'Edit' : 'Generate';
   element('maskSemantics').textContent = caps?.maskMode === 'composite' || caps?.maskMode === 'latent-composite' ? 'Masked edits preserve normalized pixels outside the edited region.' : caps?.maskMode === 'native' ? 'Native inpainting: pixels outside the mask may change.' : 'This model does not support masks.';
   input('paint').disabled = !d.source || !caps || caps.maskMode === 'none'; input('expand').disabled = !caps?.outpainting;
+  admission();
+  input('addControl').disabled = !caps?.controlKinds?.includes('canny');
+  element('controlName').textContent = d.control ? session!.assets.find(a => a.id === d.control!.image)?.name ?? 'Control image' : 'No Canny map';
+  input('controlStrength').value = d.control?.strength === undefined ? '' : String(d.control.strength);
   const parameters = element('parameters'); parameters.replaceChildren();
   for (const key of ['steps', 'guidance', 'strength', 'identityStyleStrength', 'appearanceStrength', 'sampler', 'scheduler', 'negativePrompt']) {
     const descriptor = (caps?.parameters as any)?.[key]; const existing = (d.parameters as any)[key];
@@ -74,9 +93,17 @@ function references() {
   for (const [index, group] of session!.draft.references.entries()) {
     const box = document.createElement('div'); box.className = 'reference';
     const name = document.createElement('input'); name.value = group.id; name.setAttribute('aria-label', 'Reference group name'); name.onchange = () => { group.id = name.value; void flush().catch(issue); }; box.append(name);
-    const role = document.createElement('select'); for (const value of ['subject','object','style','background']) { const option = document.createElement('option'); option.value = value; option.textContent = value; role.append(option); } role.value = group.role; role.onchange = () => { group.role = role.value as typeof group.role; void flush().catch(issue); }; box.append(role);
-    for (const id of group.images) { const img = document.createElement('img'); img.src = imageUrl(id); img.alt = 'Reference'; box.append(img); }
-    box.append(button('Add photos', async () => { const added: Asset[] = await api.call('import', { id: session!.id }); group.images.push(...added.map(asset => asset.id)); await refresh(); await flush(); references(); }), button('Remove group', async () => { session!.draft.references.splice(index, 1); await flush(); references(); })); holder.append(box);
+    const role = document.createElement('select'); for (const value of ['subject','object','style','background']) { const option = document.createElement('option'); option.value = value; option.textContent = value; role.append(option); } role.value = group.role; role.onchange = () => { group.role = role.value as typeof group.role; admission(); void flush().catch(issue); }; box.append(role);
+    for (const [key, values] of [['conditioning', ['prompt','identity','appearance']], ['className', ['', 'man','woman','girl','boy']]] as const) {
+      const label = document.createElement('label'); label.textContent = key === 'conditioning' ? 'Conditioning' : 'Identity class';
+      const select = document.createElement('select');
+      for (const value of values) { const option = document.createElement('option'); option.value = value; option.textContent = value || 'Not selected'; select.append(option); }
+      select.value = group[key] ?? (key === 'conditioning' ? 'prompt' : '');
+      select.onchange = () => { if (key === 'conditioning') group.conditioning = select.value as typeof group.conditioning; else if (select.value) group.className = select.value as typeof group.className; else delete group.className; admission(); void flush().catch(issue); };
+      label.append(select); box.append(label);
+    }
+    for (const id of group.images) { const img = document.createElement('img'); img.src = imageUrl(id); img.alt = 'Reference'; box.append(img, button('Remove photo', async () => { group.images = group.images.filter(value => value !== id); await flush(); references(); admission(); })); }
+    box.append(button('Add photos', async () => { const added: Asset[] = await api.call('import', { id: session!.id }); group.images.push(...added.map(asset => asset.id)); await refresh(); await flush(); references(); admission(); }), button('Remove group', async () => { session!.draft.references.splice(index, 1); await flush(); references(); })); holder.append(box);
   }
   element('sourceName').textContent = session!.draft.source ? session!.assets.find(a => a.id === session!.draft.source)?.name ?? 'Selected result' : 'No source image';
 }
@@ -90,21 +117,39 @@ function results() {
   }
 }
 function show() {
+  if (selected.length !== 2) { comparison.hidden = true; element('imageStage').classList.remove('wipe'); input('wipePosition').hidden = true; }
   const run = session!.runs.find(r => r.id === selected[selected.length - 1]);
   const asset = run?.output ? run.id : session!.draft.source;
   element('empty').hidden = Boolean(asset); element('imageStage').hidden = !asset;
   if (asset && image.dataset.asset !== asset) { image.dataset.asset = asset; image.src = imageUrl(asset); maskDirty = false; undo.length = 0; redo.length = 0; }
-  element('resultInfo').textContent = run ? `${run.status} · ${run.modelId} · seed ${run.seed}${run.issue ? ` · ${run.issue.message}` : ''}` : '';
+  element('resultInfo').textContent = run ? `${run.status} · ${run.modelId} · seed ${run.seed}${run.issue ? ` · ${run.issue.message}` : ''}${run.notices?.length ? ` · ${run.notices.join(' · ')}` : ''}` : '';
   input('reuse').disabled = !run; input('editResult').disabled = !run?.output; input('save').disabled = !run?.output; input('saveSettings').disabled = !run?.output;
 }
-function scale(fit = false) {
+function scale(fit = fitting) {
   if (!image.naturalWidth) return;
-  const canvas = element('canvas'); const ratio = fit ? Math.min((canvas.clientWidth - 32) / image.naturalWidth, (canvas.clientHeight - 32) / image.naturalHeight, 1) : Number(input('zoom').value) / 100;
-  image.width = Math.max(1, Math.round(image.naturalWidth * ratio)); image.height = Math.max(1, Math.round(image.naturalHeight * ratio));
-  element('imageStage').style.width = `${image.width}px`; element('imageStage').style.height = `${image.height}px`;
+  fitting = fit;
+  const viewport = element('canvas');
+  const first = { width: image.naturalWidth, height: image.naturalHeight };
+  const second = { width: comparison.naturalWidth, height: comparison.naturalHeight };
+  const comparing = !comparison.hidden && second.width > 0;
+  const wipe = comparing && input('compareMode').value === 'wipe' && wipeCompatible(first, second);
+  if (comparing && input('compareMode').value === 'wipe' && !wipe) input('compareMode').value = 'side';
+  const ratio = fit ? fitScale({ width: viewport.clientWidth, height: viewport.clientHeight }, first, comparing && !wipe ? second : undefined) : Number(input('zoom').value) / 100;
+  input('zoom').value = String(Math.round(ratio * 100));
+  image.width = Math.max(1, Math.round(first.width * ratio)); image.height = Math.max(1, Math.round(first.height * ratio));
+  const stage = element('imageStage'); stage.style.width = `${image.width}px`; stage.style.height = `${image.height}px`;
+  stage.classList.toggle('wipe', wipe); input('wipePosition').hidden = !wipe;
+  if (comparing) {
+    comparison.width = Math.round(second.width * ratio); comparison.height = Math.round(second.height * ratio);
+    (wipe ? stage : viewport).append(comparison);
+    comparison.style.clipPath = wipe ? `inset(0 0 0 ${input('wipePosition').value}%)` : '';
+  }
 }
+comparison.onload = () => scale();
+input('compareMode').onchange = () => scale(); input('wipePosition').oninput = () => scale(false);
+new ResizeObserver(() => { if (fitting) scale(true); }).observe(element('canvas'));
 image.onload = () => {
-  mask.width = image.naturalWidth; mask.height = image.naturalHeight; scale(true);
+  mask.width = image.naturalWidth; mask.height = image.naturalHeight; scale();
   const owner = session;
   if (owner && image.dataset.asset === owner.draft.source && owner.draft.mask) {
     const saved = new Image(); saved.crossOrigin = 'anonymous'; const sourceId = image.dataset.asset;
@@ -112,9 +157,15 @@ image.onload = () => {
     saved.src = imageUrl(owner.draft.mask);
   }
 };
-function point(event: PointerEvent) { const rect = mask.getBoundingClientRect(); return { x: (event.clientX - rect.left) * mask.width / rect.width, y: (event.clientY - rect.top) * mask.height / rect.height }; }
-function stroke(event: PointerEvent) { const p = point(event); context.globalCompositeOperation = input('erase').checked ? 'destination-out' : 'source-over'; context.fillStyle = '#ffffff'; context.beginPath(); context.arc(p.x, p.y, Number(input('brush').value) / 2, 0, Math.PI * 2); context.fill(); maskDirty = true; maskRevision++; }
-mask.onpointerdown = event => { if (!painting) return; undo.push(context.getImageData(0,0,mask.width,mask.height)); while (undo.length > 1 && undo.length * mask.width * mask.height * 4 > 64 * 1024 * 1024) undo.shift(); redo.length = 0; drawing = true; mask.setPointerCapture(event.pointerId); stroke(event); };
+function point(event: PointerEvent) { return imagePoint({ x: event.clientX, y: event.clientY }, mask.getBoundingClientRect(), { width: mask.width, height: mask.height }); }
+function stroke(event: PointerEvent) {
+  const p = point(event); context.globalCompositeOperation = input('erase').checked ? 'destination-out' : 'source-over';
+  context.strokeStyle = '#ffffff'; context.lineWidth = Number(input('brush').value); context.lineCap = 'round';
+  context.beginPath(); context.moveTo(lastStroke?.x ?? p.x, lastStroke?.y ?? p.y); context.lineTo(p.x, p.y); context.stroke();
+  context.fillStyle = '#ffffff'; context.beginPath(); context.arc(p.x, p.y, context.lineWidth / 2, 0, Math.PI * 2); context.fill();
+  lastStroke = p; maskDirty = true; maskRevision++;
+}
+mask.onpointerdown = event => { if (!painting || event.altKey) return; undo.push(context.getImageData(0,0,mask.width,mask.height)); while (undo.length > 1 && undo.length * mask.width * mask.height * 4 > 64 * 1024 * 1024) undo.shift(); redo.length = 0; drawing = true; lastStroke = undefined; mask.setPointerCapture(event.pointerId); stroke(event); };
 mask.onpointermove = event => { if (drawing) stroke(event); };
 mask.onpointerup = () => { drawing = false; void saveMask().then(flush).catch(issue); };
 mask.onpointercancel = () => { drawing = false; void saveMask().then(flush).catch(issue); };
@@ -130,54 +181,59 @@ async function persistMask() {
 }
 async function refresh() {
   overview = await api.call('overview');
+  document.documentElement.style.colorScheme = overview.settings.theme ?? 'light dark';
   const holder = element('sessionList'); holder.replaceChildren();
   for (const item of overview.sessions) holder.append(button(item.name, () => open(item.id)));
   for (const failure of overview.failures) { const p = document.createElement('p'); p.textContent = failure.message; holder.append(p); }
   if (session) { const fresh: Session = await api.call('get', { id: session.id }); session.runs = fresh.runs; session.assets = fresh.assets; results(); show(); }
   if (overview.historyIssue) issue(overview.historyIssue);
   const active = overview.queue.active;
-  element('status').textContent = overview.queue.paused ? `Queue paused: ${overview.queue.issue ?? 'Resume when ready'}` : active ? `${active.stage} · working` : 'Ready';
+  element('status').textContent = overview.queue.paused ? `Queue paused: ${overview.queue.issue ?? 'Resume when ready'}` : active ? `${active.stage} · ${Math.max(0, Math.floor((Date.now() - active.startedAt) / 1000))} s elapsed` : 'Ready';
   element('cancel').hidden = !active;
   const progress = element<HTMLProgressElement>('progress'); progress.hidden = !active?.progress;
   if (active?.progress) { progress.max = active.progress.total; progress.value = active.progress.completed; }
 }
 async function open(id: string) {
   if (session) { await saveMask(); await flush(); }
-  session = await api.call('get', { id }); selected = session!.runs.filter(r => r.output).slice(-1).map(r => r.id); parent = undefined;
+  session = await api.call('get', { id }); renamePending = false; selected = session!.runs.filter(r => r.output).slice(-1).map(r => r.id); parent = undefined;
   fields(); results(); show();
 }
 action('new', async () => { await saveMask(); await flush(); const created: Session = await api.call('create'); await refresh(); await open(created.id); });
-action('sessionsToggle', () => { element('sessions').hidden = !element('sessions').hidden; return api.call('layout', { sidebar: !element('sessions').hidden }); });
-action('import', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (assets[0]) { session!.draft.source = assets[0].id; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); } });
+
+action('import', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (assets[0]) { session!.draft.source = assets[0].id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); } });
 action('clearSource', async () => { delete session!.draft.source; delete session!.draft.mask; maskDirty = false; selected = []; fields(); await flush(); show(); });
-action('addReference', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (!assets.length) return; session!.draft.references.push({ id: `reference-${session!.draft.references.length + 1}`, role: 'subject', images: assets.map(a => a.id) }); await refresh(); references(); await flush(); });
+action('addReference', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (!assets.length) return; session!.draft.references.push({ id: `reference-${session!.draft.references.length + 1}`, role: 'subject', images: assets.map(a => a.id) }); await refresh(); references(); admission(); await flush(); });
+action('addControl', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (assets[0]) { session!.draft.control = { image: assets[0].id, kind: 'canny' }; await refresh(); capabilities(); await flush(); } });
+action('clearControl', async () => { delete session!.draft.control; capabilities(); await flush(); });
+input('controlStrength').oninput = scheduleSave;
 action('run', async () => { session!.draft = collect(); await saveMask(); await flush(); await api.call('submit', { id: session!.id, draft: session!.draft, samples: Number(input('samples').value), parent }); await refresh(); });
 action('resume', async () => { await api.call('resume', { id: session!.id }); await refresh(); });
 action('cancel', async () => { const active = overview.queue.active; if (active) await api.call('cancel', { id: active.sessionId, runId: active.runId }); });
-action('reuse', async () => { const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run) return; session!.draft = structuredClone(run.draft); session!.draft.seed = run.seed; session!.draft.modelIds = [run.modelId]; fields(); await flush(); });
+action('reuse', async () => { await saveMask(); const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run) return; session!.draft = structuredClone(run.draft); session!.draft.seed = run.seed; session!.draft.modelIds = [run.modelId]; fields(); await flush(); });
 action('editResult', async () => { const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run?.output) return; await saveMask(); session!.draft.mode = 'edit'; session!.draft.source = run.id; delete session!.draft.mask; parent = run.id; fields(); await flush(); show(); });
-action('fit', () => scale(true)); action('actual', () => { input('zoom').value = '100'; scale(); }); input('zoom').oninput = () => scale();
+action('fit', () => scale(true)); action('actual', () => { input('zoom').value = '100'; scale(false); }); input('zoom').oninput = () => scale(false);
 action('paint', () => { selected = []; show(); painting = !painting; mask.classList.toggle('painting', painting); element('paint').textContent = painting ? 'Finish painting' : 'Paint mask'; });
 action('clearMask', async () => { context.clearRect(0,0,mask.width,mask.height); delete session!.draft.mask; maskDirty = false; await flush(); });
 action('undoMask', () => { const previous = undo.pop(); if (previous) { redo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(previous,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
 action('redoMask', () => { const next = redo.pop(); if (next) { undo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(next,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
-action('compare', () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { second.hidden = true; scale(true); return; } if (selected.length !== 2) throw new Error('Command-click two completed results to compare.'); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new Error('Choose completed results.'); second.src = imageUrl(run.id); second.hidden = false; });
+action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { second.hidden = true; scale(true); return; } if (selected.length !== 2) throw new Error('Command-click two completed results to compare.'); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new Error('Choose completed results.'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); second.hidden = false; });
 for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const result = await api.call('export', { id: session!.id, runId: selected.at(-1), sidecar, includeInputs: input('includePrompts').checked }); if (result?.status === 'refused') throw new Error(result.message); if (result?.sidecar?.status === 'failed') throw new Error('Image saved; its settings sidecar could not be saved.'); if (result?.status === 'saved') element('status').textContent = sidecar ? 'Image and settings saved.' : 'Image saved.'; });
 action('delete', async () => { const id = session!.id; await api.call('delete', { id }); session = undefined; await start(); });
 action('collection', async () => { await saveMask(); await flush(); await api.call('collection'); session = undefined; await start(); });
-input('sessionName').onchange = () => { void api.call('rename', { id: session!.id, name: input('sessionName').value }).then(refresh).catch(issue); };
+input('sessionName').oninput = () => { session!.name = input('sessionName').value; renamePending = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => { void flush().then(refresh).catch(issue); }, 350); };
 for (const id of ['mode','text','width','height','seed','expand','outWidth','outHeight','outLeft','outTop']) input(id).addEventListener('input', () => { scheduleSave(); if (id === 'mode') capabilities(); });
 element('issue').querySelector('button')!.onclick = () => { element('issue').hidden = true; };
-const management = element<HTMLDialogElement>('management');
-action('manage', async () => { management.showModal(); const select = element<HTMLSelectElement>('manageModel'); select.replaceChildren(); for (const model of overview.models) { const option = document.createElement('option'); option.value = model.id; option.textContent = `${model.id} (${model.evidence ?? 'experimental'})`; select.append(option); } await managed(); });
-action('closeManagement', () => management.close());
-async function managed() { const inventory = await api.call('models'); element('managedList').replaceChildren(); for (const model of inventory.models) { const p = document.createElement('p'); p.textContent = `${model.id}: ${model.status}`; element('managedList').append(p); } }
-for (const [id, command] of [['installNative','installNative'],['installPython','installPython'],['checkEngines','engines']] as const) action(id, async () => { element('engineState').textContent = 'Working…'; try { const result = await api.call(command); element('engineState').textContent = JSON.stringify(result, null, 2); } catch (error) { element('engineState').textContent = String(error); } });
-for (const [id, download] of [['download',true],['register',false]] as const) action(id, async () => { element('manageIssue').textContent = 'Preparing model…'; try { await api.call('prepare', { modelId: input('manageModel').value, download }); element('manageIssue').textContent = ''; await managed(); } catch (error) { element('manageIssue').textContent = String(error); } });
+management(api, refresh);
+let pan: { x: number; y: number; left: number; top: number } | undefined;
+const viewport = element('canvas');
+viewport.addEventListener('pointerdown', event => { if (!event.altKey || drawing) return; pan = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop }; viewport.setPointerCapture(event.pointerId); event.preventDefault(); });
+viewport.addEventListener('pointermove', event => { if (pan) { viewport.scrollLeft = pan.left - event.clientX + pan.x; viewport.scrollTop = pan.top - event.clientY + pan.y; } });
+viewport.addEventListener('pointerup', () => { pan = undefined; }); viewport.addEventListener('pointercancel', () => { pan = undefined; });
 element('canvas').ondragover = event => { event.preventDefault(); };
-element('canvas').ondrop = event => { event.preventDefault(); const file = event.dataTransfer?.files[0]; if (!file) return; void (async () => { const added: Asset[] = await api.call('import', { id: session!.id, path: api.droppedFile(file) }); session!.draft.source = added[0]!.id; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); })().catch(issue); };
+element('canvas').ondrop = event => { event.preventDefault(); const file = event.dataTransfer?.files[0]; if (!file) return; void (async () => { const added: Asset[] = await api.call('import', { id: session!.id, path: api.droppedFile(file) }); session!.draft.source = added[0]!.id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); })().catch(issue); };
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 api.onChange(() => { if (refreshTimer) return; refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh().catch(issue); }, 100); });
 async function start() { await refresh(); const first = overview.sessions[0] ?? await api.call('create'); await open(first.id); }
 api.onFlush(async () => { if (session) session.draft = collect(); await saveMask(); await flush(); });
-void start().then(() => api.call('ready')).catch(issue);
+api.onCommand(id => { const target = document.getElementById(id); if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click(); });
+void paneLayout(api, issue).then(start).then(() => api.call('ready')).catch(issue);

@@ -21,7 +21,7 @@ export function inference(sessions: Sessions, settings: () => Settings): Runner 
     }
     const editor = createEditor({ model: opened.model, ...(selected.runtime.name === 'stable-diffusion.cpp' ? { nativeExecutable } : { profile: config.profile }) });
     const draft = run.draft;
-    const common = { outputPath: join(sessions.directory(sessionId), 'outputs', `${run.id}.png`), size: { width: draft.width, height: draft.height }, seed: run.seed, parameters: draft.parameters, sidecar: { includeInputs: true } };
+    const common = { outputPath: join(sessions.directory(sessionId), 'outputs', `${run.id}.png`), size: { width: draft.width, height: draft.height }, seed: run.seed, parameters: draft.parameters, sidecar: { includeInputs: true }, ...(draft.control ? { control: { ...draft.control, image: await sessions.imagePath(sessionId, draft.control.image) } } : {}) };
     try {
       if (draft.mode === 'generate') {
         if (draft.source || draft.mask || draft.references.length || draft.outpaint) throw new PicPatchSdkError('INVALID_REQUEST', 'Switch to Edit to use source images, references or masks.');

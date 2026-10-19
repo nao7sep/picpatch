@@ -1,0 +1,24 @@
+import { parentPort, workerData } from 'node:worker_threads';
+import { DatabaseSync } from 'node:sqlite';
+import { mkdirSync, appendFileSync, chmodSync } from 'node:fs';
+import { join } from 'node:path';
+const { root, session } = workerData as { root: string; session: string };
+let database: DatabaseSync | undefined;
+parentPort!.on('message', record => {
+  if (record.flush) { parentPort!.postMessage({ flushed: true }); return; }
+  const json = JSON.stringify(record);
+  try {
+    if (!database) {
+      database = new DatabaseSync(join(root, 'records.sqlite3'));
+      chmodSync(join(root, 'records.sqlite3'), 0o600);
+      database.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=100; CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY, session TEXT NOT NULL, time TEXT NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL, json TEXT NOT NULL)');
+    }
+    database.prepare('INSERT INTO records(session,time,level,message,json) VALUES(?,?,?,?,?)').run(session, record.time, record.level, record.message, json);
+  } catch (error) {
+    const diagnostic = JSON.stringify({ time: new Date().toISOString(), level: 'error', message: 'Records database write failed.', error: String(error) });
+    try {
+      const directory = join(root, 'logs'); mkdirSync(directory, { recursive: true, mode: 0o700 });
+      appendFileSync(join(directory, `${session.replace(/[:.]/g, '-')}.log`), `${diagnostic}\n${json}\n`, { mode: 0o600 });
+    } catch { process.stderr.write(`${diagnostic}\n${json}\n`); }
+  } finally { parentPort!.postMessage({ written: true }); }
+});

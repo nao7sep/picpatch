@@ -1,7 +1,8 @@
+import { errorRecord } from './records.ts';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { writeFile, rm } from 'node:fs/promises';
-import { listModels, inspectModels, prepareModel, saveArtifact, validateProfile } from 'picpatchsdk';
+import { listModels, inspectModels, prepareModel, saveArtifact, validateProfile, openModel, verifyModel, removeModel, resolveStoragePaths } from 'picpatchsdk';
 import type { AppPaths } from './paths.ts';
 import { Sessions, validateDraft } from './sessions.ts';
 import { Queue } from './queue.ts';
@@ -9,6 +10,7 @@ import { inference } from './inference.ts';
 import { readSettings, saveSettings } from './settings.ts';
 import type { Runner } from './queue.ts';
 import type { Draft } from './types.ts';
+import type { PrepareModelOptions } from 'picpatchsdk';
 import type { Settings } from './settings.ts';
 export class Application {
   sessions: Sessions;
@@ -17,14 +19,14 @@ export class Application {
   private settingsTail: Promise<unknown> = Promise.resolve();
   private runner(): Runner {
     const run = inference(this.sessions, () => this.settings);
-    return async (...args) => { const completion = await run(...args); const result = completion.outcome; if (!('status' in result)) this.backup(result.image.path, undefined, result.record.sha256); return completion; };
+    return async (sessionId, attempt, events) => { let completion; try { completion = await run(sessionId, attempt, { ...events, onEvent: event => { if (event.level !== 'debug') this.diagnostic(event.level, event.message, { sessionId, runId: attempt.id, event }); events.onEvent(event); } }); } catch (error) { this.diagnostic('error', 'Image attempt failed.', { sessionId, runId: attempt.id, error: errorRecord(error) }); throw error; } const result = completion.outcome; if (!('status' in result)) this.backup(result.image.path, undefined, result.record.sha256); return completion; };
   }
-  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: () => void, private backup: (path: string, bytes?: Buffer, sha256?: string) => void) {
+  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: () => void, private backup: (path: string, bytes?: Buffer, sha256?: string) => void, private diagnostic: (level: 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
     this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined);
     this.queue = new Queue(this.sessions, this.runner(), changed);
   }
-  static async open(paths: AppPaths, changed: () => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}): Promise<Application> { return new Application(paths, await readSettings(paths.config), changed, backup); }
-  async overview() { return { ...await this.sessions.list(), models: listModels(), queue: structuredClone(this.queue.state), historyIssue: this.historyIssue, settings: structuredClone(this.settings) }; }
+  static async open(paths: AppPaths, changed: () => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}, diagnostic: (level: 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> { return new Application(paths, await readSettings(paths.config), changed, backup, diagnostic); }
+  async overview() { return { ...await this.sessions.list(), models: listModels(), queue: structuredClone(this.queue.state), historyIssue: this.historyIssue, settings: structuredClone(this.settings), locations: { ...resolveStoragePaths(this.settings.profile.engineDirectory || this.settings.profile.modelsDirectory ? { engineDirectory: this.settings.profile.engineDirectory, modelsDirectory: this.settings.profile.modelsDirectory } : {}), sessionsDirectory: this.sessions.root } }; }
   async draft(sessionId: string, draft: Draft) { validateDraft(draft); return this.sessions.update(sessionId, value => { value.draft = structuredClone(draft); }); }
   async importImage(sessionId: string, path: string) { const asset = await this.sessions.importImage(sessionId, path); this.backup(await this.sessions.imagePath(sessionId, asset.id), undefined, asset.sha256); return asset; }
   async mask(sessionId: string, bytes: Uint8Array) {
@@ -43,9 +45,29 @@ export class Application {
     return saveArtifact(await this.sessions.imagePath(sessionId, runId), destination, record, { sidecar });
   }
   async models() { return inspectModels({ profile: this.settings.profile }); }
-  async prepare(modelId: string, directory?: string, checkpoint?: string, download = false) {
-    const prepared = await prepareModel(modelId, { profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
+  async prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelOptions, 'vae' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}, signal?: AbortSignal) {
+    if (this.queue.busy()) throw new Error('Finish or cancel queued work before changing prepared models.');
+    const prepared = await prepareModel(modelId, { ...components, signal, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
     await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
+  }
+  async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark' }) {
+    if (this.queue.busy()) throw new Error('Finish or cancel queued work before changing resource settings.');
+    if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new Error('Invalid theme.');
+    await this.updateSettings(next => {
+      for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) {
+        if (value[key]) next.profile[key] = value[key]; else delete next.profile[key];
+      }
+      if (value.theme) next.theme = value.theme; else delete next.theme;
+    });
+  }
+  async verify(modelId: string, signal?: AbortSignal) {
+    const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile, signal });
+    if (opened.status !== 'ready') return opened;
+    return verifyModel(opened.model.directory, opened.model.manifest, { signal });
+  }
+  async removeManaged(modelId: string, name: string, signal?: AbortSignal) {
+    if (this.queue.busy()) throw new Error('Finish or cancel queued work before removing models.');
+    return removeModel(modelId, name, { profile: this.settings.profile, signal });
   }
   private updateSettings(change: (value: Settings) => void): Promise<void> {
     const next = this.settingsTail.then(async () => {

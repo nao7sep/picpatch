@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const staging = join(root, 'dist', 'package');
 await rm(staging, { recursive: true, force: true }); await mkdir(staging, { recursive: true });
 await mkdir(join(staging,'dist'),{recursive:true});
-for (const file of ['main.mjs','preload.cjs','backup-worker.mjs','renderer.js','index.html','style.css']) await cp(join(root,'dist',file),join(staging,'dist',file));
+for (const file of ['main.mjs','preload.cjs','backup-worker.mjs','records-worker.mjs','renderer.js','index.html','style.css']) await cp(join(root,'dist',file),join(staging,'dist',file));
 const sdk = JSON.parse(await readFile(join(root,'sdk','package.json'),'utf8'));
 // The app's distribution compiles its bundled source dependency; the standalone SDK remains source-only.
 async function compile(directory, target) {

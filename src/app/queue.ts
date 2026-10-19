@@ -6,7 +6,7 @@ import { Sessions, validateDraft } from './sessions.ts';
 export type RunEvents = { signal: AbortSignal; onProgress: (event: ProgressEvent) => void; onEvent: (event: SdkEvent) => void };
 export interface RunCompletion { outcome: ImageOutcome; stopIssue?: string }
 export type Runner = (sessionId: string, run: Run, events: RunEvents) => Promise<RunCompletion>;
-export interface QueueState { active?: { sessionId: string; runId: string; stage: string; progress?: { completed: number; total: number } }; paused: boolean; issue?: string }
+export interface QueueState { active?: { sessionId: string; runId: string; stage: string; startedAt: number; progress?: { completed: number; total: number } }; paused: boolean; issue?: string }
 /** One app queue, with no coordination of other processes or apps. */
 export class Queue {
   private pending: { sessionId: string; runId: string }[] = [];
@@ -40,7 +40,7 @@ export class Queue {
     while (this.pending.length && !this.state.paused) {
       const selected = this.pending.shift()!;
       this.controller = new AbortController();
-      this.state.active = { ...selected, stage: 'preparing' }; this.changed();
+      this.state.active = { ...selected, stage: 'preparing', startedAt: Date.now() }; this.changed();
       try {
         const session = await this.sessions.update(selected.sessionId, value => {
           const run = value.runs.find(r => r.id === selected.runId)!;
@@ -70,7 +70,7 @@ export class Queue {
         await this.sessions.update(selected.sessionId, value => {
           const run = value.runs.find(r => r.id === selected.runId)!; run.ended = new Date().toISOString();
           if ('status' in outcome) { run.status = 'refused'; run.issue = { code: outcome.code, message: outcome.message, effect: outcome.effect }; }
-          else { run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record; }
+          else { run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record; const notices = [outcome.sidecar?.status === 'failed' ? outcome.sidecar.message : undefined, outcome.cleanupWarning?.message].filter((value): value is string => Boolean(value)); if (notices.length) run.notices = notices; }
         });
         if (completion.stopIssue) { this.terminationUnconfirmed = true; throw new Error(completion.stopIssue); }
       } catch (error) {

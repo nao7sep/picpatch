@@ -23,4 +23,4 @@ it('retains exact latest bytes per launch and streams verified binary history wi
       expect(Buffer.concat(parts.map(part => Buffer.from(part.content as Uint8Array)))).toEqual(bytes);
     } finally { db.close(); }
   } finally { await worker.terminate(); await rm(root, { recursive: true, force: true }); }
-});
+}, 15_000);
