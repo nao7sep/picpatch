@@ -2,9 +2,9 @@ import { parseArgs } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { referenceWorkload } from './reference-workload.ts';
-import type { EditorOptions } from 'picpatchsdk';
+import type { ImageClientOptions } from 'picpatchsdk';
 const configuration = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
-const options = JSON.parse(await readFile(configuration, 'utf8')) as EditorOptions;
+const options = JSON.parse(await readFile(configuration, 'utf8')) as ImageClientOptions;
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'input-size': { type: 'string', default: '512' },
   'output-size': { type: 'string', default: '768' },

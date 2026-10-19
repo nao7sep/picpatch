@@ -65,8 +65,8 @@ it('reports stages independently and throttles only real counts, preserving the 
 });
 
 it('emits startup once across repeated public editor calls and keeps nested operations in one stream', async () => {
-  const { createEditor } = await import('../../src/client.ts');
-  const editor = createEditor();
+  const { createImageClient } = await import('../../src/client.ts');
+  const editor = createImageClient();
   const events: SdkEvent[] = [];
   try {
     // Planning fails before inference because this editor has no registered model.

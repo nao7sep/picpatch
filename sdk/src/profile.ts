@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { open } from './storage.ts';
-import { validateDefaults, type EditDefaults } from './defaults.ts';
+import { validateDefaults, type ImageDefaults } from './defaults.ts';
 import { PicPatchSdkError } from './errors.ts';
 import { withDiagnostics, type EventOptions } from './diagnostics.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from './operations.ts';
@@ -12,7 +12,7 @@ export interface PicPatchProfile {
   engineDirectory?: string;
   modelsDirectory?: string;
   nativeExecutable?: string;
-  defaults?: EditDefaults;
+  defaults?: ImageDefaults;
   timeouts?: Partial<WorkerTimeouts>;
 }
 export interface ProfileReadOptions extends EventOptions { signal?: AbortSignal; timeoutMs?: number }
@@ -38,7 +38,7 @@ export function validateProfile(value: unknown): PicPatchProfile {
 }
 
 /** Undefined explicit values inherit; nested sampling and timeout overrides merge by field. */
-export function profileDefaults(profile: PicPatchProfile | undefined, explicit: EditDefaults | undefined): EditDefaults {
+export function profileDefaults(profile: PicPatchProfile | undefined, explicit: ImageDefaults | undefined): ImageDefaults {
   const base = profile === undefined ? {} : validateProfile(profile).defaults ?? {};
   const overrides = explicit === undefined ? {} : validateDefaults(explicit);
   const defined = Object.fromEntries(Object.entries(overrides).filter(([, value]) => value !== undefined));

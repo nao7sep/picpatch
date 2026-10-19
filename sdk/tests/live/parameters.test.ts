@@ -48,7 +48,7 @@ assert config.init_time_step == 20
 assert len(list(config.time_steps)) == 20
 print('verified')`;
   const result = await promisify(execFile)(pythonExecutable, ['-c', script], {
-    env: { ...process.env, PYTHONPATH: worker, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' }, timeout: 60_000,
+    env: { ...process.env, PYTHONPATH: [worker, fileURLToPath(new URL('../../runtimes/common/src', import.meta.url))].join(':'), HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' }, timeout: 60_000,
   });
   expect(result.stdout.trim()).toBe('verified');
 }, 60_000);

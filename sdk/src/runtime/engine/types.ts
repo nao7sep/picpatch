@@ -1,7 +1,10 @@
 import type { EventOptions } from '../../diagnostics.ts';
 
 /** Engine storage is local-disk storage. No shared-network filesystem semantics are promised. */
+export type EngineRuntime = 'mflux' | 'dreamo';
 export interface EngineOptions extends EventOptions {
+  /** Dependency set to prepare; inference selects this from the model. Defaults to mflux. */
+  runtime?: EngineRuntime;
   profile?: import('../../profile.ts').PicPatchProfile;
   engineDirectory?: string;
   signal?: AbortSignal;
@@ -22,7 +25,7 @@ export interface EngineIdentity {
   platform: 'darwin';
   architecture: 'arm64';
   python: '3.15.0';
-  dependencies: 'inference';
+  dependencies: 'inference' | 'dreamo-inference';
   lockSha256: string;
   manifestSha256: string;
 }

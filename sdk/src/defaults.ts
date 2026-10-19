@@ -8,17 +8,17 @@ import type { GenerateRequest, EditRequest, ImageSize } from './types.ts';
 
 export type GenerateInput = Omit<GenerateRequest, 'model' | 'outputPath'> & { model?: string; outputPath?: string; outputDirectory?: string };
 export type EditInput = Omit<EditRequest, 'model' | 'outputPath'> & { model?: string; outputPath?: string; outputDirectory?: string };
-export interface EditDefaults { size?: ImageSize; seed?: number; outputDirectory?: string; parameters?: SamplingParameters }
-export function validateDefaults(value: EditDefaults = {}): EditDefaults {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['size', 'seed', 'outputDirectory', 'parameters'].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid editor defaults.');
+export interface ImageDefaults { size?: ImageSize; seed?: number; outputDirectory?: string; parameters?: SamplingParameters }
+export function validateDefaults(value: ImageDefaults = {}): ImageDefaults {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['size', 'seed', 'outputDirectory', 'parameters'].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid image defaults.');
   if (value.outputDirectory !== undefined) absolutePath(value.outputDirectory);
   validateEditRequest({ model: 'validation', instruction: 'Validate defaults', sourceImage: '/source.png', outputPath: '/output.png',
     ...(value.parameters !== undefined ? { parameters: value.parameters } : {}), ...(value.size !== undefined ? { size: value.size } : {}), ...(value.seed !== undefined ? { seed: value.seed } : {}) });
   return structuredClone(value);
 }
-export function resolveEditRequest(input: EditInput, defaults: EditDefaults, model?: string): EditRequest {
+export function resolveEditRequest(input: EditInput, defaults: ImageDefaults, model?: string): EditRequest {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply an edit request.');
-  if (input.model !== undefined && model !== undefined && input.model !== model) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The editor is configured for a different model.');
+  if (input.model !== undefined && model !== undefined && input.model !== model) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The image client is configured for a different model.');
   if (input.outputDirectory !== undefined) absolutePath(input.outputDirectory);
   if (input.outputPath !== undefined && input.outputDirectory !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply outputPath or outputDirectory, not both.');
   const { outputDirectory, ...request } = input;
@@ -37,9 +37,9 @@ export function resolveEditRequest(input: EditInput, defaults: EditDefaults, mod
     model: input.model === undefined ? model : input.model, outputPath });
 }
 
-export function resolveGenerateRequest(input: GenerateInput, defaults: EditDefaults, model?: string): GenerateRequest {
+export function resolveGenerateRequest(input: GenerateInput, defaults: ImageDefaults, model?: string): GenerateRequest {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply a generation request.');
-  if (input.model !== undefined && model !== undefined && input.model !== model) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The editor is configured for a different model.');
+  if (input.model !== undefined && model !== undefined && input.model !== model) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The image client is configured for a different model.');
   if (input.outputDirectory !== undefined) absolutePath(input.outputDirectory);
   if (input.outputPath !== undefined && input.outputDirectory !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply outputPath or outputDirectory, not both.');
   const { outputDirectory, ...request } = input;

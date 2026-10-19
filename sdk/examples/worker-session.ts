@@ -1,11 +1,11 @@
-import { createEditor, PicPatchSdkError } from 'picpatchsdk';
+import { createImageClient, PicPatchSdkError } from 'picpatchsdk';
 import { resolve } from 'node:path';
 
 const engineDirectory = process.argv[2];
 const sourceImage = process.argv[3];
 const outputPath = process.argv[4];
 if (!engineDirectory || !sourceImage || !outputPath) throw new Error('Pass an absolute managed engine directory, a source image, and an unused PNG output path.');
-const editor = createEditor({ engineDirectory });
+const editor = createImageClient({ engineDirectory });
 try {
   await editor.edit({
     model: 'model-to-be-selected-after-evaluation',

@@ -1,5 +1,5 @@
-export { createEditor } from './client.ts';
-export type { Editor, EditorOptions } from './client.ts';
+export { createImageClient } from './client.ts';
+export type { ImageClient, ImageClientOptions } from './client.ts';
 export type { ImageResult, ImageOutcome, OperationRefusal, GenerateRequest, GenerateResult, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, OperationOptions, ProgressEvent, ReferenceGroup } from './types.ts';
 export { validateEditRequest, validateGenerateRequest } from './validation.ts';
 export { PicPatchSdkError, isPicPatchSdkError, errorCodes } from './errors.ts';
@@ -12,19 +12,19 @@ export type { ModelManifest, ModelComponent, ModelVerification, ModelVerificatio
 export { inspectRuntime } from './runtime/inspection.ts';
 export type { RuntimeInspection, RuntimeOperationOptions } from './runtime/types.ts';
 
-export type { LocalEditingModel } from './contracts.generated.ts';
+export type { LocalModel } from './contracts.generated.ts';
 export { resolveStoragePaths } from './paths.ts';
 export type { StorageOptions, StoragePaths } from './paths.ts';
 export { listModels } from './models/catalog.ts';
 export type { ModelVariant, ExternalModel } from './models/variants.ts';
-export type { CatalogModel, ModelSelection } from './models/catalog.ts';
+export type { CatalogModel, ModelCatalogEntry } from './models/catalog.ts';
 export { prepareModel } from './models/preparation.ts';
 export type { PrepareModelOptions, PreparedModel } from './models/preparation.ts';
 export { inspectReadiness } from './runtime/readiness.ts';
 export type { ReadinessOptions, ModelReadiness } from './runtime/readiness.ts';
 export type { RuntimeCheck } from './worker/protocol.ts';
 
-export type { GenerateInput, EditInput, EditDefaults } from './defaults.ts';
+export type { GenerateInput, EditInput, ImageDefaults } from './defaults.ts';
 export type { SdkEvent, EventOptions, WorkerDiagnostic, RuntimeConfiguration } from './diagnostics.ts';
 
 export type { SamplingParameters, ParameterCapabilities } from './contracts.generated.ts';
@@ -37,7 +37,7 @@ export type { LocalLora, LoraProvenance } from './contracts.generated.ts';
 export type { LocalControlNet, StructuralControl, ControlProvenance } from './contracts.generated.ts';
 
 export { installEngine, inspectEngine } from './runtime/engine/engine.ts';
-export type { EngineOptions, InstallEngineOptions, EngineIdentity, EngineRecord, ReadyEngine, EngineInspection, EngineInstallation } from './runtime/engine/types.ts';
+export type { EngineRuntime, EngineOptions, InstallEngineOptions, EngineIdentity, EngineRecord, ReadyEngine, EngineInspection, EngineInstallation } from './runtime/engine/types.ts';
 
 export { readProfile, validateProfile } from './profile.ts';
 export type { PicPatchProfile, ProfileReadOptions, ProfileReadResult, ProfileRefusal } from './profile.ts';

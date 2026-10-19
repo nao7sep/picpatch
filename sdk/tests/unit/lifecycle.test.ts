@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createEditor, type EditRequest } from '../../src/index.ts';
+import { createImageClient, type EditRequest } from '../../src/index.ts';
 import { ProcessEditor } from '../../src/execution/worker-backend.ts';
 import { WorkerProcess, type WorkerTimeouts } from '../../src/worker/process.ts';
 import type { WorkerRequest } from '../../src/worker/protocol.ts';
@@ -163,9 +163,9 @@ describe('owned worker lifecycle', () => {
     await vi.advanceTimersByTimeAsync(20); await caught; expect(child.closed).toBe(true);
   });
   it('validates public factory configuration without starting a process', async () => {
-    expect(() => createEditor({ engineDirectory: 'python' })).toThrow();
-    expect(() => createEditor({ engineDirectory: '/python', timeouts: { startupMs: 0 } })).toThrow();
-    await createEditor({ engineDirectory: '/python' }).dispose();
+    expect(() => createImageClient({ engineDirectory: 'python' })).toThrow();
+    expect(() => createImageClient({ engineDirectory: '/python', timeouts: { startupMs: 0 } })).toThrow();
+    await createImageClient({ engineDirectory: '/python' }).dispose();
   });
 });
 
@@ -309,10 +309,10 @@ it('preserves structured worker failure causes on the public runtime error', asy
 });
 
 it('cancels capability discovery before image preparation and closes the worker', async () => {
-  const { ImageEditor } = await import('../../src/execution/session.ts');
+  const { ImageClientImpl } = await import('../../src/execution/session.ts');
   const { child, editor: backend } = setup();
   child.onRequest = () => {};
-  const editor = new ImageEditor(backend);
+  const editor = new ImageClientImpl(backend);
   const controller = new AbortController();
   const editing = editor.edit(request, { signal: controller.signal });
   const rejected = expect(editing).rejects.toMatchObject({ code: 'CANCELLED' });

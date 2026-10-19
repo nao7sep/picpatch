@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel } from 'picpatchsdk';
+import { createImageClient, prepareModel } from 'picpatchsdk';
 import assets from '../fixtures/native-sdxl-assets.json' with { type: 'json' };
 
 interface Configuration { directory: string; executable: string; checkpoint: string; photoMaker: string; ipAdapter: string; ipAdapterPlus: string; clipVision: string }
@@ -22,7 +22,7 @@ it('runs native SDXL generation, repeated variation and each dedicated condition
     const base = await prepareModel('sdxl', { directory: config.directory, checkpoint: config.checkpoint });
     expect(base.model.manifest.components[0]!.sha256).toBe(assets.find(asset => asset.role === 'checkpoint')!.sha256);
     const options = { nativeExecutable: config.executable, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } };
-    const editor = createEditor({ ...options, model: base.model });
+    const editor = createImageClient({ ...options, model: base.model });
     let original: string;
     try {
       phase = 'base generation';
@@ -62,7 +62,7 @@ it('runs native SDXL generation, repeated variation and each dedicated condition
         const role = Object.entries(config).find(([, path]) => path === component.path)?.[0];
         expect(component.sha256).toBe(assets.find(asset => asset.role === role)!.sha256);
       }
-      const conditioned = createEditor({ ...options, model: prepared.model });
+      const conditioned = createImageClient({ ...options, model: prepared.model });
       try {
         const result = await conditioned.edit({ instruction: identity ? 'A studio portrait of {person} wearing a green shirt.' : 'A watercolor portrait with green tones.',
           references: identity ? [{ id: 'person', role: 'subject', conditioning: 'identity', className: 'man', images: [original!, second] }]

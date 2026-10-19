@@ -4,7 +4,7 @@ import distilled9Manifest from './catalog/klein-9b-4bit.manifest.json' with { ty
 import base9Manifest from './catalog/klein-base-9b-4bit.manifest.json' with { type: 'json' };
 import zImageManifest from './catalog/z-image-turbo-4bit.manifest.json' with { type: 'json' };
 import fillManifest from './catalog/flux1-fill-dev-4bit.manifest.json' with { type: 'json' };
-import type { LocalEditingModel, ModelManifest, ModelCapabilities } from '../contracts.generated.ts';
+import type { LocalModel, ModelManifest, ModelCapabilities } from '../contracts.generated.ts';
 import { externalModels, modelCapabilities, modelDefinition, type ExternalModel } from './variants.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { validateModelManifest } from './verification.ts';
@@ -15,7 +15,7 @@ export interface CatalogModel {
   acquisition: 'pinned';
   family: string;
   evidence: 'inference-tested';
-  variant: LocalEditingModel['variant'];
+  variant: LocalModel['variant'];
   status: 'experimental';
   manifest: ModelManifest;
   downloadBytes: number;
@@ -24,7 +24,7 @@ export interface CatalogModel {
   runtime: { name: 'mflux'; version: string; platform: 'darwin'; architecture: 'arm64' };
 }
 /** Pinned community quantization, not an official upstream weight distribution. */
-export function listModels(): ModelSelection[] {
+export function listModels(): ModelCatalogEntry[] {
   const configurations = [
     { manifest, variant: 'flux2-klein-4b' as const, license: 'Apache-2.0', licenseUrl: `https://huggingface.co/${manifest.source.repository}/blob/${manifest.source.revision}/README.md` },
     { manifest: base9Manifest, variant: 'flux2-klein-base-9b' as const, license: 'flux-non-commercial-license', licenseUrl: 'https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B/blob/main/LICENSE.md' },
@@ -42,8 +42,8 @@ export function listModels(): ModelSelection[] {
   });
   return [...pinned, ...externalModels(), ...nativeModels()];
 }
-export type ModelSelection = CatalogModel | ExternalModel | ReturnType<typeof nativeModels>[number];
-export function catalogModel(id: string): ModelSelection {
+export type ModelCatalogEntry = CatalogModel | ExternalModel | ReturnType<typeof nativeModels>[number];
+export function catalogModel(id: string): ModelCatalogEntry {
   const entry = listModels().find(model => model.id === id);
   if (!entry) throw new PicPatchSdkError('INVALID_REQUEST', 'Choose a model ID returned by listModels.');
   return entry;

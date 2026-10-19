@@ -7,26 +7,44 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[3]
 WORKER = ROOT / 'runtimes/mflux/src/picpatch_worker'
-PROJECT = tomllib.loads((ROOT / 'runtimes/mflux/pyproject.toml').read_text())['project']
-DEPENDENCIES = {re.split(r'[<>=!~\[]', item)[0].replace('-', '_') for item in PROJECT['dependencies'] + PROJECT['optional-dependencies']['inference']}
-DEPENDENCIES.add('PIL')  # Pillow's import name differs from its distribution name.
+RUNTIMES = ROOT / 'runtimes'
+# Discover runtime packages from their source roots, not a hand-maintained family list.
+PACKAGES = {package.name for source in RUNTIMES.glob('*/src') for package in source.iterdir() if package.is_dir() and (package / '__init__.py').exists()}
+
+def dependencies(path):
+    runtime = RUNTIMES / path.relative_to(RUNTIMES).parts[0]
+    manifest = runtime / 'pyproject.toml'
+    # Shared protocol uses only the packages declared by the worker runtimes.
+    manifests = [manifest] if manifest.exists() else list(RUNTIMES.glob('*/pyproject.toml'))
+    names = set()
+    for item in manifests:
+        project = tomllib.loads(item.read_text())['project']
+        specs = project.get('dependencies', []) + project.get('optional-dependencies', {}).get('inference', [])
+        names.update(re.split(r'[<>=!~\[]', value)[0].replace('-', '_') for value in specs)
+    if 'pillow' in names:
+        names.add('PIL')
+    if 'opencv_python' in names:
+        names.add('cv2')
+    return names
 
 
 def violations(source, path):
     tree = ast.parse(source)
+    allowed = sys.stdlib_module_names | dependencies(path) | PACKAGES
+    package_root = next((parent for parent in path.parents if parent.parent.name == 'src'), path.parent)
     aliases = {}
     failures = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for item in node.names:
                 aliases[item.asname or item.name.split('.')[0]] = item.name
-                if item.name.split('.')[0] not in sys.stdlib_module_names | DEPENDENCIES | {'picpatch_worker'}:
+                if item.name.split('.')[0] not in allowed:
                     failures.append('dependency')
         if isinstance(node, ast.ImportFrom):
             if node.level:
-                if node.level > len(path.relative_to(WORKER).parts):
+                if node.level > len(path.relative_to(package_root).parts):
                     failures.append('package escape')
-            elif (node.module or '').split('.')[0] not in sys.stdlib_module_names | DEPENDENCIES | {'picpatch_worker'}:
+            elif (node.module or '').split('.')[0] not in allowed:
                 failures.append('dependency')
             for item in node.names:
                 aliases[item.asname or item.name] = f'{node.module}.{item.name}'
@@ -38,7 +56,7 @@ def violations(source, path):
             return name(node.value) + '.' + node.attr
         return ''
 
-    protocol_entry = path == WORKER / '__main__.py' or path == ROOT / 'runtimes/mflux/engine_probe.py'
+    protocol_entry = path == RUNTIMES / 'common/src/picpatch_worker_core/entry.py' or path.name == 'engine_probe.py'
     parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
     for node in ast.walk(tree):
         value = name(node)
@@ -57,7 +75,7 @@ def violations(source, path):
 
 
 def test_worker_resources_have_no_consumer_dependencies_or_ambient_reads():
-    paths = list(WORKER.rglob('*.py')) + [ROOT / 'runtimes/mflux/engine_probe.py']
+    paths = [path for source in RUNTIMES.glob('*/src') for path in source.rglob('*.py')] + list(RUNTIMES.glob('*/engine_probe.py'))
     assert {str(path.relative_to(ROOT)): found for path in paths if (found := violations(path.read_text(), path))} == {}
 
 

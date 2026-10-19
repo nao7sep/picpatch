@@ -1,8 +1,7 @@
 """One active inference thread; the protocol reader remains responsive to cancellation."""
 from threading import Event, RLock, Thread
 from .protocol import Protocol, ProtocolError
-from .backends import create_adapter
-from .backends.errors import Cancelled, BackendUnavailable, InvalidEditInput
+from .errors import Cancelled, BackendUnavailable, InvalidEditInput
 
 
 def diagnostic(error, phase):
@@ -27,7 +26,8 @@ def diagnostic(error, phase):
 
 
 class Session:
-    def __init__(self, protocol: Protocol, emit=None):
+    def __init__(self, protocol: Protocol, emit=None, adapter_factory=None):
+        self.adapter_factory = adapter_factory
         self.protocol = protocol
         self.emit = emit
         self.ready = False
@@ -58,7 +58,9 @@ class Session:
             if self.ready:
                 raise ProtocolError('Handshake already completed.')
             if 'model' in request:
-                self.adapter = create_adapter(request['model'])
+                if self.adapter_factory is None:
+                    raise ProtocolError('No adapter factory for model handshake.')
+                self.adapter = self.adapter_factory(request['model'])
             self.ready = True
             models = [self.adapter.capabilities] if self.adapter else []
             result = {**envelope, 'type': 'ready', 'workerVersion': '0.0.0', 'models': models}

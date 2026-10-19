@@ -7,12 +7,12 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { referenceWorkload } from '../../benchmarks/reference-workload.ts';
-import { createEditor, listModels, prepareModel, inspectReadiness, discoverModels, resolveStoragePaths, type EditorOptions, type SdkEvent } from '../../src/index.ts';
+import { createImageClient, listModels, prepareModel, inspectReadiness, discoverModels, resolveStoragePaths, type ImageClientOptions, type SdkEvent } from '../../src/index.ts';
 
-async function localOptions(): Promise<EditorOptions> {
+async function localOptions(): Promise<ImageClientOptions> {
   const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
-  let options: EditorOptions;
-  try { options = JSON.parse(await readFile(path, 'utf8')) as EditorOptions; }
+  let options: ImageClientOptions;
+  try { options = JSON.parse(await readFile(path, 'utf8')) as ImageClientOptions; }
   catch (cause) { throw new Error('Prepare the local inference test cache or set PICPATCH_INFERENCE_CONFIG to an editor-options JSON file. This test never downloads models.', { cause }); }
   if (!options.model) throw new Error('PICPATCH_INFERENCE_CONFIG must include a local model configuration.');
   return inferenceOptions(options);
@@ -23,7 +23,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-inference-'));
   const storage = { modelsDirectory: join(directory, 'models') };
   const events: SdkEvent[] = [];
-  let editor: ReturnType<typeof createEditor> | undefined;
+  let editor: ReturnType<typeof createImageClient> | undefined;
   const paths: string[] = [];
   try {
     // The harness supplies only existing filesystem locations. Consumer code uses public operations.
@@ -38,7 +38,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
     expect(await inspectReadiness((await managedPython()), prepared.model)).toMatchObject({
       files: 'present', runtime: { status: 'imports-ready' },
     });
-    editor = createEditor({ engineDirectory: testEngineDirectory, model: prepared.model,
+    editor = createImageClient({ engineDirectory: testEngineDirectory, model: prepared.model,
       defaults: { size: { width: 256, height: 256 }, seed: 42, outputDirectory: directory } });
     const images = [join(directory, 'red.png'), join(directory, 'blue.png')];
     await sharp({ create: { width: 271, height: 289, channels: 3, background: 'red' } }).png().toFile(images[0]!);
@@ -80,7 +80,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
 
 it('cancels after a real denoising step and cleans unpublished output after worker settlement', async () => {
   const options = await localOptions();
-  const editor = createEditor(options);
+  const editor = createImageClient(options);
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-cancel-inference-'));
   try {
     const sourceImage = join(directory, 'source.png');
@@ -137,7 +137,7 @@ it('prepares existing catalog weights and checks actual model loading without ac
 
 it('edits through a mask while preserving every black-mask source pixel', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-masked-inference-'));
-  const editor = createEditor(await localOptions());
+  const editor = createImageClient(await localOptions());
   try {
     const sourceImage = join(directory, 'source.png'); const maskImage = join(directory, 'mask.png');
     await sharp({ create: { width: 256, height: 256, channels: 3, background: 'red' } }).png().toFile(sourceImage);
@@ -169,7 +169,7 @@ it('generates from text, edits that result in the same session, and cancels gene
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-generation-'));
   const prepared = await prepareModel('flux2-klein-4b', { directory: options.model!.directory });
   expect(prepared.integrity).toBe('locally-fingerprinted');
-  const editor = createEditor({ ...options, model: prepared.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
+  const editor = createImageClient({ ...options, model: prepared.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
   const events: SdkEvent[] = [];
   try {
     const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a plain white table.', parameters: { steps: 2 }, sidecar: {} }, { onEvent: event => events.push(event) });
@@ -205,7 +205,7 @@ it('generates from text, edits that result in the same session, and cancels gene
 
 it('outpaints an asymmetric canvas while preserving normalized source pixels including alpha', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-outpaint-inference-'));
-  const editor = createEditor(await localOptions());
+  const editor = createImageClient(await localOptions());
   const sourceImage = join(directory, 'source.png');
   try {
     await sharp({ create: { width: 37, height: 29, channels: 4, background: { r: 150, g: 80, b: 30, alpha: 0.5 } } }).png().toFile(sourceImage);

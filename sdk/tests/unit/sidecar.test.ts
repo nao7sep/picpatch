@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ImageEditor } from '../../src/execution/session.ts';
+import { ImageClientImpl } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
 import { contractValidator } from '../../src/contracts.ts';
 import { validateGenerateRequest, validateEditRequest, type ArtifactRecord, type SdkEvent, type EditResult } from '../../src/index.ts';
@@ -18,7 +18,7 @@ let directory: string;
 let source: string;
 let output: string;
 let png: Buffer;
-let editor: ImageEditor;
+let editor: ImageClientImpl;
 let beforeRender: (() => Promise<void>) | undefined;
 const events: SdkEvent[] = [];
 beforeEach(async () => {
@@ -48,7 +48,7 @@ beforeEach(async () => {
         image: { path: request.outputPath, mimeType: 'image/png', size: { width: 8, height: 8 } } };
     }, dispose: async () => {},
   };
-  editor = new ImageEditor(backend, {}, 'test');
+  editor = new ImageClientImpl(backend, {}, 'test');
 });
 afterEach(async () => { await editor.dispose(); await fs.rm(directory, { recursive: true, force: true }); });
 async function record(saved: EditResult): Promise<ArtifactRecord> {

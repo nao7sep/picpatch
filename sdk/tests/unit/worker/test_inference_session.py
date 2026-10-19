@@ -2,8 +2,8 @@ import pytest
 from pathlib import Path
 from threading import Event
 
-from picpatch_worker.protocol import Protocol
-from picpatch_worker.session import Session
+from picpatch_worker_core.protocol import Protocol
+from picpatch_worker_core.session import Session
 from picpatch_worker.backends.errors import Cancelled
 
 
@@ -78,7 +78,7 @@ def test_loading_failure_preserves_safe_causal_structure():
 
 
 def test_diagnostics_bound_cycles_and_do_not_use_custom_exception_names():
-    from picpatch_worker.session import diagnostic
+    from picpatch_worker_core.session import diagnostic
     class PrivateSentinel(Exception):
         pass
     error = PrivateSentinel('secret')

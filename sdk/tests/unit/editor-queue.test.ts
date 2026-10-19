@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { ImageEditor } from '../../src/execution/session.ts';
+import { ImageClientImpl } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
 import type { ImageRequest, OperationOptions } from '../../src/types.ts';
 import { PicPatchSdkError } from '../../src/errors.ts';
@@ -25,7 +25,7 @@ function setup() {
     validate: async () => { if (++validations === 1) { entered.resolve(); await release.promise; } return { model: 'test', textToImage: true, instructionEditing: true, referenceRoles: [], maskMode: 'none' }; },
     generate: render, edit: render, dispose: async () => {},
   };
-  return { editor: new ImageEditor(backend), entered, release, seen };
+  return { editor: new ImageClientImpl(backend), entered, release, seen };
 }
 it('runs submissions in order and snapshots request/options before any callback or wait', async () => {
   const { editor, entered, release, seen } = setup();
@@ -71,7 +71,7 @@ it('does not let cancellation replace evidence of an unconfirmed writer', async 
   const backend: EditBackend = { validate: async () => ({ model: 'test', textToImage: true, instructionEditing: false, referenceRoles: [], maskMode: 'none' }),
     generate: async () => { controller.abort(); throw new PicPatchSdkError('TERMINATION_FAILED', 'Unknown writer'); },
     edit: async () => { throw new Error('Unexpected edit'); }, dispose: async () => {} };
-  const editor = new ImageEditor(backend);
+  const editor = new ImageClientImpl(backend);
   try { await expect(editor.generate(request('unknown'), { signal: controller.signal })).rejects.toMatchObject({ code: 'TERMINATION_FAILED', effect: 'unknown', details: { recoveryDirectory: expect.any(String) } }); }
   finally { await editor.dispose(); }
 });
@@ -87,7 +87,7 @@ it('continues queued independent work after a settled failure without retrying t
       return { image: { path: input.outputPath, mimeType: 'image/png', size: { width: 16, height: 16 } }, model: 'test', seed: 1, effectiveParameters: {}, modelRevision: 'test', runtime: { name: 'test', version: '1' }, references: [] };
     }, edit: async () => { throw new Error('Unexpected edit'); }, dispose: async () => {},
   };
-  const editor = new ImageEditor(backend);
+  const editor = new ImageClientImpl(backend);
   const failed = expect(editor.generate(request('failed'))).rejects.toMatchObject({ code: 'RUNTIME_FAILURE', effect: 'none' });
   const next = editor.generate(request('next'));
   try { await failed; await next; expect(seen).toEqual(['failed', 'next']); expect(await readdir(directory)).toEqual(['next.png']); }

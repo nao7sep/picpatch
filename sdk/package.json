@@ -49,6 +49,14 @@
     "runtimes/mflux/uv.lock",
     "runtimes/mflux/src/**/*.py",
     "runtimes/mflux/src/**/*.json",
-    "runtimes/mflux/engine_probe.py"
+    "runtimes/mflux/engine_probe.py",
+    "runtimes/dreamo/pyproject.toml",
+    "runtimes/dreamo/uv.lock",
+    "runtimes/dreamo/src/**/*.py",
+    "runtimes/dreamo/src/**/*.json",
+    "runtimes/dreamo/engine_probe.py",
+    "runtimes/dreamo/THIRD_PARTY_NOTICES",
+    "runtimes/common/src/**/*.py",
+    "runtimes/dreamo/THIRD_PARTY_NOTICES"
   ]
 }

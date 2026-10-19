@@ -5,13 +5,13 @@ import { PicPatchSdkError, isPicPatchSdkError, type PicPatchSdkErrorData } from 
 import { validateEditRequest, validateGenerateRequest } from '../validation.ts';
 import type { GenerateRequest, EditRequest, ModelCapabilities } from '../types.ts';
 import type { EditResult } from '../contracts.generated.ts';
-import type { LocalEditingModel } from '../contracts.generated.ts';
+import type { LocalModel } from '../contracts.generated.ts';
 import schema from '../../protocol/worker.schema.json' with { type: 'json' };
 
 export interface RuntimeCheck { status: 'imports-ready' | 'load-ready' | 'missing-package' | 'unsupported-version' | 'import-failed' | 'load-failed'; version?: string }
 
 type Envelope<T extends string> = { version: 1; id: number; type: T };
-export type WorkerRequest = Envelope<'shutdown'> | (Envelope<'hello'> & { model?: LocalEditingModel; runtimeCheck?: 'imports' | 'load' }) |
+export type WorkerRequest = Envelope<'shutdown'> | (Envelope<'hello'> & { model?: LocalModel; runtimeCheck?: 'imports' | 'load' }) |
   (Envelope<'generate'> & { request: GenerateRequest }) | (Envelope<'edit'> & { request: EditRequest }) | (Envelope<'cancel'> & { targetId: number });
 export type WorkerResponse = (Envelope<'ready'> & { workerVersion: string; models: ModelCapabilities[]; runtimeCheck?: RuntimeCheck }) |
   (Envelope<'progress' | 'event'> & { event: ProgressEvent }) | (Envelope<'result'> & { result: EditResult }) |

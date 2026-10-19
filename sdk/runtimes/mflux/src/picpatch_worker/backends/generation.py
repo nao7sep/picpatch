@@ -1,9 +1,25 @@
 """Text-only families sharing the MFLUX generation API and capability contract."""
+from pathlib import Path
+
 from .runtime import MfluxAdapter
 from .errors import InvalidEditInput
 
 
 class GenerationAdapter(MfluxAdapter):
+    def __init__(self, config):
+        super().__init__(config)
+        if config.get('loras') and not self.capabilities.get('loraFormats'):
+            raise InvalidEditInput('This generation adapter does not support LoRAs.')
+
+    def load_pipeline(self, operation="generate"):
+        if self.definition['family'] == 'krea2':
+            # External preparation fingerprints the diffusers component directories.
+            # Upstream prefers these root files, so never load unrecorded overrides.
+            root = Path(self.config['directory'])
+            if any(root.glob('*.safetensors')):
+                raise InvalidEditInput('Krea 2 requires the prepared diffusers transformer directory without root checkpoint overrides.')
+        return super().load_pipeline(operation)
+
     def configure_pipeline(self, pipeline):
         if self.definition['family'] == 'z-image':
             from mflux.callbacks.instances.memory_saver import MemorySaver
@@ -26,4 +42,13 @@ class GenerationAdapter(MfluxAdapter):
         if self.definition['family'] == 'ernie-image':
             from mflux.models.ernie_image.variants.txt2img.ernie_image import ErnieImage
             return getattr(ModelConfig, self.definition['config'])(), ErnieImage, mx
+        if self.definition['family'] == 'krea2':
+            from mflux.models.krea2.variants.txt2img.krea2 import Krea2
+            return getattr(ModelConfig, self.definition['config'])(), Krea2, mx
+        if self.definition['family'] == 'boogu':
+            from mflux.models.boogu.variants.txt2img.boogu_image import BooguImage
+            return getattr(ModelConfig, self.definition['config'])(), BooguImage, mx
+        if self.definition['family'] == 'ming-image':
+            from mflux.models.ming_image.variants.ming_image import MingImage
+            return getattr(ModelConfig, self.definition['config'])(), MingImage, mx
         raise InvalidEditInput('Unsupported MFLUX generation adapter.')

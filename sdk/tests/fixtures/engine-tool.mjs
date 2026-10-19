@@ -7,7 +7,7 @@ if (args[0] === 'sync') {
   await writeFile(join(parent, 'observed.json'), JSON.stringify({ args, env: process.env }));
   await mkdir(join(process.env.UV_PROJECT_ENVIRONMENT, 'bin'), { recursive: true });
   await writeFile(join(process.env.UV_PROJECT_ENVIRONMENT, 'bin', 'python'), `#!${process.execPath}
-if (process.argv.includes('-m')) {
+if (process.argv.includes('--protocol-dir')) {
   const {createInterface} = require('node:readline');
   createInterface({input:process.stdin}).on('line', line => {
     const request=JSON.parse(line);

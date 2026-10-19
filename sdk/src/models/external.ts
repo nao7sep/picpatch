@@ -9,7 +9,7 @@ import type { PrepareModelOptions, PreparedModel } from './preparation.ts';
 import { modelDefinition, type ExternalModel } from './variants.ts';
 import { validateModelManifest, verifyModelOperation as verifyModel } from './verification.ts';
 
-/** Fingerprint a caller-selected MFLUX bundle. This records bytes, not upstream authenticity. */
+/** Fingerprint a caller-selected runtime bundle. This records bytes, not upstream authenticity. */
 export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'variant'>, options: PrepareModelOptions): Promise<PreparedModel> {
   validateOperation(options, ['timeoutMs', 'directory', 'download', 'modelsDirectory']);
   if (options.download !== undefined && typeof options.download !== 'boolean') throw new PicPatchSdkError('INVALID_REQUEST', 'download must be a boolean.');
@@ -48,7 +48,7 @@ export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'va
             const after = await file.stat({ bigint: true });
             const current = await stat(join(root, name), { bigint: true });
             if (position !== Number(before.size) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.ino !== current.ino || before.dev !== current.dev) throw new PicPatchSdkError('MODEL_IO', 'A model component changed during preparation.');
-            const role = name.endsWith('.safetensors') ? 'weights' : name.endsWith('.index.json') ? 'shard-index' : (relative.startsWith('tokenizer') || relative === 'processor') ? 'tokenizer' : 'configuration';
+            const role = (name.endsWith('.safetensors') || (entry.variant === 'flux1-dreamo-v1.1' && name === 'preprocessing/BEN2_Base.pth')) ? 'weights' : name.endsWith('.index.json') ? 'shard-index' : (relative.startsWith('tokenizer') || relative === 'processor') ? 'tokenizer' : 'configuration';
             components.push({ path: name, role, bytes: position, sha256: hash.digest('hex') });
           } finally { await file.close(); }
         }
@@ -57,7 +57,12 @@ export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'va
         if (await realpath(join(root, part)) !== join(root, part)) throw new PicPatchSdkError('MODEL_IO', 'Model component directories must not be symbolic links.');
         await visit(part);
         const files = components.filter(c => c.path.startsWith(`${part}/`));
-        if (!files.length || (!part.startsWith('tokenizer') && part !== 'processor' && !files.some(c => c.role === 'weights'))) throw new PicPatchSdkError('MODEL_IO', 'The selected variant requires a complete MFLUX bundle.');
+        if (!files.length || (!part.startsWith('tokenizer') && part !== 'processor' && !files.some(c => c.role === 'weights'))) throw new PicPatchSdkError('MODEL_IO', 'The selected variant requires a complete model bundle.');
+      }
+      if (entry.variant === 'flux1-dreamo-v1.1') {
+        for (const part of ['transformer', 'vae', 'text_encoder', 'text_encoder_2']) {
+          if (!components.some(component => component.path.startsWith(`base/${part}/`) && component.role === 'weights')) throw new PicPatchSdkError('MODEL_IO', 'DreamO requires complete local base-model component weights.');
+        }
       }
       for (const required of definition.requiredFiles ?? []) {
         if (!components.some(component => component.path === required)) throw new PicPatchSdkError('MODEL_IO', 'The selected variant requires complete component and processor configuration files.');
@@ -71,7 +76,7 @@ export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'va
     } catch (cause) {
       checkSignal(signal);
       if (cause instanceof PicPatchSdkError) throw cause;
-      throw new PicPatchSdkError('MODEL_IO', 'Could not prepare the local MFLUX bundle.', { cause });
+      throw new PicPatchSdkError('MODEL_IO', 'Could not prepare the local model bundle.', { cause });
     }
   });
 }

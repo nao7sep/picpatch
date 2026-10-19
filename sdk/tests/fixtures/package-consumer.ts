@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import sharp from 'sharp';
-import { createEditor, readProfile, verifyArtifact, readArtifactRecord, openModel, prepareModel, discoverModels, resolveStoragePaths, type EditResult } from 'picpatchsdk';
+import { createImageClient, readProfile, verifyArtifact, readArtifactRecord, openModel, prepareModel, discoverModels, resolveStoragePaths, type EditResult } from 'picpatchsdk';
 
 const config = JSON.parse(await readFile(process.argv[2]!, 'utf8')) as {
   engineDirectory: string; modelId: string; outputDirectory: string; modelsDirectory: string;
@@ -39,8 +39,8 @@ const loadedProfile = await readProfile(profilePath);
 if (loadedProfile.status === 'refused') throw new Error(loadedProfile.code);
 const profile = loadedProfile.profile;
 const opened = await openModel(prepared);
-if (opened.status !== 'ready') throw new Error(opened.code);
-const editor = createEditor({ profile, model: opened.model });
+if (opened.status !== 'present') throw new Error(opened.code);
+const editor = createImageClient({ profile, model: opened.model });
 let source: string;
 try {
   const generation = await editor.plan({ prompt: 'A blue ceramic bowl on a white table.', parameters: { steps: 2 }, sidecar: {} });
@@ -62,7 +62,7 @@ await sharp({ create: { width: 256, height: 256, channels: 3, background: 'white
 const masked = await prepareModel('sd15-inpaint', { directory: config.native.directory, checkpoint: config.native.sd15InpaintCheckpoint });
 assert.equal(masked.origin, 'external');
 assert.equal(masked.integrity, 'locally-fingerprinted');
-const inpaint = createEditor({ profile, model: masked.model });
+const inpaint = createImageClient({ profile, model: masked.model });
 try {
   const plan = await inpaint.plan({ instruction: 'A red ceramic bowl on a white table.', sourceImage: source!, maskImage, parameters: { steps: 4 }, sidecar: { includeInputs: true } });
   if (plan.status !== 'planned') throw new Error(plan.code);
@@ -73,7 +73,7 @@ try {
   assert.equal(record.effectiveParameters.strength, 1);
 } finally { await inpaint.dispose(); }
 const identity = await prepareModel('sdxl-photomaker-v1', { directory: config.native.directory, checkpoint: config.native.checkpoint, photoMaker: config.native.photoMaker });
-const conditioned = createEditor({ nativeExecutable: config.native.executable, model: identity.model, defaults });
+const conditioned = createImageClient({ nativeExecutable: config.native.executable, model: identity.model, defaults });
 try {
   // A neutral generated fixture proves API/asset transport, not portrait identity quality.
   const result = await conditioned.edit({ instruction: 'A watercolor portrait of {person}.', references: [

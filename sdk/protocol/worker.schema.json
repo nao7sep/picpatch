@@ -25,7 +25,7 @@
           "const": "hello"
         },
         "model": {
-          "$ref": "contracts.schema.json#/definitions/LocalEditingModel"
+          "$ref": "contracts.schema.json#/definitions/LocalModel"
         },
         "runtimeCheck": {
           "enum": [

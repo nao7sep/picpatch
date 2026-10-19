@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel } from 'picpatchsdk';
+import { createImageClient, prepareModel } from 'picpatchsdk';
 import { loraWeights } from '../helpers/lora-weights.ts';
 it.each(['sd15', 'sdxl'])('applies a local LoRA at distinct scales during real native inference with path-free provenance', async variant => {
   const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/native-inference-config.json', import.meta.url)), 'utf8'));
@@ -16,7 +16,7 @@ it.each(['sd15', 'sdxl'])('applies a local LoRA at distinct scales during real n
     const original = await readFile(join(directory, 'adapter.safetensors'));
     const pixels: Buffer[] = [];
     for (const scale of [0, 1, -1]) {
-      const editor = createEditor({ nativeExecutable: config.executable, model: { ...prepared.model, loras: [{ path: 'adapter.safetensors', scale }] }, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
+      const editor = createImageClient({ nativeExecutable: config.executable, model: { ...prepared.model, loras: [{ path: 'adapter.safetensors', scale }] }, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42 } });
       try {
         const result = await editor.generate({ prompt: 'A blue ceramic bowl on a table.', parameters: { steps: 4 }, sidecar: {} });
         if ('status' in result) throw new Error(result.code);

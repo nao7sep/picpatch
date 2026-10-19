@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel } from 'picpatchsdk';
+import { createImageClient, prepareModel } from 'picpatchsdk';
 import { nativeRevision } from '../../src/backends/stable-diffusion-cpp/models.ts';
 import { controlNetShapes, nativeCheckpoint, tensorFile } from '../helpers/native-assets.ts';
 
@@ -33,7 +33,7 @@ if (args.includes('--control-net')) {
 fs.writeFileSync(value('--output'), Buffer.from('${png.toString('base64')}', 'base64'));
 `, { mode: 0o700 });
     const model = (await prepareModel(variant, { directory, checkpoint: 'base.safetensors', controlNet: { kind, path: 'canny.safetensors' }, loras: [{ path: 'one odd name.safetensors' }, { path: 'two.safetensors', scale: -0.5 }] })).model;
-    const editor = createEditor({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
+    const editor = createImageClient({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
     try {
       const ordinary = await editor.generate({ prompt: 'A bowl.' });
       if ('status' in ordinary) throw new Error(ordinary.code);

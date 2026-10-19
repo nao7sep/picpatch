@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createEditor, inspectEngine, installEngine, type EngineRecord } from '../../src/index.ts';
+import { createImageClient, inspectEngine, installEngine, type EngineRecord } from '../../src/index.ts';
 import { engineDefinition, identifyEngine, validRecord } from '../../src/runtime/engine/identity.ts';
 import { runCommand } from '../../src/runtime/engine/command.ts';
 
@@ -107,7 +107,7 @@ it('pins the readiness format and isolates different dependency identities', asy
 });
 
 it('allows an explicit later call after installing a previously missing engine', async () => {
-  const editor = createEditor({ engineDirectory: options().engineDirectory });
+  const editor = createImageClient({ engineDirectory: options().engineDirectory });
   const request = { prompt: 'Neutral', model: 'fixture', outputPath: join(directory, 'out.png') };
   try {
     await expect(editor.generate(request)).rejects.toMatchObject({ code: 'ENGINE_MISSING' });
@@ -133,4 +133,13 @@ it('preserves unsettled-process evidence over a simultaneous cancellation', asyn
   await expect(withDeadline(controller.signal, 1000, 'Deadline', async () => {
     controller.abort(); throw failure;
   })).rejects.toBe(failure);
+});
+
+it('keeps DreamO and MFLUX installations distinct in one caller-selected engine home', async () => {
+  const mflux = await installEngine(options());
+  const dreamo = await installEngine({ ...options(), runtime: 'dreamo' });
+  expect(dreamo.identity.dependencies).toBe('dreamo-inference');
+  expect(dreamo.pythonExecutable).not.toBe(mflux.pythonExecutable);
+  expect(await inspectEngine({ engineDirectory: dreamo.engineDirectory, runtime: 'dreamo' })).toMatchObject({ status: 'ready', pythonExecutable: dreamo.pythonExecutable });
+  expect(await inspectEngine({ engineDirectory: mflux.engineDirectory })).toMatchObject({ status: 'ready', pythonExecutable: mflux.pythonExecutable });
 });

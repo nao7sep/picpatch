@@ -3,10 +3,10 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { createEditor, type EditorOptions, type ReferenceGroup } from 'picpatchsdk';
+import { createImageClient, type ImageClientOptions, type ReferenceGroup } from 'picpatchsdk';
 
 // Synthetic object views isolate reference-count and resource behavior from likeness.
-export async function referenceWorkload(options: EditorOptions, directory: string,
+export async function referenceWorkload(options: ImageClientOptions, directory: string,
   inputSize: number, outputSize: number, counts: readonly number[],
   record: (event: Record<string, unknown>) => void = () => {}, signal?: AbortSignal) {
   assert(options.model, 'Supply a prepared local inference configuration.');
@@ -26,7 +26,7 @@ export async function referenceWorkload(options: EditorOptions, directory: strin
     }
   }
   const hashes = await Promise.all(groups.flat().map(async path => createHash('sha256').update(await readFile(path)).digest('hex')));
-  const editor = createEditor(options);
+  const editor = createImageClient(options);
   try {
     for (const [index, count] of counts.entries()) {
       const groupReference = (group: number): ReferenceGroup => ({ id: `object-${group}`, role: 'object', images: groups[group]!.slice(0, count / 2) as [string, ...string[]] });

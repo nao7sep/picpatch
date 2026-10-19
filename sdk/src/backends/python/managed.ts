@@ -5,7 +5,7 @@ import type { EditBackend } from '../../execution/backend.ts';
 import { ProcessEditor } from '../../execution/worker-backend.ts';
 import { WorkerProcess, type WorkerTimeouts } from '../../worker/process.ts';
 import { resolveEngine } from '../../runtime/engine/engine.ts';
-import type { LocalEditingModel } from '../../contracts.generated.ts';
+import type { LocalModel } from '../../contracts.generated.ts';
 import type { ImageRequest, GenerateRequest, EditRequest, OperationOptions } from '../../types.ts';
 import { PicPatchSdkError } from '../../errors.ts';
 import { checkSignal } from '../../operations.ts';
@@ -17,9 +17,9 @@ export class ManagedBackend implements EditBackend {
   private opening: Promise<ProcessEditor> | undefined;
   private disposed = false;
   private readonly root: string;
-  private readonly model: LocalEditingModel | undefined;
+  private readonly model: LocalModel | undefined;
   private readonly timeouts: WorkerTimeouts;
-  constructor(root: string, model: LocalEditingModel | undefined, timeouts: WorkerTimeouts) { this.root = root; this.model = model; this.timeouts = timeouts; }
+  constructor(root: string, model: LocalModel | undefined, timeouts: WorkerTimeouts) { this.root = root; this.model = model; this.timeouts = timeouts; }
   describe(request: ImageRequest) {
     if (!this.model) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'Planning requires a prepared model.');
     const capabilities = modelCapabilities(this.model.variant, this.model.manifest.model);
@@ -27,13 +27,13 @@ export class ManagedBackend implements EditBackend {
     return capabilities;
   }
   private open(signal?: AbortSignal): Promise<ProcessEditor> {
-    if (this.disposed) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
+    if (this.disposed) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Image client has been disposed.'));
     this.opening ??= (async () => {
-      const engine = await resolveEngine(this.root, signal);
+      const engine = await resolveEngine(this.root, signal, this.model?.variant === 'flux1-dreamo-v1.1' ? 'dreamo' : 'mflux');
       checkSignal(signal);
-      if (this.disposed) throw new PicPatchSdkError('DISPOSED', 'Editor has been disposed.');
+      if (this.disposed) throw new PicPatchSdkError('DISPOSED', 'Image client has been disposed.');
       const installation = dirname(dirname(dirname(engine.pythonExecutable)));
-      this.backend = new ProcessEditor(new WorkerProcess({ ...workerLaunch(engine.pythonExecutable, installation), ...(this.model ? { model: this.model } : {}) }, this.timeouts), this.model);
+      this.backend = new ProcessEditor(new WorkerProcess({ ...workerLaunch(engine.pythonExecutable, installation, this.model?.variant === 'flux1-dreamo-v1.1' ? 'dreamo' : 'mflux'), ...(this.model ? { model: this.model } : {}) }, this.timeouts), this.model);
       return this.backend;
     })().catch(error => { this.opening = undefined; throw error; });
     return this.opening;

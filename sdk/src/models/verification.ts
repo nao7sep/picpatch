@@ -1,3 +1,4 @@
+import { validateFlowAssets } from '../backends/stable-diffusion-cpp/flow.ts';
 import { isNativeVariant } from '../backends/stable-diffusion-cpp/models.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import { createHash } from 'node:crypto';
@@ -9,7 +10,7 @@ import { pipeline } from 'node:stream/promises';
 import { contractValidator } from '../contracts.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
-import type { LocalEditingModel } from '../contracts.generated.ts';
+import type { LocalModel } from '../contracts.generated.ts';
 import type { ModelComponent, ModelManifest, ModelOperationOptions, ModelVerificationOptions, ModelVerification, VerifiedComponent } from './types.ts';
 
 const manifestValidator = contractValidator<ModelManifest>('ModelManifest');
@@ -37,22 +38,24 @@ export function validateModelManifest(input: unknown): ModelManifest {
   return structuredClone(input);
 }
 /** Shared registration validation for editing and read-only readiness. */
-export function validateLocalEditingModel(input: unknown): LocalEditingModel {
-  if (!contractValidator<LocalEditingModel>('LocalEditingModel')(input)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid local editing model configuration.');
+export function validateLocalModel(input: unknown): LocalModel {
+  if (!contractValidator<LocalModel>('LocalModel')(input)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid local model configuration.');
   absolutePath(input.directory);
+  if (input.variant === 'flux1-dreamo-v1.1' && (input.loras !== undefined || input.quantize !== undefined)) throw new PicPatchSdkError('INVALID_REQUEST', 'DreamO requires its fixed local components without quantization or extra LoRAs.');
   const loraPaths = input.loras?.map(lora => lora.path) ?? [];
   if (new Set(loraPaths.map(path => path.toLowerCase())).size !== loraPaths.length || loraPaths.some(path => !path.toLowerCase().endsWith('.safetensors') || !input.manifest.components.some(component => component.path === path && component.role === 'weights'))) throw new PicPatchSdkError('INVALID_REQUEST', 'LoRAs must be distinct declared safetensors weights.');
   if (isNativeVariant(input.variant)) {
     if (!input.checkpoint || input.quantize !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Native models require a checkpoint and use checkpoint-owned quantization.');
+    validateFlowAssets(input);
     const identity = input.variant === 'sdxl-photomaker-v1';
     const appearance = input.variant.includes('-ip-adapter');
     if (identity !== (input.photoMaker !== undefined) || appearance !== (input.ipAdapter !== undefined) || appearance !== (input.clipVision !== undefined)) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply exactly the auxiliary assets required by the selected native conditioning method.');
     if (input.loras && !input.checkpoint.toLowerCase().endsWith('.safetensors')) throw new PicPatchSdkError('INVALID_REQUEST', 'LoRA compatibility checks require a safetensors checkpoint.');
     if (input.controlNet && (!['sd15', 'sdxl'].includes(input.variant) || !input.checkpoint.toLowerCase().endsWith('.safetensors') || !input.controlNet.path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchSdkError('INVALID_REQUEST', 'ControlNet currently requires an SD1.5 or SDXL base safetensors checkpoint and a matching ControlNet safetensors asset.');
-    for (const path of [...loraPaths, input.controlNet?.path, input.checkpoint, input.vae, input.photoMaker, input.ipAdapter, input.clipVision].filter(value => value !== undefined)) {
+    for (const path of [...loraPaths, input.controlNet?.path, input.checkpoint, input.vae, input.photoMaker, input.ipAdapter, input.clipVision, input.clipL, input.clipG, input.t5].filter(value => value !== undefined)) {
       if (!input.manifest.components.some(component => component.path === path && component.role === 'weights')) throw new PicPatchSdkError('INVALID_REQUEST', 'Native model files must be declared manifest weights.');
     }
-  } else if (input.controlNet !== undefined || input.checkpoint !== undefined || input.vae !== undefined || input.photoMaker !== undefined || input.ipAdapter !== undefined || input.clipVision !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
+  } else if (input.clipL !== undefined || input.clipG !== undefined || input.t5 !== undefined || input.controlNet !== undefined || input.checkpoint !== undefined || input.vae !== undefined || input.photoMaker !== undefined || input.ipAdapter !== undefined || input.clipVision !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Checkpoint files belong to native model registrations.');
 
   return { ...structuredClone(input), manifest: validateModelManifest(input.manifest) };
 }

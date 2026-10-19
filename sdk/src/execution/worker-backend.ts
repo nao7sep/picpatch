@@ -1,7 +1,7 @@
 import { withDiagnostics } from '../diagnostics.ts';
 import type { ProgressEvent } from '../contracts.generated.ts';
 import type { EditBackend } from './backend.ts';
-import type { LocalEditingModel } from '../contracts.generated.ts';
+import type { LocalModel } from '../contracts.generated.ts';
 import type { ImageRequest, GenerateRequest, EditRequest, ModelCapabilities, OperationOptions } from '../types.ts';
 import type { EditResult } from '../contracts.generated.ts';
 import { PicPatchSdkError } from '../errors.ts';
@@ -21,8 +21,8 @@ export class ProcessEditor implements EditBackend {
   private disposed = false;
   private disposal: Promise<void> | undefined;
   private readonly worker: WorkerProcess;
-  private readonly model: LocalEditingModel | undefined;
-  constructor(worker: WorkerProcess, model?: LocalEditingModel) { this.worker = worker; this.model = model; }
+  private readonly model: LocalModel | undefined;
+  constructor(worker: WorkerProcess, model?: LocalModel) { this.worker = worker; this.model = model; }
 
   async edit(input: EditRequest, options: OperationOptions = {}): Promise<EditResult> {
     return withDiagnostics('edit', options, operation => this.execute(validateEditRequest(input), operation));
@@ -33,7 +33,7 @@ export class ProcessEditor implements EditBackend {
   }
 
   private async execute(request: ImageRequest, options: OperationOptions): Promise<EditResult> {
-    if (this.disposed) throw new PicPatchSdkError('DISPOSED', 'Editor has been disposed.');
+    if (this.disposed) throw new PicPatchSdkError('DISPOSED', 'Image client has been disposed.');
     if (this.busy) throw new PicPatchSdkError('BUSY', 'An operation is already active on this editor.');
     validateOperation(options);
     const { signal, ...progressOptions } = options;
@@ -50,7 +50,7 @@ export class ProcessEditor implements EditBackend {
   }
 
   async validate(request: ImageRequest, options: OperationOptions = {}): Promise<ModelCapabilities> {
-    if (this.disposed) throw new PicPatchSdkError('DISPOSED', 'Editor has been disposed.');
+    if (this.disposed) throw new PicPatchSdkError('DISPOSED', 'Image client has been disposed.');
     const { signal } = options;
     if (signal?.aborted) throw new PicPatchSdkError('CANCELLED', 'The operation was cancelled.');
     if (this.model && request.model !== this.model.manifest.model) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The editor is configured for a different model.');

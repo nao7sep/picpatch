@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { readProfile, validateProfile, createEditor, inspectEngine, prepareModel, listModels, type PicPatchProfile } from '../../src/index.ts';
+import { readProfile, validateProfile, createImageClient, inspectEngine, prepareModel, listModels, type PicPatchProfile } from '../../src/index.ts';
 import { profileDefaults } from '../../src/profile.ts';
 let directory: string;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-profile-')); });
@@ -28,7 +28,7 @@ it('uses explicit resource paths ahead of profiles and never discovers ambient s
   const profile: PicPatchProfile = { version: 1, engineDirectory: join(directory, 'profile-engine'), modelsDirectory: join(directory, 'profile-models') };
   expect(await inspectEngine({ profile })).toMatchObject({ engineDirectory: profile.engineDirectory, status: 'missing' });
   expect(await inspectEngine({ profile, engineDirectory: join(directory, 'explicit-engine') })).toMatchObject({ engineDirectory: join(directory, 'explicit-engine'), status: 'missing' });
-  const editor = createEditor({ profile });
+  const editor = createImageClient({ profile });
   try { await expect(editor.generate({ model: 'test', prompt: 'A bowl.', outputDirectory: directory })).rejects.toMatchObject({ code: 'ENGINE_MISSING', subject: profile.engineDirectory }); }
   finally { await editor.dispose(); }
   await expect(prepareModel(listModels()[0]!.id, { profile })).rejects.toMatchObject({ code: 'MODEL_IO' });

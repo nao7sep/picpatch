@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { resolveStoragePaths } from '../paths.ts';
-import type { LocalEditingModel } from '../contracts.generated.ts';
+import type { LocalModel } from '../contracts.generated.ts';
 import { catalogModel, type CatalogModel } from './catalog.ts';
 import { prepareExternalModel } from './external.ts';
 import { downloadFile } from '../runtime/download.ts';
@@ -23,6 +23,10 @@ export interface PrepareModelOptions extends ModelOperationOptions {
   /** Native checkpoint and optional VAE paths relative to directory. */
   checkpoint?: string;
   vae?: string;
+  /** Separate native text encoders, relative to directory. */
+  clipL?: string;
+  clipG?: string;
+  t5?: string;
   photoMaker?: string;
   ipAdapter?: string;
   clipVision?: string;
@@ -35,7 +39,7 @@ export interface PrepareModelOptions extends ModelOperationOptions {
   modelsDirectory?: string;
 }
 export interface PreparedModel extends ModelRegistration {
-  model: LocalEditingModel;
+  model: LocalModel;
   origin: 'external' | 'cache' | 'download';
   integrity: 'matches-manifest' | 'locally-fingerprinted';
   cleanupWarning?: { directory: string; message: string };
@@ -55,7 +59,7 @@ async function syncDirectory(path: string): Promise<void> {
 
 /** Explicit preparation only. Reuses and verifies files; never repairs existing bundles. */
 async function prepareModelOperation(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
-  validateOperation(options, ['profile', 'directory', 'download', 'modelsDirectory', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'loras', 'controlNet']);
+  validateOperation(options, ['profile', 'directory', 'download', 'modelsDirectory', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'clipL', 'clipG', 't5', 'loras', 'controlNet']);
   if (options.modelsDirectory !== undefined) absolutePath(options.modelsDirectory);
   const entry = catalogModel(id);
   if (options.profile !== undefined) {
@@ -71,6 +75,7 @@ async function prepareModelOperation(id: string, options: PrepareModelOptions = 
     const { modelsDirectory: _modelsDirectory, ...nativeOptions } = options;
     return prepareNativeModel(entry.variant, nativeOptions);
   }
+  if (entry.runtime.name === 'dreamo' && options.loras !== undefined) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'DreamO uses its fixed trained components; additional LoRAs are unsupported.');
   if (options.loras !== undefined) {
     validateMfluxLoras(options.loras);
     const loras = structuredClone(options.loras);

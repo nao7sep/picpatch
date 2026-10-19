@@ -887,5 +887,186 @@
         "mflux-lora-safetensors"
       ]
     }
+  },
+  {
+    "id": "krea-2",
+    "family": "krea2",
+    "config": "krea2",
+    "defaults": {},
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 8,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "guidance": {
+          "default": 1,
+          "minimum": 1
+        },
+        "negativePrompt": {
+          "requiresGuidanceAbove": 1
+        },
+        "scheduler": {
+          "default": "er_sde",
+          "values": [
+            "er_sde",
+            "euler"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "id": "krea-2-raw",
+    "family": "krea2",
+    "config": "krea2_raw",
+    "defaults": {},
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "text_encoder",
+      "tokenizer"
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 8,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "guidance": {
+          "default": 1,
+          "minimum": 1
+        },
+        "negativePrompt": {
+          "requiresGuidanceAbove": 1
+        },
+        "scheduler": {
+          "default": "er_sde",
+          "values": [
+            "er_sde",
+            "euler"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "id": "boogu-image-turbo",
+    "family": "boogu",
+    "config": "boogu_image_turbo",
+    "defaults": {},
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "mllm"
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 4,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        }
+      }
+    },
+    "requiredFiles": [
+      "mllm/tokenizer_config.json",
+      "mllm/vocab.json",
+      "mllm/merges.txt"
+    ]
+  },
+  {
+    "id": "ming-image-design",
+    "family": "ming-image",
+    "config": "ming_image_design",
+    "defaults": {},
+    "requiredDirectories": [
+      "transformer",
+      "vae",
+      "mllm",
+      "connector",
+      "mlp"
+    ],
+    "capabilities": {
+      "instructionEditing": false,
+      "textToImage": true,
+      "referenceRoles": [],
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "maxReferenceImages": 0,
+      "parameters": {
+        "steps": {
+          "default": 12,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "guidance": {
+          "default": 1,
+          "minimum": 1
+        }
+      }
+    },
+    "requiredFiles": [
+      "mllm/tokenizer.json",
+      "mllm/tokenizer_config.json"
+    ]
   }
 ]

@@ -1,0 +1,63 @@
+[
+  {
+    "id": "flux1-dreamo-v1.1",
+    "family": "dreamo",
+    "config": "dreamo_v1_1",
+    "defaults": {},
+    "requiredDirectories": [
+      "base",
+      "dreamo",
+      "preprocessing"
+    ],
+    "requiredFiles": [
+      "base/model_index.json",
+      "base/transformer/config.json",
+      "base/vae/config.json",
+      "base/text_encoder/config.json",
+      "base/text_encoder_2/config.json",
+      "base/tokenizer/tokenizer_config.json",
+      "base/tokenizer_2/tokenizer_config.json",
+      "base/scheduler/scheduler_config.json",
+      "dreamo/dreamo.safetensors",
+      "dreamo/dreamo_cfg_distill.safetensors",
+      "dreamo/dreamo_sft_lora.safetensors",
+      "dreamo/dreamo_dpo_lora.safetensors",
+      "preprocessing/BEN2_Base.pth"
+    ],
+    "capabilities": {
+      "instructionEditing": true,
+      "textToImage": false,
+      "referenceRoles": [
+        "subject",
+        "object"
+      ],
+      "maxReferenceImages": 2,
+      "maxConditioningImages": 2,
+      "maskMode": "none",
+      "size": {
+        "widthMultiple": 16,
+        "heightMultiple": 16
+      },
+      "defaultOutputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "sourceImageRequired": false,
+      "referenceConditioning": "independent-subject",
+      "parameters": {
+        "steps": {
+          "default": 25,
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "integer": true
+        },
+        "guidance": {
+          "default": 4.5,
+          "minimum": 0
+        }
+      },
+      "outpainting": false,
+      "loraFormats": []
+    }
+  }
+]

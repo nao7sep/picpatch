@@ -4,13 +4,13 @@ import { withDiagnostics } from '../diagnostics.ts';
 import type { EventOptions } from '../diagnostics.ts';
 import { stat } from '../storage.ts';
 import { join } from 'node:path';
-import type { LocalEditingModel, ModelCapabilities } from '../contracts.generated.ts';
-import { validateLocalEditingModel, verifyModelOperation as verifyModel } from '../models/verification.ts';
+import type { LocalModel, ModelCapabilities } from '../contracts.generated.ts';
+import { validateLocalModel, verifyModelOperation as verifyModel } from '../models/verification.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { WorkerProcess } from '../worker/process.ts';
 import type { RuntimeCheck } from '../worker/protocol.ts';
-import { workerLaunch } from '../backends/mflux/launch.ts';
+import { workerLaunch } from '../backends/python/launch.ts';
 import { workerTimeouts } from '../worker/process.ts';
 
 export interface ReadinessOptions extends EventOptions {
@@ -29,10 +29,10 @@ export interface ModelReadiness {
 }
 
 /** Presence, integrity, imports and load evidence remain separate. Never downloads. */
-async function inspectReadinessOperation(executable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
+async function inspectReadinessOperation(executable: string, input: LocalModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
   absolutePath(executable); validateOperation(options, ['timeoutMs', 'verify', 'load']);
   for (const value of [options.verify, options.load]) if (value !== undefined && typeof value !== 'boolean') throw new PicPatchSdkError('INVALID_REQUEST', 'Readiness switches must be booleans.');
-  const model = validateLocalEditingModel(input);
+  const model = validateLocalModel(input);
   const budget = timeBudget(options.timeoutMs, options.load || options.verify ? 600_000 : 30_000);
   return withDeadline(options.signal, budget, 'Model readiness inspection timed out.', async signal => {
     const operation = { ...options, signal };
@@ -66,7 +66,7 @@ async function inspectReadinessOperation(executable: string, input: LocalEditing
       } finally { await backend.dispose(); }
     }
     emitProgress(operation, { type: 'progress', verb: 'inspectReadiness', stage: 'runtime', message: options.load ? 'Loading the local model for a readiness check.' : 'Checking inference runtime imports.' });
-    const worker = new WorkerProcess({ ...workerLaunch(executable), model, runtimeCheck: options.load ? 'load' : 'imports' }, { ...workerTimeouts, startupMs: budget });
+    const worker = new WorkerProcess({ ...workerLaunch(executable, undefined, model.variant === 'flux1-dreamo-v1.1' ? 'dreamo' : 'mflux'), model, runtimeCheck: options.load ? 'load' : 'imports' }, { ...workerTimeouts, startupMs: budget });
     const abort = () => worker.abortStartup();
     signal.addEventListener('abort', abort, { once: true });
     try {
@@ -82,6 +82,6 @@ async function inspectReadinessOperation(executable: string, input: LocalEditing
   });
 }
 
-export function inspectReadiness(executable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
+export function inspectReadiness(executable: string, input: LocalModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
   return withDiagnostics('inspectReadiness', options, operation => inspectReadinessOperation(executable, input, operation));
 }

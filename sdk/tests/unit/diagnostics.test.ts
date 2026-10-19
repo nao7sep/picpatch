@@ -62,8 +62,8 @@ it('does not recurse into a failed asynchronous event hook or wait for progress 
 });
 
 it('records invalid and disposed editor calls through the same terminal boundary', async () => {
-  const { createEditor } = await import('../../src/index.ts');
-  const editor = createEditor();
+  const { createImageClient } = await import('../../src/index.ts');
+  const editor = createImageClient();
   const events: SdkEvent[] = [];
   const options = { onEvent: (event: SdkEvent) => events.push(event) };
   try {

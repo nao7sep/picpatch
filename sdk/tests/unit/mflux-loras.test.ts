@@ -25,7 +25,10 @@ it('prepares multiple local adapters without writes and retains explicit integri
   expect(await readFile(join(directory, 'one.safetensors'))).toEqual(before);
   await writeFile(join(directory, 'two.safetensors'), 'changed');
   expect((await verifyModel(directory, prepared.model.manifest)).status).not.toBe('matches-manifest');
-  expect(listModels().filter(item => item.runtime.name === 'mflux').every(item => item.capabilities.loraFormats?.includes('mflux-lora-safetensors'))).toBe(true);
+  expect(listModels().find(item => item.id === 'flux2-klein-4b')?.capabilities.loraFormats).toContain('mflux-lora-safetensors');
+  for (const id of ['krea-2', 'krea-2-raw', 'boogu-image-turbo', 'ming-image-design']) {
+    expect(listModels().find(item => item.id === id)?.capabilities.loraFormats).toBeUndefined();
+  }
 });
 it.each([null, [], [{ path: '../outside.safetensors' }], [{ path: '/absolute.safetensors' }], [{ path: 'a.safetensors', scale: Infinity }], [{ path: 'a.gguf' }], [{ path: 'a.safetensors' }, { path: 'A.safetensors' }]])('rejects malformed selections before acquiring a base', async loras => {
   await expect(prepareModel('flux2-klein-4b-4bit', { directory: '/missing', loras: loras as never })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });

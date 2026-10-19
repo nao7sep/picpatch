@@ -1,3 +1,4 @@
+import { copyRuntimeResources } from './runtime-resources.mjs';
 import sharp from 'sharp';
 import { packager } from '@electron/packager';
 import { transform } from 'esbuild';
@@ -32,8 +33,7 @@ async function compile(directory, target) {
 }
 await compile(join(root,'sdk','src'),join(staging,'sdk','src'));
 for (const name of ['protocol','LICENSE','THIRD_PARTY_NOTICES']) await cp(join(root,'sdk',name),join(staging,'sdk',name),{recursive:true});
-await mkdir(join(staging,'sdk','runtimes','mflux'),{recursive:true});
-for (const name of ['pyproject.toml','uv.lock','engine_probe.py','src']) await cp(join(root,'sdk','runtimes','mflux',name),join(staging,'sdk','runtimes','mflux',name),{recursive:true,filter:source=>!source.includes('__pycache__')&&!source.endsWith('.pyc')});
+await copyRuntimeResources(join(root, 'sdk/runtimes'), join(staging, 'sdk/runtimes'));
 await writeFile(join(staging,'sdk','package.json'),JSON.stringify({name:sdk.name,version:sdk.version,private:true,type:'module',main:'./src/index.js',exports:{'.':'./src/index.js','./types':'./src/browser-types.js'},dependencies:sdk.dependencies}));
 const app=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
 await writeFile(join(staging,'package.json'),JSON.stringify({name:app.name,productName:app.productName,version:app.version,private:true,type:'module',main:'dist/main.mjs',dependencies:{picpatchsdk:'file:./sdk'}}));

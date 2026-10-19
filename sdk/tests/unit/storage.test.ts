@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ImageEditor } from '../../src/execution/session.ts';
+import { ImageClientImpl } from '../../src/execution/session.ts';
 import { open, writeFile, storageScope, storageStalled } from '../../src/storage.ts';
 import { withDeadline } from '../../src/operations.ts';
 vi.mock('node:fs/promises', async original => { const actual = await original<typeof fs>(); return { ...actual, open: vi.fn(actual.open), link: vi.fn(actual.link) }; });
@@ -27,7 +27,7 @@ it('bounds a stalled publication, retains owned files, and never resumes sidecar
     await sharp({ create: { width: 8, height: 8, channels: 3, background: 'blue' } }).png().toFile(request.outputPath);
     return { image: { path: request.outputPath, mimeType: 'image/png' as const, size: { width: 8, height: 8 } }, model: request.model, modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 1, effectiveParameters: {}, references: [] };
   };
-  const editor = new ImageEditor({ validate: async () => ({ model: 'fixture', textToImage: true, instructionEditing: true, referenceRoles: [], maskMode: 'none' }), generate: render, edit: render, dispose: async () => {} }, {}, 'fixture');
+  const editor = new ImageClientImpl({ validate: async () => ({ model: 'fixture', textToImage: true, instructionEditing: true, referenceRoles: [], maskMode: 'none' }), generate: render, edit: render, dispose: async () => {} }, {}, 'fixture');
   try {
     await expect(editor.generate({ prompt: 'Bowl', outputPath: path, sidecar: {} }, { timeoutMs: 100 })).rejects.toMatchObject({ code: 'TIMEOUT', effect: 'unknown', details: { recoveryDirectory: expect.any(String) } });
     expect(publish).toBeDefined(); expect((await fs.readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(true);

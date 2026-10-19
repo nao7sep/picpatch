@@ -1,9 +1,11 @@
 import { contractValidator } from '../contracts.ts';
-import definitions from '../../runtimes/mflux/src/picpatch_worker/backends/models.json' with { type: 'json' };
-import type { LocalEditingModel, ModelCapabilities } from '../contracts.generated.ts';
+import mfluxDefinitions from '../../runtimes/mflux/src/picpatch_worker/backends/models.json' with { type: 'json' };
+import dreamoDefinitions from '../../runtimes/dreamo/src/picpatch_dreamo/models.json' with { type: 'json' };
+const definitions = [...mfluxDefinitions, ...dreamoDefinitions];
+import type { LocalModel, ModelCapabilities } from '../contracts.generated.ts';
 import { PicPatchSdkError } from '../errors.ts';
 
-export type ModelVariant = LocalEditingModel['variant'];
+export type ModelVariant = LocalModel['variant'];
 export function modelDefinition(id: string) {
   const definition = definitions.find(item => item.id === id);
   if (!definition) throw new PicPatchSdkError('INVALID_REQUEST', 'Unknown model variant. Choose a model returned by listModels.');
@@ -18,6 +20,6 @@ export function externalModels() {
   return definitions.map(item => ({ id: item.id, variant: item.id as ModelVariant,
     family: item.family, capabilities: modelCapabilities(item.id), acquisition: 'external' as const, status: 'experimental' as const,
     evidence: 'api-tested' as const,
-    runtime: { name: 'mflux' as const, version: '0.22.0', platform: 'darwin' as const, architecture: 'arm64' as const } }));
+    runtime: { name: item.family === 'dreamo' ? 'dreamo' as const : 'mflux' as const, version: item.family === 'dreamo' ? '1.1' : '0.22.0', platform: 'darwin' as const, architecture: 'arm64' as const } }));
 }
 export type ExternalModel = ReturnType<typeof externalModels>[number];

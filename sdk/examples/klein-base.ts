@@ -1,15 +1,15 @@
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
-import { createEditor, type EditorOptions } from 'picpatchsdk';
+import { createImageClient, type ImageClientOptions } from 'picpatchsdk';
 
 // Supply the configuration written by scripts/prepare-inference.ts and a fresh output directory.
 const [configuration, destination] = process.argv.slice(2);
 if (!configuration || !destination) throw new Error('Supply a prepared configuration JSON and output directory.');
-const options = JSON.parse(await readFile(resolve(configuration), 'utf8')) as EditorOptions;
+const options = JSON.parse(await readFile(resolve(configuration), 'utf8')) as ImageClientOptions;
 const output = resolve(destination);
 await mkdir(output, { recursive: true });
 // Full-resolution Base inference can exceed the SDK's ordinary operation deadline.
-const editor = createEditor({ ...options, timeouts: { ...options.timeouts, generateMs: 7_200_000, editMs: 7_200_000 } });
+const editor = createImageClient({ ...options, timeouts: { ...options.timeouts, generateMs: 7_200_000, editMs: 7_200_000 } });
 const started = performance.now();
 const onProgress = (event: { stage: string; completed?: number; total?: number }) => {
   console.log(((performance.now() - started) / 1000).toFixed(3), event.stage, event.completed ?? '', event.total ?? '');

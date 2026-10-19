@@ -6,12 +6,12 @@ import { withDiagnostics, type EventOptions } from '../diagnostics.ts';
 import { PicPatchSdkError, sdkError, type PicPatchSdkErrorData } from '../errors.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import type { PicPatchProfile } from '../profile.ts';
-import type { LocalEditingModel } from '../contracts.generated.ts';
+import type { LocalModel } from '../contracts.generated.ts';
 import { catalogModel, listModels } from './catalog.ts';
-import { validateLocalEditingModel } from './verification.ts';
+import { validateLocalModel } from './verification.ts';
 
 /** Persist this envelope, not an inference session or historical verification claim. */
-export interface ModelRegistration { version: 1; model: LocalEditingModel }
+export interface ModelRegistration { version: 1; model: LocalModel }
 export interface ModelOpenOptions extends EventOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -27,7 +27,7 @@ export interface ModelPresenceIssue {
   effect: 'none';
 }
 export interface OpenedModel extends ModelRegistration {
-  status: 'ready';
+  status: 'present';
   integrity: 'presence-only';
   compatibility: 'unknown';
 }
@@ -44,7 +44,7 @@ export interface ManagedModelInventory { entries: ManagedModelEntry[]; models: {
 
 export function validateModelRegistration(value: unknown): ModelRegistration {
   if (!value || typeof value !== 'object' || Array.isArray(value) || (value as ModelRegistration).version !== 1) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model registration.');
-  return { version: 1, model: validateLocalEditingModel((value as ModelRegistration).model) };
+  return { version: 1, model: validateLocalModel((value as ModelRegistration).model) };
 }
 function unsupported(value: unknown): ModelOpenRefusal | undefined {
   const version = (value as { version?: unknown } | null)?.version;
@@ -73,7 +73,7 @@ async function presence(registration: ModelRegistration, signal?: AbortSignal): 
     if (code) issues.push({ path, code, message: 'Model component is not present at its declared location and size.', effect: 'none' });
   }
   checkSignal(signal);
-  return issues.length ? { status: 'refused', code: 'MODEL_INCOMPLETE', message: 'The model bundle is incomplete; existing files were preserved.', effect: 'none', issues } : { ...registration, status: 'ready', integrity: 'presence-only', compatibility: 'unknown' };
+  return issues.length ? { status: 'refused', code: 'MODEL_INCOMPLETE', message: 'The model bundle is incomplete; existing files were preserved.', effect: 'none', issues } : { ...registration, status: 'present', integrity: 'presence-only', compatibility: 'unknown' };
 }
 async function boundary<T>(options: ModelOpenOptions, action: (signal: AbortSignal) => Promise<T>): Promise<T> {
   validateOperation(options, ['profile', 'modelsDirectory', 'directory']);
@@ -135,7 +135,7 @@ export function inspectModels(options: ModelOpenOptions = {}): Promise<ManagedMo
         continue;
       }
       const missing = result.status === 'refused' && result.issues.every(issue => issue.code === 'MODEL_FILE_MISSING');
-      models.push({ id: entry.id, directory: registration.model.directory, status: result.status === 'ready' ? 'present' : missing ? 'missing' : 'incomplete', result });
+      models.push({ id: entry.id, directory: registration.model.directory, status: result.status === 'present' ? 'present' : missing ? 'missing' : 'incomplete', result });
     }
     return { models, entries };
   }));

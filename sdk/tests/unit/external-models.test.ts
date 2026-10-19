@@ -7,9 +7,12 @@ import { listModels, prepareModel, verifyModel } from '../../src/index.ts';
 let directory: string;
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-external-'));
-  for (const name of ['transformer', 'vae', 'text_encoder', 'text_encoder_2', 'tokenizer', 'tokenizer_2', 'processor']) {
+  for (const name of ['transformer', 'vae', 'text_encoder', 'text_encoder_2', 'tokenizer', 'tokenizer_2', 'processor', 'mllm', 'connector', 'mlp']) {
     await mkdir(join(directory, name));
     if (['transformer', 'vae', 'text_encoder'].includes(name)) await writeFile(join(directory, name, 'config.json'), '{}');
+    if (name === 'mllm') {
+      for (const filename of ['tokenizer.json', 'tokenizer_config.json', 'vocab.json', 'merges.txt']) await writeFile(join(directory, name, filename), '{}');
+    }
     if (name === 'processor') {
       await writeFile(join(directory, name, 'tokenizer_config.json'), '{}');
       await writeFile(join(directory, name, 'preprocessor_config.json'), '{}');
@@ -68,4 +71,15 @@ it('includes processor assets as tokenizer data without requiring processor weig
 it('does not advertise Turbo without checkpoint-specific scheduler support', async () => {
   expect(listModels().some(model => model.id === 'qwen-image-2.1-turbo')).toBe(false);
   await expect(prepareModel('qwen-image-2.1-turbo', { directory })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+});
+
+it.each([
+  ['boogu-image-turbo', 'mllm/vocab.json'],
+  ['boogu-image-turbo', 'mllm/tokenizer_config.json'],
+  ['ming-image-design', 'mllm/tokenizer.json'],
+  ['ming-image-design', 'connector/0.safetensors'],
+  ['ming-image-design', 'mlp/0.safetensors'],
+])('rejects incomplete %s bundles missing %s', async (id, path) => {
+  await rm(join(directory, path));
+  await expect(prepareModel(id, { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
 });

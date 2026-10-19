@@ -6,7 +6,7 @@ import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { listModels, validateEditRequest, validateGenerateRequest, type EditRequest } from '../../src/index.ts';
 import { ImageWorkspace } from '../../src/images/output.ts';
-import { ImageEditor } from '../../src/execution/session.ts';
+import { ImageClientImpl } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
 
 let directory: string;
@@ -88,7 +88,7 @@ it('publishes geometry and path-free sidecar through the session, and cleans can
     return { model: request.model, modelRevision: 'test', runtime: { name: 'test', version: '1' }, seed: 42, effectiveParameters: {}, references: [], image: { path: prepared.outputPath, mimeType: 'image/png', size: prepared.size! } };
   });
   const backend: EditBackend = { validate: async r => { validateEditRequest(r, caps); return caps; }, edit: execute, generate: async () => { throw new Error('Unexpected generation'); }, dispose: async () => {} };
-  const editor = new ImageEditor(backend);
+  const editor = new ImageClientImpl(backend);
   try {
     const saved = await editor.edit({ ...request, sidecar: { includeInputs: true } });
     if ('status' in saved) throw new Error(saved.code);

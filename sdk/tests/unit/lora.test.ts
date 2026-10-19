@@ -2,7 +2,7 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createEditor, listModels, prepareModel } from 'picpatchsdk';
+import { createImageClient, listModels, prepareModel } from 'picpatchsdk';
 import { nativeCheckpoint, tensorFile } from '../helpers/native-assets.ts';
 let directory: string;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-lora-')); });
@@ -31,7 +31,7 @@ it.each([null, [], [{ path: '../outside.safetensors' }], [{ path: 'a.safetensors
   await expect(prepareModel('sd15', { directory, checkpoint: 'base.safetensors', loras: loras as never })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });
 it('rejects undeclared LoRA registrations', () => {
-  expect(() => createEditor({ model: { variant: 'flux2-klein-4b', directory, loras: [{ path: 'undeclared.safetensors' }], manifest: { version: 1, model: 'fixture', source: { repository: 'local', revision: 'a'.repeat(64) }, components: [{ path: 'style.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } } })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+  expect(() => createImageClient({ model: { variant: 'flux2-klein-4b', directory, loras: [{ path: 'undeclared.safetensors' }], manifest: { version: 1, model: 'fixture', source: { repository: 'local', revision: 'a'.repeat(64) }, components: [{ path: 'style.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } } })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
 });
 it.each([
   ['input_blocks.4.0.in_layers.2', 'down_blocks_1_resnets_0_conv1'],

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel } from 'picpatchsdk';
+import { createImageClient, prepareModel } from 'picpatchsdk';
 import { testEngineDirectory } from '../helpers/engine.ts';
 
 it('generates with Z-Image Turbo then performs native masked editing with FLUX Fill', async () => {
@@ -17,7 +17,7 @@ it('generates with Z-Image Turbo then performs native masked editing with FLUX F
     expect(fill.integrity).toBe('matches-manifest');
     const sourceImage = join(directory, 'source.png');
     const maskImage = join(directory, 'mask.png');
-    const generated = createEditor({ engineDirectory: testEngineDirectory, model: generation.model });
+    const generated = createImageClient({ engineDirectory: testEngineDirectory, model: generation.model });
     try {
       const result = await generated.generate({ prompt: 'A small blue ceramic vase on a pale wooden table, product photography.', seed: 42, size: { width: 256, height: 256 }, parameters: { steps: 9 }, outputPath: sourceImage, sidecar: {} });
       if ('status' in result) throw new Error(result.code);
@@ -29,7 +29,7 @@ it('generates with Z-Image Turbo then performs native masked editing with FLUX F
     const mask = Buffer.alloc(256 * 256);
     for (let y = 48; y < 208; y++) for (let x = 64; x < 192; x++) mask[y * 256 + x] = Math.min(255, (Math.min(x - 64, 191 - x, y - 48, 207 - y) + 1) * 32);
     await sharp(mask, { raw: { width: 256, height: 256, channels: 1 } }).toColourspace('b-w').png().toFile(maskImage);
-    const editor = createEditor({ engineDirectory: testEngineDirectory, model: fill.model });
+    const editor = createImageClient({ engineDirectory: testEngineDirectory, model: fill.model });
     try {
       const cancellation = new AbortController();
       const cancelledPath = join(directory, 'cancelled.png');

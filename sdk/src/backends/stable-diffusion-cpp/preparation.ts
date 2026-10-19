@@ -6,19 +6,19 @@ import { open, realpath, stat } from '../../storage.ts';
 import { dirname, extname, join } from 'node:path';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../../operations.ts';
 import { PicPatchSdkError } from '../../errors.ts';
-import { validateLocalEditingModel, validateModelManifest } from '../../models/verification.ts';
-import type { LocalEditingModel, ModelComponent } from '../../contracts.generated.ts';
+import { validateLocalModel, validateModelManifest } from '../../models/verification.ts';
+import type { LocalModel, ModelComponent } from '../../contracts.generated.ts';
 import type { PrepareModelOptions, PreparedModel } from '../../models/preparation.ts';
 
 /** Explicit caller selection, byte fingerprints and recognized conditioning metadata; loading remains separate. */
-export async function prepareNativeModel(variant: LocalEditingModel['variant'], options: PrepareModelOptions): Promise<PreparedModel> {
-  validateOperation(options, ['timeoutMs', 'directory', 'download', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'loras', 'controlNet']);
+export async function prepareNativeModel(variant: LocalModel['variant'], options: PrepareModelOptions): Promise<PreparedModel> {
+  validateOperation(options, ['timeoutMs', 'directory', 'download', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'clipL', 'clipG', 't5', 'loras', 'controlNet']);
   if (!options.directory || !options.checkpoint || (options.download !== undefined && options.download !== false)) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply a local directory and relative checkpoint; native variants have no downloads.');
   absolutePath(options.directory);
   const directory = options.directory;
   if (options.loras !== undefined && (!Array.isArray(options.loras) || options.loras.length === 0)) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply a nonempty LoRA array.');
-  const assets = { ...(options.controlNet !== undefined ? { controlNet: options.controlNet } : {}), ...(options.loras !== undefined ? { loras: options.loras } : {}), checkpoint: options.checkpoint, ...(options.vae ? { vae: options.vae } : {}), ...(options.photoMaker ? { photoMaker: options.photoMaker } : {}), ...(options.ipAdapter ? { ipAdapter: options.ipAdapter } : {}), ...(options.clipVision ? { clipVision: options.clipVision } : {}) };
-  const selected = [options.checkpoint, ...(options.controlNet !== undefined ? [options.controlNet?.path] : []), ...(options.loras ?? []).map(lora => lora?.path), ...[options.vae, options.photoMaker, options.ipAdapter, options.clipVision].filter(value => value !== undefined)];
+  const assets = { ...Object.fromEntries((['clipL', 'clipG', 't5'] as const).flatMap(key => options[key] === undefined ? [] : [[key, options[key]]])), ...(options.controlNet !== undefined ? { controlNet: options.controlNet } : {}), ...(options.loras !== undefined ? { loras: options.loras } : {}), checkpoint: options.checkpoint, ...(options.vae ? { vae: options.vae } : {}), ...(options.photoMaker ? { photoMaker: options.photoMaker } : {}), ...(options.ipAdapter ? { ipAdapter: options.ipAdapter } : {}), ...(options.clipVision ? { clipVision: options.clipVision } : {}) };
+  const selected = [options.checkpoint, ...(options.controlNet !== undefined ? [options.controlNet?.path] : []), ...(options.loras ?? []).map(lora => lora?.path), ...[options.vae, options.photoMaker, options.ipAdapter, options.clipVision, options.clipL, options.clipG, options.t5].filter(value => value !== undefined)];
   if (new Set(selected).size !== selected.length) throw new PicPatchSdkError('INVALID_REQUEST', 'Selected native assets must be distinct files.');
   for (const path of selected) {
     if (typeof path !== 'string' || !['.safetensors', '.gguf'].includes(extname(path).toLowerCase())) throw new PicPatchSdkError('INVALID_REQUEST', 'Native weights must be safetensors or GGUF files.');
@@ -31,7 +31,7 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
       const root = await realpath(directory);
       const components: ModelComponent[] = [];
       const snapshots = new Map<string, BigIntStats>();
-      const provisional = validateLocalEditingModel({ variant, directory: root, ...assets, manifest: { version: 1, model: variant, source: { repository: 'local', revision: '0'.repeat(64) }, components: selected.map(path => ({ path, role: 'weights', bytes: 1, sha256: '0'.repeat(64) })) } });
+      const provisional = validateLocalModel({ variant, directory: root, ...assets, manifest: { version: 1, model: variant, source: { repository: 'local', revision: '0'.repeat(64) }, components: selected.map(path => ({ path, role: 'weights', bytes: 1, sha256: '0'.repeat(64) })) } });
       // Check compatibility before hashing multi-GB assets; repeat headers under final snapshots below.
       await inspectNativeAssets(provisional, signal);
       for (const path of selected) {
@@ -60,7 +60,7 @@ export async function prepareNativeModel(variant: LocalEditingModel['variant'], 
       const revision = createHash('sha256').update(JSON.stringify({ variant, components })).digest('hex');
       const manifest = validateModelManifest({ version: 1, model: variant, source: { repository: 'local', revision }, components });
       emitProgress({ ...options, signal }, { stage: 'verifying', completed: selected.length, total: selected.length });
-      const model = validateLocalEditingModel({ variant, directory, manifest, ...assets });
+      const model = validateLocalModel({ variant, directory, manifest, ...assets });
       await inspectNativeAssets({ ...model, directory: root }, signal);
       // The hashing read already checks file identity and mutation. Recheck every earlier file
       // after callbacks/header inspection, rather than reading all weights a second time.

@@ -1,7 +1,7 @@
 import { fixtureEditor } from '../helpers/editor.ts';
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createEditor, validateEditRequest, type ModelCapabilities, type EditRequest } from '../../src/index.ts';
+import { createImageClient, validateEditRequest, type ModelCapabilities, type EditRequest } from '../../src/index.ts';
 import { WorkerProcess } from '../../src/worker/process.ts';
 import { ProtocolSession } from '../../src/worker/protocol.ts';
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/klein-contract.json', import.meta.url), 'utf8')) as {

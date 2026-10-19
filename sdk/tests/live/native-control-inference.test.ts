@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel } from 'picpatchsdk';
+import { createImageClient, prepareModel } from 'picpatchsdk';
 import { loraWeights } from '../helpers/lora-weights.ts';
 
 it('runs Canny generation and source editing with local LoRA composition and path-free provenance', async () => {
@@ -20,7 +20,7 @@ it('runs Canny generation and source editing with local LoRA composition and pat
     await sharp(pixels, { raw: { width: 256, height: 256, channels: 1 } }).toColourspace('b-w').png().toFile(map);
     const original = await readFile(map);
     const prepared = await prepareModel('sd15', { directory, checkpoint: 'base.safetensors', controlNet: { kind: 'canny', path: 'canny.safetensors' }, loras: [{ path: 'adapter.safetensors', scale: 0.5 }] });
-    const editor = createEditor({ model: prepared.model, nativeExecutable: config.executable, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42, parameters: { steps: 4 } } });
+    const editor = createImageClient({ model: prepared.model, nativeExecutable: config.executable, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42, parameters: { steps: 4 } } });
     try {
       const outputs: string[] = [];
       for (const strength of [0, 1]) {

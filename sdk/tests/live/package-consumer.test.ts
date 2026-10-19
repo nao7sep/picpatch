@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
-import type { EditorOptions } from 'picpatchsdk';
+import type { ImageClientOptions } from 'picpatchsdk';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import pkg from '../../package.json' with { type: 'json' };
@@ -24,6 +24,9 @@ it('packs a source SDK and runs its public worker journey from an unrelated cons
     expect(files).toContain('runtimes/mflux/src/picpatch_worker/backends/models.json');
     expect(files).toContain('runtimes/mflux/uv.lock');
     expect(files).toContain('runtimes/mflux/engine_probe.py');
+    expect(files).toContain('runtimes/common/src/picpatch_worker_core/entry.py');
+    expect(files).toContain('runtimes/dreamo/src/picpatch_dreamo/adapter.py');
+    expect(files).toContain('runtimes/dreamo/THIRD_PARTY_NOTICES');
     expect(files).not.toContain('benchmarks/comparison.ts');
     expect(files.some(path => /(?:\.venv|node_modules|__pycache__|\.safetensors|\.gguf|\.pyc|inference-config)/.test(path))).toBe(false);
     await exec('tar', ['-xzf', join(directory, packed.filename), '-C', directory], { timeout: 30_000 });
@@ -39,12 +42,12 @@ it('packs a source SDK and runs its public worker journey from an unrelated cons
     }
     const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(root, 'node_modules/.cache/picpatch-live/inference-config.json'), 'utf8'));
     const script = join(directory, 'consumer.ts');
-    await writeFile(script, `import { inspectEngine, inspectRuntime, createEditor, listModels } from 'picpatchsdk';
+    await writeFile(script, `import { inspectEngine, inspectRuntime, createImageClient, listModels } from 'picpatchsdk';
 const engine = await inspectEngine({engineDirectory:${JSON.stringify(testEngineDirectory)}});
 if(engine.status !== 'ready') throw new Error('Shared engine unavailable');
 const result = await inspectRuntime(engine.pythonExecutable);
 if(result.status !== 'worker-ready' || !listModels().some(model => model.id === 'sdxl-photomaker-v1')) throw new Error('Relocated runtime unavailable');
-const editor = createEditor({engineDirectory:${JSON.stringify(testEngineDirectory)}});
+const editor = createImageClient({engineDirectory:${JSON.stringify(testEngineDirectory)}});
 try { await editor.generate({model:'unavailable',prompt:'neutral',outputPath:${JSON.stringify(join(directory, 'out.png'))}}); throw new Error('Unsupported operation accepted'); }
 catch(error) { if(error.code !== 'UNSUPPORTED_CAPABILITY') throw error; }
 finally { await editor.dispose(); }
@@ -54,7 +57,7 @@ console.log('consumer passed');\n`);
     expect(output.trim()).toBe('consumer passed');
     // Seed disposable managed storage using hard links to already acquired files.
     // No model bytes are copied or changed; removing the fixture leaves the originals intact.
-    const model = (config as EditorOptions).model!;
+    const model = (config as ImageClientOptions).model!;
     const modelsDirectory = join(directory, 'models');
     const cached = join(modelsDirectory, model.manifest.model, model.manifest.source.revision);
     for (const component of model.manifest.components) {

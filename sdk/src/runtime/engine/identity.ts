@@ -3,18 +3,21 @@ import { readFile } from '../../storage.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PicPatchSdkError } from '../../errors.ts';
-import type { EngineIdentity, EngineRecord } from './types.ts';
+import type { EngineIdentity, EngineRecord, EngineRuntime } from './types.ts';
 
-export const projectDirectory = fileURLToPath(new URL('../../../runtimes/mflux/', import.meta.url));
-export const probePath = fileURLToPath(new URL('../../../runtimes/mflux/engine_probe.py', import.meta.url));
 const hash = (bytes: string) => createHash('sha256').update(bytes).digest('hex');
-export async function engineDefinition() {
-  if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The managed MFLUX runtime requires macOS arm64.');
-  const [manifest, lock] = await Promise.all([readFile(join(projectDirectory, 'pyproject.toml'), 'utf8'), readFile(join(projectDirectory, 'uv.lock'), 'utf8')]);
-  return { identity: identifyEngine(manifest, lock), manifest, lock };
+export function runtimePaths(runtime: EngineRuntime = 'mflux') {
+  if (!['mflux', 'dreamo'].includes(runtime)) throw new PicPatchSdkError('INVALID_REQUEST', 'Unknown engine runtime.');
+  return { projectDirectory: fileURLToPath(new URL(`../../../runtimes/${runtime}/`, import.meta.url)), probePath: fileURLToPath(new URL(`../../../runtimes/${runtime}/engine_probe.py`, import.meta.url)) };
 }
-export function identifyEngine(manifest: string, lock: string): EngineIdentity {
-  const fields = { platform: 'darwin', architecture: 'arm64', python: '3.15.0', dependencies: 'inference', lockSha256: hash(lock), manifestSha256: hash(manifest) } as const;
+export async function engineDefinition(runtime: EngineRuntime = 'mflux') {
+  const { projectDirectory } = runtimePaths(runtime);
+  if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The managed Python runtime requires macOS arm64.');
+  const [manifest, lock] = await Promise.all([readFile(join(projectDirectory, 'pyproject.toml'), 'utf8'), readFile(join(projectDirectory, 'uv.lock'), 'utf8')]);
+  return { identity: identifyEngine(manifest, lock, runtime), manifest, lock };
+}
+export function identifyEngine(manifest: string, lock: string, runtime: EngineRuntime = 'mflux'): EngineIdentity {
+  const fields = { platform: 'darwin', architecture: 'arm64', python: '3.15.0', dependencies: runtime === 'dreamo' ? 'dreamo-inference' : 'inference', lockSha256: hash(lock), manifestSha256: hash(manifest) } as const;
   return { id: hash(JSON.stringify({ version: 1, ...fields })), ...fields };
 }
 export function validRecord(value: unknown, identity: EngineIdentity): value is EngineRecord {

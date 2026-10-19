@@ -12,7 +12,7 @@ it('opens a persisted registration using presence alone while explicit verificat
   const read = await readModelRegistration(fixture('current')); if (read.status === 'refused') throw new Error(read.code); const registration = read.registration;
   registration.model.directory = directory;
   await writeFile(join(directory, 'weights.safetensors'), 'test');
-  expect(await openModel(registration)).toMatchObject({ status: 'ready', integrity: 'presence-only', compatibility: 'unknown', version: 1 });
+  expect(await openModel(registration)).toMatchObject({ status: 'present', integrity: 'presence-only', compatibility: 'unknown', version: 1 });
   expect(await verifyModel(directory, registration.model.manifest)).toMatchObject({ status: 'invalid', components: [{ status: 'digest-mismatch', code: 'MODEL_COMPONENT_DIGEST_MISMATCH', effect: 'none', message: expect.any(String) }] });
   await writeFile(join(directory, 'weights.safetensors'), 'wrong length');
   expect(await openModel(registration)).toMatchObject({ status: 'refused', code: 'MODEL_INCOMPLETE', issues: [{ code: 'MODEL_FILE_SIZE_MISMATCH', effect: 'none' }] });
@@ -30,4 +30,22 @@ it('inventories missing managed bundles without creating directories and honors 
   expect(result.models.every(item => item.status === 'missing' && item.directory.startsWith(join(directory, 'explicit')))).toBe(true);
   await expect(inspectModels({ modelsDirectory: 'relative' })).rejects.toMatchObject({ kind: 'invalid' });
   await expect(inspectModels({ signal: AbortSignal.abort() })).rejects.toMatchObject({ kind: 'cancelled' });
+});
+
+it('round-trips persisted native split encoder roles without dropping or redirecting a component', async () => {
+  const path = fixture('native-split-encoders');
+  const bytes = await readFile(path);
+  const expected = JSON.parse(bytes.toString());
+  const result = await readModelRegistration(path);
+  if (result.status === 'refused') throw new Error(result.code);
+  expect(result.registration).toEqual(expected);
+  expect(result.registration.model).toMatchObject({ checkpoint: 'sd35-large.safetensors', clipL: 'clip-l.safetensors', clipG: 'clip-g.safetensors', t5: 't5.gguf', vae: 'vae.safetensors' });
+  const saved = join(directory, 'registration.json');
+  await writeFile(saved, JSON.stringify(validateModelRegistration(result.registration)));
+  const reread = await readModelRegistration(saved);
+  expect(reread).toEqual(result);
+  expect(await readFile(path)).toEqual(bytes);
+  const incomplete = structuredClone(expected);
+  incomplete.model.manifest.components = incomplete.model.manifest.components.filter((component: { path: string }) => component.path !== incomplete.model.t5);
+  expect(() => validateModelRegistration(incomplete)).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
 });

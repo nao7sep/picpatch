@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createEditor, listModels, type ModelCapabilities, type EditInput } from '../../src/index.ts';
-import { ImageEditor } from '../../src/execution/session.ts';
+import { createImageClient, listModels, type ModelCapabilities, type EditInput } from '../../src/index.ts';
+import { ImageClientImpl } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
 import type { ImageRequest } from '../../src/types.ts';
 let directory: string;
@@ -20,7 +20,7 @@ function setup(capabilities = caps) {
     return { image: { path: input.outputPath, mimeType: 'image/png', size: input.size! }, model: input.model, seed: input.seed!, effectiveParameters: input.parameters ?? {}, modelRevision: 'test', runtime: { name: 'test', version: '1' }, references: [] };
   });
   const backend: EditBackend = { describe: () => capabilities, validate: vi.fn(async () => capabilities), generate: render, edit: render, dispose: vi.fn(async () => {}) };
-  return { editor: new ImageEditor(backend, { outputDirectory: directory }, 'test'), render, backend };
+  return { editor: new ImageClientImpl(backend, { outputDirectory: directory }, 'test'), render, backend };
 }
 it('fixes seed, parameters and output once, creates no files during planning and executes that decision', async () => {
   const { editor, render, backend } = setup();
@@ -70,7 +70,7 @@ it('refuses a removed input and a retargeted destination, and rejects plans from
 it('plans real Klein geometry and profile defaults without an engine or model files', async () => {
   const entry = listModels()[0]!; if (entry.acquisition !== 'pinned') throw new Error('Expected pinned model');
   const source = join(directory, 'source.png'); await image(source, 'blue', 1050, 800);
-  const editor = createEditor({ profile: { version: 1, engineDirectory: join(directory, 'absent-engine'), defaults: { outputDirectory: directory, seed: 7, parameters: { steps: 2 } } }, defaults: { seed: 8 }, model: { variant: entry.variant, directory: join(directory, 'absent-model'), manifest: entry.manifest } });
+  const editor = createImageClient({ profile: { version: 1, engineDirectory: join(directory, 'absent-engine'), defaults: { outputDirectory: directory, seed: 7, parameters: { steps: 2 } } }, defaults: { seed: 8 }, model: { variant: entry.variant, directory: join(directory, 'absent-model'), manifest: entry.manifest } });
   try {
     const plan = await editor.plan({ instruction: 'A bowl.', sourceImage: source }); if (plan.status !== 'planned') throw new Error(plan.code);
     expect(plan.request.seed).toBe(8); expect(plan.request.parameters?.steps).toBe(2);

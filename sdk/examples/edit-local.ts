@@ -1,14 +1,14 @@
 /** A first edit using catalog preparation, session defaults and existing local files. */
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
-import { createEditor, listModels, prepareModel } from 'picpatchsdk';
+import { createImageClient, listModels, prepareModel } from 'picpatchsdk';
 const { values } = parseArgs({ options: {
   steps: { type: 'string' }, guidance: { type: 'string' }, instruction: { type: 'string' }, mask: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, directory: { type: 'string' }, engine: { type: 'string' },
 } });
 if (!values.instruction || !values.source || !values.output) throw new Error('Supply --instruction, --source and --output. Optionally select an existing model with --directory and managed runtime with --engine.');
 const choice = listModels()[0]!;
 const prepared = await prepareModel(choice.id, values.directory ? { directory: resolve(values.directory) } : {});
-const editor = createEditor({ model: prepared.model, ...(values.engine ? { engineDirectory: resolve(values.engine) } : {}) });
+const editor = createImageClient({ model: prepared.model, ...(values.engine ? { engineDirectory: resolve(values.engine) } : {}) });
 try {
   const result = await editor.edit({ instruction: values.instruction, sourceImage: resolve(values.source), outputPath: resolve(values.output), parameters: {
     ...(values.steps !== undefined ? { steps: Number(values.steps) } : {}),

@@ -1,12 +1,14 @@
+import { flowVariants, inspectFlowAssets } from './flow.ts';
 import { validateLoraTensors } from './lora.ts';
 import { safetensorsHeader as header, type Header } from '../../models/safetensors.ts';
 import { join } from 'node:path';
-import type { LocalEditingModel } from '../../contracts.generated.ts';
+import type { LocalModel } from '../../contracts.generated.ts';
 import { checkSignal } from '../../operations.ts';
 import { PicPatchSdkError } from '../../errors.ts';
 
 /** Recognize conventional SD checkpoints and the supported conditioning exports. */
-async function inspectAssets(model: LocalEditingModel, signal?: AbortSignal): Promise<void> {
+async function inspectAssets(model: LocalModel, signal?: AbortSignal): Promise<void> {
+  if ((flowVariants as readonly string[]).includes(model.variant)) return inspectFlowAssets(model, signal);
   const conditioned = Boolean(model.photoMaker || model.ipAdapter);
   const required = [model.checkpoint!, ...[model.photoMaker, model.ipAdapter, model.clipVision].filter((path): path is string => path !== undefined)];
   if (conditioned && required.some(path => !path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchSdkError('INVALID_REQUEST', 'Conditioned workflows currently require safetensors checkpoint and auxiliary assets.');
@@ -58,7 +60,7 @@ async function inspectAssets(model: LocalEditingModel, signal?: AbortSignal): Pr
   }
 }
 
-export async function inspectNativeAssets(model: LocalEditingModel, signal?: AbortSignal): Promise<void> {
+export async function inspectNativeAssets(model: LocalModel, signal?: AbortSignal): Promise<void> {
   try { await inspectAssets(model, signal); }
   catch (cause) {
     checkSignal(signal);

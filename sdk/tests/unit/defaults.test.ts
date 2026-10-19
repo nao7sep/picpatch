@@ -1,7 +1,7 @@
 import { expect, it, vi, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createEditor } from '../../src/index.ts';
+import { createImageClient } from '../../src/index.ts';
 import { resolveEditRequest, validateDefaults } from '../../src/defaults.ts';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -36,5 +36,5 @@ it('snapshots session defaults and keeps absent inference settings absent', () =
 });
 it('does not inspect ambient interpreter settings when constructing an editor', async () => {
   vi.stubEnv('UV_PROJECT_ENVIRONMENT', '/not-an-engine');
-  const editor = createEditor({ engineDirectory: '/explicit/engine' }); await editor.dispose();
+  const editor = createImageClient({ engineDirectory: '/explicit/engine' }); await editor.dispose();
 });

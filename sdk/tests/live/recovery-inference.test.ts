@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel, type EditorOptions, type SdkEvent } from 'picpatchsdk';
+import { createImageClient, prepareModel, type ImageClientOptions, type SdkEvent } from 'picpatchsdk';
 
 const exec = promisify(execFile);
 async function children(): Promise<number[]> {
@@ -35,7 +35,7 @@ it('recovers native sessions after real loading cancellation and protects prior 
   const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(root, 'native-inference-config.json'), 'utf8'));
   const prepared = await prepareModel('sd15', { directory: config.directory, checkpoint: config.sd15Checkpoint });
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-native-recovery-'));
-  const editor = createEditor({ model: prepared.model, nativeExecutable: config.executable,
+  const editor = createImageClient({ model: prepared.model, nativeExecutable: config.executable,
     defaults: { outputDirectory: directory, size: { width: 512, height: 512 }, seed: 42 } });
   const events: SdkEvent[] = [];
   try {
@@ -74,10 +74,10 @@ it('recovers native sessions after real loading cancellation and protects prior 
 }, 600_000);
 
 it('recovers from cooperative MFLUX cancellation and survives failing progress hooks for real 512px inference', async () => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(root, 'inference-config.json'), 'utf8')) as EditorOptions;
+  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(root, 'inference-config.json'), 'utf8')) as ImageClientOptions;
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-mflux-recovery-'));
-  const options: EditorOptions = { ...inferenceOptions(config), defaults: { outputDirectory: directory, size: { width: 512, height: 512 }, seed: 42 } };
-  let editor = createEditor(options);
+  const options: ImageClientOptions = { ...inferenceOptions(config), defaults: { outputDirectory: directory, size: { width: 512, height: 512 }, seed: 42 } };
+  let editor = createImageClient(options);
   const pids: number[] = [];
   try {
     const controller = new AbortController(); let sawStep = false;

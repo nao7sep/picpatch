@@ -3,9 +3,9 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createEditor, PicPatchSdkError, type ImageResult } from 'picpatchsdk';
+import { createImageClient, PicPatchSdkError, type ImageResult } from 'picpatchsdk';
 import { compare, type ComparisonRecord } from '../../benchmarks/comparison.ts';
-vi.mock('picpatchsdk', async original => ({ ...await original<typeof import('picpatchsdk')>(), createEditor: vi.fn() }));
+vi.mock('picpatchsdk', async original => ({ ...await original<typeof import('picpatchsdk')>(), createImageClient: vi.fn() }));
 const directories: string[] = [];
 afterEach(async () => { vi.resetAllMocks(); await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 async function reportPath() { const dir = await mkdtemp(join(tmpdir(), 'picpatch-comparison-')); directories.push(dir); return join(dir, 'report.jsonl'); }
@@ -15,7 +15,7 @@ it('persists success, skips unsupported and dependent cases, and recreates a fai
   const path = await reportPath();
   const first = { plan: vi.fn(), generate: vi.fn().mockResolvedValue(result), edit: vi.fn().mockRejectedValue(new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'private details')), dispose: vi.fn().mockResolvedValue(undefined) };
   const next = { plan: vi.fn(), generate: vi.fn().mockResolvedValue(result), edit: vi.fn(), dispose: vi.fn().mockResolvedValue(undefined) };
-  vi.mocked(createEditor).mockReturnValueOnce(first).mockReturnValueOnce(next);
+  vi.mocked(createImageClient).mockReturnValueOnce(first).mockReturnValueOnce(next);
   await compare([{ id: 'neutral', options: {}, operations: [
     { operation: 'generate', request: { prompt: 'private prompt' } },
     { operation: 'edit', sourceFromPrevious: true, request: { instruction: 'private edit' } },
@@ -34,18 +34,18 @@ it('persists success, skips unsupported and dependent cases, and recreates a fai
 it('marks cancelled remainder untested without starting editors', async () => {
   const path = await reportPath();
   await compare([{ id: 'cancelled', options: {}, operations: [{ operation: 'generate', request: { prompt: 'neutral' } }] }], path, AbortSignal.abort());
-  expect((await records(path))[0]!.outcome).toBe('untested'); expect(createEditor).not.toHaveBeenCalled();
+  expect((await records(path))[0]!.outcome).toBe('untested'); expect(createImageClient).not.toHaveBeenCalled();
 });
 it('records the failure but stops when disposal cannot establish settlement', async () => {
   const path = await reportPath(); const failure = new Error('unsettled');
-  vi.mocked(createEditor).mockReturnValue({ plan: vi.fn(), generate: vi.fn().mockRejectedValue(new Error('failed')), edit: vi.fn(), dispose: vi.fn().mockRejectedValue(failure) });
+  vi.mocked(createImageClient).mockReturnValue({ plan: vi.fn(), generate: vi.fn().mockRejectedValue(new Error('failed')), edit: vi.fn(), dispose: vi.fn().mockRejectedValue(failure) });
   await expect(compare([{ id: 'failure', options: {}, operations: [{ operation: 'generate', request: { prompt: 'neutral' } }, { operation: 'generate', request: { prompt: 'another' } }] }], path)).rejects.toBe(failure);
   expect((await records(path)).map(row => row.outcome)).toEqual(['failed']);
 });
 
 it('reports actual SDK stages without serializing progress messages', async () => {
   const path = await reportPath(); const events: Record<string, unknown>[] = [];
-  vi.mocked(createEditor).mockReturnValue({ plan: vi.fn(), generate: async (_request, options) => {
+  vi.mocked(createImageClient).mockReturnValue({ plan: vi.fn(), generate: async (_request, options) => {
     for (const stage of ['loading', 'loading', 'generating', 'saving'] as const) options?.onEvent?.({ type: 'event', name: 'operation.stage', operationId: 'test', time: new Date().toISOString(), level: 'info', verb: 'generate', stage, message: 'private text' });
     return result;
   }, edit: vi.fn(), dispose: vi.fn().mockResolvedValue(undefined) });

@@ -2,11 +2,11 @@ import { appendFile, open } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { arch, cpus, platform, release, totalmem } from 'node:os';
 import { performance } from 'node:perf_hooks';
-import { createEditor, PicPatchSdkError, type EditorOptions, type EditInput, type GenerateInput, type EditResult, type SdkEvent } from 'picpatchsdk';
+import { createImageClient, PicPatchSdkError, type ImageClientOptions, type EditInput, type GenerateInput, type EditResult, type SdkEvent } from 'picpatchsdk';
 
 export type ComparisonOperation = { operation: 'generate'; request: Omit<GenerateInput, 'sidecar'> } |
   { operation: 'edit'; request: Omit<EditInput, 'sidecar'>; sourceFromPrevious?: boolean };
-export interface ComparisonCase { id: string; options: EditorOptions; operations: ComparisonOperation[] }
+export interface ComparisonCase { id: string; options: ImageClientOptions; operations: ComparisonOperation[] }
 export interface ComparisonRecord {
   version: 1;
   case: string;
@@ -38,7 +38,7 @@ export async function compare(cases: ComparisonCase[], report: string, signal?: 
   const hardware = { platform: platform(), architecture: arch(), release: release(), cpu: cpus()[0]?.model ?? 'unknown', totalMemoryBytes: totalmem() };
   let measurementIndex = 0;
   for (const entry of cases) {
-    let editor: ReturnType<typeof createEditor> | undefined;
+    let editor: ReturnType<typeof createImageClient> | undefined;
     let previous: EditResult | undefined;
     try {
       for (const [index, operation] of entry.operations.entries()) {
@@ -49,7 +49,7 @@ export async function compare(cases: ComparisonCase[], report: string, signal?: 
         try {
           if (!signal?.aborted && !(operation.operation === 'edit' && operation.sourceFromPrevious && !previous)) {
             try {
-              editor ??= createEditor(entry.options);
+              editor ??= createImageClient(entry.options);
               let stage: string | undefined;
               const operationOptions = { ...(signal ? { signal } : {}), onEvent: (progress: SdkEvent) => {
                 if (stage !== progress.stage) {

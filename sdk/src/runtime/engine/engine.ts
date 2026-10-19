@@ -7,14 +7,15 @@ import { resolveStoragePaths } from '../../paths.ts';
 import { PicPatchSdkError } from '../../errors.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../../operations.ts';
 import { operationStage, withDiagnostics } from '../../diagnostics.ts';
-import { engineDefinition, probePath, projectDirectory, validRecord } from './identity.ts';
+import { engineDefinition, runtimePaths, validRecord } from './identity.ts';
 import { runCommand } from './command.ts';
-import type { EngineIdentity, EngineInspection, EngineInstallation, EngineOptions, EngineRecord, InstallEngineOptions, ReadyEngine } from './types.ts';
+import type { EngineIdentity, EngineInspection, EngineInstallation, EngineOptions, EngineRecord, InstallEngineOptions, ReadyEngine, EngineRuntime } from './types.ts';
 
 const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException)?.code ?? '');
 function validate(options: EngineOptions, install: boolean): string {
-  validateOperation(options, ['profile', 'engineDirectory', 'timeoutMs', ...(install ? ['uvExecutable', 'cacheDirectory', 'pythonDirectory', 'toolDirectories', 'offline'] : [])]);
+  validateOperation(options, ['profile', 'runtime', 'engineDirectory', 'timeoutMs', ...(install ? ['uvExecutable', 'cacheDirectory', 'pythonDirectory', 'toolDirectories', 'offline'] : [])]);
   if ('onProgress' in options) throw new PicPatchSdkError('INVALID_REQUEST', 'Engine operations report stages through onEvent, not invented progress counts.');
+  runtimePaths(options.runtime);
   const profile = options.profile === undefined ? undefined : validateProfile(options.profile);
   const engineDirectory = options.engineDirectory ?? profile?.engineDirectory;
   return resolveStoragePaths(engineDirectory === undefined ? {} : { engineDirectory }).engineDirectory;
@@ -46,6 +47,7 @@ async function readReady(root: string, identity: EngineIdentity): Promise<Engine
   return { status: 'ready', code: 'ENGINE_READY', identity, engineDirectory: root, pythonExecutable };
 }
 async function probe(engine: ReadyEngine, signal: AbortSignal): Promise<void> {
+  const { projectDirectory, probePath } = runtimePaths(engine.identity.dependencies === 'dreamo-inference' ? 'dreamo' : 'mflux');
   const installation = dirname(dirname(dirname(engine.pythonExecutable)));
   const result = await runCommand(engine.pythonExecutable, ['-I', '-B', probePath, join(projectDirectory, 'uv.lock')], installation, environment(installation), signal, 60_000);
   try { if (JSON.parse(result).ready !== true) throw new Error('No ready result'); }
@@ -67,19 +69,19 @@ export function inspectEngine(options: EngineOptions = {}): Promise<EngineInspec
   return withDiagnostics('inspectEngine', options, async operation => {
     const root = validate(operation, false);
     return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Engine inspection timed out.', async signal => {
-      const { identity } = await engineDefinition();
+      const { identity } = await engineDefinition(operation.runtime);
       operationStage(operation, 'checking', 'Checking engine dependencies.');
       return inspect(root, identity, signal);
     });
   });
 }
 /** Internal admission check: ordinary inference trusts preparation, without re-importing every dependency. */
-export async function resolveEngine(root: string, signal?: AbortSignal): Promise<ReadyEngine> {
+export async function resolveEngine(root: string, signal?: AbortSignal, runtime: EngineRuntime = 'mflux'): Promise<ReadyEngine> {
   absolutePath(root); checkSignal(signal);
-  const { identity } = await engineDefinition();
+  const { identity } = await engineDefinition(runtime);
   const result = await readReady(root, identity);
   checkSignal(signal);
-  if (result.status !== 'ready') throw new PicPatchSdkError(result.status === 'missing' ? 'ENGINE_MISSING' : 'ENGINE_INCOMPATIBLE', 'Install this SDK version’s engine before using the editor.', { subject: root });
+  if (result.status !== 'ready') throw new PicPatchSdkError(result.status === 'missing' ? 'ENGINE_MISSING' : 'ENGINE_INCOMPATIBLE', 'Install this SDK version’s engine before using the image client.', { subject: root });
   return result;
 }
 async function syncDirectory(path: string): Promise<void> {
@@ -98,7 +100,7 @@ export function installEngine(options: InstallEngineOptions): Promise<EngineInst
     const budget = timeBudget(operation.timeoutMs, 1_800_000);
     let completed: EngineInstallation | undefined;
     return withDeadline(operation.signal, budget, 'Engine installation timed out.', async signal => {
-      const definition = await engineDefinition();
+      const definition = await engineDefinition(operation.runtime);
       operationStage(operation, 'checking', 'Checking the installed engine.');
       const existing = await inspect(root, definition.identity, signal);
       if (existing.status === 'incompatible' && existing.code === 'ENGINE_RECORD_INVALID') throw new PicPatchSdkError('ENGINE_INCOMPATIBLE', 'Engine readiness has an unsupported or invalid format; it was preserved.', { subject: root });

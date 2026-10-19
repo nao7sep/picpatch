@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, inspectEngine, installEngine } from 'picpatchsdk';
+import { createImageClient, inspectEngine, installEngine } from 'picpatchsdk';
 import { testEngineDirectory } from '../helpers/engine.ts';
 
 const exec = promisify(execFile);
@@ -41,7 +41,7 @@ it('installs independent locked environments, shares only complete readiness, an
     }
     const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
     const config = JSON.parse(await readFile(configPath, 'utf8'));
-    const editor = createEditor({ engineDirectory: options.engineDirectory, model: config.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42, parameters: { steps: 2 } } });
+    const editor = createImageClient({ engineDirectory: options.engineDirectory, model: config.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42, parameters: { steps: 2 } } });
     try {
       const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a white table.', sidecar: {} });
       if ('status' in generated) throw new Error(generated.code);

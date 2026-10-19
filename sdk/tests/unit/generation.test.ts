@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createEditor, validateGenerateRequest, type SdkEvent, type GenerateRequest, type ModelCapabilities } from '../../src/index.ts';
+import { createImageClient, validateGenerateRequest, type SdkEvent, type GenerateRequest, type ModelCapabilities } from '../../src/index.ts';
 import { resolveGenerateRequest } from '../../src/defaults.ts';
-import { ImageEditor } from '../../src/execution/session.ts';
+import { ImageClientImpl } from '../../src/execution/session.ts';
 import type { EditBackend } from '../../src/execution/backend.ts';
 import { PicPatchSdkError } from '../../src/errors.ts';
 let directory: string;
@@ -47,7 +47,7 @@ it('publishes generation through shared safe storage without fabricated inputs o
     expect(input.outputPath).not.toBe(request().outputPath);
     return render(input);
   });
-  const editor = new ImageEditor(backend(generate));
+  const editor = new ImageClientImpl(backend(generate));
   try {
     const result = await editor.generate(request(), { onEvent: event => events.push(event) });
     if ('status' in result) throw new Error(result.code);
@@ -64,13 +64,13 @@ it('publishes generation through shared safe storage without fabricated inputs o
   } finally { await editor.dispose(); }
 });
 it('rejects malformed generated output and cleans private storage', async () => {
-  const editor = new ImageEditor(backend(async input => { const result = await render(input); await writeFile(input.outputPath, 'invalid'); return result; }));
+  const editor = new ImageClientImpl(backend(async input => { const result = await render(input); await writeFile(input.outputPath, 'invalid'); return result; }));
   try { await expect(editor.generate(request())).rejects.toMatchObject({ code: 'INVALID_OUTPUT' }); expect(await readdir(directory)).toEqual([]); }
   finally { await editor.dispose(); }
 });
 it('shares queued/disposal ownership across edit and generation and waits before cleanup', async () => {
   const entered = Promise.withResolvers<void>(); const release = Promise.withResolvers<void>();
-  const editor = new ImageEditor(backend(async () => { entered.resolve(); await release.promise; throw new PicPatchSdkError('CANCELLED', 'The operation was cancelled.'); }));
+  const editor = new ImageClientImpl(backend(async () => { entered.resolve(); await release.promise; throw new PicPatchSdkError('CANCELLED', 'The operation was cancelled.'); }));
   const operation = editor.generate(request()); const caught = expect(operation).rejects.toMatchObject({ code: 'CANCELLED' });
   await entered.promise;
   const waiting = editor.generate({ ...request(), outputPath: join(directory, 'queued.png') });
@@ -82,7 +82,7 @@ it('shares queued/disposal ownership across edit and generation and waits before
   await expect(editor.generate(request())).rejects.toMatchObject({ code: 'DISPOSED' });
 });
 it('rejects invalid public calls and pre-cancellation without starting Python', async () => {
-  const editor = createEditor({ engineDirectory: '/absent/python' });
+  const editor = createImageClient({ engineDirectory: '/absent/python' });
   try {
     await expect(editor.generate({ ...request(), prompt: '' })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     await expect(editor.generate({ ...request(), outputPath: null } as unknown as GenerateRequest)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });

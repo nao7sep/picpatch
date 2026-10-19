@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel } from 'picpatchsdk';
+import { createImageClient, prepareModel } from 'picpatchsdk';
 import assets from '../fixtures/native-sd15-assets.json' with { type: 'json' };
 
 it('runs SD1.5 generation, variation and trained inpainting with thresholded masks and resized canvases', async () => {
@@ -17,7 +17,7 @@ it('runs SD1.5 generation, variation and trained inpainting with thresholded mas
   try {
     const base = await prepareModel('sd15', { directory: config.directory, checkpoint: config.sd15Checkpoint });
     expect(base.model.manifest.components[0]!.sha256).toBe(assets[0]!.sha256);
-    const editor = createEditor({ ...options, model: base.model });
+    const editor = createImageClient({ ...options, model: base.model });
     const sourceImage = join(directory, 'source.png');
     try {
       phase = 'base generation';
@@ -34,7 +34,7 @@ it('runs SD1.5 generation, variation and trained inpainting with thresholded mas
     phase = 'inpaint preparation';
     const prepared = await prepareModel('sd15-inpaint', { directory: config.directory, checkpoint: config.sd15InpaintCheckpoint });
     expect(prepared.model.manifest.components[0]!.sha256).toBe(assets[1]!.sha256);
-    const inpaint = createEditor({ ...options, model: prepared.model });
+    const inpaint = createImageClient({ ...options, model: prepared.model });
     const original = await readFile(sourceImage);
     const pixels = new Map<number, Buffer>();
     try {

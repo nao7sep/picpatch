@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createEditor, listModels, prepareModel, validateGenerateRequest } from 'picpatchsdk';
+import { createImageClient, listModels, prepareModel, validateGenerateRequest } from 'picpatchsdk';
 import { ImageWorkspace } from '../../src/images/output.ts';
 import { controlNetShapes, nativeCheckpoint, tensorFile } from '../helpers/native-assets.ts';
 let directory: string;
@@ -40,7 +40,7 @@ it('rejects unsupported maps and malformed capability metadata before input IO',
   for (const model of ['sdxl-inpaint', 'flux2-klein-4b']) expect(() => validateGenerateRequest({ ...request, model }, listModels().find(item => item.id === model)!.capabilities)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
   await nativeCheckpoint(join(directory, 'base.safetensors'), 'sd15');
   const prepared = await prepareModel('sd15', { directory, checkpoint: 'base.safetensors' });
-  const editor = createEditor({ model: prepared.model, nativeExecutable: '/missing-executable' });
+  const editor = createImageClient({ model: prepared.model, nativeExecutable: '/missing-executable' });
   try { await expect(editor.generate(request as never)).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' }); }
   finally { await editor.dispose(); }
 });

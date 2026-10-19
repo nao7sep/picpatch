@@ -86,7 +86,7 @@ export class Application {
   }
   async verify(modelId: string, signal?: AbortSignal) {
     const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile, signal, onEvent: this.sdkEvents({ modelId }) });
-    if (opened.status !== 'ready') return opened;
+    if (opened.status !== 'present') return opened;
     return verifyModel(opened.model.directory, opened.model.manifest, { signal, onEvent: this.sdkEvents({ modelId }) });
   }
   async removeManaged(modelId: string, name: string, signal?: AbortSignal) {

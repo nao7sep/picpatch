@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel, inspectReadiness } from '../../src/index.ts';
+import { createImageClient, prepareModel, inspectReadiness } from '../../src/index.ts';
 import { nativeRevision } from '../../src/backends/stable-diffusion-cpp/models.ts';
 
 async function fixture(revision: string = nativeRevision) {
@@ -40,7 +40,7 @@ it('runs native generation and masked editing through public preparation, pipes 
       const { model } = await prepareModel(variant, { directory, checkpoint: 'weights.safetensors' });
       expect(await inspectReadiness(executable, model)).toMatchObject({ runtime: { status: 'executable-ready', version: nativeRevision } });
       await expect(inspectReadiness(executable, model, { load: true })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
-      const editor = createEditor({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
+      const editor = createImageClient({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
       try {
         await writeFile(join(directory, 'source.png'), png);
         await sharp({ create: { width: 16, height: 16, channels: 3, background: 'white' } }).toColourspace('b-w').png().toFile(join(directory, 'mask.png'));
@@ -64,7 +64,7 @@ it('runs native generation and masked editing through public preparation, pipes 
 it('rejects unrecognized native versions without opening images', async () => {
   const { directory, executable } = await fixture('deadbeef');
   const { model } = await prepareModel('sdxl', { directory, checkpoint: 'weights.safetensors' });
-  const editor = createEditor({ model, nativeExecutable: executable });
+  const editor = createImageClient({ model, nativeExecutable: executable });
   try { await expect(editor.generate({ prompt: 'Blue', outputPath: join(directory, 'out.png') })).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE' }); }
   finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
 });
@@ -72,7 +72,7 @@ it('rejects unrecognized native versions without opening images', async () => {
 it('times out and disposes native children that ignore graceful termination before cleanup', async () => {
   const { directory, executable } = await fixture();
   const { model } = await prepareModel('sdxl', { directory, checkpoint: 'weights.safetensors' });
-  const editor = createEditor({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory }, timeouts: { generateMs: 100, cancellationMs: 20, terminationMs: 1000 } });
+  const editor = createImageClient({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory }, timeouts: { generateMs: 100, cancellationMs: 20, terminationMs: 1000 } });
   try {
     await expect(editor.generate({ prompt: 'hold' })).rejects.toMatchObject({ code: 'TIMEOUT' });
     const pending = editor.generate({ prompt: 'hold' });
@@ -86,7 +86,7 @@ it.each(['sd15', 'sdxl'])('runs repeated %s source variations with default/sessi
   const { directory, executable, png } = await fixture();
   await nativeCheckpoint(join(directory, 'weights.safetensors'), variant);
   const { model } = await prepareModel(variant, { directory, checkpoint: 'weights.safetensors' });
-  const editor = createEditor({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
+  const editor = createImageClient({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
   const sourceImage = join(directory, 'source.png');
   await sharp({ create: { width: 29, height: 19, channels: 3, background: 'red' } }).png().toFile(sourceImage);
   const original = await readFile(sourceImage);
@@ -112,7 +112,7 @@ it.each(['sd15', 'sdxl'])('runs repeated %s source variations with default/sessi
     expect(await readFile(sourceImage)).toEqual(original);
     expect(await readFile(first.image.path)).toEqual(png);
     expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
-    const session = createEditor({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory, parameters: { strength: 0.4 } } });
+    const session = createImageClient({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory, parameters: { strength: 0.4 } } });
     try {
       expect(await session.edit({ instruction: 'variation:0.4', sourceImage })).toMatchObject({ effectiveParameters: { strength: 0.4 } });
       expect(await session.edit({ instruction: 'variation:0.2', sourceImage, parameters: { strength: 0.2 } })).toMatchObject({ effectiveParameters: { strength: 0.2 } });

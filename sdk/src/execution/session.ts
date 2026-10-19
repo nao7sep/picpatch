@@ -1,9 +1,9 @@
 import { storageScope, storageStalled } from '../storage.ts';
 import { planImage, type ImagePlan, type GenerateImagePlan, type EditImagePlan } from '../images/planning.ts';
-import { resolveGenerateRequest, resolveEditRequest, type GenerateInput, type EditDefaults, type EditInput } from '../defaults.ts';
+import { resolveGenerateRequest, resolveEditRequest, type GenerateInput, type ImageDefaults, type EditInput } from '../defaults.ts';
 import { emitProgress, validateOperation, timeBudget, withDeadline } from '../operations.ts';
 import { diagnosticLifetime, withDiagnostics, type RuntimeConfiguration } from '../diagnostics.ts';
-import type { Editor } from '../client.ts';
+import type { ImageClient } from '../client.ts';
 import type { EditBackend } from './backend.ts';
 import type { ImageRequest, ImageOutcome, OperationOptions, OperationRefusal } from '../types.ts';
 import { PicPatchSdkError, sdkError } from '../errors.ts';
@@ -11,16 +11,16 @@ import { checkCancellation } from '../images/validation.ts';
 import { ImageWorkspace } from '../images/output.ts';
 
 /** Coordinates files with the worker's actual settlement, including disposal. */
-export class ImageEditor implements Editor {
+export class ImageClientImpl implements ImageClient {
   private readonly diagnostics;
   private readonly backend: EditBackend;
   private readonly lifetime = new AbortController();
   private tail: Promise<void> = Promise.resolve();
   private disposal: Promise<void> | undefined;
   private readonly plans = new WeakSet<ImagePlan>();
-  private readonly defaults: EditDefaults;
+  private readonly defaults: ImageDefaults;
   private readonly model: string | undefined;
-  constructor(backend: EditBackend, defaults: EditDefaults = {}, model?: string, configuration: RuntimeConfiguration = {}) { this.diagnostics = diagnosticLifetime(configuration); this.backend = backend; this.defaults = defaults; this.model = model; }
+  constructor(backend: EditBackend, defaults: ImageDefaults = {}, model?: string, configuration: RuntimeConfiguration = {}) { this.diagnostics = diagnosticLifetime(configuration); this.backend = backend; this.defaults = defaults; this.model = model; }
 
   edit(input: EditInput | EditImagePlan, options: OperationOptions = {}): Promise<ImageOutcome> {
     const plan = this.acceptPlan(input, 'edit');
@@ -38,7 +38,7 @@ export class ImageEditor implements Editor {
   plan(input: EditInput, options?: OperationOptions): Promise<EditImagePlan | OperationRefusal>;
   plan(input: GenerateInput | EditInput, options?: OperationOptions): Promise<ImagePlan | OperationRefusal>;
   plan(input: GenerateInput | EditInput, options: OperationOptions = {}): Promise<ImagePlan | OperationRefusal> {
-    if (this.lifetime.signal.aborted) return this.rejectCall('plan', options, new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
+    if (this.lifetime.signal.aborted) return this.rejectCall('plan', options, new PicPatchSdkError('DISPOSED', 'Image client has been disposed.'));
     let request: ImageRequest;
     try {
       validateOperation(options);
@@ -74,7 +74,7 @@ export class ImageEditor implements Editor {
   }
 
   private submit(verb: 'edit' | 'generate', resolve: () => ImageRequest, options: OperationOptions, plan?: ImagePlan): Promise<ImageOutcome> {
-    if (this.lifetime.signal.aborted) return this.rejectCall(verb, options, new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
+    if (this.lifetime.signal.aborted) return this.rejectCall(verb, options, new PicPatchSdkError('DISPOSED', 'Image client has been disposed.'));
     let request: ImageRequest;
     let budget: number;
     try {

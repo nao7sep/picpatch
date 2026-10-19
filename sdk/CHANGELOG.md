@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add experimental external generation selections for Krea 2 Turbo/Raw, Boogu Image Turbo, Ming Image Design, SD3.5 Large, Chroma and Chroma Radiance. Installed APIs and native source contracts are checked; these configurations are not trained-weight qualified.
+- Local model registrations accept explicit CLIP-L, CLIP-G and T5 components for the supported native flow models, with manifest fingerprinting and persisted registration fixtures.
+
+- Add an experimental offline DreamO 1.1 reference-edit path with separate learned indices for up to two single-photo subject/object groups. Its independently selected managed Python environment and fixed preprocessing/model components do not alter MFLUX installations. No trained-weight quality claim is implied by pipeline checks.
+- Engine install/inspection accept `runtime: 'dreamo'`; image clients and readiness select the runtime from the prepared model. Shared worker protocol/lifecycle source remains bundled with the SDK.
+
+- Return `present` from successful openModel calls: this cheap check confirms local file presence and size, not runtime compatibility or inference readiness.
+- Rename the shared generation/editing runtime owner to createImageClient, ImageClient and ImageClientOptions; rename shared defaults to ImageDefaults, local model descriptors to LocalModel, and catalog entries to ModelCatalogEntry. These source API changes do not change serialized model registrations or image records.
+
 - Add pinned, inference-tested Z-Image Turbo Q4 generation and FLUX.1 Fill Q4 native masked-edit bundles, with source revisions, complete component fingerprints and license information. External selections remain available.
 - Release completed encoder and transformer stages in Z-Image and Fill single-image pipelines without changing cache limits or decode tiling.
 

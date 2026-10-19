@@ -164,7 +164,8 @@ export interface ModelCapabilities {
    * Whether this adapter requires a source image in addition to any references. Absence means unspecified.
    */
   sourceImageRequired?: boolean;
-  referenceConditioning?: "ordered-images-with-role-prompt" | "pooled-identity" | "appearance-embedding";
+  referenceConditioning?:
+    "ordered-images-with-role-prompt" | "pooled-identity" | "appearance-embedding" | "independent-subject";
   defaultOutputSize?: ImageSize;
   /**
    * Aspect-preserving downscale to 1024 squared pixels, then center crop to multiples of 16. Applies to source and references.
@@ -400,9 +401,9 @@ export interface ModelManifest {
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
- * via the `definition` "LocalEditingModel".
+ * via the `definition` "LocalModel".
  */
-export interface LocalEditingModel {
+export interface LocalModel {
   variant:
     | "flux2-klein-4b"
     | "flux2-klein-9b"
@@ -420,6 +421,11 @@ export interface LocalEditingModel {
     | "qwen-image"
     | "qwen-image-edit-2511"
     | "qwen-image-2.1"
+    | "krea-2"
+    | "krea-2-raw"
+    | "boogu-image-turbo"
+    | "ming-image-design"
+    | "flux1-dreamo-v1.1"
     | "sd15"
     | "sdxl"
     | "sd15-inpaint"
@@ -428,7 +434,10 @@ export interface LocalEditingModel {
     | "sd15-ip-adapter"
     | "sdxl-ip-adapter"
     | "sd15-ip-adapter-plus"
-    | "sdxl-ip-adapter-plus";
+    | "sdxl-ip-adapter-plus"
+    | "sd35-large"
+    | "chroma"
+    | "chroma-radiance";
   directory: string;
   manifest: ModelManifest;
   quantize?: 4 | 8;
@@ -457,6 +466,18 @@ export interface LocalEditingModel {
    */
   loras?: [LocalLora, ...LocalLora[]];
   controlNet?: LocalControlNet;
+  /**
+   * Native text encoder weight path relative to the prepared model directory.
+   */
+  clipL?: string;
+  /**
+   * Native text encoder weight path relative to the prepared model directory.
+   */
+  clipG?: string;
+  /**
+   * Native text encoder weight path relative to the prepared model directory.
+   */
+  t5?: string;
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema

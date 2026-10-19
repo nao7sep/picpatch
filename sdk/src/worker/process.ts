@@ -1,5 +1,5 @@
 import { emitProgress } from '../operations.ts';
-import type { LocalEditingModel } from '../contracts.generated.ts';
+import type { LocalModel } from '../contracts.generated.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { ProtocolSession, type WorkerRequest, type WorkerResponse } from './protocol.ts';
 import { PicPatchSdkError } from '../errors.ts';
@@ -10,7 +10,7 @@ export interface WorkerLaunch {
   args: string[];
   cwd: string;
   env?: NodeJS.ProcessEnv;
-  model?: LocalEditingModel;
+  model?: LocalModel;
   runtimeCheck?: 'imports' | 'load';
 }
 export interface WorkerTimeouts {
@@ -253,7 +253,7 @@ export class WorkerProcess {
     if (!this.child) return;
     if (this.failure) { await this.stop(); return; }
     if (this.pending.size) {
-      this.fail(new PicPatchSdkError('CANCELLED', 'Editor was disposed.'));
+      this.fail(new PicPatchSdkError('CANCELLED', 'Image client was disposed.'));
       await this.stop();
       return;
     }

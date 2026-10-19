@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
-import { createEditor, inspectReadiness, listModels, type LocalEditingModel } from '../../src/index.ts';
+import { createImageClient, inspectReadiness, listModels, type LocalModel } from '../../src/index.ts';
 
 // These tests import the real installed family classes but never load synthetic weights.
 it.each(['qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1', 'flux1-kontext-dev', 'z-image', 'ernie-image', 'ernie-image-turbo', 'flux1-dev', 'flux1-krea-dev', 'flux1-fill-dev', 'z-image-turbo', 'flux1-schnell', 'flux2-klein-4b', 'flux2-klein-9b', 'flux2-klein-base-4b', 'flux2-klein-base-9b'] as const)('checks installed %s imports and rejects unsupported operations before image I/O', async adapter => {
@@ -13,11 +13,11 @@ it.each(['qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1', 'flux1-kontext-
   const { pythonExecutable } = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-family-import-'));
   const bytes = Buffer.from('Import-only fixture; never load as weights.');
-  const model: LocalEditingModel = { variant: adapter, directory, quantize: 4, manifest: {
+  const model: LocalModel = { variant: adapter, directory, quantize: 4, manifest: {
     version: 1, model: adapter, source: { repository: 'fixture', revision: 'a'.repeat(40) },
     components: [{ path: 'fixture.bin', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
   } };
-  const editor = createEditor({ engineDirectory: testEngineDirectory, model });
+  const editor = createImageClient({ engineDirectory: testEngineDirectory, model });
   try {
     await writeFile(join(directory, 'fixture.bin'), bytes);
     const readiness = await inspectReadiness(pythonExecutable, model);

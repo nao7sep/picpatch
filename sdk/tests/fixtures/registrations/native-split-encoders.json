@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "model": {
+    "variant": "sd35-large",
+    "directory": "/models/sd35-large",
+    "checkpoint": "sd35-large.safetensors",
+    "clipL": "clip-l.safetensors",
+    "clipG": "clip-g.safetensors",
+    "t5": "t5.gguf",
+    "vae": "vae.safetensors",
+    "manifest": {
+      "version": 1,
+      "model": "sd35-large",
+      "source": {
+        "repository": "local",
+        "revision": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "components": [
+        {
+          "path": "sd35-large.safetensors",
+          "role": "weights",
+          "bytes": 4,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "path": "clip-l.safetensors",
+          "role": "weights",
+          "bytes": 4,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "path": "clip-g.safetensors",
+          "role": "weights",
+          "bytes": 4,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "path": "t5.gguf",
+          "role": "weights",
+          "bytes": 4,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "path": "vae.safetensors",
+          "role": "weights",
+          "bytes": 4,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  }
+}

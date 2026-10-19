@@ -1,9 +1,10 @@
+import { nativeWeightArguments } from './flow.ts';
 import { inspectNativeAssets } from './assets.ts';
 import { randomInt } from 'node:crypto';
 import { writeFile, mkdir, copyFile, symlink } from '../../storage.ts';
 import { basename, dirname, join } from 'node:path';
 import type { EditBackend } from '../../execution/backend.ts';
-import type { LocalEditingModel, ModelCapabilities } from '../../contracts.generated.ts';
+import type { LocalModel, ModelCapabilities } from '../../contracts.generated.ts';
 import type { ImageRequest, EditRequest, GenerateRequest, OperationOptions } from '../../types.ts';
 import type { EditResult } from '../../contracts.generated.ts';
 import { validateEditRequest, validateGenerateRequest } from '../../validation.ts';
@@ -17,9 +18,9 @@ import type { WorkerTimeouts } from '../../worker/process.ts';
 export class NativeBackend implements EditBackend {
   private readonly process: NativeProcess;
   private checked = false;
-  private readonly model: LocalEditingModel;
+  private readonly model: LocalModel;
   private readonly timeouts: WorkerTimeouts;
-  constructor(executable: string, model: LocalEditingModel, timeouts: WorkerTimeouts) {
+  constructor(executable: string, model: LocalModel, timeouts: WorkerTimeouts) {
     this.process = new NativeProcess(executable, timeouts); this.model = model; this.timeouts = timeouts;
   }
   async inspect(signal?: AbortSignal): Promise<void> {
@@ -70,7 +71,7 @@ export class NativeBackend implements EditBackend {
       throw new PicPatchSdkError('IMAGE_IO', 'Could not prepare private native input files.', { cause });
     }
     checkSignal(options.signal);
-    const args = ['--model', join(this.model.directory, this.model.checkpoint!), '--prompt-file', 'prompt.txt', '--negative-prompt-file', 'negative.txt',
+    const args = [...nativeWeightArguments(this.model), '--prompt-file', 'prompt.txt', '--negative-prompt-file', 'negative.txt',
       // The pinned Metal GROUP_NORM kernel corrupts batched CFG (upstream issue #2149).
       '--batched-cfg', 'off', '--output', basename(request.outputPath), '--disable-image-metadata', '--log-level', 'error', '--batch-count', '1',
       '--width', String(size.width), '--height', String(size.height), '--seed', String(seed),
@@ -78,7 +79,6 @@ export class NativeBackend implements EditBackend {
       '--sampling-method', effectiveParameters.sampler!, '--scheduler', effectiveParameters.scheduler!, '--lora-model-dir', directory];
     if (this.model.loras) args.push('--lora-apply-mode', 'at_runtime');
     if (request.control) args.push('--control-net', join(this.model.directory, this.model.controlNet!.path), '--control-image', request.control.image, '--control-strength', String(request.control.strength ?? 0.9));
-    if (this.model.vae) args.push('--vae', join(this.model.directory, this.model.vae));
     if ('instruction' in request && request.sourceImage) {
       args.push('--init-img', request.sourceImage!, '--strength', String(effectiveParameters.strength));
       if (request.maskImage) args.push('--mask', request.maskImage);

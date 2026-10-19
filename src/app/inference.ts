@@ -1,6 +1,6 @@
 import packageInfo from '../../package.json' with { type: 'json' };
 import { join } from 'node:path';
-import { createEditor, openModel, listModels, inspectNativeEngine, PicPatchSdkError } from 'picpatchsdk';
+import { createImageClient, openModel, listModels, inspectNativeEngine, PicPatchSdkError } from 'picpatchsdk';
 import type { EditInput, ReferenceGroup, ImageOutcome } from 'picpatchsdk';
 import type { Settings } from './settings.ts';
 import type { Runner } from './queue.ts';
@@ -13,14 +13,14 @@ export function inference(sessions: Sessions, settings: () => Settings): Runner 
     const selected = listModels().find(model => model.id === run.modelId);
     if (!selected) throw new PicPatchSdkError('INVALID_REQUEST', 'Choose an available model.');
     const opened = await openModel(config.registrations[run.modelId] ?? run.modelId, { profile: config.profile, signal: events.signal, onEvent: events.onEvent });
-    if (opened.status !== 'ready') throw new PicPatchSdkError('MODEL_IO', 'Prepare this model in Managed tools and models before running it.');
+    if (opened.status !== 'present') throw new PicPatchSdkError('MODEL_IO', 'Prepare this model in Managed tools and models before running it.');
     let nativeExecutable = config.profile.nativeExecutable;
     if (selected.runtime.name === 'stable-diffusion.cpp' && !nativeExecutable) {
       const native = await inspectNativeEngine({ profile: config.profile, signal: events.signal, onEvent: events.onEvent });
       if (native.status !== 'ready') throw new PicPatchSdkError('ENGINE_MISSING', 'Install the native engine in Managed tools and models.');
       nativeExecutable = native.nativeExecutable;
     }
-    const editor = createEditor({ model: opened.model, profile: config.profile, ...(selected.runtime.name === 'stable-diffusion.cpp' ? { nativeExecutable } : {}) });
+    const editor = createImageClient({ model: opened.model, profile: config.profile, ...(selected.runtime.name === 'stable-diffusion.cpp' ? { nativeExecutable } : {}) });
     const draft = run.draft;
     const common = { outputPath: join(sessions.directory(sessionId), 'outputs', `${run.id}.png`), size: { width: draft.width, height: draft.height }, seed: run.seed, parameters: draft.parameters, sidecar: { includeInputs: true }, ...(draft.control ? { control: { ...draft.control, image: await sessions.imagePath(sessionId, draft.control.image) } } : {}) };
     try {

@@ -9,11 +9,11 @@ import { delimiter, join } from 'node:path';
 import { constants } from 'node:fs';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, inspectReadiness, type Editor, type EditorOptions } from '../../src/index.ts';
+import { createImageClient, inspectReadiness, type ImageClient, type ImageClientOptions } from '../../src/index.ts';
 
 it('accepts a local registration then returns a missing-runtime failure over real worker pipes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-adapter-'));
-  let editor: Editor | undefined;
+  let editor: ImageClient | undefined;
   try {
     const bytes = Buffer.from('not real weights');
     let uvExecutable: string | undefined;
@@ -27,7 +27,7 @@ it('accepts a local registration then returns a missing-runtime failure over rea
     await promisify(execFile)(uvExecutable, ['sync', '--project', 'runtimes/mflux', '--python', testPython,
       '--no-python-downloads', '--no-dev', '--no-install-project', '--locked', '--no-build', '--offline',
       '--cache-dir', cacheDirectory], { env: { ...process.env, UV_PROJECT_ENVIRONMENT: runtimeDirectory }, timeout: 30_000 });
-    const options: Omit<EditorOptions, 'engineDirectory'> & { pythonExecutable: string } = { pythonExecutable: join(runtimeDirectory, 'bin/python'),
+    const options: Omit<ImageClientOptions, 'engineDirectory'> & { pythonExecutable: string } = { pythonExecutable: join(runtimeDirectory, 'bin/python'),
       model: { variant: 'flux2-klein-4b', directory, manifest: {
         version: 1, model: 'test', source: { repository: 'test', revision: 'a'.repeat(40) },
         components: [{ path: 'weights.safetensors', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],

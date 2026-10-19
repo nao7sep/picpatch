@@ -54,7 +54,12 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
       if (geometry.preparedSize.width !== canvas.width || geometry.preparedSize.height !== canvas.height) unsupported('Outpaint canvas must not require model cropping or downscaling.');
     }
     const conditioning = capabilities.referenceConditioning;
-    if (conditioning === 'pooled-identity' || conditioning === 'appearance-embedding') {
+    if (conditioning === 'independent-subject') {
+      if (request.sourceImage || request.maskImage || request.outpaint || groups.length < 1 || groups.length > 2) unsupported('Independent subject binding requires one or two reference groups without a source or mask.');
+      if (groups.some(group => /[{}]/.test(group.id) || group.images.length !== 1 || group.conditioning !== 'identity' || group.className !== undefined)) unsupported('Supply one image per identity group without className.');
+      for (const group of groups) if (!request.instruction.includes(`{${group.id}}`)) unsupported('Mention each subject using its group placeholder.');
+      if (/\[ref#[0-9]+\]/i.test(request.instruction)) unsupported('Use group placeholders; the SDK supplies learned reference indices.');
+    } else if (conditioning === 'pooled-identity' || conditioning === 'appearance-embedding') {
       if (request.sourceImage || request.maskImage || request.outpaint || groups.length !== 1) unsupported('Dedicated reference conditioning requires exactly one group and no source or mask.');
       const group = groups[0]!;
       if (conditioning === 'pooled-identity') {

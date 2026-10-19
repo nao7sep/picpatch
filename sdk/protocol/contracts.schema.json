@@ -233,7 +233,8 @@
           "enum": [
             "ordered-images-with-role-prompt",
             "pooled-identity",
-            "appearance-embedding"
+            "appearance-embedding",
+            "independent-subject"
           ]
         },
         "defaultOutputSize": {
@@ -551,7 +552,7 @@
       ],
       "additionalProperties": false
     },
-    "LocalEditingModel": {
+    "LocalModel": {
       "type": "object",
       "properties": {
         "variant": {
@@ -572,6 +573,11 @@
             "qwen-image",
             "qwen-image-edit-2511",
             "qwen-image-2.1",
+            "krea-2",
+            "krea-2-raw",
+            "boogu-image-turbo",
+            "ming-image-design",
+            "flux1-dreamo-v1.1",
             "sd15",
             "sdxl",
             "sd15-inpaint",
@@ -580,7 +586,10 @@
             "sd15-ip-adapter",
             "sdxl-ip-adapter",
             "sd15-ip-adapter-plus",
-            "sdxl-ip-adapter-plus"
+            "sdxl-ip-adapter-plus",
+            "sd35-large",
+            "chroma",
+            "chroma-radiance"
           ]
         },
         "directory": {
@@ -630,6 +639,21 @@
         },
         "controlNet": {
           "$ref": "#/definitions/LocalControlNet"
+        },
+        "clipL": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Native text encoder weight path relative to the prepared model directory."
+        },
+        "clipG": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Native text encoder weight path relative to the prepared model directory."
+        },
+        "t5": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Native text encoder weight path relative to the prepared model directory."
         }
       },
       "required": [

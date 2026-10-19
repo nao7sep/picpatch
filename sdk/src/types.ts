@@ -6,7 +6,7 @@ export interface OperationOptions extends EventOptions {
   readonly signal?: AbortSignal;
   /** Optional calling app identity, separate from the SDK record writer. */
   readonly caller?: import('./contracts.generated.ts').ArtifactRecord['caller'];
-  /** Total budget from submission, including time waiting on this editor. */
+  /** Total budget from submission, including time waiting on this image client. */
   readonly timeoutMs?: number;
   readonly onProgress?: (event: ProgressEvent) => void;
 }

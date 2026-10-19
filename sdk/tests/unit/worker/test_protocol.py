@@ -3,9 +3,9 @@ import json
 from pathlib import Path
 
 import pytest
-from picpatch_worker.protocol import Protocol, ProtocolError
-from picpatch_worker.session import Session
-from picpatch_worker.__main__ import serve
+from picpatch_worker_core.protocol import Protocol, ProtocolError
+from picpatch_worker_core.session import Session
+from picpatch_worker_core.entry import serve
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -72,7 +72,7 @@ def test_shared_protocol_corpus(protocol, fixture):
             protocol.validate(fixture['message'], fixture['kind'])
 
 def test_entry_point_uses_explicit_protocol_directory(protocol, monkeypatch):
-    from picpatch_worker.__main__ import main
+    from picpatch_worker_core.entry import main
     source = io.TextIOWrapper(io.BytesIO(b'{"version":1,"id":1,"type":"hello"}\n{"version":1,"id":2,"type":"shutdown"}\n'))
     output = io.TextIOWrapper(io.BytesIO())
     monkeypatch.setattr('sys.stdin', source)

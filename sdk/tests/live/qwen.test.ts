@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
-import { createEditor } from '../../src/index.ts';
+import { createImageClient } from '../../src/index.ts';
 import { testPython } from '../helpers/python.ts';
 
 it('rejects Qwen total-image and geometry violations over worker pipes before image I/O', async () => {
@@ -101,6 +101,6 @@ assert sorted(p.suffix for p in root.iterdir()) == ['.png'] * 7
 mx.synchronize()
 mx.clear_cache()`;
     await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { timeout: 30_000,
-      env: { ...process.env, PYTHONPATH: worker, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
+      env: { ...process.env, PYTHONPATH: [worker, fileURLToPath(new URL('../../runtimes/common/src', import.meta.url))].join(':'), HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
   } finally { await rm(directory, { recursive: true, force: true }); }
 }, 45_000);

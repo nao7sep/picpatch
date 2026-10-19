@@ -1,6 +1,7 @@
+import { runtimePaths } from './engine/identity.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import { WorkerProcess } from '../worker/process.ts';
-import { workerLaunch } from '../backends/mflux/launch.ts';
+import { workerLaunch } from '../backends/python/launch.ts';
 import { workerTimeouts } from '../worker/process.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
@@ -8,10 +9,11 @@ import type { RuntimeInspection, RuntimeOperationOptions } from './types.ts';
 
 /** Starts only the bundled model-free handshake and confirms closure before returning. */
 async function inspectRuntimeOperation(pythonExecutable: string, options: RuntimeOperationOptions = {}): Promise<RuntimeInspection> {
-  absolutePath(pythonExecutable); validateOperation(options, ['timeoutMs']);
+  absolutePath(pythonExecutable); validateOperation(options, ['timeoutMs', 'runtime']);
+  runtimePaths(options.runtime);
   const budget = timeBudget(options.timeoutMs, 30_000); const operation = { ...options };
   emitProgress(operation, { type: 'progress', verb: 'inspectRuntime', stage: 'checking', message: 'Checking the worker environment.' });
-  const worker = new WorkerProcess(workerLaunch(pythonExecutable), { ...workerTimeouts, startupMs: budget });
+  const worker = new WorkerProcess(workerLaunch(pythonExecutable, undefined, options.runtime), { ...workerTimeouts, startupMs: budget });
   const abort = () => worker.abortStartup();
   operation.signal?.addEventListener('abort', abort, { once: true });
   let result: RuntimeInspection;

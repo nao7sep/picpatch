@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createEditor, prepareModel } from '../../src/index.ts';
+import { createImageClient, prepareModel } from '../../src/index.ts';
 import { nativeRevision } from '../../src/backends/stable-diffusion-cpp/models.ts';
 import { nativeAssets } from '../helpers/native-assets.ts';
 
@@ -37,7 +37,7 @@ if (${identity}) {
 fs.writeFileSync(value('--output'),Buffer.from('${png.toString('base64')}','base64'));
 `, { mode: 0o700 });
     const prepared = await prepareModel(variant, await nativeAssets(directory, variant));
-    const editor = createEditor({ model: prepared.model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
+    const editor = createImageClient({ model: prepared.model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
     try {
       const request = { instruction: identity ? 'A portrait of {person}.' : 'Transfer the appearance.',
         references: identity ? [{ id: 'person', role: 'subject' as const, conditioning: 'identity' as const, className: 'man' as const, images: images as [string, ...string[]] }]

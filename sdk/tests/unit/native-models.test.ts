@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, readdir, rm, symlink, mkdir } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { createEditor, listModels, prepareModel, verifyModel, validateGenerateRequest, validateEditRequest, type EditInput } from '../../src/index.ts';
+import { createImageClient, listModels, prepareModel, verifyModel, validateGenerateRequest, validateEditRequest, type EditInput } from '../../src/index.ts';
 
 let directory: string;
 beforeEach(async () => {
@@ -43,10 +43,10 @@ it('rejects implicit acquisition, ambiguous files and bad registration before ex
     await expect(prepareModel('sdxl', { directory, ...extra })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   }
   const { model } = await prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors' });
-  expect(() => createEditor({ model })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
-  expect(() => createEditor({ model: { ...model, quantize: 4 }, nativeExecutable: '/sd-cli' })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
-  expect(() => createEditor({ model: { ...model, checkpoint: 'undeclared.safetensors' }, nativeExecutable: '/sd-cli' })).toThrow();
-  const editor = createEditor({ model, nativeExecutable: '/missing/sd-cli' });
+  expect(() => createImageClient({ model })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+  expect(() => createImageClient({ model: { ...model, quantize: 4 }, nativeExecutable: '/sd-cli' })).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+  expect(() => createImageClient({ model: { ...model, checkpoint: 'undeclared.safetensors' }, nativeExecutable: '/sd-cli' })).toThrow();
+  const editor = createImageClient({ model, nativeExecutable: '/missing/sd-cli' });
   await editor.dispose();
 });
 
@@ -71,7 +71,7 @@ it('distinguishes base variation from dedicated inpaint before image I/O', () =>
 it.each(['sd15', 'sdxl'])('admits %s source variation and rejects incompatible inputs before starting the executable', async id => {
   await nativeCheckpoint(join(directory, 'custom.safetensors'), id);
   const { model } = await prepareModel(id, { directory, checkpoint: 'custom.safetensors' });
-  const editor = createEditor({ model, nativeExecutable: '/missing/sd-cli', defaults: { outputDirectory: directory } });
+  const editor = createImageClient({ model, nativeExecutable: '/missing/sd-cli', defaults: { outputDirectory: directory } });
   const request = { instruction: 'Blue', sourceImage: '/missing/image.png' };
   try {
     for (const extra of [{ maskImage: '/missing/mask.png' }, { references: [{ id: 'style', role: 'style' as const, images: ['/missing/ref.png'] }] }, { size: { width: 17, height: 16 } }] satisfies Partial<EditInput>[]) {

@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { createEditor, prepareModel } from 'picpatchsdk';
+import { createImageClient, prepareModel } from 'picpatchsdk';
 
 // node examples/structural-control.ts sd15|sdxl MODEL_DIR CHECKPOINT CONTROLNET SD_CLI canny|depth|pose MAP OUTPUT
 // Map pixels must already match the chosen training modality and output size.
@@ -12,7 +12,7 @@ const prepared = await prepareModel(variant!, {
   directory: resolve(directory), checkpoint,
   controlNet: { path: controlNet, kind: kind as 'canny' | 'depth' | 'pose' },
 });
-const editor = createEditor({ model: prepared.model, nativeExecutable: resolve(executable) });
+const editor = createImageClient({ model: prepared.model, nativeExecutable: resolve(executable) });
 try {
   const result = await editor.generate({
     prompt: 'A ceramic sculpture in soft studio lighting.',
