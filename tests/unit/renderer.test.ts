@@ -220,3 +220,15 @@ it('keeps management failures while unrelated progress and success occur', async
   finish({status:'ready'}); await vi.waitFor(() => expect(field('installPython').disabled).toBe(false));
   expect(field('manageIssue').textContent).toBe(failure); expect(field('issue').hidden).toBe(true);
 });
+it('routes a source drop through import and clears its own batch refusal after correction', async () => {
+  const drop = (names: string[]) => {
+    const data = new DataTransfer(); Object.defineProperty(data,'types',{get:()=>['Files']});
+    for (const name of names) data.items.add(new File(['fixture'],name,{type:'image/png'}));
+    const event = new DragEvent('drop',{bubbles:true,cancelable:true}); Object.defineProperty(event,'dataTransfer',{value:data}); field('canvas').dispatchEvent(event);
+  };
+  drop(['a.png','b.png']); expect(field('requestIssues').children).toHaveLength(1);
+  expect(call.mock.calls.some(([action]) => action === 'import')).toBe(false);
+  drop(['a.png']); await vi.waitFor(() => expect(session.draft.source).toBe('22222222-2222-4222-8222-222222222222'));
+  expect(call).toHaveBeenCalledWith('import',{id:session.id,path:'/fixture/photo.png'});
+  expect(session.draft.mode).toBe('edit'); expect(field('requestIssues').hidden).toBe(true);
+});

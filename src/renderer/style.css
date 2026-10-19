@@ -22,3 +22,5 @@ dialog[open]{display:flex;flex-direction:column}.modalHeader,.modalFooter{flex:n
 #canvasActions button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
 
 #recordLines{font-family:var(--font-mono,ui-monospace,"Menlo","Consolas",monospace)}
+
+#collectionLocation{margin-inline-start:.35em;overflow-wrap:anywhere}

@@ -13,6 +13,7 @@ it.each(['locale','overview','get'])('keeps a failed %s load behind recovery, th
   const session = {id:'session',name:'Saved',draft:initialDraft(),assets:[],runs:[]};
   const call = vi.fn(async (action: string) => {
     if (action === failing && fail) throw new Error('EACCES /private/internal SENTINEL');
+    if (action === 'ready') expect(document.getElementById('appViewport')!.hidden).toBe(false);
     if (action === 'locale') return {language:'en',format:'en'};
     if (action === 'paneState') return {requestWidth:300,sidebar:false};
     if (action === 'overview') return {sessions:[session],failures:[],models:[],queue:{},settings:{profile:{}},locations:{}};

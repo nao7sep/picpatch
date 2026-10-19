@@ -269,7 +269,7 @@ const viewport = element('canvas');
 viewport.addEventListener('pointerdown', event => { if (!event.altKey || drawing) return; pan = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop }; viewport.setPointerCapture(event.pointerId); event.preventDefault(); });
 viewport.addEventListener('pointermove', event => { if (pan) { viewport.scrollLeft = pan.left - event.clientX + pan.x; viewport.scrollTop = pan.top - event.clientY + pan.y; } });
 viewport.addEventListener('pointerup', () => { pan = undefined; }); viewport.addEventListener('pointercancel', () => { pan = undefined; });
-sourceDrop(viewport, file => command(async () => { await saveMask(); await flush(); const added: Asset[] = await api.call('import', { id: session!.id, path: api.droppedFile(file) }); session!.draft.source = added[0]!.id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); }, 'import').catch(() => {}), error => requestIssues.show('import', error));
+sourceDrop(viewport, file => command(async () => { await saveMask(); await flush(); const added: Asset[] = await api.call('import', { id: session!.id, path: api.droppedFile(file) }); session!.draft.source = added[0]!.id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); }, 'import').catch(() => {}), error => requestIssues.show(`${session?.id ?? ''}:import`, error));
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 api.onChange(() => { if (!loaded) return; if (refreshTimer) return; refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh().then(() => shellIssues.clear('refresh')).catch(error => shellIssues.show('refresh', error)); }, 100); });
 async function start() { await refresh(); const first = overview.sessions[0] ?? await api.call('create'); await open(first.id); }
@@ -312,9 +312,11 @@ async function boot() {
     document.documentElement.style.setProperty('--font-ui', locale?.uiFont || defaultFont);
     await localize(locale ?? { language: 'en', format: 'en' });
     if (!layoutReady) { await paneLayout(api, issue); layoutReady = true; }
-    await start(); await api.call('ready');
+    await start();
     loaded = true; element('startup').hidden = true; element('appViewport').hidden = false;
+    await api.call('ready');
   } catch (error) {
+    loaded = false;
     console.error('Workspace startup failed.', error);
     // Keep the normal workspace unavailable until all required reads succeed.
     await localize(activeLocale());

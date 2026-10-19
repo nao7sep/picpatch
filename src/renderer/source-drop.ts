@@ -6,10 +6,11 @@ import { UiError } from '../shared/i18n/index.ts';
 export function sourceDrop(receiver: HTMLElement, importFile: (file: File) => Promise<unknown>, report: (error: unknown) => void) {
   const files = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files');
   const clear = () => receiver.classList.remove('dropTarget');
-  receiver.addEventListener('dragover', event => { if (!files(event) || document.querySelector('dialog[open]')) return; event.preventDefault(); receiver.classList.add('dropTarget'); });
+  const blocked = () => receiver.closest('[inert],[hidden]') || document.querySelector('dialog[open]');
+  receiver.addEventListener('dragover', event => { if (!files(event) || blocked()) { clear(); return; } event.preventDefault(); receiver.classList.add('dropTarget'); });
   receiver.addEventListener('dragleave', event => { if (!(event.relatedTarget instanceof Node) || !receiver.contains(event.relatedTarget)) clear(); });
   receiver.addEventListener('drop', event => {
-    clear(); if (!files(event) || document.querySelector('dialog[open]')) return;
+    clear(); if (!files(event) || blocked()) return;
     event.preventDefault(); event.stopPropagation();
     const offered = Array.from(event.dataTransfer?.files ?? []);
     if (offered.length !== 1) { report(new UiError('ui.drop_one_source')); return; }

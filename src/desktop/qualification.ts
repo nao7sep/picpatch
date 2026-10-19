@@ -28,14 +28,20 @@ export async function qualifyLocalization(window: import('electron').BrowserWind
       const deadline = Date.now() + 5000;
       while (document.documentElement.lang !== ${JSON.stringify(language)}) { if (Date.now() > deadline) throw new Error('Language did not update.'); await new Promise(resolve => setTimeout(resolve, 20)); }
     })()`);
-    for (const width of [1280, 1024]) {
-      window.setContentSize(width, 900);
+    for (const theme of ['light', 'dark'] as const) for (const [width, height] of [[1280, 850], [1024, 700]]) {
+      const { nativeTheme } = await import('electron'); nativeTheme.themeSource = theme;
+      window.setContentSize(width!, height!);
       await window.webContents.executeJavaScript(`(async () => {
         const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         await settle();
-        for (const id of ['settings', 'management', 'records']) {
+        if (innerWidth !== ${width} || innerHeight !== ${height}) throw new Error('Unexpected qualification viewport: ' + innerWidth + 'x' + innerHeight);
+        if (matchMedia('(prefers-color-scheme: dark)').matches !== ${theme === 'dark'}) throw new Error('Qualification theme did not apply.');
+        for (const id of ['settings', 'management', 'records', 'shortcuts', 'appMessage']) {
           const dialog = document.getElementById(id);
-          document.getElementById({ settings: 'settingsButton', management: 'manage', records: 'showRecords' }[id]).click();
+          const trigger = document.getElementById({ settings: 'settingsButton', management: 'manage', records: 'showRecords', shortcuts: 'shortcutsButton', appMessage: 'sessionsToggle' }[id]);
+          trigger.focus();
+          const pending = id === 'appMessage' ? window.picpatch.call('delete', { id: 'qualification-cancel-only' }) : undefined;
+          if (!pending) trigger.click();
           const deadline = Date.now() + 5000;
           while (!dialog.open || (id === 'management' && !document.getElementById('manageModel').options.length)) { if (Date.now() > deadline) throw new Error('Dialog did not populate: ' + id); await new Promise(resolve => setTimeout(resolve, 20)); }
           if (id === 'management') {
@@ -46,9 +52,20 @@ export async function qualifyLocalization(window: import('electron').BrowserWind
           for (const details of dialog.querySelectorAll('details')) details.open = true;
           await settle();
           const failures = [];
+          if (dialog.getBoundingClientRect().height < 1) failures.push(id + ': not rendered');
+          const body = dialog.querySelector('.modalBody'), header = dialog.querySelector('.modalHeader'), footer = dialog.querySelector('.modalFooter');
+          const bands = [header, body, footer].map(element => element.getBoundingClientRect());
+          if (bands[0].bottom > bands[1].top + 2 || bands[1].bottom > bands[2].top + 2 || bands[2].bottom > innerHeight + 1) failures.push(id + ': unreachable bands');
+          body.scrollTop = body.scrollHeight; await settle();
+          if (footer.getBoundingClientRect().bottom > innerHeight + 1) failures.push(id + ': footer left viewport');
           if (dialog.scrollWidth > dialog.clientWidth + 2) failures.push(id + ': horizontal overflow');
           for (const control of dialog.querySelectorAll('button')) if (control.getClientRects().length && control.scrollWidth > control.clientWidth + 2) failures.push(control.id + ': clipped caption');
-          dialog.close(); if (failures.length) throw new Error(failures.join('; '));
+          if (!dialog.contains(document.activeElement)) failures.push(id + ': focus outside modal');
+          document.getElementById({ settings: 'cancelSettings', management: 'closeManagement', records: 'closeRecords', shortcuts: 'closeShortcuts', appMessage: 'messageCancel' }[id]).click();
+          await settle();
+          if (dialog.open || document.activeElement !== trigger) failures.push(id + ': close/focus return failed');
+          if (pending && await pending !== false) throw new Error('Qualification must cancel deletion.');
+          if (failures.length) throw new Error(${JSON.stringify(language + ':' + theme + ':' + width + 'x' + height)} + ': ' + failures.join('; '));
         }
         for (const element of document.querySelectorAll('[data-i18n]')) if (!element.textContent.trim()) throw new Error('Empty translation: ' + element.dataset.i18n);
         if (document.querySelector('header').scrollWidth > document.querySelector('header').clientWidth + 2) throw new Error('Header overflow');

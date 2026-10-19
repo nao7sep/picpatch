@@ -25,3 +25,14 @@ it('reports import rejection and leaves ordinary text drops native', async () =>
   const event = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }); Object.defineProperty(event, 'dataTransfer', { value: data }); text.dispatchEvent(event); expect(event.defaultPrevented).toBe(false);
   receiver.remove(); text.remove();
 });
+it('clears hover and refuses drops behind a modal or a closing workspace', () => {
+  const workspace = document.createElement('div'); const receiver = document.createElement('div'); workspace.append(receiver); document.body.append(workspace);
+  const imported = vi.fn(async () => {}); sourceDrop(receiver, imported, vi.fn());
+  drop(receiver,['a.png'],'dragover'); expect(receiver.classList.contains('dropTarget')).toBe(true);
+  const dialog = document.createElement('dialog'); dialog.setAttribute('open',''); document.body.append(dialog);
+  drop(receiver,['a.png'],'dragover'); expect(receiver.classList.contains('dropTarget')).toBe(false);
+  drop(receiver,['a.png']); expect(imported).not.toHaveBeenCalled(); dialog.remove();
+  workspace.setAttribute('inert',''); drop(receiver,['a.png']); expect(imported).not.toHaveBeenCalled();
+  workspace.removeAttribute('inert'); drop(receiver,['a.png'],'dragover'); window.dispatchEvent(new Event('blur'));
+  expect(receiver.classList.contains('dropTarget')).toBe(false); workspace.remove();
+});
