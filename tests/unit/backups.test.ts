@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
 it('retains exact latest bytes per launch and streams verified binary history without protecting mismatches', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-backup-')); const database = join(root, 'backups.sqlite3');
-  const worker = new Worker(new URL('../../src/app/backup-worker.ts', import.meta.url));
+  const worker = new Worker(new URL('../../src/main/core/backup-worker.ts', import.meta.url));
   try {
     worker.postMessage({ database, path: join(root, 'session.json'), bytes: Buffer.from('first') });
     worker.postMessage({ database, path: join(root, 'session.json'), bytes: Buffer.from('last') });

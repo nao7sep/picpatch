@@ -1,12 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { quitFlow } from '../../src/desktop/quit.ts';
-import { rendererRequests } from '../../src/desktop/renderer-requests.ts';
+import { quitFlow } from '../../src/main/quit.ts';
+import { rendererRequests } from '../../src/main/renderer-requests.ts';
 function fixture() {
   const port = {
     freeze: vi.fn(), flush: vi.fn(async () => {}), drafts: vi.fn(async () => true),
     saveFailure: vi.fn(async (_error: unknown): Promise<number | undefined> => undefined),
     work: vi.fn(async () => true), finish: vi.fn(async () => {}), failed: vi.fn(async () => {}),
-    interrupt: vi.fn(), shutdownSave: vi.fn(async () => {}), exit: vi.fn(),
+    interrupt: vi.fn(), shutdownSave: vi.fn(async () => {}), exit: vi.fn(), forceExit: vi.fn(),
   };
   return { port, flow: quitFlow(port) };
 }
@@ -46,9 +46,16 @@ it('OS takeover interrupts a human question and exits once at the total deadline
   const attempt = flow.close(); await vi.advanceTimersByTimeAsync(0);
   flow.shutdown(); flow.shutdown(); expect(port.interrupt).toHaveBeenCalledOnce();
   answer(false); await attempt; expect(port.finish).not.toHaveBeenCalled();
-  await vi.advanceTimersByTimeAsync(1000); expect(port.exit).toHaveBeenCalledOnce();
-  saved(); await vi.advanceTimersByTimeAsync(0); expect(port.exit).toHaveBeenCalledOnce();
+  // A save still pending at the deadline may be stuck in native I/O, so the end is forced rather than a cleanup exit.
+  await vi.advanceTimersByTimeAsync(1000); expect(port.forceExit).toHaveBeenCalledOnce(); expect(port.exit).not.toHaveBeenCalled();
+  saved(); await vi.advanceTimersByTimeAsync(0); expect(port.forceExit).toHaveBeenCalledOnce(); expect(port.exit).not.toHaveBeenCalled();
   expect(port.freeze).toHaveBeenCalledExactlyOnceWith(true);
+});
+it('OS takeover exits normally when the save settles within the deadline', async () => {
+  vi.useFakeTimers(); const { port, flow } = fixture();
+  flow.shutdown(); await vi.advanceTimersByTimeAsync(0);
+  expect(port.exit).toHaveBeenCalledOnce(); expect(port.forceExit).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1000); expect(port.forceExit).not.toHaveBeenCalled();
 });
 it('late flush replies cannot satisfy a later request, and interrupted questions reject', async () => {
   vi.useFakeTimers(); const send = vi.fn(); const requests = rendererRequests(send);

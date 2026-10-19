@@ -1,33 +1,35 @@
 import { startupFailureWindow } from './startup-failure.ts';
 import { exportName } from '../shared/export-name.ts';
 import { menuTemplate } from './menu-template.ts';
-import { pythonRuntime } from '../app/engines.ts';
-import { RecordsReader } from '../app/records-reader.ts';
+import { pythonRuntime } from './core/engines.ts';
+import { RecordsReader } from './core/records-reader.ts';
 import { focusWorkspaceForCommand } from './workspace-command.ts';
 import { LogsWindow } from './logs-window.ts';
 import { about } from '../shared/about.ts';
 import { normalizeZoom, nextZoom, windowMinimum } from '../shared/appearance.ts';
-import type { PaneState } from '../app/layout-state.ts';
+import type { PaneState } from './core/layout-state.ts';
 import { accelerator, shortcutCommand } from '../shared/shortcuts.ts';
 import { rendererRequests } from './renderer-requests.ts';
 import { quitFlow } from './quit.ts';
 import type { Message } from '../shared/i18n/index.ts';
 import { bootstrapLanguage, selectLanguage, localeState, prepareChromiumLanguage } from './language.ts';
 import { t, term, number, errorText, errorNotice, UiError, message } from '../shared/i18n/index.ts';
-import { Records, errorRecord } from '../app/records.ts';
-import { readPaneState, savePaneState } from '../app/layout-state.ts';
-import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor, nativeTheme, systemPreferences, screen, shell } from 'electron';
+import { Records, errorRecord } from './core/records.ts';
+import { checkPaneState, readPaneState, savePaneState } from './core/layout-state.ts';
+import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor, nativeTheme, systemPreferences, screen, session as browserSession, shell } from 'electron';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, join, basename, relative, isAbsolute, delimiter } from 'node:path';
+import { dirname, join, isAbsolute, delimiter } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { qualifyInference, qualifyLocalization, qualifyLogs } from './qualification.ts';
-import { installEngine, installNativeEngine, inspectEngine, inspectNativeEngine, isPicPatchSdkError } from 'picpatchsdk';
-import { appPaths, resolveAppPaths } from '../app/paths.ts';
-import { Application } from '../app/service.ts';
-import { minimum } from '../shared/layout.ts';
-import { contentSecurityPolicy, locations } from './locations.ts';
-import type { Draft } from '../app/types.ts';
+import { installEngine, installNativeEngine, inspectEngine, inspectNativeEngine, isPicPatchSdkError, listModels } from 'picpatchsdk';
+import { insideBundle, trustedSender } from './trust.ts';
+import { appPaths, resolveAppPaths } from './core/paths.ts';
+import { Application } from './core/service.ts';
+import { minimum, thumbnailSize } from '../shared/layout.ts';
+import { Thumbnails } from './core/thumbnails.ts';
+import { locations } from './locations.ts';
+import type { Draft } from '../shared/session.ts';
 app.setName('PicPatch');
 let earlyFailure: unknown;
 try { prepareChromiumLanguage(resolveAppPaths().config); } catch (error) { earlyFailure = error; }
@@ -49,13 +51,17 @@ const qualification = qualificationIndex < 0 ? undefined : process.argv[qualific
 const localizationSmoke = process.argv.includes('--smoke-localization');
 const backgroundReload = !app.isPackaged && process.argv.includes('--background-reload');
 const smoke = process.argv.includes('--smoke') || qualificationIndex >= 0 || localizationSmoke;
+// Smoke runs change settings and create sessions, so they only run against a separate data folder.
+if (smoke && !process.env.PICPATCH_DATA_DIR) { console.error('Smoke runs require PICPATCH_DATA_DIR.'); process.exit(2); }
 let smokeTimer: ReturnType<typeof setTimeout> | undefined;
 let paneState: PaneState;
+const thumbnails = new Thumbnails(thumbnailSize);
 let paneWrites = Promise.resolve();
 let contentFloor = minimum(false);
 let appliedMinimum = '';
 function storePane(patch: Partial<PaneState>) {
-  paneState = { ...paneState, ...patch };
+  // An invalid patch is refused before it can stick in memory and fail every later save.
+  const next = { ...paneState, ...patch }; checkPaneState(next); paneState = next;
   const snapshot = { ...paneState }; if (snapshot.uiZoom === 1) delete snapshot.uiZoom;
   paneWrites = paneWrites.catch(() => {}).then(() => savePaneState(paths.state, snapshot));
   return paneWrites;
@@ -78,7 +84,7 @@ const requests = rendererRequests((id, request) => {
   window.webContents.send('picpatch:request', id, request);
 });
 ipcMain.on('picpatch:reply', (event, reply) => {
-  if (event.sender === window?.webContents && event.senderFrame === window.webContents.mainFrame) requests.reply(reply);
+  if (trustedSender(event, window, locations.page('index'))) requests.reply(reply);
 });
 async function ask(options: { message: Message; detail?: Message; buttons: Message[]; destructive?: boolean; duringClose?: boolean }) {
   if (closing && !options.duringClose) return { response: undefined };
@@ -88,10 +94,15 @@ async function ask(options: { message: Message; detail?: Message; buttons: Messa
   } });
   return { response };
 }
+/** Whether a renderer is listening for requests; a crashed or reloading one holds no unsaved editor state. */
+const editorAvailable = () => rendererReady && !!window && !window.isDestroyed() && !window.webContents.isDestroyed();
+/** A step stuck in native I/O would hold Electron's own exit, so the bounded teardown ends with SIGKILL instead. */
+const forceExit = () => process.kill(process.pid, 'SIGKILL');
+const delay = (milliseconds: number) => new Promise<'late'>(resolve => setTimeout(() => resolve('late'), milliseconds));
 const lifetime = quitFlow({
   freeze: value => { closing = value; command(value ? 'beginClose' : 'endClose'); },
-  flush: async () => { await requests.request({ kind: 'flush' }, 5000); },
-  drafts: async () => await requests.request({ kind: 'closeDrafts' }) === true,
+  flush: async () => { if (editorAvailable()) await requests.request({ kind: 'flush' }, 5000); },
+  drafts: async () => !editorAvailable() || await requests.request({ kind: 'closeDrafts' }) === true,
   saveFailure: async error => {
     records?.write('error', 'Pending editor saves did not complete.', { error: errorRecord(error) });
     return (await ask({ duringClose: true, message: message('ui.pending_changes_could_not_be_saved'), buttons: [message('ui.keep_working'), message('ui.retry_save'), message('ui.quit_without_pending_changes')] })).response;
@@ -105,19 +116,26 @@ const lifetime = quitFlow({
     const pending = managed; pending?.controller.abort(); await pending?.task.catch(() => {});
     await service.queue.stop();
     if (quitting) return;
+    // Saves already accepted (renames, masks, exports) settle before teardown, within a bound a stalled volume cannot extend.
+    const late = await Promise.race([service.sessions.settled().then(() => 'settled' as const), delay(5000)]) === 'late';
+    if (late) records?.write('warn', 'Session saves did not settle before quitting.');
     if (backup) { await new Promise<void>(resolve => { const timer = setTimeout(resolve, 500); const done = (reply: any) => { if (reply.flushed === 'quit') { clearTimeout(timer); backup?.off('message', done); resolve(); } }; backup!.on('message', done); backup!.postMessage({ flush: 'quit' }); }); await backup.terminate(); }
     logs?.close(); await recordsReader?.close();
-    records?.write('info', 'PicPatch closed normally.'); await records?.close();
-    quitting = true; app.quit();
+    records?.write('info', 'PicPatch closed normally.');
+    const recordsLate = await Promise.race([records?.close().then(() => 'closed' as const), delay(2000)]) === 'late';
+    quitting = true;
+    // Electron's own exit waits on Node cleanup, which a step still stuck in native I/O would hold forever.
+    if (late || recordsLate) forceExit(); else app.quit();
   },
   failed: async error => {
     records?.write('error', 'Closing did not complete.', { error: errorRecord(error) });
     try { await ask({ duringClose: true, message: message('ui.picpatch_could_not_finish_closing'), buttons: [message('ui.keep_working')] }); }
     catch { /* No usable message surface: ordinary quit remains cancelled. */ }
   },
-  interrupt: () => { quitting = true; command('shutdown'); requests.cancelAll(); managed?.controller.abort(); },
+  interrupt: () => { quitting = true; command('shutdown'); requests.cancelAll(); managed?.controller.abort(); void service?.queue.stop(); },
   shutdownSave: async () => { await requests.request({ kind: 'flush' }, 800); await service.sessions.settled(); },
   exit: () => app.exit(0),
+  forceExit,
 });
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -140,6 +158,9 @@ async function startupFailure(error: unknown) {
 }
 function command(id: string) { if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) { focusWorkspaceForCommand(window, id); window.webContents.send('picpatch:command', id); } }
 async function start() {
+  // No page needs camera, notifications or other browser permissions.
+  browserSession.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  browserSession.defaultSession.setPermissionCheckHandler(() => false);
   if (earlyFailure) throw earlyFailure;
   await bootstrapLanguage(paths.config);
   records = new Records(paths.root, locations.worker('records-worker'), () => logs?.changed());
@@ -149,17 +170,22 @@ async function start() {
   backup = new Worker(locations.worker('backup-worker'));
   backup.on('error', () => { if (service) service.historyIssue = new UiError('ui.backup_history_is_unavailable_primary_session_saves_remain_active'); });
   backup.on('message', message => { if (message.issue && service) { records?.write('warn', 'Backup capture failed.', { diagnostic: message.issue }); service.historyIssue = new UiError('ui.backup_history_could_not_capture_some_work_primary_session'); window?.webContents.send('picpatch:changed'); } });
-  service = await Application.open(paths, () => window?.webContents.send('picpatch:changed'), (path, bytes, sha256) => backup?.postMessage({ database: paths.backups, path, bytes, sha256 }), (level, message, details) => records?.write(level, message, details));
+  service = await Application.open(paths, scope => scope === 'progress' ? window?.webContents.send('picpatch:queue', service?.queue.state) : window?.webContents.send('picpatch:changed'), (path, bytes, sha256) => backup?.postMessage({ database: paths.backups, path, bytes, sha256 }), (level, message, details) => records?.write(level, message, details));
   protocol.handle('picpatch-image', async request => {
-    try { const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1)); const response = await net.fetch(pathToFileURL(path).href); const headers = new Headers(response.headers); headers.set('Access-Control-Allow-Origin', '*'); return new Response(response.body, { status: response.status, headers }); }
+    try {
+      const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1));
+      // Session images never change after they are written, so a thumbnail is cached by path.
+      if (url.searchParams.get('size') === String(thumbnailSize)) return new Response(new Uint8Array(await thumbnails.get(path)), { headers: { 'Content-Type': 'image/webp', 'Cache-Control': 'max-age=31536000, immutable', 'Access-Control-Allow-Origin': '*' } });
+      const response = await net.fetch(pathToFileURL(path).href); const headers = new Headers(response.headers); headers.set('Access-Control-Allow-Origin', '*'); return new Response(response.body, { status: response.status, headers });
+    }
     catch { return new Response('Image unavailable', { status: 404 }); }
   });
   logs = new LogsWindow(recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }), width => storePane({ recordsListWidth: width }));
   const renderer = locations.page('index');
   ipcMain.handle('picpatch:call', async (event, action: string, payload: any = {}) => {
-    if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== renderer) throw new Error('Untrusted request.');
+    if (!trustedSender(event, window, renderer)) throw new Error('Untrusted request.');
     try {
-      if (!['ready', 'overview', 'get', 'draft', 'layout', 'paneState', 'modalState'].includes(action)) records?.write('info', 'Command requested.', { action });
+      if (!['ready', 'listening', 'renderer-error', 'overview', 'get', 'draft', 'layout', 'paneState', 'modalState'].includes(action)) records?.write('info', 'Command requested.', { action });
       if (['prepare', 'verify', 'removeManaged', 'installPython', 'installNative'].includes(action)) {
         if (managed) throw new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it');
         const controller = new AbortController(); const task = dispatch(action, payload, controller.signal);
@@ -174,14 +200,13 @@ async function start() {
   nativeTheme.themeSource = service.settings.theme ?? 'system';
   nativeTheme.on('updated', () => { logs?.updateAppearance(); window?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#11181b' : '#f3f4f1'); if (rendererReady) window?.webContents.send('picpatch:changed'); });
   menus();
-  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', ...(process.platform === 'darwin' ? {} : { icon: locations.icon() }), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#11181b' : '#f3f4f1', webPreferences: { zoomFactor: normalizeZoom(paneState.uiZoom), preload: locations.preload('preload'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', ...(process.platform === 'darwin' ? {} : { icon: locations.icon() }), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#11181b' : '#f3f4f1', webPreferences: { zoomFactor: normalizeZoom(paneState.uiZoom), preload: locations.preload('index'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   window.on('move', fitMinimum);
   screen.on('display-metrics-changed', fitMinimum);
   fitMinimum();
   window.webContents.on('before-input-event', (_event, input) => { window?.webContents.setIgnoreMenuShortcuts(input.isComposing || shortcutCommand({ key: input.key, metaKey: input.meta, ctrlKey: input.control, altKey: input.alt, shiftKey: input.shift }) !== undefined); });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => { if (url !== renderer) event.preventDefault(); });
-  if (contentSecurityPolicy) window.webContents.session.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [contentSecurityPolicy!] } }));
   window.once('ready-to-show', () => { if (!smoke) { if (backgroundReload) window?.showInactive(); else window?.show(); } });
   if (smoke) smokeTimer = setTimeout(() => { app.exit(1); }, qualification ? 300_000 : localizationSmoke ? 240_000 : 15000);
   window.on('close', event => { if (!quitting) { event.preventDefault(); void lifetime.close(); } });
@@ -190,7 +215,12 @@ async function start() {
   window.on('session-end', () => lifetime.shutdown());
   app.on('before-quit', event => { if (!quitting) { event.preventDefault(); void lifetime.close(); } });
   powerMonitor.on('shutdown', () => { records?.write('info', 'OS shutdown requested.'); lifetime.shutdown(); });
-  window.webContents.on('render-process-gone', () => { rendererReady = false; requests.cancelAll(); });
+  window.webContents.on('render-process-gone', (_event, details) => {
+    rendererReady = false; requests.cancelAll();
+    records?.write('error', 'The window renderer stopped.', { reason: details.reason, exitCode: details.exitCode });
+    // Its drafts went with it; reload so the workspace (and quit questions) work again.
+    if (!quitting && details.reason !== 'clean-exit' && window && !window.isDestroyed()) void window.webContents.reload();
+  });
   window.webContents.on('did-start-loading', () => { rendererReady = false; requests.cancelAll(); });
   window.on('closed', () => { rendererReady = false; requests.cancelAll(); });
   await window.loadURL(renderer);
@@ -204,7 +234,9 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'closeWindow': void lifetime.close(); return;
     case 'openProjectLink': { if (payload.destination !== 'repository' && payload.destination !== 'issues') throw new Error('Unknown project link.'); await shell.openExternal(about[payload.destination as 'repository' | 'issues']); return; }
     case 'openLogs': try { await logs?.open(); } catch (error) { records?.write('error', 'Logs window could not open.', { error: errorRecord(error) }); throw new UiError('logs.openFailed'); } return;
-    case 'ready': rendererReady = true; if (smoke) { if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root, command); await qualifyLogs(await logs!.open(false), window!); logs!.close(); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, locations.uv()); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
+    case 'listening': rendererReady = true; return;
+    case 'renderer-error': records?.write('error', 'Renderer error.', { error: typeof payload.message === 'string' ? payload.message.slice(0, 2000) : 'unknown', stack: typeof payload.stack === 'string' ? payload.stack.slice(0, 8000) : undefined }); return;
+    case 'ready': rendererReady = true; if (smoke) { if (app.isPackaged && !await window!.webContents.executeJavaScript("(() => { try { new Function(''); return false; } catch { return true; } })()")) { console.error('The packaged renderer runs without its content security policy.'); app.exit(1); return; } if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root, command); await qualifyLogs(await logs!.open(false), window!); logs!.close(); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, locations.uv()); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
     case 'paneState': if (payload.railWidth !== undefined) { await storePane({ railWidth: payload.railWidth, optionsPane: payload.optionsPane }); return; } return paneState;
     case 'layout': { const size = minimum(payload.optionsPane === true); contentFloor = { width: size.width, height: Number.isFinite(payload.height) ? Math.max(size.height, payload.height) : size.height }; fitMinimum(); return; }
     case 'uiZoom': {
@@ -218,17 +250,18 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'overview': return { ...await service.overview(), resourcesBusy: Boolean(managed) || service.queue.busy(), locale: localeState(), systemDark: systemDark() };
     case 'create': return service.sessions.create(t('session.untitled'));
     case 'get': return service.sessions.get(payload.id);
-    case 'draft': return service.draft(payload.id, payload.draft as Draft, payload.selection);
+    case 'draft': return service.draft(payload.id, payload.draft as Draft);
     case 'rename': if (typeof payload.name !== 'string' || !payload.name.trim()) throw new UiError('ui.enter_a_session_name'); return service.sessions.update(payload.id, session => { session.name = payload.name; });
     case 'delete': { if (service.queue.busy(payload.id)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); const answer = await ask({ message: message('ui.delete_this_session_and_its_retained_images'), detail: message('ui.exported_images_and_original_files_are_kept'), buttons: [message('ui.keep_session'), message('ui.delete_session')] }); if (answer.response !== 1) return false; await service.remove(payload.id); return true; }
-    case 'import': { const files = payload.path ? [payload.path] : await pick(['openFile', 'multiSelections'], t('ui.add_images')); const assets = []; for (const path of files) assets.push(await service.importImage(payload.id, path)); return assets; }
+    case 'import': { const files = payload.path ? [payload.path] : await pick(payload.multiple === false ? ['openFile'] : ['openFile', 'multiSelections'], t('ui.add_images')); const assets = []; for (const path of files) assets.push(await service.importImage(payload.id, path)); return assets; }
     case 'mask': return service.mask(payload.id, payload.bytes);
     case 'submit': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.submit(payload.id, payload.draft, payload.samples);
     case 'cancel': return service.queue.cancel(payload.id, payload.runId);
     case 'resume': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.resume(payload.id);
     case 'export': {
       const session = await service.sessions.get(payload.id);
-      const index = session.runs.filter(run => run.output).findIndex(run => run.id === payload.runId);
+      // The default name uses the image's number as shown in the conversation.
+      const index = session.runs.findIndex(run => run.id === payload.runId && run.output);
       if (index < 0) throw new UiError('ui.choose_completed_results');
       const name = exportName(session.name, index + 1);
       const result = await dialog.showSaveDialog(window!, { title: t('ui.save_image'), defaultPath: paneState.exportDirectory ? join(paneState.exportDirectory, name) : name, filters: [{ name: t('ui.png_image'), extensions: ['png'] }] });
@@ -243,7 +276,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'pickComponent': {
       if (typeof payload.directory !== 'string' || !isAbsolute(payload.directory)) throw new UiError('ui.choose_the_model_bundle_first');
       const file = (await pick(['openFile'], t('ui.choose_a_file_inside_the_model_bundle')))[0]; if (!file) return;
-      const path = relative(payload.directory, file); if (path === '..' || path.startsWith('../') || isAbsolute(path)) throw new UiError('ui.choose_a_file_inside_the_selected_bundle'); return path;
+      const path = insideBundle(payload.directory, file); if (!path) throw new UiError('ui.choose_a_file_inside_the_selected_bundle'); return path;
     }
     case 'verify': return service.verify(payload.modelId, signal);
     case 'removeManaged': {
@@ -251,13 +284,13 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       if (answer.response === 1) return service.removeManaged(payload.modelId, payload.name, signal); return;
     }
     case 'models': return service.models();
-    case 'prepare': { if (payload.download) { const model = (await service.overview()).models.find(m => m.id === payload.modelId); if (!model || model.acquisition !== 'pinned') throw new UiError('ui.no_downloadable_bundle_for_this_selection'); const answer = await ask({ message: message('management.download', { model: model.id }), detail: message('management.downloadScope', { size: number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 }) }), buttons: [message('ui.cancel'), message('ui.download')], destructive: false }); if (answer.response !== 1) return; return service.prepare(model.id, undefined, undefined, true, {}, signal); }
-      const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return; let checkpoint: string | undefined = payload.checkpoint;
-      if (!checkpoint && (await service.overview()).models.find(m => m.id === payload.modelId)?.runtime.name === 'stable-diffusion.cpp') { const files = await pick(['openFile'], t('ui.select_the_checkpoint_inside_that_bundle')); if (!files[0] || dirname(files[0]) !== paths[0]) throw new UiError('ui.choose_a_checkpoint_in_the_selected_bundle'); checkpoint = basename(files[0]); }
-      return service.prepare(payload.modelId, paths[0], checkpoint, false, payload.components, signal); }
-    case 'engines': return { python: await inspectEngine({ runtime: pythonRuntime((await service.overview()).models, payload.modelId), profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
+    case 'prepare': { if (payload.download) { const model = listModels().find(m => m.id === payload.modelId); if (!model || model.acquisition !== 'pinned') throw new UiError('ui.no_downloadable_bundle_for_this_selection'); const answer = await ask({ message: message('management.download', { model: model.profile.name }), detail: message('management.downloadScope', { size: number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 }) }), buttons: [message('ui.cancel'), message('ui.download')], destructive: false }); if (answer.response !== 1) return; return service.prepare(model.id, undefined, undefined, true, {}, signal); }
+      // Native bundles name their checkpoint through pickComponent before Register is enabled.
+      const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return;
+      return service.prepare(payload.modelId, paths[0], payload.checkpoint, false, payload.components, signal); }
+    case 'engines': return { python: await inspectEngine({ runtime: pythonRuntime(listModels(), payload.modelId), profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
     case 'installNative': return installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal });
-    case 'installPython': { const uvExecutable = locations.uv(); return installEngine({ runtime: pythonRuntime((await service.overview()).models, payload.modelId), onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
+    case 'installPython': { const uvExecutable = locations.uv(); return installEngine({ runtime: pythonRuntime(listModels(), payload.modelId), onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }

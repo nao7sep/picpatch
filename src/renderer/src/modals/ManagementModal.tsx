@@ -2,7 +2,7 @@
 // registration of files already on this computer, and removal of managed revisions.
 // Inspection never acquires anything; each change is an explicit action.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { modelName } from '../../shared/model-name.ts';
+import { modelLabel, modelOption } from '../models.ts';
 import { api, type CatalogModel, type Components, type Engines, type Inventory, type Readiness } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { CloseIcon, PlusIcon } from '../components/icons.tsx';
@@ -83,7 +83,7 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
       <label className="field">
         <span className="field-label">{t('ui.model')}</span>
         <select value={choice} disabled={busy} data-autofocus="true" onChange={event => { setChoice(event.target.value); setRegistration(emptyRegistration()); setRegistering(false); }}>
-          {models.map(item => <option key={item.id} value={item.id}>{modelName(item.id)}</option>)}
+          {models.map(item => <option key={item.id} value={item.id}>{modelOption(item)}</option>)}
         </select>
       </label>
       <dl className="facts">
@@ -127,10 +127,10 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
                   <span className="path-value" title={lora.path}>{lora.path}</span>
                   <input type="number" step="any" className="inline-number" placeholder={t('ui.scale_1')} aria-label={t('management.scale', { name: lora.path })} value={lora.scale ?? ''}
                     onChange={event => setRegistration(value => ({ ...value, loras: value.loras.map((item, i) => i === index ? (event.target.value === '' ? { path: item.path } : { ...item, scale: Number(event.target.value) }) : item) }))} />
-                  <button type="button" className="icon-button" aria-label={t('ui.remove')} title={t('ui.remove')} onClick={() => setRegistration(value => ({ ...value, loras: value.loras.filter((_, i) => i !== index) }))}><CloseIcon size={14} /></button>
+                  <button type="button" className="icon-button" aria-label={t('ui.remove')} title={t('ui.remove')} onClick={() => setRegistration(value => ({ ...value, loras: value.loras.filter((_, i) => i !== index) }))}><CloseIcon /></button>
                 </span>
               ))}
-              <button type="button" className="button compact" disabled={busy || !registration.directory} onClick={() => void pick(path => setRegistration(value => ({ ...value, loras: [...value.loras, { path }] })))}><PlusIcon size={14} /><span>{t('ui.add_lora')}</span></button>
+              <button type="button" className="button compact" disabled={busy || !registration.directory} onClick={() => void pick(path => setRegistration(value => ({ ...value, loras: [...value.loras, { path }] })))}><PlusIcon /><span>{t('ui.add_lora')}</span></button>
               <span className="field-help">{t('ui.weights_stay_in_the_selected_model_bundle_these_choices')}</span>
             </div>
           )}
@@ -146,7 +146,7 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
           <ul className="revision-list">
             {entries.map(entry => (
               <li key={`${entry.modelId}:${entry.name}`}>
-                <span className="revision-name">{modelName(entry.modelId)}</span>
+                <span className="revision-name">{modelLabel(entry.modelId)}</span>
                 <span className="revision-meta">{t('management.revision', { revision: entry.name.slice(0, 12), size: number(entry.bytes / 1e9, { maximumFractionDigits: 2 }) })}</span>
                 <button type="button" className="button compact outline-danger" disabled={busy} onClick={() => act(() => api.removeManaged(entry.modelId, entry.name), t('management.removed'))}>{t('ui.remove_revision')}</button>
               </li>
@@ -170,7 +170,7 @@ function PathField({ label, value, note, disabled, extra, onChoose, onClear }: {
         <span className={`path-value${value ? '' : ' empty'}`} title={value}>{value || t('ui.not_selected')}</span>
         {extra}
         <button type="button" className="button compact" disabled={disabled} onClick={onChoose}>{t('ui.choose')}</button>
-        {onClear && value && <button type="button" className="icon-button" aria-label={t('management.clear', { name: label })} title={t('ui.clear')} onClick={onClear}><CloseIcon size={14} /></button>}
+        {onClear && value && <button type="button" className="icon-button" aria-label={t('management.clear', { name: label })} title={t('ui.clear')} onClick={onClear}><CloseIcon /></button>}
       </span>
       {note && <span className="field-warn">{note}</span>}
     </div>

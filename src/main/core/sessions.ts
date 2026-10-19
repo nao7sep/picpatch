@@ -1,14 +1,16 @@
-import { UiError } from '../shared/i18n/index.ts';
-import { recoverCommand } from '../shared/image-command.ts';
+import { UiError } from '../../shared/i18n/index.ts';
+import { recoverCommand } from '../../shared/image-command.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { mkdir, open, readdir, readFile, rename, rm, realpath, lstat } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename, rm, realpath, lstat, utimes } from 'node:fs/promises';
 import { join, basename, isAbsolute, relative, sep } from 'node:path';
 import { validateArtifactRecord } from 'picpatchsdk';
-import { initialDraft } from './types.ts';
-import type { Session, SessionSummary, Draft, Asset } from './types.ts';
+import sharp from 'sharp';
+import { initialDraft } from '../../shared/session.ts';
+import type { Session, SessionSummary, Draft, Asset } from '../../shared/session.ts';
 import { writeJson } from './files.ts';
 
+const removing = /^[a-f0-9-]{36}\.removing-[a-f0-9-]{36}$/;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 export function id(value: unknown): asserts value is string { if (typeof value !== 'string' || !uuid.test(value)) throw new UiError('error.invalid_session_or_asset_identifier'); }
 export function validateDraft(value: unknown): Draft {
@@ -44,7 +46,6 @@ export function validateSession(value: unknown): Session {
     if (run.record) validateArtifactRecord(run.record);
     if (run.status === 'completed' && (!run.output || !run.record)) throw new UiError('error.incomplete_saved_result');
   }
-  if (session.selection !== undefined && (!Array.isArray(session.selection) || new Set(session.selection).size !== session.selection.length || session.selection.some(key => !runs.has(key)))) throw new Error('Invalid selected results.');
   for (const run of session.runs) if (run.parent !== undefined && (!runs.has(run.parent) || run.parent === run.id)) throw new Error('Invalid parent image.');
   const check = (draft: Draft) => { for (const key of [draft.source, draft.mask, draft.control?.image, ...draft.references.flatMap(group => group.images)]) if (key !== undefined && !ids.has(key) && !runs.has(key)) throw new UiError('error.session_references_a_missing_image'); };
   check(session.draft); session.runs.forEach(run => check(run.draft));
@@ -61,27 +62,37 @@ export class Sessions {
   }
   directory(key: string): string { id(key); return join(this.root, key); }
   private serial<T>(work: () => Promise<T>): Promise<T> { const next = this.tail.then(work); this.tail = next.catch(() => {}); return next; }
-  async list(): Promise<{ sessions: SessionSummary[]; failures: { id: string; message: string }[] }> {
+  /** A chosen collection that is missing (an unplugged drive) is reported, never recreated. */
+  async list(): Promise<{ sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string } }> {
     if (!this.existingCollection) await mkdir(this.root, { recursive: true, mode: 0o700 });
+    let entries;
+    try { entries = await readdir(this.root, { withFileTypes: true }); }
+    catch (error) { if (!this.existingCollection) throw error; const code = (error as { code?: unknown }).code; return { sessions: [], failures: [], unavailable: { path: this.root, ...(typeof code === 'string' ? { code } : {}) } }; }
     const sessions: SessionSummary[] = [], failures: { id: string; message: string }[] = [];
-    for (const entry of await readdir(this.root, { withFileTypes: true })) {
+    for (const entry of entries) {
+      if (entry.isDirectory() && removing.test(entry.name)) { void rm(join(this.root, entry.name), { recursive: true, force: true }).catch(() => {}); continue; }
       if (!uuid.test(entry.name) || !entry.isDirectory()) continue;
-      try { const s = await this.get(entry.name); const done = s.runs.filter(r => r.status === 'completed' && r.output); const cover = done.at(-1)?.id; sessions.push({ id: s.id, name: s.name, updated: s.updated, results: done.length, ...(cover ? { cover } : {}) }); }
+      try { const s = await this.read(entry.name); let results = 0, cover: string | undefined; for (const r of s.runs) if (r.status === 'completed' && r.output) { results++; cover = r.id; } sessions.push({ id: s.id, name: s.name, updated: s.updated, results, ...(cover ? { cover } : {}) }); }
       catch (error) { failures.push({ id: entry.name, message: error instanceof Error ? error.message : 'Could not read session.' }); }
     }
     return { sessions: sessions.sort((a, b) => b.updated.localeCompare(a.updated)), failures };
   }
-  async get(key: string): Promise<Session> {
+  async get(key: string): Promise<Session> { return structuredClone(await this.read(key)); }
+  /** The cached session itself; callers only read it. */
+  private async read(key: string): Promise<Session> {
     id(key);
-    const cached = this.loaded.get(key); if (cached) return structuredClone(cached);
+    const cached = this.loaded.get(key); if (cached) return cached;
     const directory = this.directory(key);
     if ((await lstat(directory)).isSymbolicLink()) throw new UiError('error.linked_sessions_are_not_supported');
     const session = validateSession(JSON.parse(await readFile(join(directory, 'session.json'), 'utf8')));
     if (session.id !== key) throw new UiError('error.session_identity_does_not_match_its_directory');
     // Reopening never schedules inference. Queued work requires an explicit resume.
     for (const run of session.runs) if (run.status === 'running') { run.status = 'interrupted'; run.issue = { code: 'INTERRUPTED', message: 'The app closed before this attempt settled.', effect: 'unknown' }; }
+    delete (session as { selection?: unknown }).selection;
     session.draft = recoverCommand(session.draft, session.runs);
-    this.loaded.set(key, session); return structuredClone(session);
+    // A save that finished during this read is newer than the file just read.
+    const newer = this.loaded.get(key); if (newer) return newer;
+    this.loaded.set(key, session); return session;
   }
   async create(name = 'Untitled session'): Promise<Session> {
     return this.serial(async () => {
@@ -93,17 +104,22 @@ export class Sessions {
     });
   }
   private async publish(session: Session): Promise<void> {
-    validateSession(session);
+    const valid = validateSession(session);
     const path = join(this.directory(session.id), 'session.json');
-    const bytes = await writeJson(path, session);
-    this.loaded.set(session.id, structuredClone(session));
+    const bytes = await writeJson(path, valid);
+    this.loaded.set(session.id, valid);
     try { this.saved(path, bytes); } catch { /* Backup history cannot fail a primary save. */ }
   }
   update(key: string, change: (session: Session) => void): Promise<Session> {
-    return this.serial(async () => { const session = await this.get(key); change(session); session.updated = new Date().toISOString(); await this.publish(session); return structuredClone(session); });
+    return this.serial(async () => {
+      const session = await this.get(key); const before = JSON.stringify(session); change(session);
+      // A change that alters nothing is not written and does not reorder the collection.
+      if (JSON.stringify(session) === before) return session;
+      session.updated = new Date().toISOString(); await this.publish(session); return session;
+    });
   }
   async imagePath(key: string, assetId: string): Promise<string> {
-    const session = await this.get(key); id(assetId);
+    const session = await this.read(key); id(assetId);
     const file = session.assets.find(a => a.id === assetId)?.file ?? session.runs.find(r => r.id === assetId)?.output;
     if (!file) throw new UiError('error.image_is_not_part_of_this_session');
     const directory = await realpath(this.directory(key)); const path = await realpath(join(directory, file)); const part = relative(directory, path);
@@ -112,7 +128,7 @@ export class Sessions {
   }
   async importImage(key: string, source: string): Promise<Asset> {
     if (!isAbsolute(source)) throw new UiError('error.select_an_absolute_image_path');
-    await this.get(key);
+    await this.read(key);
     const assetId = randomUUID(); const file = `assets/${assetId}`; const path = join(this.directory(key), file); const temporary = `${path}.tmp`;
     const input = await open(source, constants.O_RDONLY | constants.O_NONBLOCK);
     let asset: Asset;
@@ -126,6 +142,11 @@ export class Sessions {
       } finally { await output.close(); }
       const after = await input.stat({ bigint: true });
       if (before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new UiError('error.source_image_changed_while_copying');
+      // Only files the image decoder recognises join the session; the check reads the header of the private copy.
+      try { const { width, height } = await sharp(temporary, { limitInputPixels: false }).metadata(); if (!width || !height) throw new Error('No image size.'); }
+      catch { throw new UiError('error.select_a_regular_image_file'); }
+      // A copy keeps the original's modified time.
+      await utimes(temporary, Number(before.atimeNs) / 1e9, Number(before.mtimeNs) / 1e9);
       await rename(temporary, path);
       asset = { id: assetId, name: basename(source), file, bytes, sha256: hash.digest('hex') };
     } finally { await input.close(); await rm(temporary, { force: true }); }
@@ -133,8 +154,13 @@ export class Sessions {
     await this.update(key, session => { session.assets.push(asset); });
     return asset;
   }
-  remove(key: string): Promise<void> {
-    return this.serial(async () => { await this.get(key); await rm(this.directory(key), { recursive: true }); this.loaded.delete(key); });
+  /** Removal hides the session at once; deleting its files runs outside the save lock, and a later listing retries leftovers. */
+  async remove(key: string): Promise<void> {
+    const hidden = await this.serial(async () => {
+      await this.read(key); const hidden = join(this.root, `${key}.removing-${randomUUID()}`);
+      await rename(this.directory(key), hidden); this.loaded.delete(key); return hidden;
+    });
+    await rm(hidden, { recursive: true, force: true }).catch(() => {});
   }
   async settled(): Promise<void> { await this.tail; }
 }

@@ -26,9 +26,14 @@
   --accent-rule: #7fb5b5;
   --patch: #d9822f;
   --patch-soft: #fbead8;
+  --patch-ink: #1b1208;
   --danger: #b3261e;
   --danger-fill: #b3261e;
   --danger-fill-hover: #9a2019;
+  --danger-ink: #ffffff;
+  /* A control laid over an image, readable on any picture. */
+  --scrim-control: rgba(16, 24, 28, 0.66);
+  --scrim-ink: #ffffff;
   --danger-soft: #fbe5e2;
   --warn: #8a5a00;
   --warn-soft: #f8edd6;
@@ -75,9 +80,11 @@
     --accent-rule: #3f8a8b;
     --patch: #f0a95f;
     --patch-soft: #3a2a1a;
+    --patch-ink: #1b1208;
     --danger: #f2877e;
     --danger-fill: #c4473d;
     --danger-fill-hover: #d4554a;
+    --danger-ink: #ffffff;
     --danger-soft: #3b1f1d;
     --warn: #e2b55c;
     --warn-soft: #33290f;

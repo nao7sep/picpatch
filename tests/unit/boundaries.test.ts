@@ -31,3 +31,9 @@ it('keeps Node and browser global types separated', async () => {
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+it('keeps Electron in the shell and Node out of the renderer', async () => {
+  const violations = [];
+  for (const [directory, banned] of [['src/main/core', /^electron$/], ['src/shared', /^(electron|node:)/], ['src/renderer', /^(electron|node:)/]] as const)
+    for (const file of await files(join(root, directory))) for (const specifier of imports(await readFile(file, 'utf8'))) if (banned.test(specifier)) violations.push(`${relative(root, file)}: ${specifier}`);
+  expect(violations).toEqual([]);
+});

@@ -1,8 +1,8 @@
 // Why the composer cannot run its command yet. The SDK stays authoritative at
 // execution; this only explains early, and never changes the draft.
-import { incompatibilities } from '../shared/admission.ts';
-import { commandTargetReady } from '../shared/image-command.ts';
-import type { Draft, Session } from '../app/types.ts';
+import { incompatibilities } from '../../shared/admission.ts';
+import { commandTargetReady } from '../../shared/image-command.ts';
+import type { Draft, Session } from '../../shared/session.ts';
 import type { CatalogModel, Readiness } from './api.ts';
 
 export type CommandIssue =

@@ -10,7 +10,9 @@ export async function writeJson(path: string, value: unknown): Promise<Buffer> {
     const file = await open(temp, 'wx', 0o600);
     try { await file.writeFile(bytes); await file.sync(); } finally { await file.close(); }
     await rename(temp, path); published = true;
-    const directory = await open(dirname(path), 'r'); try { await directory.sync(); } finally { await directory.close(); }
+    // The rename is the publication; syncing the directory entry is best effort (Windows refuses it).
+    if (process.platform !== 'win32') await syncDirectory(dirname(path)).catch(() => {});
     return bytes;
   } finally { if (!published) await rm(temp, { force: true }).catch(() => {}); }
 }
+async function syncDirectory(path: string): Promise<void> { const directory = await open(path, 'r'); try { await directory.sync(); } finally { await directory.close(); } }

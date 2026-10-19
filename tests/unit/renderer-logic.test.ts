@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { initialDraft, type Run, type Session } from '../../src/app/types.ts';
+import { initialDraft, type Run, type Session } from '../../src/shared/session.ts';
 import { withoutTarget } from '../../src/shared/image-command.ts';
-import { commandIssues } from '../../src/renderer/command-issues.ts';
-import { DraftWriter, DRAFT_DELAY } from '../../src/renderer/draft-writer.ts';
-import { componentFields } from '../../src/renderer/modals/resources.ts';
-import { commandTurns } from '../../src/renderer/transcript.ts';
+import { commandIssues } from '../../src/renderer/src/command-issues.ts';
+import { DraftWriter, DRAFT_DELAY } from '../../src/renderer/src/draft-writer.ts';
+import { componentFields } from '../../src/renderer/src/modals/resources.ts';
+import { commandTurns } from '../../src/renderer/src/transcript.ts';
 import { models } from '../helpers/bridge.ts';
 
 const run = (id: string, created: string, text = 'x'): Run => ({ id, modelId: 'm', seed: 1, created, status: 'completed', draft: { ...initialDraft(), text } });

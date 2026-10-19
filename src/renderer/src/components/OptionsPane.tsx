@@ -2,7 +2,7 @@
 // model's own sampling controls, the edit region and canvas expansion when an image
 // is being edited, and a structural control map. Only what the chosen model offers
 // is shown; a value the model cannot use stays visible so it can be cleared.
-import type { Draft, Session } from '../../app/types.ts';
+import type { Draft, Session } from '../../../shared/session.ts';
 import type { ModelCapabilities, SamplingParameters } from 'picpatchsdk/types';
 import type { CatalogModel } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
@@ -45,7 +45,7 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
     <aside className="options-pane" aria-label={t('conversation.options')}>
       <header className="pane-head">
         <h2>{t('conversation.options')}</h2>
-        <button type="button" className="icon-button" onClick={onClose} aria-label={t('ui.close')} title={t('ui.close')}><CloseIcon size={16} /></button>
+        <button type="button" className="icon-button" onClick={onClose} aria-label={t('ui.close')} title={t('ui.close')}><CloseIcon /></button>
       </header>
       <div className="pane-body">
         <section className="pane-section">
@@ -103,7 +103,7 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
             <h3 className="group-label">{t('options.editRegion')}</h3>
             <p className="field-help">{maskNote}</p>
             <div className="button-row">
-              <button type="button" className="button compact" disabled={caps?.maskMode === 'none'} onClick={onPaintMask}><BrushIcon size={15} /><span>{draft.mask ? t('options.editMask') : t('ui.paint_mask')}</span></button>
+              <button type="button" className="button compact" disabled={caps?.maskMode === 'none'} onClick={onPaintMask}><BrushIcon /><span>{draft.mask ? t('options.editMask') : t('ui.paint_mask')}</span></button>
               {draft.mask && <button type="button" className="button compact" onClick={() => { const next = { ...draft }; delete next.mask; onDraft(next, 'now'); }}>{t('ui.clear_mask')}</button>}
             </div>
             <label className="check">

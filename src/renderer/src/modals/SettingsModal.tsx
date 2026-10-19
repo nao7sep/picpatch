@@ -1,8 +1,8 @@
 // Settings: General (appearance, language, interface font) and Resources (where the
 // SDK keeps engines and models). A draft until Save; closing a changed draft asks first.
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
-import { defaultFont } from '../../shared/appearance.ts';
-import { languages, type Language } from '../../shared/i18n/index.ts';
+import { defaultFont } from '../../../shared/appearance.ts';
+import { languages, type Language } from '../../../shared/i18n/index.ts';
 import { api, type Overview, type Preferences } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { Modal } from './Modal.tsx';
@@ -79,7 +79,6 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
         {tabs.map(name => <button key={name} id={`settings-tab-${name}`} type="button" role="tab" aria-selected={tab === name} tabIndex={tab === name ? 0 : -1} className={tab === name ? 'on' : undefined} onClick={() => setTab(name)}>{t(`settings.${name}`)}</button>)}
       </div>}
       footer={<>
-        {failure && <span className="foot-error" role="alert">{failure}</span>}
         <span className="spacer" />
         <button type="button" className="button" disabled={saving} onClick={() => void close()}>{t('ui.cancel')}</button>
         <button type="button" className="button primary" disabled={saving || !dirty || invalid.length > 0} onClick={save}>{t('ui.save_settings')}</button>
@@ -140,6 +139,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
           </div>
         )}
       </fieldset>
+      {failure && <p className="field-error" role="alert">{failure}</p>}
     </Modal>
   );
 }

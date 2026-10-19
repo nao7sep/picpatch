@@ -2,7 +2,7 @@
 // files already on this computer). Opening or skipping changes nothing; every
 // acquisition is its own explicit step.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { modelName } from '../../shared/model-name.ts';
+import { modelLabel, modelOption, modelSummary } from '../models.ts';
 import { api, type CatalogModel, type Engines, type Readiness } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { Modal } from './Modal.tsx';
@@ -39,7 +39,10 @@ export function SetupModal({ models, initial, onClose, onChanged, onUse, onManag
     if (model?.acquisition !== 'pinned') { onManage(choice); return; }
     void run(async () => { const result = await api.download(choice); await after(); return result; });
   };
-  const sorted = [...models].sort((a, b) => Number(b.acquisition === 'pinned') - Number(a.acquisition === 'pinned') || modelName(a.id).localeCompare(modelName(b.id)));
+  // Downloads first, recommended models first within each kind.
+  const tier = { recommended: 0, standard: 1, specialist: 2 } as const;
+  const sorted = [...models].sort((a, b) => Number(b.acquisition === 'pinned') - Number(a.acquisition === 'pinned') || tier[a.profile.tier] - tier[b.profile.tier] || modelLabel(a.id).localeCompare(modelLabel(b.id)));
+  const summary = model && modelSummary(model);
 
   return (
     <Modal title={t('setup.title')} width={560} guarded={busy} onClose={() => { if (!busy) onClose(); }} footer={<>
@@ -53,8 +56,9 @@ export function SetupModal({ models, initial, onClose, onChanged, onUse, onManag
       <label className="field">
         <span className="field-label">{t('setup.model')}</span>
         <select value={choice} disabled={busy} onChange={event => setChoice(event.target.value)} data-autofocus="true">
-          {sorted.map(item => <option key={item.id} value={item.id}>{modelName(item.id)}</option>)}
+          {sorted.map(item => <option key={item.id} value={item.id}>{modelOption(item)}</option>)}
         </select>
+        {summary && <span className="field-help">{[summary.purposes, summary.facts].filter(Boolean).join(' — ')}</span>}
         <span className="field-help">{model?.downloadBytes ? t('setup.size', { size: `${number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 })} GB` }) : t('setup.local')}</span>
       </label>
       <ol className="steps">

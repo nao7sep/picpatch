@@ -4,12 +4,12 @@ import { mkdtemp, mkdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { Application } from '../../src/app/service.ts';
-import { saveSettings } from '../../src/app/settings.ts';
-import type { AppPaths } from '../../src/app/paths.ts';
+import { Application } from '../../src/main/core/service.ts';
+import { saveSettings } from '../../src/main/core/settings.ts';
+import type { AppPaths } from '../../src/main/core/paths.ts';
 import type { Bridge } from '../../src/shared/bridge.ts';
-import type { Session } from '../../src/app/types.ts';
-import { App } from '../../src/renderer/App.tsx';
+import type { Session } from '../../src/shared/session.ts';
+import { App } from '../../src/renderer/src/App.tsx';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -42,14 +42,14 @@ it('generates, edits with references, branches and reopens through the real rend
       case 'modelReadiness': return app.readiness();
       case 'overview': return { ...await app.overview(), resourcesBusy: false, locale: { language: 'en', format: 'en' }, systemDark: false };
       case 'get': return app.sessions.get(p.id);
-      case 'draft': return app.draft(p.id, p.draft, p.selection);
+      case 'draft': return app.draft(p.id, p.draft);
       case 'import': return Promise.all(referencePaths.map(path => app.importImage(p.id, path)));
       case 'submit': return app.queue.submit(p.id, p.draft, p.samples);
       case 'ready': ready = true; return;
       default: throw new Error(`Unexpected bridge call: ${action}`);
     }
   };
-  window.picpatch = { call, onChange: listener => { change = listener; return () => {}; }, onCommand: () => () => {}, onRequest: listener => { flush = () => listener({ kind: 'flush' }); }, droppedFile: () => { throw new Error('No native drop in this test'); } };
+  window.picpatch = { call, onChange: listener => { change = listener; return () => {}; }, onQueue: () => () => {}, onCommand: () => () => {}, onRequest: listener => { flush = () => listener({ kind: 'flush' }); }, droppedFile: () => { throw new Error('No native drop in this test'); } };
   Element.prototype.scrollIntoView ??= () => {};
   const field = () => screen.getByRole('textbox', { name: 'Command' }) as HTMLTextAreaElement;
   const command = async (text: string) => {

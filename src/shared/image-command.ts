@@ -1,4 +1,4 @@
-import type { Draft, Run, Session } from '../app/types.ts';
+import type { Draft, Run, Session } from './session.ts';
 
 /** The visible inputs choose the operation; command text is never interpreted or rewritten. */
 export function imageCommand(draft: Draft): Draft {
@@ -9,13 +9,6 @@ export function targetImage(draft: Draft, source: string): Draft {
   const next = imageCommand({ ...draft, source });
   if (source !== draft.source) { delete next.mask; delete next.outpaint; }
   return next;
-}
-
-export function newImage(draft: Draft): Draft {
-  const next = structuredClone(draft);
-  delete next.source; delete next.mask; delete next.outpaint;
-  next.references = [];
-  return imageCommand(next);
 }
 
 /** Removes the image being edited and what belongs to it, keeping references and options. */

@@ -2,8 +2,8 @@
 // command as it was sent (text first, then the images it used) and its results,
 // each with its own actions. Authored text is rendered literally.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { Draft, QueueState, Run, Session } from '../../app/types.ts';
-import { modelName } from '../../shared/model-name.ts';
+import type { Draft, QueueState, Run, Session } from '../../../shared/session.ts';
+import { modelLabel } from '../models.ts';
 import { imageUrl } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { commandTurns, imageLabel, imageNumber, pending, type Turn } from '../transcript.ts';
@@ -55,7 +55,7 @@ export function Conversation(props: ConversationProps) {
       <header className="conversation-head">
         <button type="button" className="title-button" onClick={props.onRename} title={t('ui.rename_session')}>
           <span className="title-text">{session.name}</span>
-          <PencilIcon size={14} />
+          <PencilIcon />
         </button>
         <span className="head-meta">{t('conversation.count', { count: session.runs.filter(run => run.output).length })}</span>
         <button
@@ -99,7 +99,7 @@ function TurnView({ turn, session, queue, target, saved, onEditThis, onReuse, on
             )}
             {draft.references.map((group, index) => (
               <span key={index} className="command-group">
-                <span className="command-group-name"><StackIcon size={14} />{t('conversation.group', { name: group.id, role: t(`role.${group.role}`) })}</span>
+                <span className="command-group-name"><StackIcon />{t('conversation.group', { name: group.id, role: t(`role.${group.role}`) })}</span>
                 <span className="command-group-images">
                   {group.images.map(key => (
                     <InputThumb key={key} session={session} imageKey={key} label={imageLabel(session, key, t)} onOpen={() => onViewInputs(viewable, viewable.findIndex(item => item.key === key))} />
@@ -136,7 +136,7 @@ function InputThumb({ session, imageKey, label, onOpen }: { session: Session; im
   const ready = available(session, imageKey);
   return (
     <button type="button" className="input-thumb" disabled={!ready} onClick={onOpen} title={label} aria-label={label}>
-      {ready ? <img src={imageUrl(session.id, imageKey)} alt="" loading="lazy" draggable={false} /> : <span className="input-missing" aria-hidden="true" />}
+      {ready ? <img src={imageUrl(session.id, imageKey, true)} alt="" loading="lazy" draggable={false} /> : <span className="input-missing" aria-hidden="true" />}
     </button>
   );
 }
@@ -146,12 +146,12 @@ function CommandFacts({ draft, count }: { draft: Draft; count: number }) {
   const { t, number } = useI18n();
   const size = draft.outpaint ?? draft;
   const facts: { icon?: React.ReactNode; text: string }[] = [
-    { text: draft.modelIds.map(modelName).join(', ') },
+    { text: draft.modelIds.map(modelLabel).join(', ') },
     { text: t('conversation.size', { width: String(size.width), height: String(size.height) }) },
   ];
-  if (draft.mask) facts.push({ icon: <BrushIcon size={13} />, text: t('conversation.masked') });
-  if (draft.outpaint) facts.push({ icon: <CanvasIcon size={13} />, text: t('conversation.expanded') });
-  if (draft.control) facts.push({ icon: <SlidersIcon size={13} />, text: t(`control.${draft.control.kind}`) });
+  if (draft.mask) facts.push({ icon: <BrushIcon />, text: t('conversation.masked') });
+  if (draft.outpaint) facts.push({ icon: <CanvasIcon />, text: t('conversation.expanded') });
+  if (draft.control) facts.push({ icon: <SlidersIcon />, text: t(`control.${draft.control.kind}`) });
   if (count > 1) facts.push({ text: t('conversation.results', { count }) });
   return (
     <ul className="command-facts">
@@ -166,7 +166,7 @@ function RunResult({ run, session, queue, isTarget, savedCount, onEditThis, onRe
 }) {
   const { t, term, errorText } = useI18n();
   const number = imageNumber(session, run.id);
-  const caption = t('conversation.caption', { number, model: modelName(run.modelId), seed: String(run.seed) });
+  const caption = t('conversation.caption', { number, model: modelLabel(run.modelId), seed: String(run.seed) });
   if (pending(run)) return <Developing run={run} queue={queue} caption={caption} onCancel={() => onCancel(run.id)} />;
   if (!run.output) {
     return (
@@ -174,7 +174,7 @@ function RunResult({ run, session, queue, isTarget, savedCount, onEditThis, onRe
         <p className="result-caption">{caption}</p>
         <p className="result-reason">{run.issue ? errorText(run.issue, run.draft.mode === 'edit' ? 'error.edit' : 'error.generate') : term('status', run.status)}</p>
         <div className="print-actions">
-          <button type="button" className="quiet-button" onClick={() => onReuse(run)}><ReuseIcon size={15} /><span>{t('ui.reuse_settings')}</span></button>
+          <button type="button" className="quiet-button" onClick={() => onReuse(run)}><ReuseIcon /><span>{t('ui.reuse_settings')}</span></button>
         </div>
       </div>
     );
@@ -182,16 +182,16 @@ function RunResult({ run, session, queue, isTarget, savedCount, onEditThis, onRe
   return (
     <figure className={`print${isTarget ? ' target' : ''}`}>
       <button type="button" className="print-mat" onClick={() => onView(run.id)} aria-label={t('conversation.view', { name: t('conversation.image', { number }) })}>
-        <img src={imageUrl(session.id, run.id)} alt="" draggable={false} />
+        <img src={imageUrl(session.id, run.id)} alt="" loading="lazy" decoding="async" draggable={false} />
         {isTarget && <span className="print-badge">{t('conversation.editing')}</span>}
       </button>
       <figcaption>
         <p className="result-caption">{caption}</p>
         <div className="print-actions">
-          <button type="button" className="quiet-button" aria-pressed={isTarget} onClick={() => onEditThis(run.id)}><TargetIcon size={15} /><span>{t('ui.edit_this_result')}</span></button>
-          <button type="button" className="quiet-button" onClick={() => onView(run.id)}><ExpandIcon size={15} /><span>{t('conversation.viewShort')}</span></button>
-          <button type="button" className="quiet-button" onClick={() => onSave(run.id)}><SaveIcon size={15} /><span>{t('ui.save_image')}</span></button>
-          <button type="button" className="quiet-button" onClick={() => onReuse(run)}><ReuseIcon size={15} /><span>{t('ui.reuse_settings')}</span></button>
+          <button type="button" className="quiet-button" aria-pressed={isTarget} onClick={() => onEditThis(run.id)}><TargetIcon /><span>{t('ui.edit_this_result')}</span></button>
+          <button type="button" className="quiet-button" onClick={() => onView(run.id)}><ExpandIcon /><span>{t('conversation.viewShort')}</span></button>
+          <button type="button" className="quiet-button" onClick={() => onSave(run.id)}><SaveIcon /><span>{t('ui.save_image')}</span></button>
+          <button type="button" className="quiet-button" onClick={() => onReuse(run)}><ReuseIcon /><span>{t('ui.reuse_settings')}</span></button>
           {savedCount > 0 && <SavedFlash count={savedCount} />}
         </div>
         {(run.notices ?? []).map((notice, index) => <p key={index} className="result-note">{errorText(notice)}</p>)}
@@ -235,7 +235,7 @@ function Developing({ run, queue, caption, onCancel }: { run: Run; queue: QueueS
       </div>
       <p className="result-caption">{caption}</p>
       <div className="print-actions">
-        <button type="button" className="quiet-button" onClick={onCancel}><CloseIcon size={15} /><span>{t('ui.cancel')}</span></button>
+        <button type="button" className="quiet-button" onClick={onCancel}><CloseIcon /><span>{t('ui.cancel')}</span></button>
       </div>
     </div>
   );

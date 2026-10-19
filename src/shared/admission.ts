@@ -1,6 +1,6 @@
 import { t, term } from './i18n/index.ts';
 import type { ModelCapabilities } from 'picpatchsdk/types';
-import type { Draft } from '../app/types.ts';
+import type { Draft } from './session.ts';
 /** Early GUI explanations; the SDK remains authoritative at execution. Never rewrite a draft. */
 export function incompatibilities(draft: Draft, capabilities: ModelCapabilities): string[] {
   const issues: string[] = [];

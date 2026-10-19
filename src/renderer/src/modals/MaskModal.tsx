@@ -2,7 +2,7 @@
 // Clear. The painted region is what the model may change. Done saves the mask as a
 // white-on-black image; Cancel leaves the previous mask as it was.
 import { useEffect, useRef, useState } from 'react';
-import { imagePoint } from '../../shared/viewport.ts';
+import { imagePoint } from '../../../shared/viewport.ts';
 import { BrushIcon, EraserIcon, RedoIcon, UndoIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n.tsx';
 import { isComposing } from '../ime.ts';
@@ -12,9 +12,9 @@ import { Modal } from './Modal.tsx';
 const HISTORY_BYTES = 64 * 1024 * 1024;
 const PAINT = '#f2a65a';
 
-export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard }: {
+export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard, onDirty }: {
   source: string; mask: string | undefined; note: string;
-  onClose: () => void; onDone: (bytes: Uint8Array | null) => Promise<string | undefined>; confirmDiscard: () => Promise<boolean>;
+  onClose: () => void; onDone: (bytes: Uint8Array | null) => Promise<string | undefined>; confirmDiscard: () => Promise<boolean>; onDirty: (dirty: boolean) => void;
 }) {
   const { t } = useI18n();
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -29,6 +29,7 @@ export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard 
   const last = useRef<{ x: number; y: number } | undefined>(undefined);
   const drawing = useRef(false);
   const context = () => canvas.current!.getContext('2d', { willReadFrequently: true })!;
+  useEffect(() => { onDirty(dirty); }, [dirty, onDirty]);
 
   // Load the image's size, then any saved mask as the painted overlay (its white becomes paint).
   useEffect(() => {
@@ -114,8 +115,8 @@ export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard 
       <div className="mask-editor" onKeyDown={onKeyDown}>
         <div className="mask-tools">
           <div className="segmented" role="radiogroup" aria-label={t('mask.tool')}>
-            <label className={!erase ? 'on' : undefined}><input type="radio" name="mask-tool" checked={!erase} onChange={() => setErase(false)} /><BrushIcon size={15} /><span>{t('mask.paint')}</span></label>
-            <label className={erase ? 'on' : undefined}><input type="radio" name="mask-tool" checked={erase} onChange={() => setErase(true)} /><EraserIcon size={15} /><span>{t('mask.erase')}</span></label>
+            <label className={!erase ? 'on' : undefined}><input type="radio" name="mask-tool" checked={!erase} onChange={() => setErase(false)} /><BrushIcon /><span>{t('mask.paint')}</span></label>
+            <label className={erase ? 'on' : undefined}><input type="radio" name="mask-tool" checked={erase} onChange={() => setErase(true)} /><EraserIcon /><span>{t('mask.erase')}</span></label>
           </div>
           <label className="mask-brush"><span>{t('ui.brush_size')}</span><input type="range" min={4} max={200} value={brush} onChange={event => setBrush(Number(event.target.value))} /></label>
           <button type="button" className="icon-button" disabled={!history.current.undo.length} onClick={() => step('undo')} aria-label={t('ui.undo_stroke')} title={t('ui.undo_stroke')}><UndoIcon /></button>

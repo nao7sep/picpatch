@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { isAbsolute } from 'node:path';
-import type { Application } from '../app/service.ts';
+import type { Application } from './core/service.ts';
 /** Explicit automated package qualification; never reached during ordinary launch. */
 export async function qualifyInference(service: Application, configuration: string, uv: string): Promise<void> {
   if (!isAbsolute(configuration)) throw new Error('Qualification configuration must be absolute.');

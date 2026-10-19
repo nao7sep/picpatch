@@ -3,8 +3,8 @@
 import { vi } from 'vitest';
 import type { Bridge } from '../../src/shared/bridge.ts';
 import type { RendererRequest } from '../../src/shared/messages.ts';
-import type { Draft, Run, Session } from '../../src/app/types.ts';
-import { initialDraft } from '../../src/app/types.ts';
+import type { Draft, Run, Session } from '../../src/shared/session.ts';
+import { initialDraft } from '../../src/shared/session.ts';
 
 export const capabilities = {
   model: 'flux2-klein-4b-4bit', instructionEditing: true, textToImage: true, referenceRoles: ['subject', 'object', 'style', 'background'],
@@ -12,8 +12,8 @@ export const capabilities = {
   parameters: { steps: { default: 4, minimum: 1, integer: true } },
 };
 export const models = [
-  { id: 'flux2-klein-4b-4bit', variant: 'flux2-klein-4b', family: 'flux2-klein', acquisition: 'pinned', capabilities, runtime: { name: 'mflux' }, downloadBytes: 4.6e9 },
-  { id: 'sd15', variant: 'sd15', family: 'sd15', acquisition: 'external', capabilities: { ...capabilities, model: 'sd15', referenceRoles: [], instructionEditing: false }, runtime: { name: 'stable-diffusion.cpp' } },
+  { id: 'flux2-klein-4b-4bit', variant: 'flux2-klein-4b', family: 'flux2-klein', acquisition: 'pinned', capabilities, runtime: { name: 'mflux' }, downloadBytes: 4.6e9, evidence: 'real-weights', tested: ['generate', 'edit'], profile: { name: 'FLUX.2 Klein 4B', parameters: 4, memory: 'light', speed: 'fast', licence: 'commercial', purposes: ['drafts', 'editing'], tier: 'recommended' } },
+  { id: 'sd15', variant: 'sd15', family: 'sd15', acquisition: 'external', capabilities: { ...capabilities, model: 'sd15', referenceRoles: [], instructionEditing: false }, runtime: { name: 'stable-diffusion.cpp' }, evidence: 'real-weights', tested: ['generate'], profile: { name: 'Stable Diffusion 1.5', parameters: 0.9, memory: 'light', speed: 'fast', licence: 'commercial', purposes: ['drafts'], tier: 'standard' } },
 ];
 
 export function session(patch: Partial<Session> = {}): Session {
@@ -45,6 +45,7 @@ export function fakeBridge(initial: Session = session(), overrides: Record<strin
     call,
     onCommand: listener => { commands.push(listener); return () => {}; },
     onChange: listener => { changes.push(listener); return () => {}; },
+    onQueue: () => () => {},
     onRequest: listener => { request = listener; },
     droppedFile: file => `/drops/${file.name}`,
   };

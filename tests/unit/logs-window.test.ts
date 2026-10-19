@@ -15,9 +15,10 @@ vi.mock('electron', async () => {
   }
   return { app: { isPackaged: false }, BrowserWindow: Window, ipcMain: { handle: (name: string, callback: any) => mocks.handlers.set(name, callback) }, screen: Object.assign(new EventEmitter(), { getDisplayMatching: () => ({ workAreaSize: { width: 1440, height: 900 } }) }) };
 });
-import { LogsWindow, trustedLogsRequest } from '../../src/desktop/logs-window.ts';
-import { locations } from '../../src/desktop/locations.ts';
-import type { RecordsReader } from '../../src/app/records-reader.ts';
+import { LogsWindow } from '../../src/main/logs-window.ts';
+import { insideBundle, trustedSender } from '../../src/main/trust.ts';
+import { locations } from '../../src/main/locations.ts';
+import type { RecordsReader } from '../../src/main/core/records-reader.ts';
 beforeEach(() => { mocks.windows.length = 0; mocks.handlers.clear(); mocks.load = undefined; });
 function setup() {
   const reader = { query: vi.fn().mockResolvedValue({ records: [], more: false }), detail: vi.fn().mockResolvedValue(null) };
@@ -28,10 +29,10 @@ function setup() {
 it('creates one durable sandboxed window and refuses subframes, changed pages and main-workspace calls', async () => {
   const { owner, reader } = setup(); await owner.open(); await owner.open();
   expect(mocks.windows).toHaveLength(1); const window = mocks.windows[0];
-  expect(window.options).toMatchObject({ name:'picpatch-logs', windowStatePersistence: { bounds:true }, webPreferences: { sandbox:true, contextIsolation:true, nodeIntegration:false, preload: locations.preload('records-preload') } });
+  expect(window.options).toMatchObject({ name:'picpatch-logs', windowStatePersistence: { bounds:true }, webPreferences: { sandbox:true, contextIsolation:true, nodeIntegration:false, preload: locations.preload('records') } });
   const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
   expect(window.webContents.mainFrame.url).toBe(locations.page('records'));
-  expect(trustedLogsRequest(event, window, locations.page('records'))).toBe(true);
+  expect(trustedSender(event, window, locations.page('records'))).toBe(true);
   const handler = mocks.handlers.get('picpatch:logs')!;
   await expect(handler({ ...event, senderFrame: {} }, 'query', {})).rejects.toThrow('Untrusted');
   expect((await handler(event, 'query', { current:true, level:'all', search:'' })).ok).toBe(true);
@@ -60,7 +61,7 @@ it('returns read failures and only sends bounded change notifications', async ()
   } finally { vi.useRealTimers(); }
 });
 
-import { focusWorkspaceForCommand } from '../../src/desktop/workspace-command.ts';
+import { focusWorkspaceForCommand } from '../../src/main/workspace-command.ts';
 it('focuses the visible quit or settings owner over a secondary window without background reveals', () => {
   const window = { isVisible: () => true, isMinimized: () => false, focus: vi.fn() };
   for (const id of ['quit','settingsButton','about','shortcutsButton']) focusWorkspaceForCommand(window, id);
@@ -70,4 +71,8 @@ it('focuses the visible quit or settings owner over a secondary window without b
   focusWorkspaceForCommand({ ...window, isVisible: () => false }, 'quit');
   focusWorkspaceForCommand({ ...window, isMinimized: () => true }, 'quit');
   expect(window.focus).toHaveBeenCalledTimes(4);
+});
+it('accepts bundle components only inside the chosen bundle', () => {
+  expect(insideBundle('/models/bundle', '/models/bundle/vae/model.safetensors')).toBe('vae/model.safetensors');
+  for (const outside of ['/models/bundle', '/models/other/model.gguf', '/models/bundle-two/model.gguf', '/elsewhere']) expect(insideBundle('/models/bundle', outside)).toBeUndefined();
 });

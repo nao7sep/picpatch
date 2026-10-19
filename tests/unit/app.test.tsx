@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { App } from '../../src/renderer/App.tsx';
-import { DRAFT_DELAY } from '../../src/renderer/draft-writer.ts';
+import { App } from '../../src/renderer/src/App.tsx';
+import { DRAFT_DELAY } from '../../src/renderer/src/draft-writer.ts';
 import { fakeBridge, run, session } from '../helpers/bridge.ts';
-import { leakedMessages } from './rendered-messages.ts';
+import { leakedMessages } from '../helpers/rendered-messages.ts';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 beforeEach(() => { Element.prototype.scrollIntoView ??= () => {}; });
@@ -70,7 +70,7 @@ it('keeps a refused command and its inputs in the composer', async () => {
 
 it('explains an unready model and offers setup instead of running', async () => {
   const fake = await start(fakeBridge(session({ draft: { ...session().draft, modelIds: ['sd15'], text: 'x' } })));
-  expect(screen.getByText('SD 1.5 is not set up yet.')).toBeTruthy();
+  expect(screen.getByText('Stable Diffusion 1.5 is not set up yet.')).toBeTruthy();
   expect((send() as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: 'Set up' }));
   expect(await screen.findByRole('dialog', { name: 'Set up PicPatch' })).toBeTruthy();
@@ -182,4 +182,16 @@ it('dismisses open questions and the export choice when closing begins, then res
   expect(document.querySelector('.shell')!.hasAttribute('inert')).toBe(true);
   await act(async () => fake.command('endClose'));
   expect(document.querySelector('.shell')!.hasAttribute('inert')).toBe(false);
+});
+
+it('describes each model and groups ready models before the ones to set up', async () => {
+  await start(fakeBridge(session()));
+  fireEvent.click(screen.getByRole('button', { name: /FLUX\.2 Klein 4B/ }));
+  const list = await screen.findByRole('radiogroup', { name: 'Models' });
+  expect(within(list).getByText('Ready to use')).toBeTruthy();
+  expect(within(list).getByText('Quick drafts · Editing')).toBeTruthy();
+  expect(within(list).getByText('Under 8 GB memory · Fast · Tested')).toBeTruthy();
+  expect(within(list).getByText('Download')).toBeTruthy(); expect(within(list).queryByText('Stable Diffusion 1.5')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Show more models' }));
+  expect(within(list).getByText('More models')).toBeTruthy(); expect(within(list).getByText('Your files')).toBeTruthy();
 });

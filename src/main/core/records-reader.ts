@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import type { RecordsQuery, RecordsPage } from '../shared/records.ts';
+import type { RecordsQuery, RecordsPage } from '../../shared/records.ts';
 /** Reads cannot queue behind a stalled writer, or hold up inference and shutdown. */
 export class RecordsReader {
   private worker?: Worker;

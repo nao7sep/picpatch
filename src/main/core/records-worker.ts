@@ -10,9 +10,13 @@ parentPort!.on('message', record => {
   let stored = false;
   try {
     if (!database) {
-      database = new DatabaseSync(join(root, 'records.sqlite3'));
-      chmodSync(join(root, 'records.sqlite3'), 0o600);
-      database.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=100; CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY, session TEXT NOT NULL, time TEXT NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL, json TEXT NOT NULL)');
+      // The handle is kept only once the schema exists, so a failed setup is retried by the next write.
+      const opened = new DatabaseSync(join(root, 'records.sqlite3'));
+      try {
+        chmodSync(join(root, 'records.sqlite3'), 0o600);
+        opened.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=100; CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY, session TEXT NOT NULL, time TEXT NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL, json TEXT NOT NULL)');
+      } catch (error) { opened.close(); throw error; }
+      database = opened;
     }
     database.prepare('INSERT INTO records(session,time,level,message,json) VALUES(?,?,?,?,?)').run(session, record.time, record.level, record.message, json);
     stored = true;

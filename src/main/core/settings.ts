@@ -1,10 +1,10 @@
-import { preference, UiError } from '../shared/i18n/index.ts';
-import type { Language } from '../shared/i18n/index.ts';
+import { preference, UiError } from '../../shared/i18n/index.ts';
+import type { Language } from '../../shared/i18n/index.ts';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { validateProfile, validateModelRegistration } from 'picpatchsdk';
 import type { ModelRegistration, PicPatchProfile } from 'picpatchsdk';
-export interface Settings { version: 1; sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; uvExecutable?: string; uiFont?: string; theme?: 'light' | 'dark'; language?: Language }
+export interface Settings { version: 1; sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; uiFont?: string; theme?: 'light' | 'dark'; language?: Language }
 import { writeJson } from './files.ts';
 export async function readSettings(path: string): Promise<Settings> {
   let value: Settings;
@@ -17,7 +17,8 @@ export async function readSettings(path: string): Promise<Settings> {
   if (typeof value.uiFont !== 'string' || !value.uiFont.trim()) delete value.uiFont;
   validateProfile(value.profile);
   for (const entry of Object.values(value.registrations)) validateModelRegistration(entry);
-  for (const path of [value.sessionsDirectory, value.uvExecutable]) if (path !== undefined && !isAbsolute(path)) throw new UiError('error.stored_resource_paths_must_be_absolute');
+  delete (value as { uvExecutable?: unknown }).uvExecutable; // Retired: the bundled uv is always used.
+  if (value.sessionsDirectory !== undefined && !isAbsolute(value.sessionsDirectory)) throw new UiError('error.stored_resource_paths_must_be_absolute');
   return value;
 }
 export async function saveSettings(path: string, value: Settings): Promise<Buffer> { validateProfile(value.profile); const stored: Partial<Settings> = structuredClone(value); if (Object.keys(value.profile).length === 1) delete stored.profile; if (!Object.keys(value.registrations).length) delete stored.registrations; return writeJson(path, stored); }

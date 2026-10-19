@@ -82,7 +82,7 @@ export function Modal({ title, onClose, width = 460, large, footer, band, hideTi
         <header className="modal-head">
           <h2 id={titleId} className={hideTitle ? 'visually-hidden' : undefined}>{title}</h2>
           <button type="button" className="icon-button modal-close" data-close="true" aria-label={t('ui.close')} title={t('ui.close')} onClick={() => closeRef.current()}>
-            <CloseIcon size={16} />
+            <CloseIcon />
           </button>
         </header>
         {band && <div className="modal-band">{band}</div>}

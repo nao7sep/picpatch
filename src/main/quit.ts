@@ -10,6 +10,8 @@ export function quitFlow(port: {
   interrupt(): void;
   shutdownSave(): Promise<void>;
   exit(): void;
+  /** Ends the process without entering cleanup that a call stuck in native I/O would hold. */
+  forceExit(): void;
 }) {
   let attempt: Promise<void> | undefined;
   let shutdown = false;
@@ -43,9 +45,8 @@ export function quitFlow(port: {
       port.interrupt();
       // One total budget; neither a stuck renderer nor cleanup may extend it.
       let exited = false;
-      const exit = () => { if (!exited) { exited = true; port.exit(); } };
-      const deadline = setTimeout(exit, 1000);
-      void port.shutdownSave().catch(() => {}).finally(() => { clearTimeout(deadline); exit(); });
+      const deadline = setTimeout(() => { if (!exited) { exited = true; port.forceExit(); } }, 1000);
+      void port.shutdownSave().catch(() => {}).finally(() => { clearTimeout(deadline); if (!exited) { exited = true; port.exit(); } });
     },
   };
 }

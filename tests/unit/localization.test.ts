@@ -3,11 +3,11 @@ import { expect, it } from 'vitest';
 import { catalogues, languages, resolveLocale, useLocale, t, UiError, errorText, errorNotice, number } from '../../src/shared/i18n/index.ts';
 const literalKeys = ['component.clipL','component.clipG','component.t5','component.vae','component.photoMaker','component.ipAdapter','component.controlNet','conversation.size'];
 const identical: Record<string, string[]> = {
-  de: ['ui.seed','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint','control.pose','logs.info','setup.size','about.version'],
-  fr: ['ui.sessions','role.style','native.services','control.pose','conversation.image','menu.open','logs.action','logs.session','logs.message','about.version','composer.portrait','conversation.count','conversation.label','rail.meta','reference.photos'],
+  de: ['ui.seed','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint','control.pose','logs.info','setup.size','about.version','model.download','purpose.illustration','purpose.design','purpose.inpainting','purpose.outpainting'],
+  fr: ['ui.sessions','role.style','native.services','control.pose','conversation.image','menu.open','logs.action','logs.session','logs.message','about.version','composer.portrait','conversation.count','conversation.label','rail.meta','reference.photos','purpose.illustration','purpose.design'],
   es: ['control.pose','logs.error','settings.general'], ja: [], ko: [], 'zh-Hans': [],
-  it: ['ui.seed','ui.file','conditioning.prompt','component.checkpoint','logs.debug','menu.open','about.repository','setup.size'],
-  'pt-BR': ['conditioning.prompt','component.checkpoint','control.pose','menu.open','setup.size'], ru: [],
+  it: ['ui.seed','ui.file','conditioning.prompt','component.checkpoint','logs.debug','menu.open','about.repository','setup.size','model.download','purpose.design'],
+  'pt-BR': ['conditioning.prompt','component.checkpoint','control.pose','menu.open','setup.size','model.download','purpose.design'], ru: [],
 };
 it('ships independently reviewed catalogues with matching keys, placeholders, punctuation and intentional literals', async () => {
   const en = await catalogues.en();
@@ -69,4 +69,11 @@ it('maps real SDK errors by cause and keeps hostile text out of operation fallba
   }
   expect(errorNotice(new Error('Select a completed image.'), 'error.generate').key).toBe('error.generate');
   expect(errorNotice(new UiError('error.select_a_completed_image')).key).toBe('error.select_a_completed_image');
+});
+it('names About the way each language names it in macOS menus', async () => {
+  const expected = { en: 'About PicPatch', de: 'Über PicPatch', es: 'Acerca de PicPatch', fr: 'À propos de PicPatch', it: 'Informazioni su PicPatch', ja: 'PicPatch について', ko: 'PicPatch에 관하여', 'pt-BR': 'Sobre o PicPatch', ru: 'О программе PicPatch', 'zh-Hans': '关于 PicPatch' };
+  for (const [language, label] of Object.entries(expected)) {
+    const catalogue = JSON.parse(await readFile(new URL(`../../src/shared/i18n/locales/${language}.json`, import.meta.url), 'utf8'));
+    expect(catalogue['ui.about_picpatch'], language).toBe(label);
+  }
 });

@@ -1,6 +1,6 @@
 // Draft persistence: typing waits briefly, structural edits save at once, and every
 // write lands in submission order with the draft as it was when it was requested.
-import type { Draft } from '../app/types.ts';
+import type { Draft } from '../../shared/session.ts';
 
 export const DRAFT_DELAY = 350;
 
@@ -30,7 +30,11 @@ export class DraftWriter {
     const snapshot = structuredClone(item.draft);
     const next = this.chain.catch(() => {}).then(() => this.save(item.id, snapshot));
     this.chain = next;
-    return next.then(() => { this.report(undefined); }, error => { this.report(error); throw error; });
+    return next.then(() => { this.report(undefined); }, error => {
+      // A failed write stays waiting, unless a newer draft replaced it, so the next flush retries it.
+      this.waiting ??= item;
+      this.report(error); throw error;
+    });
   }
 
   dispose() { clearTimeout(this.timer); }

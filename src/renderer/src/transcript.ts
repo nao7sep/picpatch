@@ -1,5 +1,5 @@
 // The transcript's shape: runs submitted together are one command turn.
-import type { Draft, Run, Session } from '../app/types.ts';
+import type { Draft, Run, Session } from '../../shared/session.ts';
 
 export interface Turn { id: string; draft: Draft; created: string; runs: Run[] }
 

@@ -3,8 +3,8 @@
 // the window's one drop receiver. Enter runs, except while an input method is
 // composing; Shift+Enter starts a new line.
 import { useLayoutEffect, useRef, useState, type MutableRefObject } from 'react';
-import type { Draft, Session } from '../../app/types.ts';
-import { modelName } from '../../shared/model-name.ts';
+import type { Draft, Session } from '../../../shared/session.ts';
+import { modelLabel } from '../models.ts';
 import { imageUrl, type CatalogModel, type Readiness } from '../api.ts';
 import type { CommandIssue } from '../command-issues.ts';
 import { useI18n } from '../i18n.tsx';
@@ -80,28 +80,28 @@ export function Composer(props: ComposerProps) {
           <ul className="chips" aria-label={t('composer.inputs')}>
             {draft.source && (
               <li className={`chip target${draft.mask ? ' masked' : ''}`}>
-                <span className="chip-thumb">{session.assets.some(a => a.id === draft.source) || session.runs.some(r => r.id === draft.source && r.output) ? <img src={imageUrl(session.id, draft.source)} alt="" draggable={false} /> : <span className="chip-pending" aria-hidden="true" />}</span>
+                <span className="chip-thumb">{session.assets.some(a => a.id === draft.source) || session.runs.some(r => r.id === draft.source && r.output) ? <img src={imageUrl(session.id, draft.source, true)} alt="" draggable={false} /> : <span className="chip-pending" aria-hidden="true" />}</span>
                 <span className="chip-label">
                   <span className="chip-title">{t('conversation.editing')}</span>
                   <span className="chip-name">{imageLabel(session, draft.source, t)}</span>
                 </span>
-                <button type="button" className="icon-button tiny" aria-pressed={Boolean(draft.mask)} disabled={!maskable} onClick={props.onPaintMask} aria-label={t('ui.paint_mask')} title={draft.mask ? t('composer.masked') : t('ui.paint_mask')}><BrushIcon size={14} /></button>
-                <button type="button" className="icon-button tiny" onClick={props.onClearTarget} aria-label={t('composer.removeTarget')} title={t('composer.removeTarget')}><CloseIcon size={13} /></button>
+                <button type="button" className="icon-button tiny" aria-pressed={Boolean(draft.mask)} disabled={!maskable} onClick={props.onPaintMask} aria-label={t('ui.paint_mask')} title={draft.mask ? t('composer.masked') : t('ui.paint_mask')}><BrushIcon /></button>
+                <button type="button" className="icon-button tiny" onClick={props.onClearTarget} aria-label={t('composer.removeTarget')} title={t('composer.removeTarget')}><CloseIcon /></button>
               </li>
             )}
             {draft.references.map((group, index) => (
               <li key={index} className="chip group">
                 <button type="button" className="chip-open" onClick={() => props.onEditReference(index)} title={t('composer.editGroup')}>
                   <span className="chip-stack">
-                    {group.images.slice(0, 3).map(key => <img key={key} src={imageUrl(session.id, key)} alt="" draggable={false} />)}
-                    {!group.images.length && <StackIcon size={18} />}
+                    {group.images.slice(0, 3).map(key => <img key={key} src={imageUrl(session.id, key, true)} alt="" draggable={false} />)}
+                    {!group.images.length && <StackIcon />}
                   </span>
                   <span className="chip-label">
                     <span className="chip-title">{t(`role.${group.role}`)}</span>
                     <span className="chip-name">{group.id}</span>
                   </span>
                 </button>
-                <button type="button" className="icon-button tiny" onClick={() => props.onRemoveReference(index)} aria-label={t('composer.removeGroup', { name: group.id })} title={t('ui.remove_group')}><CloseIcon size={13} /></button>
+                <button type="button" className="icon-button tiny" onClick={() => props.onRemoveReference(index)} aria-label={t('composer.removeGroup', { name: group.id })} title={t('ui.remove_group')}><CloseIcon /></button>
               </li>
             ))}
           </ul>
@@ -123,7 +123,7 @@ export function Composer(props: ComposerProps) {
           {dropping && <span className="composer-hint">{dropHint}</span>}
           <span className="spacer" />
           <button type="button" className="send-button" disabled={blocked} onClick={props.onSend} aria-label={t('conversation.send')} title={t('conversation.send')}>
-            <SendIcon size={18} />
+            <SendIcon />
           </button>
         </div>
       </div>
@@ -137,10 +137,10 @@ function IssueLine({ issues, onSetup }: { issues: readonly CommandIssue[]; onSet
   const first = issues[0];
   if (!first) return null;
   const text = first.kind === 'checking' ? t('model.checking')
-    : first.kind === 'unready' ? t('composer.unready', { count: first.models.length, models: new Intl.ListFormat(locale.format, { type: 'conjunction', style: 'narrow' }).format(first.models.map(modelName)) })
+    : first.kind === 'unready' ? t('composer.unready', { count: first.models.length, models: new Intl.ListFormat(locale.format, { type: 'conjunction', style: 'narrow' }).format(first.models.map(modelLabel)) })
     : first.kind === 'waiting' ? t('conversation.waiting')
     : first.kind === 'noModel' ? t('composer.chooseModel')
-    : first.reason ? t('admission.reason', { model: modelName(first.model), reason: first.reason }) : t('admission.unavailable', { model: modelName(first.model) });
+    : first.reason ? t('admission.reason', { model: modelLabel(first.model), reason: first.reason }) : t('admission.unavailable', { model: modelLabel(first.model) });
   return (
     <div className="composer-banner" role="status">
       <span>{issues.length > 1 ? t('composer.issues', { first: text, count: issues.length - 1 }) : text}</span>

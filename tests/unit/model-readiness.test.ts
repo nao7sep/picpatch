@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 vi.mock('picpatchsdk', () => ({ listModels: vi.fn(), openModel: vi.fn(), inspectEngine: vi.fn(), inspectNativeEngine: vi.fn() }));
 import { listModels, openModel, inspectEngine, inspectNativeEngine } from 'picpatchsdk';
-import { modelReadiness } from '../../src/app/model-readiness.ts';
+import { modelReadiness } from '../../src/main/core/model-readiness.ts';
 const settings = { version: 1 as const, profile: { version: 1 as const }, registrations: {} };
 beforeEach(() => {
   vi.resetAllMocks();

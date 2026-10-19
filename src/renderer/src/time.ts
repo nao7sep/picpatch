@@ -1,5 +1,5 @@
 // Relative times for identifying text (the rail), in the interface language's format.
-import { activeLocale } from '../shared/i18n/index.ts';
+import { activeLocale } from '../../shared/i18n/index.ts';
 
 const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 

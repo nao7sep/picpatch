@@ -2,7 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { DatabaseSync } from 'node:sqlite';
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
-import { recordsQuery, recordId, recordsPageSize } from '../shared/records.ts';
+import { recordsQuery, recordId, recordsPageSize } from '../../shared/records.ts';
 const { root, session } = workerData as { root: string; session: string };
 const path = join(root, 'records.sqlite3');
 let database: DatabaseSync | undefined;

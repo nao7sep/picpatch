@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
 import type { ArtifactRecord } from 'picpatchsdk/types';
-import { Application } from '../../src/app/service.ts';
+import { Application } from '../../src/main/core/service.ts';
 it('exports through the SDK without prompts and preserves independently exported files after session deletion', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-export-'));
   try {

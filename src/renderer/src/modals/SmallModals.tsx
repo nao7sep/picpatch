@@ -1,13 +1,13 @@
 // The small surfaces: About, Keyboard shortcuts, Rename and Save image. Each is the
 // shared shell with its own body.
-import { useState } from 'react';
-import { about } from '../../shared/about.ts';
-import { shortcuts, shortcutText } from '../../shared/shortcuts.ts';
+import { useEffect, useState } from 'react';
+import { about } from '../../../shared/about.ts';
+import { shortcuts, shortcutText } from '../../../shared/shortcuts.ts';
 import { api, imageUrl } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { isComposing } from '../ime.ts';
 import { ExternalIcon } from '../components/icons.tsx';
-import iconUrl from '../../../build/icon.png';
+import iconUrl from '../../../../build/icon.png';
 import { Modal } from './Modal.tsx';
 
 const mac = /Mac/.test(navigator.platform);
@@ -24,8 +24,8 @@ export function AboutModal({ onClose }: { onClose: () => void }) {
         <p className="about-version">{t('about.version', { version: about.version })}</p>
         <p>{t('about.introduction')}</p>
         <p className="about-links">
-          <button type="button" className="link-button" onClick={() => open('repository')}>{t('about.repository')}<ExternalIcon size={13} /></button>
-          <button type="button" className="link-button" onClick={() => open('issues')}>{t('about.issues')}<ExternalIcon size={13} /></button>
+          <button type="button" className="link-button" onClick={() => open('repository')}>{t('about.repository')}<ExternalIcon /></button>
+          <button type="button" className="link-button" onClick={() => open('issues')}>{t('about.issues')}<ExternalIcon /></button>
         </p>
         <p className="about-meta">{about.copyright}</p>
         <p className="about-meta">{t('about.license', { license: about.license })}</p>
@@ -36,7 +36,7 @@ export function AboutModal({ onClose }: { onClose: () => void }) {
 }
 
 const LOCAL_KEYS = [
-  ['shortcuts.send', 'Enter'], ['shortcuts.newline', 'Shift+Enter'], ['shortcuts.rename', 'F2'], ['shortcuts.delete', 'Delete'],
+  ['shortcuts.send', 'Enter'], ['shortcuts.newline', 'Shift+Enter'], ['shortcuts.rename', 'F2'], ['shortcuts.delete', mac ? 'Delete / Cmd+Backspace' : 'Delete'],
   ['shortcuts.viewerNavigate', 'Left/Right'], ['shortcuts.maskUndo', `${mac ? 'Cmd' : 'Ctrl'}+Z`], ['shortcuts.maskRedo', `${mac ? 'Cmd' : 'Ctrl'}+Shift+Z`],
 ] as const;
 
@@ -51,25 +51,28 @@ export function ShortcutsModal({ onClose }: { onClose: () => void }) {
       <dl className="shortcut-list">{shortcuts.filter(entry => entry.id !== 'quit').map(entry => row(t(entry.label), shortcutText(entry, mac)))}</dl>
       <h3 className="group-label">{t('shortcuts.inContext')}</h3>
       <dl className="shortcut-list">{LOCAL_KEYS.map(([label, keys]) => row(t(label), keys))}</dl>
-      <p className="field-help">{t('shortcuts.modifiers')}</p>
+      <p className="field-help">{t(mac ? 'shortcuts.modifiers' : 'shortcuts.modifiersOther')}</p>
     </Modal>
   );
 }
 
-export function RenameModal({ name, onClose, onRename }: { name: string; onClose: () => void; onRename: (name: string) => Promise<string | undefined> }) {
+export function RenameModal({ name, onClose, onRename, onDirty, confirmDiscard }: { name: string; onClose: () => void; onRename: (name: string) => Promise<string | undefined>; onDirty: (dirty: boolean) => void; confirmDiscard: () => Promise<boolean> }) {
   const { t } = useI18n();
   const [value, setValue] = useState(name);
   const [failure, setFailure] = useState<string>();
   const [working, setWorking] = useState(false);
   const valid = value.trim() !== '';
+  const dirty = value !== name;
+  useEffect(() => { onDirty(dirty); }, [dirty, onDirty]);
+  const close = async () => { if (!dirty || await confirmDiscard()) onClose(); };
   const submit = async () => {
     if (!valid || working) return;
     if (value.trim() === name) { onClose(); return; }
     setWorking(true); setFailure(await onRename(value.trim())); setWorking(false);
   };
   return (
-    <Modal title={t('ui.rename_session')} width={420} onClose={onClose} guarded={value !== name} footer={<>
-      <button type="button" className="button" onClick={onClose}>{t('ui.cancel')}</button>
+    <Modal title={t('ui.rename_session')} width={420} onClose={() => void close()} guarded={dirty} footer={<>
+      <button type="button" className="button" onClick={() => void close()}>{t('ui.cancel')}</button>
       <button type="button" className="button primary" disabled={!valid || working} onClick={() => void submit()}>{t('ui.rename')}</button>
     </>}>
       <label className="field">

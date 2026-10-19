@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { menuTemplate } from '../../src/desktop/menu-template.ts';
+import { menuTemplate } from '../../src/main/menu-template.ts';
 import type { MenuItemConstructorOptions } from 'electron';
 function flatten(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] { return items.flatMap(item => [item, ...flatten(Array.isArray(item.submenu) ? item.submenu : [])]); }
 it('keeps native Mac roles, disables modal-incompatible actions and excludes developer tools from packages', () => {

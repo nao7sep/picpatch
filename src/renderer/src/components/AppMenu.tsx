@@ -1,6 +1,6 @@
 // The in-window menu in fleet order (app-chrome-conventions): the app's own actions,
 // Settings and the setup that belongs with it, Records, Zoom, then Shortcuts and About.
-import { shortcuts, shortcutText, type ShortcutId } from '../../shared/shortcuts.ts';
+import { shortcuts, shortcutText, type ShortcutId } from '../../../shared/shortcuts.ts';
 import { useI18n } from '../i18n.tsx';
 import { Menu, type MenuEntry } from './Menu.tsx';
 import { MenuIcon } from './icons.tsx';

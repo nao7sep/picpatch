@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { listModels } from 'picpatchsdk';
 import { incompatibilities } from '../../src/shared/admission.ts';
-import { initialDraft } from '../../src/app/types.ts';
+import { initialDraft } from '../../src/shared/session.ts';
 it('preserves authored controls while explaining incompatible model choices', () => {
   const draft = { ...initialDraft(), mode: 'edit' as const, references: [{ id: 'person', role: 'subject' as const, images: ['photo'], conditioning: 'identity' as const, className: 'man' as const }] };
   const before = structuredClone(draft);

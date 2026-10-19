@@ -1,8 +1,8 @@
 // The app's one queued message surface: main's questions (delete, download, quit)
 // and the renderer's own confirmations. Dismissal resolves undefined, never consent.
 import { useCallback, useRef, useState } from 'react';
-import type { AppMessage } from '../../shared/messages.ts';
-import type { Message } from '../../shared/i18n/index.ts';
+import type { AppMessage } from '../../../shared/messages.ts';
+import type { Message } from '../../../shared/i18n/index.ts';
 import { useI18n } from '../i18n.tsx';
 import { Modal } from './Modal.tsx';
 
@@ -12,11 +12,15 @@ export function useMessages() {
   const [queue, setQueue] = useState<Pending[]>([]);
   const queueRef = useRef(queue); queueRef.current = queue;
   const ask = useCallback((message: AppMessage) => new Promise<number | undefined>(resolve => { setQueue(items => [...items, { message, resolve }]); }), []);
+  // A second click before React re-renders must not answer, or drop, the next question.
+  const answered = useRef(new WeakSet<Pending>());
   const answer = useCallback((value: number | undefined) => {
-    const [first] = queueRef.current; first?.resolve(value);
-    setQueue(items => items.slice(1));
+    const first = queueRef.current.find(item => !answered.current.has(item));
+    if (!first) return;
+    answered.current.add(first); first.resolve(value);
+    setQueue(items => items.filter(item => item !== first));
   }, []);
-  const dismissAll = useCallback(() => { for (const item of queueRef.current) item.resolve(undefined); setQueue([]); }, []);
+  const dismissAll = useCallback(() => { for (const item of queueRef.current) if (!answered.current.has(item)) { answered.current.add(item); item.resolve(undefined); } setQueue([]); }, []);
   return { current: queue[0], ask, answer, dismissAll };
 }
 

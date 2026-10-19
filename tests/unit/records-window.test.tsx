@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { RecordsWindow } from '../../src/renderer/records/RecordsWindow.tsx';
+import { RecordsWindow } from '../../src/renderer/src/records/RecordsWindow.tsx';
 import type { LogsBridge } from '../../src/shared/logs-bridge.ts';
 import type { RecordSummary } from '../../src/shared/records.ts';
 

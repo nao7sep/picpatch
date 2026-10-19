@@ -2,13 +2,11 @@ import { BrowserWindow, ipcMain, screen } from 'electron';
 import { locations } from './locations.ts';
 import { recordsQuery, recordId } from '../shared/records.ts';
 import type { LogsAppearance } from '../shared/logs-bridge.ts';
-import type { RecordsReader } from '../app/records-reader.ts';
+import type { RecordsReader } from './core/records-reader.ts';
 import { normalizeZoom, windowMinimum } from '../shared/appearance.ts';
 import { t } from '../shared/i18n/index.ts';
+import { trustedSender } from './trust.ts';
 /** The logs renderer has no workspace, file-picker, or model-management authority. */
-export function trustedLogsRequest(event: { sender: unknown; senderFrame: unknown }, window: BrowserWindow | undefined, renderer: string): boolean {
-  return !!window && !window.isDestroyed() && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && window.webContents.mainFrame.url === renderer;
-}
 export class LogsWindow {
   private window?: BrowserWindow;
   private opening?: Promise<BrowserWindow>;
@@ -18,7 +16,7 @@ export class LogsWindow {
   constructor(private reader: RecordsReader, private appearance: () => LogsAppearance, private failed: (error: unknown) => void, private resizeList: (width: number) => Promise<void> = async () => {}) {
     this.renderer = locations.page('records');
     ipcMain.handle('picpatch:logs', async (event, action: string, payload: unknown) => {
-      if (!trustedLogsRequest(event, this.window, this.renderer)) throw new Error('Untrusted logs request.');
+      if (!trustedSender(event, this.window, this.renderer)) throw new Error('Untrusted logs request.');
       try {
         switch (action) {
           case 'query': return { ok: true, value: await reader.query(recordsQuery(payload)) };
@@ -46,7 +44,7 @@ export class LogsWindow {
   async open(visible = true): Promise<BrowserWindow> {
     if (this.opening) return this.opening;
     if (this.window && !this.window.isDestroyed()) { if (this.window.isMinimized()) this.window.restore(); if (visible) { this.window.show(); this.window.focus(); } return this.window; }
-    const window = this.window = new BrowserWindow({ name: 'picpatch-logs', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, title: t('ui.logs'), ...(process.platform === 'darwin' ? {} : { icon: locations.icon() }), width: 1100, height: 720, minWidth: 765, minHeight: 480, show: false, backgroundColor: this.appearance().dark ? '#11181b' : '#f3f4f1', webPreferences: { zoomFactor: normalizeZoom(this.appearance().uiZoom), preload: locations.preload('records-preload'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+    const window = this.window = new BrowserWindow({ name: 'picpatch-logs', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, title: t('ui.logs'), ...(process.platform === 'darwin' ? {} : { icon: locations.icon() }), width: 1100, height: 720, minWidth: 765, minHeight: 480, show: false, backgroundColor: this.appearance().dark ? '#11181b' : '#f3f4f1', webPreferences: { zoomFactor: normalizeZoom(this.appearance().uiZoom), preload: locations.preload('records'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
     const minimum = () => {
       if (window.isDestroyed()) return;
       const [width, height] = window.getSize(); const [cw, ch] = window.getContentSize();

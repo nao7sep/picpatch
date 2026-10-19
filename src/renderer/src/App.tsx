@@ -2,11 +2,12 @@
 // options pane and the one modal stack. App is the single writer of the window's
 // state; the panes receive what they show and report what the user did.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Asset, Draft, ReferenceDraft, Run, Session } from '../app/types.ts';
-import { afterCommand, hasImage, imageCommand, recoverCommand, targetImage, withoutTarget } from '../shared/image-command.ts';
-import { errorText as describeError, message, t, useLocale } from '../shared/i18n/index.ts';
-import { layout, minimum } from '../shared/layout.ts';
-import type { RendererRequest } from '../shared/messages.ts';
+import type { Asset, Draft, ReferenceDraft, Run, Session } from '../../shared/session.ts';
+import { afterCommand, hasImage, imageCommand, recoverCommand, targetImage, withoutTarget } from '../../shared/image-command.ts';
+import { errorText as describeError, message, t, useLocale } from '../../shared/i18n/index.ts';
+import { layout, minimum } from '../../shared/layout.ts';
+import type { RendererRequest } from '../../shared/messages.ts';
+import { setCatalog } from './models.ts';
 import { api, imageUrl, type LocaleState, type Overview, type PaneState, type Readiness } from './api.ts';
 import { commandIssues } from './command-issues.ts';
 import { Composer } from './components/Composer.tsx';
@@ -43,7 +44,8 @@ const LIFETIME = ['beginClose', 'endClose', 'shutdown'];
 
 export function App() {
   const [revision, setRevision] = useState(-1);
-  const [phase, setPhase] = useState<'loading' | 'failed' | 'ready'>('loading');
+  const [phase, setPhase] = useState<'loading' | 'failed' | 'unavailable' | 'ready'>('loading');
+  const [missingCollection, setMissingCollection] = useState('');
   const [overview, setOverview] = useState<Overview>();
   const [readiness, setReadiness] = useState<Readiness>();
   const [session, setSession] = useState<Session>();
@@ -51,7 +53,8 @@ export function App() {
   const [pane, setPane] = useState<PaneState>({ railWidth: layout.railDefault, optionsPane: false });
   const [modals, setModals] = useState<ModalSpec[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
-  const [historyDismissed, setHistoryDismissed] = useState(false);
+  /** The backup notice the user dismissed; a different one shows again. */
+  const [historyDismissed, setHistoryDismissed] = useState<string>();
   const [closing, setClosing] = useState(false);
   const [samples, setSamples] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -67,6 +70,9 @@ export function App() {
   const closeFocus = useRef<HTMLElement | null>(null);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
   const settingsGuard = useRef<SettingsGuard>(null);
+  /** Whether the front modal holds an unsaved edit (a painted mask, a typed name) that quitting would discard. */
+  const modalDraft = useRef(false);
+  const markDraft = useCallback((dirty: boolean) => { modalDraft.current = dirty; }, []);
   const focusComposer = useRef<() => void>(() => {});
   const composerBox = useRef<HTMLDivElement>(null);
   const revisionRef = useRef(-1); revisionRef.current = revision;
@@ -89,7 +95,7 @@ export function App() {
     if (changed || revisionRef.current < 0) setRevision(value => value + 1);
   }, []);
   const applyOverview = useCallback(async (next: Overview) => {
-    overviewRef.current = next; setOverview(next);
+    setCatalog(next.models); overviewRef.current = next; setOverview(next);
     applyFont(next.settings.uiFont);
     await applyLocale(next.locale);
   }, [applyLocale]);
@@ -125,7 +131,10 @@ export function App() {
       const locale = await api.locale(); applyFont(locale.uiFont); await applyLocale(locale);
       const state = await api.paneState(); setPane({ railWidth: state.railWidth, optionsPane: state.optionsPane });
       const ready = await checkModels();
-      await start(await refreshOverview());
+      const current = await refreshOverview();
+      // A missing collection is reported, never recreated; another one can be opened instead.
+      if (current.unavailable) { loaded.current = false; setMissingCollection(current.unavailable.path); setPhase('unavailable'); return; }
+      await start(current);
       loaded.current = true; setPhase('ready');
       if (Object.keys(ready).length && !Object.values(ready).includes('ready')) setModals([{ kind: 'setup' }]);
     } catch (error) {
@@ -156,9 +165,14 @@ export function App() {
       timer = setTimeout(() => { timer = undefined; void refresh().then(() => clear('refresh'), error => show('refresh', error)); }, 100);
     });
   }, [clear, refresh, show]);
+  // Progress replaces only the queue state; sessions are reloaded when a run settles.
+  useEffect(() => api.onQueue(queue => {
+    const current = overviewRef.current; if (!loaded.current || !current) return;
+    const next = { ...current, queue }; overviewRef.current = next; setOverview(next);
+  }), []);
 
   const push = useCallback((spec: ModalSpec) => setModals(items => [...items, spec]), []);
-  const pop = useCallback(() => setModals(items => items.slice(0, -1)), []);
+  const pop = useCallback(() => { modalDraft.current = false; setModals(items => items.slice(0, -1)); }, []);
   useEffect(() => onModalCount(setModalCount), []);
   const anyModal = modalCount > 0;
   useEffect(() => { if (phase === 'ready') void api.modalState(anyModal).catch(() => {}); }, [anyModal, phase]);
@@ -195,7 +209,7 @@ export function App() {
   const group = (images: string[]): ReferenceDraft => ({ id: t('reference.name', { number: (draftRef.current?.references.length ?? 0) + 1 }), role: 'subject', images });
   const attachTarget = useCallback(() => command('import', async () => {
     const owner = sessionRef.current; if (!owner) return;
-    const assets = await api.importImages(owner.id);
+    const assets = await api.importImages(owner.id, undefined, false);
     if (!assets[0]) return;
     addAssets(assets); updateDraft(targetImage(draftRef.current!, assets[0].id));
     focusComposer.current();
@@ -209,18 +223,20 @@ export function App() {
   const dropFiles = useCallback((files: File[]) => command('import', async () => {
     const owner = sessionRef.current; if (!owner) return;
     const paths = files.map(file => api.droppedFile(file)).filter(Boolean);
-    const assets: Asset[] = [];
-    for (const path of paths) assets.push(...await api.importImages(owner.id, path));
-    if (!assets.length) return;
+    // Every file that can be imported is kept and used; the first failure is reported afterwards.
+    const assets: Asset[] = []; let failure: unknown;
+    for (const path of paths) { try { assets.push(...await api.importImages(owner.id, path)); } catch (error) { failure ??= error; } }
+    if (!assets.length) { if (failure) throw failure; return; }
     addAssets(assets);
     const current = draftRef.current!;
     // With nothing being edited, one image becomes the image to edit; otherwise the drop is a reference group.
     if (!current.source && assets.length === 1) updateDraft(targetImage(current, assets[0]!.id));
     else updateDraft({ ...current, references: [...current.references, group(assets.map(asset => asset.id))] });
+    if (failure) throw failure;
   }), [addAssets, command, updateDraft]);
   const chooseControl = useCallback((kind: NonNullable<Draft['control']>['kind']) => command('addControl', async () => {
     const owner = sessionRef.current; if (!owner) return;
-    const [asset] = await api.importImages(owner.id);
+    const [asset] = await api.importImages(owner.id, undefined, false);
     if (!asset) return;
     addAssets([asset]); updateDraft({ ...draftRef.current!, control: { image: asset.id, kind } });
   }), [addAssets, command, updateDraft]);
@@ -236,9 +252,12 @@ export function App() {
       // The backend saved this same next draft with the submission.
       const next = afterCommand(current, runs[0]!.id);
       patchSession(value => ({ ...value, runs: [...value.runs, ...runs.filter(run => !value.runs.some(item => item.id === run.id))] }));
-      draftRef.current = next; setDraftState(next);
+      const typed = draftRef.current;
+      if (typed === current) { draftRef.current = next; setDraftState(next); }
+      // Text typed while the command was being sent is the next instruction; keep it, aimed at the new result.
+      else updateDraft({ ...next, text: typed?.text ?? '' }, 'now');
     } finally { setSubmitting(false); focusComposer.current(); }
-  }), [command, patchSession, readiness, samples, writer]);
+  }), [command, patchSession, readiness, samples, updateDraft, writer]);
 
   const editThis = useCallback((runId: string) => {
     setModals(items => items.filter(item => item.kind !== 'viewer'));
@@ -306,12 +325,16 @@ export function App() {
   const requestRef = useRef<(request: RendererRequest) => Promise<unknown>>(async () => undefined);
   requestRef.current = async request => {
     if (request.kind === 'message') return messages.ask(request.message);
-    if (request.kind === 'closeDrafts') return settingsGuard.current ? settingsGuard.current.approveQuit() : true;
-    await chain.current; await writer.flush(); await settingsGuard.current?.settleSave();
+    if (request.kind === 'closeDrafts') {
+      if (settingsGuard.current) return settingsGuard.current.approveQuit();
+      return !modalDraft.current || await confirm('quit.discardEdits');
+    }
+    // Capture the draft first: an open picker or import in the command chain must not delay or block it.
+    await writer.flush(); await settingsGuard.current?.settleSave();
   };
   // The bridge offers no unsubscribe, so the listener is registered once per page.
   const listening = useRef(false);
-  useEffect(() => { if (listening.current) return; listening.current = true; api.onRequest(request => requestRef.current(request)); }, []);
+  useEffect(() => { if (listening.current) return; listening.current = true; api.onRequest(request => requestRef.current(request)); void api.listening().catch(() => {}); }, []);
 
   // The invisible drop boundary: a file dropped anywhere but the composer is refused, never opened.
   useEffect(() => {
@@ -341,11 +364,11 @@ export function App() {
   if (revision < 0) return null;
   return (
     <LanguageRevision value={revision}>
-      {phase === 'failed' ? <StartupFailure retrying={false} onRetry={() => void boot()} onQuit={() => void api.closeWindow()} />
+      {phase === 'failed' || phase === 'unavailable' ? <StartupFailure retrying={false} onRetry={() => void boot()} onQuit={() => void api.closeWindow()} {...phase === 'unavailable' ? { collection: missingCollection, onOpenCollection: () => void api.collection().then(chosen => { if (chosen) void boot(); }, error => console.error('Collection change failed.', error)) } : {}} />
         : phase === 'loading' || !overview || !session || !draft ? <div className="shell loading" aria-busy="true" />
         : (
           <>
-            <div className="shell" inert={closing} style={{ minWidth: minimum(pane.optionsPane).width }}>
+            <div className="shell" inert={closing} style={{ minWidth: minimum(pane.optionsPane).width, minHeight: minimum(pane.optionsPane).height }}>
               <Rail
                 sessions={overview.sessions} failures={overview.failures.length} currentId={session.id} workingId={overview.queue.active?.sessionId}
                 width={pane.railWidth} optionsPane={pane.optionsPane} onWidth={setRailWidth}
@@ -361,7 +384,7 @@ export function App() {
                 <div ref={composerBox} className="stage-foot">
                   <StageNotices
                     notices={notices} onDismiss={clear} queue={overview.queue} session={session} onResume={() => void resume()}
-                    history={historyDismissed ? undefined : overview.historyIssue} onDismissHistory={() => setHistoryDismissed(true)}
+                    history={JSON.stringify(overview.historyIssue ?? null) === historyDismissed ? undefined : overview.historyIssue} onDismissHistory={() => setHistoryDismissed(JSON.stringify(overview.historyIssue ?? null))}
                   />
                   <Composer
                     session={session} draft={draft} models={overview.models} readiness={readiness} issues={issues} submitting={submitting}
@@ -382,9 +405,9 @@ export function App() {
               )}
               {modals.length > 0 && renderModal(modals[modals.length - 1]!)}
             </div>
-            {messages.current && <MessageModal message={messages.current.message} onAnswer={messages.answer} />}
           </>
         )}
+      {messages.current && <MessageModal message={messages.current.message} onAnswer={messages.answer} />}
     </LanguageRevision>
   );
 
@@ -401,7 +424,7 @@ export function App() {
         onChanged={async () => { const next = await checkModels(); await refreshOverview(); return next; }} />;
       case 'about': return <AboutModal onClose={pop} />;
       case 'shortcuts': return <ShortcutsModal onClose={pop} />;
-      case 'rename': return <RenameModal name={owner.name} onClose={pop} onRename={async name => {
+      case 'rename': return <RenameModal name={owner.name} onClose={pop} onDirty={markDraft} confirmDiscard={() => confirm('rename.discard')} onRename={async name => {
         try { const renamed = await api.rename(owner.id, name); patchSession(value => ({ ...value, name: renamed.name })); pop(); await refreshOverview(); return undefined; }
         catch (error) { return describeError(error); }
       }} />;
@@ -411,19 +434,20 @@ export function App() {
           const result = await api.exportImage(owner.id, spec.runId, sidecar, includeInputs);
           if (!result || closingRef.current) return undefined;
           if (result.status === 'refused') return describeError(result);
-          pop(); setSaved(value => ({ runId: spec.runId, count: (value?.runId === spec.runId ? value.count : 0) + 1 }));
+          // A save that finishes after its dialog was dismissed must not close what is now in front.
+          setModals(items => items.at(-1) === spec ? items.slice(0, -1) : items); setSaved(value => ({ runId: spec.runId, count: (value?.runId === spec.runId ? value.count : 0) + 1 }));
           if (result.sidecar?.status === 'failed') show('export', { notice: message('ui.image_saved_its_settings_sidecar_could_not_be_saved') }); else clear('export');
           return undefined;
         } catch (error) { return describeError(error); }
       }} />;
       case 'viewer': return <ViewerModal session={owner} items={spec.items} index={spec.index} onClose={pop} onEditThis={editThis} onReuse={reuse}
-        onSave={runId => push({ kind: 'export', runId, sidecar: false })} />;
+        onSave={(runId, at) => setModals(items => [...items.slice(0, -1), { ...spec, index: at }, { kind: 'export', runId, sidecar: false }])} />;
       case 'mask': {
         const model = models.find(item => item.id === current.modelIds[0]);
         if (!current.source || !hasImage(owner, current.source)) return null;
         return <MaskModal source={imageUrl(owner.id, current.source)} mask={current.mask ? imageUrl(owner.id, current.mask) : undefined}
           note={t(model?.capabilities.maskMode === 'native' ? 'ui.native_inpainting_pixels_outside_the_mask_may_change' : 'ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region')}
-          onClose={pop} confirmDiscard={() => confirm('mask.discard')}
+          onClose={pop} confirmDiscard={() => confirm('mask.discard')} onDirty={markDraft}
           onDone={async bytes => {
             try {
               if (!bytes) { const next = { ...draftRef.current! }; delete next.mask; updateDraft(next); pop(); return undefined; }
@@ -460,19 +484,19 @@ function StageNotices({ notices, onDismiss, queue, session, onResume, history, o
       {waiting && (
         <div className="notice notice-warn" role="status">
           <span>{queue.paused ? t('run.paused', { reason: queue.issue ? errorText(queue.issue) : t('ui.resume_when_ready') }) : t('conversation.queuedWaiting')}</span>
-          <button type="button" className="button compact" onClick={onResume}><ResumeIcon size={14} /><span>{t('ui.resume_queued')}</span></button>
+          <button type="button" className="button compact" onClick={onResume}><ResumeIcon /><span>{t('ui.resume_queued')}</span></button>
         </div>
       )}
       {history && (
         <div className="notice notice-warn" role="status">
           <span>{errorText(history)}</span>
-          <button type="button" className="icon-button tiny" onClick={onDismissHistory} aria-label={t('ui.clear_message')} title={t('ui.clear_message')}><CloseIcon size={13} /></button>
+          <button type="button" className="icon-button tiny" onClick={onDismissHistory} aria-label={t('ui.clear_message')} title={t('ui.clear_message')}><CloseIcon /></button>
         </div>
       )}
       {notices.map(notice => (
         <div key={notice.key} className="notice notice-error" role="alert">
           <span>{errorText(notice.error)}</span>
-          <button type="button" className="icon-button tiny" onClick={() => onDismiss(notice.key)} aria-label={t('ui.clear_message')} title={t('ui.clear_message')}><CloseIcon size={13} /></button>
+          <button type="button" className="icon-button tiny" onClick={() => onDismiss(notice.key)} aria-label={t('ui.clear_message')} title={t('ui.clear_message')}><CloseIcon /></button>
         </div>
       ))}
     </div>

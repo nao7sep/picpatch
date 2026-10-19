@@ -1,8 +1,8 @@
 // The session rail: each session is found by its latest picture. One tab stop: a
 // listbox whose active row follows the arrow keys and opens that session.
 import { useEffect, useState } from 'react';
-import type { SessionSummary } from '../../app/types.ts';
-import { layout, railWidth } from '../../shared/layout.ts';
+import type { SessionSummary } from '../../../shared/session.ts';
+import { layout, railWidth } from '../../../shared/layout.ts';
 import { imageUrl } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { isComposing } from '../ime.ts';
@@ -101,7 +101,7 @@ export function Rail(props: RailProps) {
               onDoubleClick={() => { if (session.id === currentId) props.onRename(); }}
             >
               <span className="session-cover">
-                {session.cover ? <img src={imageUrl(session.id, session.cover)} alt="" draggable={false} /> : <ImageIcon size={20} />}
+                {session.cover ? <img src={imageUrl(session.id, session.cover, true)} alt="" draggable={false} /> : <ImageIcon />}
                 {props.workingId === session.id && <span className="session-working" aria-hidden="true" />}
               </span>
               <span className="session-text">

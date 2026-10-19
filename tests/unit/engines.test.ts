@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { listModels } from 'picpatchsdk';
-import { pythonRuntime } from '../../src/app/engines.ts';
+import { pythonRuntime } from '../../src/main/core/engines.ts';
 
 it('selects the managed Python dependencies for every catalog runtime', async () => {
   const models = await listModels();

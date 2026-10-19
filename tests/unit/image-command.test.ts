@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
-import { afterCommand, imageCommand, newImage, targetImage, recoverCommand } from '../../src/shared/image-command.ts';
-import type { Run } from '../../src/app/types.ts';
-import { initialDraft } from '../../src/app/types.ts';
+import { afterCommand, imageCommand, targetImage, recoverCommand } from '../../src/shared/image-command.ts';
+import type { Run } from '../../src/shared/session.ts';
+import { initialDraft } from '../../src/shared/session.ts';
 it('selects operations from explicit inputs without interpreting command text', () => {
   const draft = { ...initialDraft(), text: 'Edit the image from yesterday' };
   expect(imageCommand(draft).mode).toBe('generate');
@@ -21,7 +21,6 @@ it('retains instructions and settings while changing targets and clears only sou
   const draft = { ...initialDraft(), text: 'Make it brighter', source: 'first', mask: 'mask', outpaint: { width: 1200, height: 1200, left: 10, top: 10 }, references: [{ id: 'person', role: 'subject' as const, images: ['photo'] }] };
   expect(targetImage(draft, 'first').mask).toBe('mask');
   const next = targetImage(draft, 'second'); expect(next.mask).toBeUndefined(); expect(next.outpaint).toBeUndefined(); expect(next.text).toBe(draft.text);
-  const independent = newImage(draft); expect(independent).toMatchObject({ mode: 'generate', text: draft.text, references: [] }); expect(independent.source).toBeUndefined();
   expect(afterCommand(draft, 'result')).toMatchObject({ text: '', source: 'result', references: draft.references, mode: 'edit' });
   expect(draft.source).toBe('first'); expect(draft.mask).toBe('mask');
 });

@@ -1,4 +1,4 @@
-import { shortcutCommand } from '../shared/shortcuts.ts';
+import { shortcutCommand } from '../../shared/shortcuts.ts';
 import { isComposing } from './ime.ts';
 export function editableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && !!target.closest('textarea,[contenteditable=true],input:not([type=range]):not([type=checkbox]):not([type=radio])');

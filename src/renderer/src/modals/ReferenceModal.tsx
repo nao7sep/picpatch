@@ -1,7 +1,7 @@
 // One reference group: its name, what it shows, how the model should use it, and its
 // photos. Edits apply to the draft as they are made, which saves itself, so there is
 // nothing to discard.
-import type { ReferenceDraft, Session } from '../../app/types.ts';
+import type { ReferenceDraft, Session } from '../../../shared/session.ts';
 import { imageUrl, type CatalogModel } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { CloseIcon, PlusIcon } from '../components/icons.tsx';
@@ -58,11 +58,11 @@ export function ReferenceModal({ session, group, models, onChange, onAddPhotos, 
       <ul className="photo-grid">
         {group.images.map(key => (
           <li key={key} className="photo">
-            <img src={imageUrl(session.id, key)} alt={session.assets.find(asset => asset.id === key)?.name ?? ''} draggable={false} />
-            <button type="button" className="chip-remove" aria-label={t('ui.remove_photo')} title={t('ui.remove_photo')} onClick={() => onChange({ ...group, images: group.images.filter(item => item !== key) }, 'now')}><CloseIcon size={12} /></button>
+            <img src={imageUrl(session.id, key, true)} alt={session.assets.find(asset => asset.id === key)?.name ?? ''} draggable={false} />
+            <button type="button" className="chip-remove" aria-label={t('ui.remove_photo')} title={t('ui.remove_photo')} onClick={() => onChange({ ...group, images: group.images.filter(item => item !== key) }, 'now')}><CloseIcon /></button>
           </li>
         ))}
-        <li><button type="button" className="photo-add" onClick={onAddPhotos}><PlusIcon size={18} /><span>{t('ui.add_photos')}</span></button></li>
+        <li><button type="button" className="photo-add" onClick={onAddPhotos}><PlusIcon /><span>{t('ui.add_photos')}</span></button></li>
       </ul>
     </Modal>
   );

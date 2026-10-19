@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { readSettings, saveSettings } from '../../src/app/settings.ts';
-import { Application } from '../../src/app/service.ts';
+import { readSettings, saveSettings } from '../../src/main/core/settings.ts';
+import { Application } from '../../src/main/core/service.ts';
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'picpatch-settings-')); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
@@ -48,4 +48,9 @@ it('saves appearance during work but refuses resource changes', async () => {
   await app.preferences({ modelsDirectory: join(root,'models'), theme: 'dark', language: 'ja', uiFont: 'Arial' });
   expect(app.settings).toMatchObject({ theme: 'dark', language: 'ja', uiFont: 'Arial' });
   await expect(app.preferences({ modelsDirectory: join(root,'other') })).rejects.toThrow();
+});
+it('reads a missing or unknown theme as System', async () => {
+  const config = join(root, 'config.json');
+  await writeFile(config, JSON.stringify({ version: 1, theme: 'sepia' })); expect((await readSettings(config)).theme).toBeUndefined();
+  await writeFile(config, JSON.stringify({ version: 1 })); expect((await readSettings(config)).theme).toBeUndefined();
 });

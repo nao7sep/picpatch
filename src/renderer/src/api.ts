@@ -1,16 +1,18 @@
 // The renderer's typed view of the preload bridge. Main owns every effect; these
 // wrappers only name the actions and their shapes.
-import type { Bridge } from '../shared/bridge.ts';
-import type { Asset, Draft, QueueState, Run, Session, SessionSummary } from '../app/types.ts';
-import type { RendererRequest } from '../shared/messages.ts';
-import type { Language, Message } from '../shared/i18n/index.ts';
-import type { ModelCapabilities } from 'picpatchsdk/types';
+import type { Bridge } from '../../shared/bridge.ts';
+import { thumbnailSize } from '../../shared/layout.ts';
+import type { Asset, Draft, QueueState, Run, Session, SessionSummary } from '../../shared/session.ts';
+import type { RendererRequest } from '../../shared/messages.ts';
+import type { Language, Message } from '../../shared/i18n/index.ts';
+import type { Evidence, ModelCapabilities, ModelProfile, Operation } from 'picpatchsdk/types';
 
 declare global { interface Window { picpatch: Bridge } }
 
 export interface CatalogModel {
   id: string; variant: string; family: string; acquisition: 'pinned' | 'external';
   capabilities: ModelCapabilities; runtime: { name: string }; downloadBytes?: number;
+  evidence: Evidence; tested: Operation[]; profile: ModelProfile;
 }
 export type ModelState = 'ready' | 'missing' | 'engineMissing';
 export type Readiness = Record<string, ModelState>;
@@ -18,7 +20,7 @@ export interface LocaleState { language: Language; format: string; systemLanguag
 export interface ResourcePaths { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }
 export interface AppSettings { profile: ResourcePaths; uiFont?: string; theme?: 'light' | 'dark'; language?: Language }
 export interface Overview {
-  sessions: SessionSummary[]; failures: { id: string; message: string }[]; models: CatalogModel[]; queue: QueueState;
+  sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string }; models: CatalogModel[]; queue: QueueState;
   historyIssue?: string | { message: string; notice?: Message }; settings: AppSettings;
   locations: { engineDirectory?: string; modelsDirectory?: string; sessionsDirectory: string };
   resourcesBusy: boolean; locale: LocaleState; systemDark: boolean;
@@ -37,6 +39,9 @@ const call = <T>(action: string, payload?: unknown): Promise<T> => window.picpat
 export const api = {
   locale: () => call<LocaleState>('locale'),
   ready: () => call<void>('ready'),
+  /** Main may now send questions and flush requests, even before the workspace loads. */
+  listening: () => call<void>('listening'),
+  reportError: (error: { message: string; stack?: string }) => call<void>('renderer-error', error),
   overview: () => call<Overview>('overview'),
   readiness: () => call<Readiness>('modelReadiness'),
   paneState: () => call<PaneState>('paneState'),
@@ -49,10 +54,11 @@ export const api = {
   openProjectLink: (destination: 'repository' | 'issues') => call<void>('openProjectLink', { destination }),
   create: () => call<Session>('create'),
   get: (id: string) => call<Session>('get', { id }),
-  saveDraft: (id: string, draft: Draft) => call<Session>('draft', { id, draft }),
+  saveDraft: (id: string, draft: Draft) => call<void>('draft', { id, draft }),
   rename: (id: string, name: string) => call<Session>('rename', { id, name }),
   remove: (id: string) => call<boolean>('delete', { id }),
-  importImages: (id: string, path?: string) => call<Asset[]>('import', path ? { id, path } : { id }),
+  /** Without a path, opens the file picker; `multiple: false` where only one image is used. */
+  importImages: (id: string, path?: string, multiple = true) => call<Asset[]>('import', path ? { id, path } : { id, multiple }),
   saveMask: (id: string, bytes: Uint8Array) => call<Asset>('mask', { id, bytes }),
   submit: (id: string, draft: Draft, samples: number) => call<Run[]>('submit', { id, draft, samples }),
   cancel: (id: string, runId: string) => call<void>('cancel', { id, runId }),
@@ -74,8 +80,11 @@ export const api = {
   droppedFile: (file: File) => window.picpatch.droppedFile(file),
   onCommand: (listener: (id: string) => void) => window.picpatch.onCommand(listener),
   onChange: (listener: () => void) => window.picpatch.onChange(listener),
+  /** Stage and progress of the active run only. */
+  onQueue: (listener: (state: QueueState) => void) => window.picpatch.onQueue(state => listener(state as QueueState)),
   onRequest: (listener: (request: RendererRequest) => Promise<unknown>) => window.picpatch.onRequest(listener),
 };
 
 /** Session images (imported inputs and results) are served by main under this scheme. */
-export const imageUrl = (sessionId: string, key: string) => `picpatch-image://${sessionId}/${key}`;
+/** `thumbnail` asks for a small preview instead of the full image. */
+export const imageUrl = (sessionId: string, key: string, thumbnail = false) => `picpatch-image://${sessionId}/${key}${thumbnail ? `?size=${thumbnailSize}` : ''}`;

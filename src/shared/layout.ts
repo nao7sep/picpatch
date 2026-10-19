@@ -6,3 +6,5 @@ export function railWidth(intent: number | undefined, windowWidth: number, optio
   const fit = windowWidth - layout.splitter - layout.stage - (options ? layout.options : 0);
   return Math.max(layout.rail, Math.min(intent ?? layout.railDefault, layout.railMax, fit));
 }
+/** Shortest edge, in device pixels, of the cropped previews in the rail, composer and inputs. */
+export const thumbnailSize = 256;

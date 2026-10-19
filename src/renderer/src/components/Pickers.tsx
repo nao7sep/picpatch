@@ -1,51 +1,81 @@
 // The composer's model and size choices, each a small panel from a chip in its row.
-import { modelName } from '../../shared/model-name.ts';
-import type { Draft } from '../../app/types.ts';
+import { useEffect, useRef, useState } from 'react';
+import { incompatibilities } from '../../../shared/admission.ts';
+import type { Draft } from '../../../shared/session.ts';
 import type { CatalogModel, Readiness } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
+import { modelLabel, modelSummary } from '../models.ts';
 import { ChevronDownIcon, ShapeIcon } from './icons.tsx';
 import { Popover } from './Popover.tsx';
 
-const ORDER = { ready: 0, engineMissing: 1, missing: 2 } as const;
+const TIER = { recommended: 0, standard: 1, specialist: 2 } as const;
 
+/** Ready models first, then recommended ones to set up; the rest stay behind Show more unless selected. */
 export function ModelPicker({ draft, models, readiness, onDraft, onSetup }: {
   draft: Draft; models: readonly CatalogModel[]; readiness: Readiness | undefined;
   onDraft: (draft: Draft) => void; onSetup: () => void;
 }) {
   const { t } = useI18n();
+  const [more, setMore] = useState(false);
   const comparing = draft.modelIds.length > 1;
   const state = (id: string) => readiness?.[id] ?? 'missing';
-  const sorted = [...models].sort((a, b) => ORDER[state(a.id)] - ORDER[state(b.id)] || modelName(a.id).localeCompare(modelName(b.id)));
-  const label = draft.modelIds.length === 0 ? t('composer.noModel') : comparing ? t('composer.models', { count: draft.modelIds.length }) : modelName(draft.modelIds[0]!);
+  const order = (a: CatalogModel, b: CatalogModel) => TIER[a.profile.tier] - TIER[b.profile.tier] || a.profile.name.localeCompare(b.profile.name) || a.id.localeCompare(b.id);
+  const ready = models.filter(model => state(model.id) === 'ready').sort(order);
+  const recommended = models.filter(model => state(model.id) !== 'ready' && model.profile.tier === 'recommended').sort(order);
+  const rest = models.filter(model => state(model.id) !== 'ready' && model.profile.tier !== 'recommended').sort(order);
+  const showRest = more || rest.some(model => draft.modelIds.includes(model.id));
+  const label = draft.modelIds.length === 0 ? t('composer.noModel') : comparing ? t('composer.models', { count: draft.modelIds.length }) : modelLabel(draft.modelIds[0]!);
   const unready = draft.modelIds.some(id => state(id) !== 'ready');
   const toggle = (id: string, on: boolean) => {
     const next = on ? [...draft.modelIds.filter(item => item !== id), id] : draft.modelIds.filter(item => item !== id);
     onDraft({ ...draft, modelIds: models.filter(model => next.includes(model.id)).map(model => model.id) });
   };
+  const first = draft.modelIds[0] ?? [...ready, ...recommended, ...rest][0]?.id;
+  const row = (model: CatalogModel) => {
+    const checked = draft.modelIds.includes(model.id);
+    const summary = modelSummary(model);
+    const unsuited = incompatibilities(draft, model.capabilities)[0];
+    return (
+      <label key={model.id} className={`picker-row model-row${checked ? ' on' : ''}${unsuited ? ' unsuited' : ''}`} title={unsuited}>
+        <input
+          type={comparing ? 'checkbox' : 'radio'} name="model" checked={checked} data-autofocus={model.id === first ? 'true' : undefined}
+          onChange={event => comparing ? toggle(model.id, event.target.checked) : onDraft({ ...draft, modelIds: [model.id] })}
+        />
+        <span className="model-text">
+          <span className="model-title">
+            <span className="picker-name">{model.profile.name}</span>
+            <span className="model-tag">{t(model.acquisition === 'pinned' ? 'model.download' : 'model.ownFiles')}</span>
+          </span>
+          {summary.purposes && <span className="model-line">{summary.purposes}</span>}
+          <span className="model-line">{summary.facts}</span>
+        </span>
+        <span className={`picker-state ${state(model.id)}`}>{t(`model.${readiness ? state(model.id) : 'checking'}`)}</span>
+      </label>
+    );
+  };
+  const group = (heading: string, items: CatalogModel[]) => items.length > 0 && (
+    <div className="picker-group" role="presentation">
+      <p className="picker-heading">{heading}</p>
+      {items.map(row)}
+    </div>
+  );
   return (
-    <Popover label={t('ui.models')} triggerClass={`chip-button${unready ? ' attention' : ''}`} trigger={<><span className={`state-dot ${unready ? 'off' : 'on'}`} aria-hidden="true" /><span className="chip-text">{label}</span><ChevronDownIcon size={14} /></>}>
+    <Popover label={t('ui.models')} triggerClass={`chip-button${unready ? ' attention' : ''}`} trigger={<><span className={`state-dot ${unready ? 'off' : 'on'}`} aria-hidden="true" /><span className="chip-text">{label}</span><ChevronDownIcon /></>}>
       {close => (
-        <div className="picker">
+        <div className="picker model-picker">
           <label className="check">
             <input type="checkbox" checked={comparing} onChange={event => onDraft({ ...draft, modelIds: event.target.checked ? draft.modelIds.slice(0, 1) : draft.modelIds.slice(-1) })} />
             <span>{t('model.compare')}</span>
           </label>
           <fieldset className="picker-list" role={comparing ? 'group' : 'radiogroup'} aria-label={t('ui.models')}>
-            {sorted.map((model, index) => {
-              const checked = draft.modelIds.includes(model.id);
-              return (
-                <label key={model.id} className={`picker-row${checked ? ' on' : ''}`}>
-                  <input
-                    type={comparing ? 'checkbox' : 'radio'} name="model" checked={checked} data-autofocus={(checked || (!draft.modelIds.length && index === 0)) ? 'true' : undefined}
-                    onChange={event => comparing ? toggle(model.id, event.target.checked) : onDraft({ ...draft, modelIds: [model.id] })}
-                  />
-                  <span className="picker-name">{modelName(model.id)}</span>
-                  <span className={`picker-state ${state(model.id)}`}>{t(`model.${readiness ? state(model.id) : 'checking'}`)}</span>
-                </label>
-              );
-            })}
+            {group(t('model.groupReady'), ready)}
+            {group(t('model.groupRecommended'), recommended)}
+            {showRest && group(t('model.groupMore'), rest)}
           </fieldset>
           <div className="picker-foot">
+            {rest.length > 0 && !rest.some(model => draft.modelIds.includes(model.id)) && (
+              <button type="button" className="quiet-button" aria-expanded={showRest} onClick={() => setMore(value => !value)}>{t(showRest ? 'model.showFewer' : 'model.showMore')}</button>
+            )}
             <button type="button" className="button compact" onClick={() => { close(); onSetup(); }}>{t('model.fix')}</button>
           </div>
         </div>
@@ -66,28 +96,40 @@ export function SizePicker({ draft, multiple, onDraft }: { draft: Draft; multipl
   const snap = (value: number) => Math.max(multiple, Math.round(value / multiple) * multiple);
   const preset = PRESETS.find(item => item.width === draft.width && item.height === draft.height);
   return (
-    <Popover label={t('composer.size')} trigger={<><ShapeIcon width={draft.width} height={draft.height} size={16} /><span className="chip-text">{t('conversation.size', { width: String(draft.width), height: String(draft.height) })}</span></>}>
+    <Popover label={t('composer.size')} trigger={<><ShapeIcon width={draft.width} height={draft.height} /><span className="chip-text">{t('conversation.size', { width: String(draft.width), height: String(draft.height) })}</span></>}>
       {() => (
         <div className="picker size-picker">
           <div className="segmented" role="radiogroup" aria-label={t('composer.size')}>
             {PRESETS.map(item => (
               <label key={item.key} className={preset?.key === item.key ? 'on' : undefined}>
                 <input type="radio" name="size-preset" checked={preset?.key === item.key} data-autofocus={preset?.key === item.key ? 'true' : undefined} onChange={() => set(item.width, item.height)} />
-                <ShapeIcon width={item.width} height={item.height} size={16} /><span>{t(`composer.${item.key}`)}</span>
+                <ShapeIcon width={item.width} height={item.height} /><span>{t(`composer.${item.key}`)}</span>
               </label>
             ))}
           </div>
           <div className="size-fields">
-            <label className="field compact"><span className="field-label">{t('ui.width')}</span>
-              <input type="number" min={multiple} step={multiple} value={draft.width} onChange={event => { const value = Number(event.target.value); if (value > 0) set(value, draft.height); }} onBlur={() => set(snap(draft.width), draft.height)} />
-            </label>
-            <label className="field compact"><span className="field-label">{t('ui.height')}</span>
-              <input type="number" min={multiple} step={multiple} value={draft.height} onChange={event => { const value = Number(event.target.value); if (value > 0) set(draft.width, value); }} onBlur={() => set(draft.width, snap(draft.height))} />
-            </label>
+            <DimensionField label={t('ui.width')} value={draft.width} multiple={multiple} onValue={width => set(width, draft.height)} snap={snap} />
+            <DimensionField label={t('ui.height')} value={draft.height} multiple={multiple} onValue={height => set(draft.width, height)} snap={snap} />
           </div>
           <p className="field-help">{t('composer.sizeRule', { multiple })}</p>
         </div>
       )}
     </Popover>
+  );
+}
+
+/** A size field that may be emptied while typing; leaving it restores or snaps the value. */
+function DimensionField({ label, value, multiple, onValue, snap }: { label: string; value: number; multiple: number; onValue: (value: number) => void; snap: (value: number) => number }) {
+  const [text, setText] = useState(String(value));
+  const editing = useRef(false);
+  useEffect(() => { if (!editing.current) setText(String(value)); }, [value]);
+  return (
+    <label className="field compact"><span className="field-label">{label}</span>
+      <input
+        type="number" min={multiple} step={multiple} value={text} onFocus={() => { editing.current = true; }}
+        onChange={event => { setText(event.target.value); const next = Number(event.target.value); if (event.target.value.trim() && next > 0) onValue(next); }}
+        onBlur={() => { editing.current = false; const next = snap(value); setText(String(next)); if (next !== value) onValue(next); }}
+      />
+    </label>
   );
 }

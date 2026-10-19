@@ -1,10 +1,10 @@
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { beforeEach, afterEach, expect, it } from 'vitest';
+import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { PicPatchSdkError } from 'picpatchsdk';
-import { Sessions } from '../../src/app/sessions.ts';
-import { Queue } from '../../src/app/queue.ts';
+import { Sessions } from '../../src/main/core/sessions.ts';
+import { Queue } from '../../src/main/core/queue.ts';
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'picpatch-queue-')); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
@@ -41,10 +41,16 @@ it('reopens interrupted attempts without executing or overwriting their retained
 it('keeps a published result when worker cleanup cannot be confirmed', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
   const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
-  const queue = new Queue(sessions, async () => ({ outcome: { model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png', size: { width: 1, height: 1 } }, record }, stopIssue: 'Worker did not close.' }));
+  const runner = Object.assign(async () => ({ outcome: { model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record } }), {
+    release: vi.fn(async () => { throw new PicPatchSdkError('TERMINATION_FAILED', 'Worker did not close.', { effect: 'unknown' }); }),
+  });
+  const queue = new Queue(sessions, runner);
   await queue.submit(session.id, session.draft, 2); await queue.settled();
   const saved = await sessions.get(session.id);
-  expect(saved.runs.map(run => run.status)).toEqual(['completed', 'queued']);
+  // The warm worker is closed once, after both runs, and its unconfirmed close stops further work.
+  expect(saved.runs.map(run => run.status)).toEqual(['completed', 'completed']); expect(runner.release).toHaveBeenCalledOnce();
+  expect(queue.state.issue).toMatchObject({ code: 'TERMINATION_FAILED' });
+  await expect(queue.submit(session.id, saved.draft, 1)).rejects.toThrow('termination is unconfirmed');
   expect(saved.runs[0]!.record).toEqual(record);
   expect(queue.state.paused).toBe(true);
   await expect(queue.resume(session.id)).rejects.toThrow('termination is unconfirmed');
@@ -85,13 +91,12 @@ it('saves the accepted command and pending target atomically, refusing edits of 
   const [run] = await queue.submit(session.id, { ...session.draft, text: 'Create a quiet garden', seed: 7 }, 1);
   const saved = await new Sessions(root).get(session.id);
   expect(saved.draft).toMatchObject({ text: '', source: run!.id, mode: 'edit', seed: 7 });
-  expect(saved.selection).toEqual([run!.id]);
   expect(saved.runs[0]!.draft).toMatchObject({ text: 'Create a quiet garden', mode: 'generate' });
   await expect(queue.submit(session.id, { ...saved.draft, text: 'Add a bench' }, 1)).rejects.toThrow('not ready');
   expect((await sessions.get(session.id)).runs).toHaveLength(1);
 });
 
-it('branches from the explicit source and restores selection without replaying commands', async () => {
+it('branches from the explicit source and restores the target without replaying commands', async () => {
   const sessions = new Sessions(root), session = await sessions.create();
   const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
   const runner = async () => ({ outcome: { model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 1, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record } });
@@ -103,8 +108,27 @@ it('branches from the explicit source and restores selection without replaying c
   const reopened = await new Sessions(root).get(session.id);
   expect(reopened.runs.map(run => run.parent)).toEqual([undefined, first!.id, first!.id]);
   expect(reopened.runs.map(run => run.draft.text)).toEqual(['A garden', 'Add a bench', 'Add a fountain instead']);
-  expect(reopened.selection).toEqual([third!.id]); expect(reopened.draft.source).toBe(third!.id);
+  expect(reopened.draft.source).toBe(third!.id);
   expect(reopened.runs[1]!.id).toBe(second!.id);
   const idle = new Queue(new Sessions(root), async () => { throw new Error('Must not replay'); });
   await idle.settled(); expect(idle.state.active).toBeUndefined();
+});
+it('skips a listed run that is no longer queued instead of pausing, and resume never re-lists the active run', async () => {
+  const sessions = new Sessions(root); const session = await sessions.create();
+  let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; }); const seen: string[] = [];
+  const queue = new Queue(sessions, async (_session, run) => { seen.push(run.id); await held; return { outcome: refusal }; });
+  const [first, second] = await queue.submit(session.id, session.draft, 2);
+  await vi.waitFor(() => expect(queue.state.active?.runId).toBe(first!.id));
+  await sessions.update(session.id, value => { value.runs.find(run => run.id === second!.id)!.status = 'cancelled'; });
+  await queue.resume(session.id); release(); await queue.settled();
+  expect(seen).toEqual([first!.id]); expect(queue.state.paused).toBe(false); expect(queue.state.issue).toBeUndefined();
+});
+it('keeps a structured pause reason and blocks resource changes until a stray worker is confirmed gone', async () => {
+  const sessions = new Sessions(root); const session = await sessions.create();
+  const queue = new Queue(sessions, async () => { throw new PicPatchSdkError('TERMINATION_FAILED', 'Still running.', { effect: 'unknown' }); });
+  const [run] = await queue.submit(session.id, session.draft, 1); await queue.settled();
+  expect(queue.state.issue).toMatchObject({ code: 'TERMINATION_FAILED' }); expect(queue.busy()).toBe(false);
+  expect(() => queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_collections')).toThrow('termination is unconfirmed');
+  expect(() => queue.use(new Sessions(root))).toThrow('termination is unconfirmed');
+  expect(run).toBeDefined();
 });

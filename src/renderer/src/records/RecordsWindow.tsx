@@ -2,9 +2,9 @@
 // text, newest first, with the selected record's fields and raw detail beside it.
 // Results never refresh on their own; new records only offer Refresh.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { activeLocale, t, useLocale } from '../../shared/i18n/index.ts';
-import type { LogsBridge } from '../../shared/logs-bridge.ts';
-import type { RecordSummary, RecordsQuery } from '../../shared/records.ts';
+import { activeLocale, t, useLocale } from '../../../shared/i18n/index.ts';
+import type { LogsBridge } from '../../../shared/logs-bridge.ts';
+import type { RecordSummary, RecordsQuery } from '../../../shared/records.ts';
 import { applyFont } from '../fonts.ts';
 import { LanguageRevision } from '../i18n.tsx';
 import { isComposing } from '../ime.ts';

@@ -1,5 +1,5 @@
 import { modelReadiness } from './model-readiness.ts';
-import { preference, UiError } from '../shared/i18n/index.ts';
+import { preference, UiError } from '../../shared/i18n/index.ts';
 import { errorRecord } from './records.ts';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -11,13 +11,13 @@ import { Queue } from './queue.ts';
 import { inference } from './inference.ts';
 import { readSettings, saveSettings } from './settings.ts';
 import type { Runner } from './queue.ts';
-import type { Draft } from './types.ts';
+import type { Draft } from '../../shared/session.ts';
 import type { PrepareModelOptions, SdkEvent } from 'picpatchsdk';
 import type { Settings } from './settings.ts';
 export class Application {
   sessions: Sessions;
   queue: Queue;
-  historyIssue?: string | { message: string; notice?: import('../shared/i18n/index.ts').Message };
+  historyIssue?: string | { message: string; notice?: import('../../shared/i18n/index.ts').Message };
   private settingsTail: Promise<unknown> = Promise.resolve();
   private runner(): Runner {
     const run = inference(this.sessions, () => this.settings);
@@ -39,16 +39,17 @@ export class Application {
       return completion;
     };
   }
-  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: () => void, private backup: (path: string, bytes?: Buffer, sha256?: string) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
+  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: (scope?: 'progress') => void, private backup: (path: string, bytes?: Buffer, sha256?: string) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
     this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined);
     this.queue = new Queue(this.sessions, this.runner(), changed);
   }
-  static async open(paths: AppPaths, changed: () => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> { return new Application(paths, await readSettings(paths.config), changed, backup, diagnostic); }
+  static async open(paths: AppPaths, changed: (scope?: 'progress') => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> { return new Application(paths, await readSettings(paths.config), changed, backup, diagnostic); }
   sdkEvents(context: Record<string, unknown> = {}): (event: SdkEvent) => void {
     return event => this.diagnostic(event.level, event.message, { ...context, event });
   }
   async overview() { return { ...await this.sessions.list(), models: listModels(), queue: structuredClone(this.queue.state), historyIssue: typeof this.historyIssue === 'object' ? { message: this.historyIssue.message, notice: this.historyIssue.notice } : this.historyIssue, settings: structuredClone(this.settings), locations: { ...resolveStoragePaths(this.settings.profile.engineDirectory || this.settings.profile.modelsDirectory ? { engineDirectory: this.settings.profile.engineDirectory, modelsDirectory: this.settings.profile.modelsDirectory } : {}), sessionsDirectory: this.sessions.root } }; }
-  async draft(sessionId: string, draft: Draft, selection?: string[]) { validateDraft(draft); return this.sessions.update(sessionId, value => { value.draft = structuredClone(draft); if (selection !== undefined) value.selection = structuredClone(selection); }); }
+  /** Autosave acknowledges only; the renderer already holds the draft it sent. */
+  async draft(sessionId: string, draft: Draft): Promise<void> { const valid = validateDraft(draft); await this.sessions.update(sessionId, value => { value.draft = valid; }); }
   async importImage(sessionId: string, path: string) { const asset = await this.sessions.importImage(sessionId, path); this.backup(await this.sessions.imagePath(sessionId, asset.id), undefined, asset.sha256); return asset; }
   async mask(sessionId: string, bytes: Uint8Array) {
     // Authored mask pixels belong to the GUI; the SDK validates their image semantics on execution.
@@ -70,7 +71,7 @@ export class Application {
   async readiness() { return modelReadiness(this.settings); }
   async models() { return inspectModels({ profile: this.settings.profile, onEvent: this.sdkEvents({ action: 'models' }) }); }
   async prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelOptions, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}, signal?: AbortSignal) {
-    if (this.queue.busy()) throw new UiError('error.finish_or_cancel_queued_work_before_changing_prepared_models');
+    this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_prepared_models');
     const prepared = await prepareModel(modelId, { ...components, onEvent: this.sdkEvents({ action: 'prepare', modelId }), signal, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
     await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
   }
@@ -78,7 +79,7 @@ export class Application {
     return (['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const).some(key => (value[key] || undefined) !== this.settings.profile[key]);
   }
   async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string; uiFont?: string }) {
-    if (this.queue.busy() && this.resourcesChanged(value)) throw new UiError('error.finish_or_cancel_queued_work_before_changing_resource_settings');
+    if (this.resourcesChanged(value)) this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_resource_settings');
     if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new UiError('error.invalid_theme');
     await this.updateSettings(next => {
       for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) {
@@ -95,7 +96,7 @@ export class Application {
     return verifyModel(opened.model.directory, opened.model.manifest, { signal, onEvent: this.sdkEvents({ modelId }) });
   }
   async removeManaged(modelId: string, name: string, signal?: AbortSignal) {
-    if (this.queue.busy()) throw new UiError('error.finish_or_cancel_queued_work_before_removing_models');
+    this.queue.requireIdle('error.finish_or_cancel_queued_work_before_removing_models');
     return removeModel(modelId, name, { profile: this.settings.profile, signal, onEvent: this.sdkEvents({ modelId }) });
   }
   private updateSettings(change: (value: Settings) => void): Promise<void> {
@@ -107,9 +108,10 @@ export class Application {
     this.settingsTail = next.catch(() => {}); return next;
   }
   async collection(directory: string) {
-    if (this.queue.busy()) throw new UiError('error.finish_or_cancel_queued_work_before_changing_collections');
-    const selected = new Sessions(directory, (path, bytes) => this.backup(path, bytes), true); await selected.list();
+    this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_collections');
+    const selected = new Sessions(directory, (path, bytes) => this.backup(path, bytes), true);
+    if ((await selected.list()).unavailable) throw new UiError('error.storage');
     await this.updateSettings(value => { value.sessionsDirectory = directory; });
-    this.sessions = selected; this.queue = new Queue(selected, this.runner(), this.changed);
+    this.queue.use(selected); this.sessions = selected;
   }
 }

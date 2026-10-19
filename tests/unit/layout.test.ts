@@ -2,7 +2,7 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
-import { readPaneState, savePaneState } from '../../src/app/layout-state.ts';
+import { readPaneState, savePaneState } from '../../src/main/core/layout-state.ts';
 import { layout, minimum, railWidth } from '../../src/shared/layout.ts';
 it('keeps pane intent independently of layout clamps and ignores corrupt disposable state', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-layout-')); const path = join(directory, 'state.json');

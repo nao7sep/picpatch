@@ -4,14 +4,14 @@ import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
-import { errorRecord } from '../../src/app/records.ts';
+import { errorRecord } from '../../src/main/core/records.ts';
 it('stores structured events and falls back to a session file when the database is unavailable', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-'));
   try {
     for (const fallback of [false, true]) {
       const directory = join(root, String(fallback)); await mkdir(directory);
       if (fallback) await mkdir(join(directory, 'records.sqlite3'));
-      const worker = new Worker(new URL('../../src/app/records-worker.ts', import.meta.url), { workerData: { root: directory, session: '2026-10-19T00:00:00Z' } });
+      const worker = new Worker(new URL('../../src/main/core/records-worker.ts', import.meta.url), { workerData: { root: directory, session: '2026-10-19T00:00:00Z' } });
       const event = { time: '2026-10-19T00:00:01Z', level: 'info', message: 'Attempt completed.', runId: 'fixture' };
       try {
         await new Promise<void>((resolve, reject) => { worker.on('error', reject); worker.on('message', message => { if (message.written) resolve(); }); worker.postMessage(event); });
@@ -26,7 +26,7 @@ it('keeps the cause chain and stack for diagnostics', () => {
   expect(errorRecord(error)).toMatchObject({ name: 'Error', message: 'outer', stack: expect.any(String), cause: { name: 'TypeError', message: 'inner' } });
 });
 
-import { RecordsReader } from '../../src/app/records-reader.ts';
+import { RecordsReader } from '../../src/main/core/records-reader.ts';
 import { recordsQuery, recordId } from '../../src/shared/records.ts';
 it('validates untrusted query and detail arguments', () => {
   expect(() => recordsQuery({ current: true, level: 'fatal', search: '' })).toThrow();
@@ -37,7 +37,7 @@ it('validates untrusted query and detail arguments', () => {
 });
 it('reads bounded historical pages, filters and full selected details without changing stored events', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-reader-'));
-  const reader = new RecordsReader(root, 'current', new URL('../../src/app/records-reader-worker.ts', import.meta.url));
+  const reader = new RecordsReader(root, 'current', new URL('../../src/main/core/records-reader-worker.ts', import.meta.url));
   try {
     expect(await reader.query({ current: false, level: 'all', search: '' })).toEqual({ records: [], more: false });
     const db = new DatabaseSync(join(root, 'records.sqlite3'));
@@ -54,7 +54,7 @@ it('reads bounded historical pages, filters and full selected details without ch
 });
 it('rejects corrupt history without claiming an empty successful page', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-corrupt-'));
-  const reader = new RecordsReader(root, 'current', new URL('../../src/app/records-reader-worker.ts', import.meta.url));
+  const reader = new RecordsReader(root, 'current', new URL('../../src/main/core/records-reader-worker.ts', import.meta.url));
   try {
     await mkdir(join(root, 'records.sqlite3'));
     await expect(reader.query({ current: false, level: 'all', search: '' })).rejects.toThrow();

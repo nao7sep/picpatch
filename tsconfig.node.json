@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": { "lib": ["ES2024"], "types": ["node"] },
-  "include": ["src/app/**/*.ts", "src/desktop/**/*.ts", "src/shared/**/*.ts", "electron.vite.config.ts"]
+  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "src/shared/**/*.ts", "electron.vite.config.ts"]
 }

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
 import { shortcuts, shortcutCommand, shortcutText, accelerator } from '../../src/shared/shortcuts.ts';
-import { commandShortcuts } from '../../src/renderer/shortcuts.ts';
+import { commandShortcuts } from '../../src/renderer/src/shortcuts.ts';
 import { catalogues } from '../../src/shared/i18n/index.ts';
 afterEach(() => { vi.restoreAllMocks(); document.body.replaceChildren(); });
 it('advertises the bound commands with platform words and accepts both command modifiers', async () => {

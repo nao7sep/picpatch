@@ -4,7 +4,7 @@ vi.mock('node:worker_threads', async () => {
   const { EventEmitter } = await import('node:events');
   return { Worker: class extends EventEmitter { postMessage = vi.fn(); terminate = vi.fn().mockResolvedValue(0); constructor() { super(); workers.push(this); } } };
 });
-import { RecordsReader } from '../../src/app/records-reader.ts';
+import { RecordsReader } from '../../src/main/core/records-reader.ts';
 it('bounds a stalled history read, terminates only the reader and restarts on a later explicit query', async () => {
   vi.useFakeTimers();
   const reader = new RecordsReader('/app', 'launch', '/reader');
