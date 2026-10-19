@@ -178,11 +178,11 @@ main {
   grid-template-rows:auto minmax(0,1fr) auto 132px
 }
 .canvasToolbar {
-  display:flex;
+  display:grid;
+  min-width:0;
   align-items:center;
   gap:8px;
-  padding:8px;
-  flex-wrap:wrap
+  padding:8px
 }
 .canvasToolbar button {
   font-size:12px
@@ -530,11 +530,14 @@ dialog[open] {
 }
 
 
-#canvasActions,.canvasAdjustments {
+#canvasActions,.canvasAdjustments,.imageExports {
   display:flex;
   align-items:center;
   gap:8px;
-  flex-wrap:wrap
+  flex-wrap:nowrap;
+  overflow-x:auto;
+  min-width:0;
+  padding:2px
 }
 #canvasActions:focus-visible {
   outline:2px solid var(--accent)
@@ -895,3 +898,5 @@ kbd {
 #results .result.selected {
   background:color-mix(in srgb,var(--accent) 12%,var(--panel))
 }
+
+.canvasToolbar button,.canvasAdjustments label,.canvasAdjustments select{flex-shrink:0}

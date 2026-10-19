@@ -1,3 +1,4 @@
+import { startupFailureWindow } from './startup-failure.ts';
 import { exportName } from '../shared/export-name.ts';
 import { menuTemplate } from './menu-template.ts';
 import { pythonRuntime } from '../app/engines.ts';
@@ -27,7 +28,8 @@ import { Application } from '../app/service.ts';
 import { minimum } from '../shared/layout.ts';
 import type { Draft } from '../app/types.ts';
 app.setName('PicPatch');
-prepareChromiumLanguage(resolveAppPaths().config);
+let earlyFailure: unknown;
+try { prepareChromiumLanguage(resolveAppPaths().config); } catch (error) { earlyFailure = error; }
 const here = dirname(fileURLToPath(import.meta.url));
 protocol.registerSchemesAsPrivileged([{ scheme: 'picpatch-image', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 let window: BrowserWindow | undefined; let service: Application; let quitting = false;
@@ -36,9 +38,12 @@ let records: Records | undefined;
 let logs: LogsWindow | undefined;
 let recordsReader: RecordsReader | undefined;
 let managed: { controller: AbortController; task: Promise<unknown> } | undefined;
-const paths = await appPaths();
-app.setPath('userData', paths.root); app.setPath('sessionData', join(paths.root, 'browser'));
-await mkdir(join(paths.root, 'browser'), { recursive: true, mode: 0o700 });
+let paths: Awaited<ReturnType<typeof appPaths>>;
+try {
+  paths = await appPaths();
+  app.setPath('userData', paths.root); app.setPath('sessionData', join(paths.root, 'browser'));
+  await mkdir(join(paths.root, 'browser'), { recursive: true, mode: 0o700 });
+} catch (error) { earlyFailure = error; }
 const qualificationIndex = process.argv.indexOf('--smoke-inference');
 const qualification = qualificationIndex < 0 ? undefined : process.argv[qualificationIndex + 1];
 const localizationSmoke = process.argv.includes('--smoke-localization');
@@ -120,13 +125,22 @@ else {
   app.on('activate', () => { if (!backgroundReload || rendererReady) window?.show(); });
   void app.whenReady().then(start).catch(startupFailure);
 }
-// Existing pre-workspace fallback: the app message host is unavailable if startup fails.
 async function startupFailure(error: unknown) {
-  await dialog.showMessageBox({ type: 'error', message: t('ui.picpatch_could_not_start'), detail: errorText(error) });
-  app.exit(1);
+  quitting = true; clearTimeout(smokeTimer); requests.cancelAll();
+  window?.destroy(); logs?.close();
+  await Promise.allSettled([backup?.terminate(), recordsReader?.close(), records?.close()]);
+  if (smoke) { console.error(error); app.exit(1); return; }
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'PicPatch', submenu: [{ label: t('native.quit'), accelerator: 'CmdOrCtrl+Q', click: () => app.exit(1) }] },
+    { label: t('native.edit'), submenu: [{ role: 'copy', label: t('native.copy') }, { role: 'selectAll', label: t('native.selectAll') }] },
+  ]));
+  // Retry starts with a clean process, not duplicate IPC handlers or half-open stores.
+  try { window = await startupFailureWindow(error, nativeTheme.shouldUseDarkColors, () => { app.relaunch(); app.exit(0); }, () => app.exit(1)); }
+  catch (failure) { console.error('Startup failure window could not open.', failure); app.exit(1); }
 }
 function command(id: string) { if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) { focusWorkspaceForCommand(window, id); window.webContents.send('picpatch:command', id); } }
 async function start() {
+  if (earlyFailure) throw earlyFailure;
   await bootstrapLanguage(paths.config);
   records = new Records(paths.root, join(here, 'records-worker.mjs'), () => logs?.changed());
   recordsReader = new RecordsReader(paths.root, records.session, join(here, 'records-reader-worker.mjs'));
@@ -156,7 +170,7 @@ async function start() {
     }
     catch (error) { records?.write(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Command did not complete.', { action, error: errorRecord(error) }); return { ok: false, message: errorText(error), ...(isPicPatchSdkError(error) ? { code: error.code, kind: error.kind, effect: error.effect } : {}), notice: errorNotice(error) }; }
   });
-  paneState = await readPaneState(paths.state);
+  paneState = await readPaneState(paths.state, (await service.sessions.list()).sessions.length > 1);
   nativeTheme.themeSource = service.settings.theme ?? 'system';
   nativeTheme.on('updated', () => { logs?.updateAppearance(); window?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2'); if (rendererReady) window?.webContents.send('picpatch:changed'); });
   menus();
@@ -200,6 +214,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       await storePane({ uiZoom: zoom }).catch(error => records?.write('warn', 'UI zoom could not be retained.', { error: errorRecord(error) })); logs?.updateAppearance(); return;
     }
     case 'locale': return { ...localeState(), uiFont: service.settings.uiFont };
+    case 'modelReadiness': return service.readiness();
     case 'overview': return { ...await service.overview(), resourcesBusy: Boolean(managed) || service.queue.busy(), locale: localeState(), systemDark: systemDark() };
     case 'create': return service.sessions.create(t('session.untitled'));
     case 'get': return service.sessions.get(payload.id);

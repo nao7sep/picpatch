@@ -1,3 +1,4 @@
+import { modelName } from '../shared/model-name.ts';
 import { operationResults } from './operation-results.ts';
 import { modal } from './Modal.ts';
 import { t, term, number, errorText, UiError } from '../shared/i18n/index.ts';
@@ -21,7 +22,13 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
   }
   async function inventory() {
     const inventory = await api.call('models'); const list = el('managedList'); list.replaceChildren();
-    for (const model of inventory.models) { const p = document.createElement('p'); p.textContent = t('common.status', { name: model.id, status: term('status', model.status) }); list.append(p); }
+    const readiness = await api.call('modelReadiness');
+    for (const state of ['ready', 'engineMissing', 'missing']) {
+      const models = overview.models.filter((model: any) => (readiness[model.id] ?? 'missing') === state);
+      if (!models.length) continue;
+      const heading = document.createElement('h3'); heading.textContent = t(`model.${state}`); list.append(heading);
+      for (const model of models) { const p = document.createElement('p'); p.textContent = modelName(model.id); list.append(p); }
+    }
     for (const entry of inventory.entries) {
       const row = document.createElement('div'); row.className = 'row';
       const description = document.createElement('span'); description.textContent = t('management.entry', { model: entry.modelId, revision: entry.name.slice(0, 12), size: number(entry.bytes / 1e9, { maximumFractionDigits: 2 }) });
@@ -29,7 +36,6 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
       remove.onclick = () => { void attempt(`remove:${entry.modelId}:${entry.name}`, () => operation(() => api.call('removeManaged', { modelId: entry.modelId, name: entry.name })), () => t('common.status', { name: entry.modelId, status: t('ui.remove_revision') })); };
       row.append(description, remove); list.append(row);
     }
-    for (const id of Object.keys(overview.settings.registrations)) { const p = document.createElement('p'); p.textContent = t('management.external', { model: id }); list.append(p); }
   }
   async function operation(work: () => Promise<unknown>) {
     if (busy) throw new UiError('ui.a_resource_operation_is_already_running');
@@ -67,8 +73,9 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
   action('manage', async () => {
     shell.open(); issues.localize(); overview = await api.call('overview');
     const select = el<HTMLSelectElement>('manageModel'); select.replaceChildren();
-    for (const model of overview.models) { const option = document.createElement('option'); option.value = model.id; option.textContent = model.id; select.append(option); }
+    for (const model of overview.models) { const option = document.createElement('option'); option.value = model.id; option.textContent = modelName(model.id); select.append(option); }
     select.onchange = selections; selections(); renderLoras(); await inventory();
+    const engines = await api.call('engines', { modelId: field('manageModel').value }); el('engineState').textContent = describe(engines);
   });
   action('cancelManaged', () => api.call('cancelManaged'));
   action('chooseBundle', async () => { const path = await api.call('pickPath'); if (path) { field('bundleDirectory').value = path; components.forEach(key => { field(`component-${key}`).value = ''; }); loras = []; renderLoras(); } });

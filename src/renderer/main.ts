@@ -1,3 +1,5 @@
+import { setupModal } from './SetupModal.ts';
+import { modelName } from '../shared/model-name.ts';
 import { exportModal } from './ExportModal.ts';
 import { appMenu } from './AppMenu.ts';
 import { afterCommand, recoverCommand, commandTargetReady, hasImage, imageCommand, newImage, targetImage } from '../shared/image-command.ts';
@@ -29,6 +31,8 @@ const element = <T extends HTMLElement = HTMLElement>(id: string) => document.ge
 const input = (id: string) => element<HTMLInputElement>(id);
 let session: Session | undefined;
 let overview: any;
+let readiness: Record<string, string> | undefined;
+async function checkModels() { try { readiness = await api.call('modelReadiness'); requestIssues.clear('readiness'); } catch (error) { readiness = {}; requestIssues.show('readiness', error); } if (session) fields(); }
 let selected: string[] = [];
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saves = Promise.resolve();
@@ -59,7 +63,7 @@ function button(text: string, work: () => unknown) { const b = document.createEl
 function collect(): Draft {
   const d = session!.draft;
   d.text = input('text').value;
-  d.modelIds = [...element('modelList').querySelectorAll<HTMLInputElement>('input:checked')].map(item => item.value);
+  d.modelIds = input('compareModels').checked ? [...element('modelList').querySelectorAll<HTMLInputElement>('input:checked')].map(item => item.value) : input('modelChoice').value ? [input('modelChoice').value] : [];
   d.width = Number(input('width').value); d.height = Number(input('height').value);
   if (input('seed').value === '') delete d.seed; else d.seed = Number(input('seed').value);
   for (const field of element('parameters').querySelectorAll<HTMLInputElement | HTMLSelectElement>('input,select,textarea')) {
@@ -85,7 +89,13 @@ function fields() {
   input('expand').checked = Boolean(d.outpaint);
   if (d.outpaint) { input('outWidth').value = String(d.outpaint.width); input('outHeight').value = String(d.outpaint.height); input('outLeft').value = String(d.outpaint.left); input('outTop').value = String(d.outpaint.top); }
   const models = element('modelList'); models.replaceChildren();
-  for (const model of overview.models) { const label = document.createElement('label'); const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = model.id; checkbox.checked = d.modelIds.includes(model.id); label.append(checkbox, document.createTextNode(` ${model.id}`)); checkbox.onchange = () => { scheduleSave(); capabilities(); references(); }; models.append(label); }
+  const choice = element<HTMLSelectElement>('modelChoice'); choice.replaceChildren();
+  input('compareModels').checked = d.modelIds.length > 1; models.hidden = !input('compareModels').checked;
+  for (const model of overview.models) { const option = document.createElement('option'); option.value = model.id; option.textContent = t('model.choice', { name: modelName(model.id), state: t(`model.${readiness?.[model.id] ?? 'checking'}`) }); choice.append(option); }
+  choice.value = d.modelIds[0] ?? overview.models[0]?.id ?? '';
+  choice.onchange = () => { scheduleSave(); capabilities(); references(); };
+  input('compareModels').onchange = () => { models.hidden = !input('compareModels').checked; for (const checkbox of models.querySelectorAll<HTMLInputElement>('input')) checkbox.checked = checkbox.value === choice.value; scheduleSave(); capabilities(); };
+  for (const model of overview.models) { const label = document.createElement('label'); const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = model.id; checkbox.checked = d.modelIds.includes(model.id); label.append(checkbox, document.createTextNode(t('model.choice', { name: modelName(model.id), state: t(`model.${readiness?.[model.id] ?? 'checking'}`) }))); checkbox.onchange = () => { scheduleSave(); capabilities(); references(); }; models.append(label); }
   capabilities(); references();
 }
 function admission() {
@@ -95,6 +105,7 @@ function admission() {
   const caps = overview.models.find((model: any) => model.id === session!.draft.modelIds[0])?.capabilities;
   input('paint').disabled = !session.draft.source || !commandTargetReady(session) || !caps || caps.maskMode === 'none';
   const messages = session.draft.modelIds.flatMap(id => { const model = overview.models.find((m: any) => m.id === id); return model ? incompatibilities(session!.draft, model.capabilities).map(message => t('admission.reason', { model: id, reason: message })) : [t('admission.unavailable', { model: id })]; });
+  if (!readiness || session.draft.modelIds.some(id => readiness![id] !== 'ready')) messages.unshift(t(readiness ? 'model.unready' : 'model.checking'));
   if (!commandTargetReady(session)) messages.unshift(t('conversation.waiting'));
   element('admission').textContent = messages.length ? messages.reduce((first, rest) => t('common.lines', { first, rest })) : '';
   input('run').disabled = !session.draft.text.trim() || !session.draft.modelIds.length || messages.length > 0;
@@ -187,6 +198,8 @@ function results() {
   holder.scrollTop = scrollTop;
 }
 function comparisonVisible(visible: boolean) { comparison.hidden = !visible; input('compareMode').hidden = !visible; input('wipePosition').hidden = !visible || input('compareMode').value !== 'wipe'; element('compare').setAttribute('aria-pressed', String(visible)); }
+function rememberMask() { undo.push(context.getImageData(0,0,mask.width,mask.height)); while (undo.length > 1 && undo.length * mask.width * mask.height * 4 > 64 * 1024 * 1024) undo.shift(); redo.length = 0; maskControls(); }
+function maskControls() { input('undoMask').disabled = undo.length === 0; input('redoMask').disabled = redo.length === 0; }
 function show() {
   if (selected.length !== 2) { comparisonVisible(false); element('imageStage').classList.remove('wipe'); input('wipePosition').hidden = true; }
   const run = session!.runs.find(r => r.id === selected[selected.length - 1]);
@@ -204,6 +217,7 @@ function show() {
   input('compare').disabled = selected.length !== 2 || !selected.every(id => session!.runs.some(run => run.id === id && run.output));
   input('delete').disabled = session!.runs.some(run => ['queued','running'].includes(run.status));
   input('cancelSelected').disabled = !session!.runs.some(run => selected.includes(run.id) && ['queued', 'running'].includes(run.status));
+  maskControls();
   input('reuse').disabled = !run; input('editResult').disabled = !run?.output; input('save').disabled = !run?.output; input('saveSettings').disabled = !run?.output;
 }
 function scale(fit = fitting) {
@@ -246,7 +260,7 @@ function stroke(event: PointerEvent) {
   context.fillStyle = '#ffffff'; context.beginPath(); context.arc(p.x, p.y, context.lineWidth / 2, 0, Math.PI * 2); context.fill();
   lastStroke = p; maskDirty = true; maskRevision++;
 }
-mask.onpointerdown = event => { if (!painting || event.altKey) return; mask.focus(); undo.push(context.getImageData(0,0,mask.width,mask.height)); while (undo.length > 1 && undo.length * mask.width * mask.height * 4 > 64 * 1024 * 1024) undo.shift(); redo.length = 0; drawing = true; lastStroke = undefined; mask.setPointerCapture(event.pointerId); stroke(event); };
+mask.onpointerdown = event => { if (!painting || event.altKey) return; mask.focus(); rememberMask(); drawing = true; lastStroke = undefined; mask.setPointerCapture(event.pointerId); stroke(event); };
 mask.onpointermove = event => { if (drawing) stroke(event); };
 mask.onpointerup = () => { drawing = false; void saveMask().then(flush).catch(error => requestIssues.show('mask', error)); };
 mask.onpointercancel = () => { drawing = false; void saveMask().then(flush).catch(error => requestIssues.show('mask', error)); };
@@ -320,13 +334,13 @@ action('reuse', async () => { await saveMask(); const run = session!.runs.find(r
 action('editResult', async () => { const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run?.output) return; await saveMask(); session!.draft = targetImage(collect(), run.id); fields(); await flush(); show(); });
 action('fit', () => scale(true)); action('actual', () => { input('zoom').value = '100'; scale(false); }); input('zoom').oninput = () => scale(false);
 action('paint', () => { show(); painting = !painting; mask.classList.toggle('painting', painting); element('paint').textContent = painting ? t('ui.finish_painting') : t('ui.paint_mask'); });
-action('clearMask', async () => { context.clearRect(0,0,mask.width,mask.height); delete session!.draft.mask; maskDirty = false; await flush(); });
-action('undoMask', () => { const previous = undo.pop(); if (previous) { redo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(previous,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
+action('clearMask', async () => { rememberMask(); context.clearRect(0,0,mask.width,mask.height); delete session!.draft.mask; maskDirty = false; await flush(); });
+action('undoMask', () => { const previous = undo.pop(); if (previous) { redo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(previous,0,0); maskDirty = true; maskRevision++; maskControls(); return saveMask().then(flush); } });
 mask.addEventListener('keydown', event => {
   if (!painting || isComposing(event) || event.altKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
   event.preventDefault(); event.stopPropagation(); if (!event.repeat) element(event.shiftKey ? 'redoMask' : 'undoMask').click();
 });
-action('redoMask', () => { const next = redo.pop(); if (next) { undo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(next,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
+action('redoMask', () => { const next = redo.pop(); if (next) { undo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(next,0,0); maskDirty = true; maskRevision++; maskControls(); return saveMask().then(flush); } });
 action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { comparisonVisible(false); scale(true); return; } if (selected.length !== 2) throw new UiError('comparison.hint', { modifier: /Mac/.test(navigator.platform) ? 'Cmd' : 'Ctrl' }); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new UiError('ui.choose_completed_results'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); comparisonVisible(true); });
 for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const id = session!.id, runId = selected.at(-1); const includeInputs = sidecar ? await chooseExport() : false; if (includeInputs === undefined) return; const result = await api.call('export', { id, runId, sidecar, includeInputs }); if (result?.status === 'refused') throw Object.assign(new Error(result.message), { code: result.code, effect: result.effect }); if (result?.sidecar?.status === 'failed') throw new UiError('ui.image_saved_its_settings_sidecar_could_not_be_saved'); if (result?.status === 'saved') element('status').textContent = sidecar ? t('ui.image_and_settings_saved') : t('ui.image_saved'); });
 action('delete', async () => { const id = session!.id; if (await api.call('delete', { id })) { session = undefined; await start(); } });
@@ -355,7 +369,8 @@ const modalObserver = new MutationObserver(() => { void api.call('modalState', {
 for (const dialog of document.querySelectorAll('dialog')) modalObserver.observe(dialog, { attributes: true, attributeFilter: ['open'] });
 window.addEventListener('pagehide', () => modalObserver.disconnect(), { once: true });
 shortcutsModal(); toolbar(element('canvasActions'));
-managementModal(api, refresh); const settings = settingsModal(api, refresh, messages); action('showRecords', () => api.call('openLogs'));
+const setup = setupModal(api, async () => { await checkModels(); await refresh(); }, async id => { session!.draft.modelIds = [id]; fields(); await flush(); });
+managementModal(api, async () => { await checkModels(); await refresh(); }); action('fixModels', setup); const settings = settingsModal(api, async () => { await checkModels(); await refresh(); }, messages); action('showRecords', () => api.call('openLogs'));
 let pan: { x: number; y: number; left: number; top: number } | undefined;
 const viewport = element('canvas');
 viewport.addEventListener('pointerdown', event => { if (!event.altKey || drawing) return; pan = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop }; viewport.setPointerCapture(event.pointerId); event.preventDefault(); });
@@ -364,7 +379,7 @@ viewport.addEventListener('pointerup', () => { pan = undefined; }); viewport.add
 sourceDrop(viewport, file => command(async () => { await saveMask(); await flush(); const added: Asset[] = await api.call('import', { id: session!.id, path: api.droppedFile(file) }); session!.draft = targetImage(collect(), added[0]!.id); selected = []; await refresh(); fields(); await flush(); show(); }, 'import').catch(() => {}), error => requestIssues.show(`${session?.id ?? ''}:import`, error));
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 api.onChange(() => { if (!loaded) return; if (refreshTimer) return; refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh().then(() => shellIssues.clear('refresh')).catch(error => shellIssues.show('refresh', error)); }, 100); });
-async function start() { await refresh(); const first = overview.sessions[0] ?? await api.call('create'); await open(first.id); }
+async function start() { await checkModels(); await refresh(); const first = overview.sessions[0] ?? await api.call('create'); await open(first.id); }
 api.onRequest(async request => {
   if (request.kind === 'message') return messages.ask(request.message);
   if (request.kind === 'closeDrafts') return settings.approveQuit();
@@ -408,6 +423,7 @@ async function boot() {
     await start();
     loaded = true; element('startup').hidden = true; element('appViewport').hidden = false;
     await api.call('ready');
+    if (readiness && !Object.values(readiness).includes('ready')) await setup();
   } catch (error) {
     loaded = false;
     console.error('Workspace startup failed.', error);

@@ -18,6 +18,8 @@ beforeEach(async () => {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(canvas as never);
   session = { version: 1, id: '11111111-1111-4111-8111-111111111111', name: 'Test', created: new Date().toISOString(), updated: new Date().toISOString(), assets: [], runs: [], draft: initialDraft() };
   call = vi.fn(async (action: string, payload?: any) => {
+    if (action === 'engines') return { python: { status: 'ready' }, native: { status: 'missing' } };
+    if (action === 'modelReadiness') return Object.fromEntries(models.map(model => [model.id, 'ready']));
     if (action === 'paneState') return { requestWidth: 300, sidebar: false };
     if (action === 'overview') return { sessions: [session], failures: [], models, queue: { paused: false }, settings: { profile: { version: 1 }, registrations: {} }, locations: {} };
     if (action === 'get') return structuredClone(session);
@@ -384,4 +386,20 @@ it('asks for sidecar privacy each time and dismissal does not export', async () 
   field('saveSettings').click(); await vi.waitFor(() => expect((field('exportOptions') as unknown as HTMLDialogElement).open).toBe(true));
   field('includePrompts').checked = true; field('confirmExport').click();
   await vi.waitFor(() => expect(call).toHaveBeenCalledWith('export', expect.objectContaining({ runId: run.id, sidecar: true, includeInputs: true })));
+});
+it('opens explicit setup without acquisitions and refuses known unready choices', async () => {
+  const original = call.getMockImplementation()!;
+  call.mockImplementation(async (action, payload) => action === 'modelReadiness' ? { [models[0]!.id]: 'missing' } : original(action, payload));
+  field('fixModels').click(); await vi.waitFor(() => expect((field('setup') as unknown as HTMLDialogElement).open).toBe(true));
+  expect(call.mock.calls.some(([action]) => ['prepare','installPython','installNative'].includes(action))).toBe(false);
+  field('skipSetup').click(); await vi.waitFor(() => expect((field('setup') as unknown as HTMLDialogElement).open).toBe(false));
+});
+it('keeps mask undo keys scoped to the focused painting canvas', async () => {
+  field('import').click(); await vi.waitFor(() => expect(field('paint').disabled).toBe(false));
+  field('paint').click(); await vi.waitFor(() => expect(field('mask').classList.contains('painting')).toBe(true));
+  field('mask').focus();
+  const undo = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }); field('mask').dispatchEvent(undo);
+  expect(undo.defaultPrevented).toBe(true);
+  field('text').focus(); const textUndo = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }); field('text').dispatchEvent(textUndo);
+  expect(textUndo.defaultPrevented).toBe(false);
 });

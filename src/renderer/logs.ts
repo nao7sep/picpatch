@@ -22,7 +22,7 @@ export function logsView(api: LogsBridge) {
     if (!text) return;
     try {
       const record = JSON.parse(text), event = record.event ?? {};
-      const values = { time: event.time, action: event.action ?? event.verb ?? event.type, session: record.session, model: event.modelId ?? event.model, message: event.message };
+      const values = { time: event.time, action: event.action ?? event.verb ?? event.event?.verb ?? event.type, session: event.sessionId ?? record.session, model: event.modelId ?? event.model ?? event.event?.modelId, message: event.message };
       for (const [key, value] of Object.entries(values)) if (typeof value === 'string') {
         const label = document.createElement('dt'); label.textContent = t(`logs.${key}`);
         const content = document.createElement('dd'); content.textContent = key === 'time' && !Number.isNaN(Date.parse(value)) ? new Intl.DateTimeFormat(activeLocale().format, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(value)) : value;

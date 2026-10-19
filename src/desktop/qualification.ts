@@ -36,9 +36,12 @@ export async function qualifyLocalization(window: import('electron').BrowserWind
         await settle();
         if (innerWidth !== ${width} || innerHeight !== ${height}) throw new Error('Unexpected qualification viewport: ' + innerWidth + 'x' + innerHeight);
         if (matchMedia('(prefers-color-scheme: dark)').matches !== ${theme === 'dark'}) throw new Error('Qualification theme did not apply.');
-        for (const id of ['settings', 'management', 'shortcuts', 'appMessage']) {
+        document.querySelector('#setup[open] #skipSetup')?.click();
+        for (const id of ['settings', 'management', 'shortcuts', 'setup', 'appMessage']) {
           const dialog = document.getElementById(id);
-          const trigger = document.getElementById({ settings: 'settingsButton', management: 'manage', shortcuts: 'shortcutsButton', appMessage: 'sessionsToggle' }[id]);
+          const trigger = document.getElementById({ settings: 'settingsButton', management: 'manage', shortcuts: 'shortcutsButton', setup: 'fixModels', appMessage: 'sessionsToggle' }[id]);
+          const menuAction = ['settings','management','shortcuts'].includes(id);
+          if (menuAction) document.getElementById('menuButton').click();
           trigger.focus();
           const pending = id === 'appMessage' ? window.picpatch.call('delete', { id: 'qualification-cancel-only' }) : undefined;
           if (!pending) trigger.click();
@@ -49,6 +52,7 @@ export async function qualifyLocalization(window: import('electron').BrowserWind
             const native = [...models.options].find(option => option.value.includes('sdxl'));
             if (native) { models.value = native.value; models.dispatchEvent(new Event('change')); }
           }
+          if (id === 'settings') { document.getElementById('resourcesTab').click(); await settle(); document.getElementById('generalTab').click(); }
           for (const details of dialog.querySelectorAll('details')) details.open = true;
           await settle();
           const failures = [];
@@ -61,9 +65,9 @@ export async function qualifyLocalization(window: import('electron').BrowserWind
           if (dialog.scrollWidth > dialog.clientWidth + 2) failures.push(id + ': horizontal overflow');
           for (const control of dialog.querySelectorAll('button')) if (control.getClientRects().length && control.scrollWidth > control.clientWidth + 2) failures.push(control.id + ': clipped caption');
           if (!dialog.contains(document.activeElement)) failures.push(id + ': focus outside modal');
-          document.getElementById({ settings: 'cancelSettings', management: 'closeManagement', shortcuts: 'closeShortcuts', appMessage: 'messageCancel' }[id]).click();
+          document.getElementById({ settings: 'cancelSettings', management: 'closeManagement', shortcuts: 'closeShortcuts', setup: 'skipSetup', appMessage: 'messageCancel' }[id]).click();
           await settle();
-          if (dialog.open || document.activeElement !== trigger) failures.push(id + ': close/focus return failed');
+          if (dialog.open || document.activeElement !== (menuAction ? document.getElementById('menuButton') : trigger)) failures.push(id + ': close/focus return failed');
           if (pending && await pending !== false) throw new Error('Qualification must cancel deletion.');
           if (failures.length) throw new Error(${JSON.stringify(language + ':' + theme + ':' + width + 'x' + height)} + ': ' + failures.join('; '));
         }

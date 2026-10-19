@@ -6,7 +6,7 @@ export function incompatibilities(draft: Draft, capabilities: ModelCapabilities)
   const issues: string[] = [];
   if (draft.mode === 'generate') {
     if (!capabilities.textToImage) issues.push(t('ui.textonly_generation_is_unavailable'));
-    if (draft.source || draft.mask || draft.references.length || draft.outpaint) issues.push(t('ui.switch_to_edit_or_clear_the_editing_inputs'));
+    if (draft.source || draft.mask || draft.references.length || draft.outpaint) issues.push(t('error.input'));
   } else {
     if (!capabilities.instructionEditing) issues.push(t('ui.editing_is_unavailable'));
     if (capabilities.sourceImageRequired && !draft.source) issues.push(t('ui.add_a_source_image'));

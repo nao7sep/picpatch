@@ -1,3 +1,4 @@
+import { modelReadiness } from './model-readiness.ts';
 import { preference, UiError } from '../shared/i18n/index.ts';
 import { errorRecord } from './records.ts';
 import { randomUUID } from 'node:crypto';
@@ -66,6 +67,7 @@ export class Application {
     if (result.status === 'saved' && result.sidecar?.status === 'failed') this.diagnostic('warn', 'Image saved; its settings sidecar could not be saved.', { sessionId, runId, sidecar: result.sidecar });
     return result;
   }
+  async readiness() { return modelReadiness(this.settings); }
   async models() { return inspectModels({ profile: this.settings.profile, onEvent: this.sdkEvents({ action: 'models' }) }); }
   async prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelOptions, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}, signal?: AbortSignal) {
     if (this.queue.busy()) throw new UiError('error.finish_or_cancel_queued_work_before_changing_prepared_models');
