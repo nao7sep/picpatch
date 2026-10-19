@@ -2,7 +2,7 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
-import { readProfile, type SdkEvent, type ProgressEvent } from '../../src/index.ts';
+import { readProfile, type SdkEvent, type ProgressEvent, type RuntimeConfiguration } from '../../src/index.ts';
 import { diagnosticLifetime, withDiagnostics } from '../../src/diagnostics.ts';
 import { emitProgress } from '../../src/operations.ts';
 import packageInfo from '../../package.json' with { type: 'json' };
@@ -20,7 +20,8 @@ it('returns plain results and rejects the retired log option without creating a 
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 it('emits startup once per lifetime with version and runtime configuration, without suppressing other callers', async () => {
-  const lifetime = diagnosticLifetime({ backend: 'mflux' });
+  const configuration: RuntimeConfiguration = { backend: 'mflux' };
+  const lifetime = diagnosticLifetime(configuration);
   const events: SdkEvent[] = [];
   const options = { onEvent: (event: SdkEvent) => events.push(event) };
   await Promise.all([withDiagnostics('one', options, async () => 1, lifetime), withDiagnostics('two', options, async () => 2, lifetime)]);

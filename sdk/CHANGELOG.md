@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Route rejected editor requests through the shared event/error boundary, including invalid plans and calls after disposal. Validate debug options consistently and retain verification events/counts during readiness checks.
+- Add code/message fields to native engine readiness and code/message/effect fields to model component verification and inspection findings. Export the runtime configuration type used by startup events.
+
 - Remove SDK-owned log files and log result fields. Caller-owned onEvent receives stable event names, a startup record with SDK/runtime identity, and opt-in debug progress; onProgress remains independent.
 
 - Add an erased browser-types entry for GUI consumers, keeping browser contracts separate from Node runtime imports.

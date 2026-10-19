@@ -60,3 +60,20 @@ it('does not recurse into a failed asynchronous event hook or wait for progress 
   await Promise.resolve();
   expect(calls).toBe(3);
 });
+
+it('records invalid and disposed editor calls through the same terminal boundary', async () => {
+  const { createEditor } = await import('../../src/index.ts');
+  const editor = createEditor();
+  const events: SdkEvent[] = [];
+  const options = { onEvent: (event: SdkEvent) => events.push(event) };
+  try {
+    await expect(editor.generate({ prompt: '', outputPath: '/unused.png' }, options)).rejects.toMatchObject({ kind: 'invalid' });
+    await expect(editor.edit({ instruction: '', outputPath: '/unused.png' }, options)).rejects.toMatchObject({ kind: 'invalid' });
+    await expect(editor.plan({ prompt: '', outputPath: '/unused.png' }, options)).rejects.toMatchObject({ kind: 'invalid' });
+    expect(events.filter(event => event.name === 'operation.failed').map(event => event.verb)).toEqual(['generate', 'edit', 'plan']);
+    expect(events.filter(event => event.name === 'sdk.startup')).toHaveLength(1);
+    await editor.dispose();
+    await expect(editor.generate({ prompt: 'A bowl.', outputPath: '/unused.png' }, options)).rejects.toMatchObject({ code: 'DISPOSED' });
+    expect(events.at(-1)).toMatchObject({ name: 'operation.failed', error: { code: 'DISPOSED' } });
+  } finally { await editor.dispose(); }
+});

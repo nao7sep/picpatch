@@ -105,9 +105,20 @@ async function validIndex(stream: AsyncIterable<Buffer>, component: ModelCompone
   }
   return valid && maps === 1 && count > 0;
 }
+const componentOutcomes = {
+  verified: { code: 'MODEL_COMPONENT_VERIFIED', message: 'The component matches its declared size and digest.' },
+  missing: { code: 'MODEL_COMPONENT_MISSING', message: 'The component is missing.' },
+  'not-file': { code: 'MODEL_COMPONENT_NOT_FILE', message: 'The component is not a regular file.' },
+  'path-escape': { code: 'MODEL_COMPONENT_PATH_ESCAPE', message: 'The component directory resolves outside the bundle.' },
+  'size-mismatch': { code: 'MODEL_COMPONENT_SIZE_MISMATCH', message: 'The component size does not match the manifest.' },
+  'digest-mismatch': { code: 'MODEL_COMPONENT_DIGEST_MISMATCH', message: 'The component digest does not match the manifest.' },
+  changed: { code: 'MODEL_COMPONENT_CHANGED', message: 'The component changed during verification.' },
+  'invalid-index': { code: 'MODEL_COMPONENT_INVALID_INDEX', message: 'The shard index does not match the declared weights.' },
+} as const satisfies Record<VerifiedComponent['status'], Pick<VerifiedComponent, 'code' | 'message'>>;
+
 async function verifyComponent(root: string, component: ModelComponent, manifest: ModelManifest, options: ModelOperationOptions): Promise<VerifiedComponent> {
   const path = join(root, ...component.path.split('/'));
-  const result = (status: VerifiedComponent['status'], sha256?: string): VerifiedComponent => ({ path: component.path, status, ...(sha256 ? { sha256 } : {}) });
+  const result = (status: VerifiedComponent['status'], sha256?: string): VerifiedComponent => ({ path: component.path, status, ...componentOutcomes[status], effect: 'none', ...(sha256 ? { sha256 } : {}) });
   try {
     // File symlinks support shared cache blobs; directory links cannot escape the selected root.
     if (!inside(root, await realpath(dirname(path)))) return result('path-escape');

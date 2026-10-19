@@ -94,7 +94,12 @@ it('reports incomplete files separately and avoids starting a worker', async () 
   const model = { variant: entry.variant, directory, manifest: entry.manifest };
   expect(await inspectReadiness('/unused/python', model, { verify: true })).toEqual({ files: 'incomplete', integrity: 'invalid', runtime: { status: 'not-checked' }, capabilities: [] });
   await writeFile(join(directory, 'weights.safetensors'), 'x'.repeat(bytes.length));
-  expect(await inspectReadiness('/unused/python', model, { verify: true })).toMatchObject({ files: 'present', integrity: 'invalid', runtime: { status: 'not-checked' } });
+  const events: import('../../src/index.ts').SdkEvent[] = [];
+  const progress: import('../../src/index.ts').ProgressEvent[] = [];
+  expect(await inspectReadiness('/unused/python', model, { verify: true, onEvent: event => events.push(event), onProgress: event => progress.push(event) })).toMatchObject({ files: 'present', integrity: 'invalid', runtime: { status: 'not-checked' } });
+  expect(events.some(event => event.stage === 'verifying')).toBe(true);
+  expect(new Set(events.map(event => event.operationId)).size).toBe(1);
+  expect(progress.at(-1)).toMatchObject({ stage: 'verifying', completed: entry.manifest.components.length, total: entry.manifest.components.length });
 });
 it('validates readiness switches and pre-cancellation before reads', async () => {
   const model = { variant: entry.variant, directory, manifest: entry.manifest };

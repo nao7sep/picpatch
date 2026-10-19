@@ -172,7 +172,7 @@ try {
 
 `PicPatchSdkError` is the single error type. `isPicPatchSdkError` also recognizes its serialized data shape; `errorCodes` exports the code-to-kind mapping. Kinds are `invalid`, `unavailable`, `cancelled` and `internal`. `effect` is `none` or `unknown`, based on evidence of effects, not a promise that retrying is safe. Errors may include `subject`, typed `details` and a local `cause`; retained workspaces are identified by `details.recoveryDirectory`. English error messages are diagnostic, not localized presentation copy. Serialization preserves safe structured cause information rather than raw exception text.
 
-Refusals are results, not exceptions: image operations return an `ImageResult` or `{ status: 'refused', code, ... }`. Check the union before accessing `image`. Sidecar failures and inventory item failures have their own outcomes; a successful parent call is not proof that every optional file or item succeeded. Consult the public types for each verb's result rather than assuming every result has the same `status` field.
+Refusals are results, not exceptions: image operations return an `ImageResult` or `{ status: 'refused', code, ... }`. Check the union before accessing `image`. Native engine readiness includes a stable code and message. Model inspection findings and component verification outcomes also carry a code, message and `effect`. Sidecar failures and inventory item failures have their own outcomes; a successful parent call is not proof that every optional file or item succeeded. Consult the public types for each verb's result rather than assuming every result has the same `status` field.
 
 ## Planning, lifecycle and cancellation
 

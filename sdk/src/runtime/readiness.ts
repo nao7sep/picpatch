@@ -50,7 +50,10 @@ async function inspectReadinessOperation(executable: string, input: LocalEditing
     }
     checkSignal(signal);
     let integrity: ModelReadiness['integrity'] = 'not-verified';
-    if (options.verify && files === 'present') integrity = (await verifyModel(model.directory, model.manifest, { signal, timeoutMs: budget })).status;
+    if (options.verify && files === 'present') {
+      const { verify: _verify, load: _load, ...verification } = operation;
+      integrity = (await verifyModel(model.directory, model.manifest, { ...verification, timeoutMs: budget })).status;
+    }
     if (options.verify && files === 'incomplete') integrity = 'invalid';
     if (files === 'incomplete' || integrity === 'invalid') return { files, integrity, runtime: { status: 'not-checked' }, capabilities: [] };
     if (isNativeVariant(model.variant)) {

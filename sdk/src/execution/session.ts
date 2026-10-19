@@ -24,27 +24,27 @@ export class ImageEditor implements Editor {
 
   edit(input: EditInput | EditImagePlan, options: OperationOptions = {}): Promise<ImageOutcome> {
     const plan = this.acceptPlan(input, 'edit');
-    if (plan instanceof PicPatchSdkError) return Promise.reject(plan);
-    return this.submit(() => plan ? structuredClone(plan.request) : resolveEditRequest(input as EditInput, this.defaults, this.model), options, plan);
+    if (plan instanceof PicPatchSdkError) return this.rejectCall('edit', options, plan);
+    return this.submit('edit', () => plan ? structuredClone(plan.request) : resolveEditRequest(input as EditInput, this.defaults, this.model), options, plan);
   }
 
   generate(input: GenerateInput | GenerateImagePlan, options: OperationOptions = {}): Promise<ImageOutcome> {
     const plan = this.acceptPlan(input, 'generate');
-    if (plan instanceof PicPatchSdkError) return Promise.reject(plan);
-    return this.submit(() => plan ? structuredClone(plan.request) : resolveGenerateRequest(input as GenerateInput, this.defaults, this.model), options, plan);
+    if (plan instanceof PicPatchSdkError) return this.rejectCall('generate', options, plan);
+    return this.submit('generate', () => plan ? structuredClone(plan.request) : resolveGenerateRequest(input as GenerateInput, this.defaults, this.model), options, plan);
   }
 
   plan(input: GenerateInput, options?: OperationOptions): Promise<GenerateImagePlan | OperationRefusal>;
   plan(input: EditInput, options?: OperationOptions): Promise<EditImagePlan | OperationRefusal>;
   plan(input: GenerateInput | EditInput, options?: OperationOptions): Promise<ImagePlan | OperationRefusal>;
   plan(input: GenerateInput | EditInput, options: OperationOptions = {}): Promise<ImagePlan | OperationRefusal> {
-    if (this.lifetime.signal.aborted) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
+    if (this.lifetime.signal.aborted) return this.rejectCall('plan', options, new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
     let request: ImageRequest;
     try {
       validateOperation(options);
       request = structuredClone(input && typeof input === 'object' && 'prompt' in input
         ? resolveGenerateRequest(input, this.defaults, this.model) : resolveEditRequest(input as EditInput, this.defaults, this.model));
-    } catch (error) { const refused = refusal(error); return refused ? Promise.resolve(refused) : Promise.reject(error); }
+    } catch (error) { return this.rejectCall('plan', options, error); }
     const captured = { ...options, signal: AbortSignal.any([this.lifetime.signal, ...(options.signal ? [options.signal] : [])]) };
     const pending = Promise.resolve().then(() => withDiagnostics('plan', captured, operation => withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Image planning timed out.', async signal => {
       try {
@@ -58,28 +58,37 @@ export class ImageEditor implements Editor {
     return accepted;
   }
 
+  /** Admission failures use the same event/error boundary without entering the work queue. */
+  private rejectCall(verb: string, options: OperationOptions, error: unknown): Promise<OperationRefusal> {
+    return withDiagnostics(verb, options, async () => {
+      const refused = refusal(error);
+      if (refused) return refused;
+      throw error;
+    }, this.diagnostics);
+  }
+
   private acceptPlan(value: unknown, operation: ImagePlan['operation']): ImagePlan | PicPatchSdkError | undefined {
     if (!value || typeof value !== 'object' || !('status' in value)) return undefined;
     if (!this.plans.has(value as ImagePlan) || (value as ImagePlan).operation !== operation) return new PicPatchSdkError('INVALID_REQUEST', 'Use an unchanged plan from this editor with its matching verb.');
     return value as ImagePlan;
   }
 
-  private submit(resolve: () => ImageRequest, options: OperationOptions, plan?: ImagePlan): Promise<ImageOutcome> {
-    if (this.lifetime.signal.aborted) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
+  private submit(verb: 'edit' | 'generate', resolve: () => ImageRequest, options: OperationOptions, plan?: ImagePlan): Promise<ImageOutcome> {
+    if (this.lifetime.signal.aborted) return this.rejectCall(verb, options, new PicPatchSdkError('DISPOSED', 'Editor has been disposed.'));
     let request: ImageRequest;
     let budget: number;
     try {
       request = structuredClone(resolve());
       validateOperation(options);
       budget = timeBudget(options.timeoutMs, 1_800_000);
-    } catch (error) { const refused = refusal(error); return refused ? Promise.resolve(refused) : Promise.reject(error); }
+    } catch (error) { return this.rejectCall(verb, options, error); }
     const callerSignal = options.signal;
     const deadline = new AbortController();
     const signal = AbortSignal.any([this.lifetime.signal, deadline.signal, ...(options.signal ? [options.signal] : [])]);
     const captured = { ...options, signal, ...(options.caller ? { caller: structuredClone(options.caller) } : {}) };
     const timer = setTimeout(() => deadline.abort(), budget);
     const previous = this.tail;
-    const operation = Promise.resolve().then(() => withDiagnostics('prompt' in request ? 'generate' : 'edit', captured, async scoped => {
+    const operation = Promise.resolve().then(() => withDiagnostics(verb, captured, async scoped => {
       try {
         await waitForTurn(previous, signal);
         checkCancellation(signal);

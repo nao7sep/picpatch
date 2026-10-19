@@ -23,10 +23,10 @@ beforeEach(async () => {
 });
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }); });
 it('inspects without acquisition and publishes or reuses complete native files', async () => {
-  expect(await inspectNativeEngine({ engineDirectory: directory })).toMatchObject({ status: 'missing' });
+  expect(await inspectNativeEngine({ engineDirectory: directory })).toMatchObject({ status: 'missing', code: 'ENGINE_MISSING', message: expect.any(String) });
   expect(fetcher).not.toHaveBeenCalled();
   const result = await installNativeEngine({ engineDirectory: directory });
-  expect(result).toMatchObject({ status: 'ready', origin: 'installed' });
+  expect(result).toMatchObject({ status: 'ready', code: 'ENGINE_READY', message: expect.any(String), origin: 'installed' });
   expect(await readFile(result.nativeExecutable, 'utf8')).toBe('data');
   expect(await installNativeEngine({ engineDirectory: directory })).toMatchObject({ origin: 'reused', nativeExecutable: result.nativeExecutable });
   expect(fetcher).toHaveBeenCalledTimes(1);
@@ -39,7 +39,7 @@ it('refuses corrupt transport and preserves prior incompatible files', async () 
   fetcher.mockImplementation(async () => new Response('archive'));
   const good = await installNativeEngine({ engineDirectory: directory });
   await writeFile(good.nativeExecutable, 'changed');
-  expect(await inspectNativeEngine({ engineDirectory: directory })).toMatchObject({ status: 'incompatible' });
+  expect(await inspectNativeEngine({ engineDirectory: directory })).toMatchObject({ status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: expect.any(String) });
   await expect(installNativeEngine({ engineDirectory: directory })).rejects.toMatchObject({ code: 'ENGINE_INCOMPATIBLE' });
   expect(await readFile(good.nativeExecutable, 'utf8')).toBe('changed');
   expect(fetcher).toHaveBeenCalledTimes(2);

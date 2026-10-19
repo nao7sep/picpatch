@@ -13,7 +13,7 @@ it('opens a persisted registration using presence alone while explicit verificat
   registration.model.directory = directory;
   await writeFile(join(directory, 'weights.safetensors'), 'test');
   expect(await openModel(registration)).toMatchObject({ status: 'ready', integrity: 'presence-only', compatibility: 'unknown', version: 1 });
-  expect(await verifyModel(directory, registration.model.manifest)).toMatchObject({ status: 'invalid', components: [{ status: 'digest-mismatch' }] });
+  expect(await verifyModel(directory, registration.model.manifest)).toMatchObject({ status: 'invalid', components: [{ status: 'digest-mismatch', code: 'MODEL_COMPONENT_DIGEST_MISMATCH', effect: 'none', message: expect.any(String) }] });
   await writeFile(join(directory, 'weights.safetensors'), 'wrong length');
   expect(await openModel(registration)).toMatchObject({ status: 'refused', code: 'MODEL_INCOMPLETE', issues: [{ code: 'MODEL_FILE_SIZE_MISMATCH', effect: 'none' }] });
   expect(validateModelRegistration(JSON.parse(JSON.stringify(registration)))).toEqual(registration);

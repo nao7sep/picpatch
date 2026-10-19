@@ -19,6 +19,8 @@ export interface ModelInspection {
 export interface ModelIssue {
   path: string;
   code: 'MISSING_FILE' | 'EMPTY_FILE' | 'PARTIAL_FILE' | 'SKIPPED_DIRECTORY_LINK';
+  message: string;
+  effect: 'none';
 }
 
 export interface ModelOperationOptions extends EventOptions {
@@ -42,6 +44,9 @@ export interface ModelVerification {
   components: VerifiedComponent[];
 }
 export interface VerifiedComponent {
+  code: 'MODEL_COMPONENT_VERIFIED' | 'MODEL_COMPONENT_MISSING' | 'MODEL_COMPONENT_NOT_FILE' | 'MODEL_COMPONENT_PATH_ESCAPE' | 'MODEL_COMPONENT_SIZE_MISMATCH' | 'MODEL_COMPONENT_DIGEST_MISMATCH' | 'MODEL_COMPONENT_CHANGED' | 'MODEL_COMPONENT_INVALID_INDEX';
+  message: string;
+  effect: 'none';
   path: string;
   status: 'verified' | 'missing' | 'not-file' | 'path-escape' | 'size-mismatch' | 'digest-mismatch' | 'changed' | 'invalid-index';
   sha256?: string;

@@ -15,8 +15,8 @@ export function validateOperation(options: unknown, extraKeys: string[] = []): v
   const caller = (options as { caller?: unknown }).caller;
   if (caller !== undefined && (!caller || typeof caller !== 'object' || Array.isArray(caller) || Object.keys(caller).some(key => !['name', 'version'].includes(key)) || ['name', 'version'].some(key => typeof (caller as Record<string, unknown>)[key] !== 'string' || !(caller as Record<string, string>)[key]?.trim()))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid caller identity.');
   timeBudget((options as { timeoutMs?: unknown }).timeoutMs, 1_800_000);
-  const value = options as { signal?: unknown; onProgress?: unknown; onEvent?: unknown };
-  if ((value.signal !== undefined && !(value.signal instanceof AbortSignal)) || (value.onProgress !== undefined && typeof value.onProgress !== 'function') || (value.onEvent !== undefined && typeof value.onEvent !== 'function')) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid cancellation signal or progress callback.');
+  const value = options as { signal?: unknown; debug?: unknown; onProgress?: unknown; onEvent?: unknown };
+  if ((value.debug !== undefined && typeof value.debug !== 'boolean') || (value.signal !== undefined && !(value.signal instanceof AbortSignal)) || (value.onProgress !== undefined && typeof value.onProgress !== 'function') || (value.onEvent !== undefined && typeof value.onEvent !== 'function')) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid cancellation signal or progress callback.');
 }
 export function emitProgress<T extends { stage: string; completed?: number; total?: number }>(options: EventOptions & { signal?: AbortSignal; onProgress?: (event: ProgressEvent) => void }, event: T): void {
   checkSignal(options.signal);

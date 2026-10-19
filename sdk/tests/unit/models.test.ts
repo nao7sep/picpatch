@@ -30,6 +30,7 @@ it('reports empty, partial, and missing linked files', async () => {
   await symlink(join(directory, 'missing'), join(path, 'missing.safetensors'));
   const result = await inspectModel(path);
   expect(result.status).toBe('incomplete');
+  for (const issue of result.issues) expect(issue).toMatchObject({ message: expect.any(String), effect: 'none' });
   expect(result.issues.map(i => i.code).sort()).toEqual(['EMPTY_FILE', 'MISSING_FILE', 'PARTIAL_FILE']);
 });
 it('reads cached file links without changing their authored path', async () => {
@@ -55,7 +56,7 @@ it('deduplicates repeated and symlinked roots', async () => {
 it('does not follow nested directory links or cycles', async () => {
   const path = await bundle('model'); await symlink(directory, join(path, 'cycle'));
   const found = await discoverModels([directory]); expect(found.models).toHaveLength(1);
-  expect(found.models[0]!.issues).toEqual([{ path: join(path, 'cycle'), code: 'SKIPPED_DIRECTORY_LINK' }]);
+  expect(found.models[0]!.issues).toEqual([{ path: join(path, 'cycle'), code: 'SKIPPED_DIRECTORY_LINK', message: 'A nested directory link was skipped.', effect: 'none' }]);
 });
 it('distinguishes an empty search from an unreadable root', async () => {
   expect(await discoverModels([directory])).toEqual({ models: [] });

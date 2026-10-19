@@ -13,8 +13,8 @@ import type { EngineOptions } from './types.ts';
 
 import { nativeRelease } from './native-release.ts';
 const nativeRevision = nativeRelease.revision;
-export interface ReadyNativeEngine { status: 'ready'; engineDirectory: string; nativeExecutable: string; revision: string }
-export type NativeEngineInspection = ReadyNativeEngine | { status: 'missing' | 'incompatible'; engineDirectory: string; revision: string };
+export interface ReadyNativeEngine { status: 'ready'; code: 'ENGINE_READY'; message: string; engineDirectory: string; nativeExecutable: string; revision: string }
+export type NativeEngineInspection = ReadyNativeEngine | { status: 'missing' | 'incompatible'; code: 'ENGINE_MISSING' | 'ENGINE_CHECK_FAILED'; message: string; engineDirectory: string; revision: string };
 export interface NativeEngineInstallation extends ReadyNativeEngine { origin: 'installed' | 'reused'; cleanupWarning?: { directory: string; message: string } }
 const missing = (cause: unknown) => ['ENOENT', 'ENOTDIR'].includes((cause as NodeJS.ErrnoException)?.code ?? '');
 function root(options: EngineOptions): string {
@@ -37,22 +37,22 @@ async function inspect(root: string, signal: AbortSignal): Promise<NativeEngineI
   let found = false;
   try {
     const info = await lstat(directory); found = true;
-    if (!info.isDirectory() || info.isSymbolicLink()) return { ...base, status: 'incompatible' };
+    if (!info.isDirectory() || info.isSymbolicLink()) return { ...base, status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: 'The native engine did not pass its readiness checks.' };
     for (const [name, bytes] of Object.entries(nativeRelease.files)) {
       const file = await lstat(join(directory, name));
-      if (!file.isFile() || file.size !== bytes) return { ...base, status: 'incompatible' };
+      if (!file.isFile() || file.size !== bytes) return { ...base, status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: 'The native engine did not pass its readiness checks.' };
     }
-  } catch (cause) { if (missing(cause)) return { ...base, status: found ? 'incompatible' : 'missing' }; throw cause; }
+  } catch (cause) { if (missing(cause)) return { ...base, status: found ? 'incompatible' : 'missing', code: found ? 'ENGINE_CHECK_FAILED' : 'ENGINE_MISSING', message: found ? 'The native engine installation is incomplete.' : 'The native engine is not installed.' }; throw cause; }
   const nativeExecutable = join(directory, 'sd-cli');
   try {
     const output = await runCommand(nativeExecutable, ['--help'], directory, env, signal, 15_000);
     const commit = output.match(/^stable-diffusion\.cpp version [^\n]+, commit ([a-f0-9]{7,40})\b/)?.[1];
-    if (!commit || !nativeRevision.startsWith(commit)) return { ...base, status: 'incompatible' };
+    if (!commit || !nativeRevision.startsWith(commit)) return { ...base, status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: 'The native engine did not pass its readiness checks.' };
   } catch (cause) {
-    if (cause instanceof PicPatchSdkError && ['INSTALL_FAILED', 'ENGINE_UNAVAILABLE'].includes(cause.code)) return { ...base, status: 'incompatible' };
+    if (cause instanceof PicPatchSdkError && ['INSTALL_FAILED', 'ENGINE_UNAVAILABLE'].includes(cause.code)) return { ...base, status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: 'The native engine did not pass its readiness checks.' };
     throw cause;
   }
-  return { ...base, status: 'ready', nativeExecutable };
+  return { ...base, status: 'ready', code: 'ENGINE_READY', message: 'The native engine is ready.', nativeExecutable };
 }
 /** Read-only runtime probe; does not acquire files or load models. */
 export function inspectNativeEngine(options: EngineOptions = {}) {
@@ -123,7 +123,7 @@ async function install(options: EngineOptions): Promise<NativeEngineInstallation
         if (winner.status !== 'ready') throw new PicPatchSdkError('ENGINE_INCOMPATIBLE', 'A conflicting native installation was preserved.');
       }
       await sync(parent);
-      completed = { status: 'ready', engineDirectory: directory, nativeExecutable: join(installation(directory), 'sd-cli'), revision: nativeRevision, origin: 'installed' };
+      completed = { status: 'ready', code: 'ENGINE_READY', message: 'The native engine is ready.', engineDirectory: directory, nativeExecutable: join(installation(directory), 'sd-cli'), revision: nativeRevision, origin: 'installed' };
       await storageCleanup(() => rm(staging, { recursive: true, force: true }));
       return completed;
     } catch (cause) {

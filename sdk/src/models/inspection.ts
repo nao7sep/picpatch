@@ -39,12 +39,12 @@ async function inspect(path: string, options: ModelOperationOptions, verb: 'insp
     const current = pending.pop()!;
     let info;
     try { info = await lstat(current); }
-    catch (error) { if (missing(error) && current !== path) { issues.push({ path: current, code: 'MISSING_FILE' }); continue; } throw error; }
+    catch (error) { if (missing(error) && current !== path) { issues.push({ path: current, code: 'MISSING_FILE', message: 'The model component is missing.', effect: 'none' }); continue; } throw error; }
     check(options);
     if (info.isSymbolicLink()) {
       try { info = await stat(current); }
-      catch (error) { if (missing(error)) { issues.push({ path: current, code: 'MISSING_FILE' }); continue; } throw error; }
-      if (info.isDirectory() && current !== path) { issues.push({ path: current, code: 'SKIPPED_DIRECTORY_LINK' }); continue; }
+      catch (error) { if (missing(error)) { issues.push({ path: current, code: 'MISSING_FILE', message: 'The model component is missing.', effect: 'none' }); continue; } throw error; }
+      if (info.isDirectory() && current !== path) { issues.push({ path: current, code: 'SKIPPED_DIRECTORY_LINK', message: 'A nested directory link was skipped.', effect: 'none' }); continue; }
     }
     check(options);
     if (info.isDirectory()) {
@@ -57,8 +57,8 @@ async function inspect(path: string, options: ModelOperationOptions, verb: 'insp
       const category = kind(current);
       if (!category) continue;
       files.push({ path: current, resolvedPath: await realpath(current), kind: category, bytes: info.size });
-      if (info.size === 0) issues.push({ path: current, code: 'EMPTY_FILE' });
-      if (category === 'partial') issues.push({ path: current, code: 'PARTIAL_FILE' });
+      if (info.size === 0) issues.push({ path: current, code: 'EMPTY_FILE', message: 'The model component is empty.', effect: 'none' });
+      if (category === 'partial') issues.push({ path: current, code: 'PARTIAL_FILE', message: 'The model component appears to be an incomplete download.', effect: 'none' });
     } else if (current === path) {
       throw new PicPatchSdkError('INVALID_REQUEST', 'Select a regular model file or directory.');
     }
