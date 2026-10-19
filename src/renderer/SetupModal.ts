@@ -3,7 +3,7 @@ import { t, number, errorText } from '../shared/i18n/index.ts';
 import { modelName } from '../shared/model-name.ts';
 import type { Bridge } from '../shared/bridge.ts';
 /** Explicit acquisition steps. Opening or skipping setup never changes resources. */
-export function setupModal(api: Bridge, changed: () => Promise<void>, selected: (id: string) => Promise<void>) {
+export function setupModal(api: Bridge, changed: () => Promise<void>, selected: (id: string) => Promise<void>, manage: (id: string) => Promise<void>) {
   const el = <T extends HTMLElement>(id: string) => document.getElementById(id)! as T;
   const surface = el<HTMLDialogElement>('setup'), choice = el<HTMLSelectElement>('setupModel');
   const install = el<HTMLButtonElement>('setupInstall'), prepare = el<HTMLButtonElement>('setupPrepare');
@@ -38,10 +38,14 @@ export function setupModal(api: Bridge, changed: () => Promise<void>, selected: 
   prepare.onclick = () => {
     const model = models.find(model => model.id === choice.value);
     if (model?.acquisition === 'pinned') void run('prepare', { modelId: choice.value, download: true });
-    else { shell.close(); el<HTMLButtonElement>('manage').click(); }
+    else { const id = choice.value; shell.close(); void manage(id).catch(error => { el('setupIssue').textContent = errorText(error); shell.open(); }); }
   };
   el('setupCancel').onclick = () => { void api.call('cancelManaged').catch(error => { el('setupIssue').textContent = errorText(error); }); };
-  el('finishSetup').onclick = () => { if (!busy && states[choice.value] === 'ready') void selected(choice.value).then(() => shell.close(), error => { el('setupIssue').textContent = errorText(error); }); };
+  el('finishSetup').onclick = () => {
+    if (busy || states[choice.value] !== 'ready') return;
+    busy = true; paint();
+    void selected(choice.value).then(() => shell.close(), error => { el('setupIssue').textContent = errorText(error); }).finally(() => { busy = false; paint(); });
+  };
   return async () => {
     const overview = await api.call('overview'); models = overview.models; states = await api.call('modelReadiness');
     choice.replaceChildren();

@@ -65,7 +65,7 @@ export function logsView(api: LogsBridge) {
       render(); if (before !== undefined) list.scrollTop = scroll;
     }
     catch { if (!stopped && revision === queryRevision) { loadFailed = true; fail(); } }
-    finally { if (!stopped && revision === queryRevision) { pending = false; render(); state(); } }
+    finally { if (!stopped && revision === queryRevision) { pending = false; const scroll = list.scrollTop; render(); if (before !== undefined) list.scrollTop = scroll; state(); } }
   }
   function search() { clearTimeout(searchTimer); void load(); }
   element<HTMLFormElement>('searchForm').onsubmit = event => { event.preventDefault(); search(); };

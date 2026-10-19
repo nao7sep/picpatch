@@ -70,13 +70,15 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
       row.append(name, scale, remove); el('loraList').append(row);
     });
   }
-  action('manage', async () => {
+  async function open(modelId?: string) {
     shell.open(); issues.localize(); overview = await api.call('overview');
     const select = el<HTMLSelectElement>('manageModel'); select.replaceChildren();
     for (const model of overview.models) { const option = document.createElement('option'); option.value = model.id; option.textContent = modelName(model.id); select.append(option); }
+    if (modelId && overview.models.some((model: any) => model.id === modelId)) select.value = modelId;
     select.onchange = selections; selections(); renderLoras(); await inventory();
     const engines = await api.call('engines', { modelId: field('manageModel').value }); el('engineState').textContent = describe(engines);
-  });
+  }
+  action('manage', () => open());
   action('cancelManaged', () => api.call('cancelManaged'));
   action('chooseBundle', async () => { const path = await api.call('pickPath'); if (path) { field('bundleDirectory').value = path; components.forEach(key => { field(`component-${key}`).value = ''; }); loras = []; renderLoras(); } });
   for (const key of components) {
@@ -97,4 +99,5 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
   action('verify', () => operation(() => api.call('verify', { modelId: field('manageModel').value })));
   for (const [id, command] of [['installNative','installNative'], ['installPython','installPython'], ['checkEngines','engines']] as const) action(id, () => operation(() => api.call(command, { modelId: field('manageModel').value })));
 
+  return (modelId?: string) => attempt('manage', () => open(modelId));
 }

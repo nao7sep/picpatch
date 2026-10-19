@@ -93,8 +93,14 @@ function fields() {
   input('compareModels').checked = d.modelIds.length > 1; models.hidden = !input('compareModels').checked;
   for (const model of overview.models) { const option = document.createElement('option'); option.value = model.id; option.textContent = t('model.choice', { name: modelName(model.id), state: t(`model.${readiness?.[model.id] ?? 'checking'}`) }); choice.append(option); }
   choice.value = d.modelIds[0] ?? overview.models[0]?.id ?? '';
+  choice.disabled = input('compareModels').checked;
   choice.onchange = () => { scheduleSave(); capabilities(); references(); };
-  input('compareModels').onchange = () => { models.hidden = !input('compareModels').checked; for (const checkbox of models.querySelectorAll<HTMLInputElement>('input')) checkbox.checked = checkbox.value === choice.value; scheduleSave(); capabilities(); };
+  input('compareModels').onchange = () => {
+    const comparing = input('compareModels').checked; models.hidden = !comparing; choice.disabled = comparing;
+    if (comparing) { for (const checkbox of models.querySelectorAll<HTMLInputElement>('input')) checkbox.checked = checkbox.value === choice.value; }
+    else choice.value = models.querySelector<HTMLInputElement>('input:checked')?.value ?? choice.value;
+    scheduleSave(); capabilities(); references();
+  };
   for (const model of overview.models) { const label = document.createElement('label'); const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = model.id; checkbox.checked = d.modelIds.includes(model.id); label.append(checkbox, document.createTextNode(t('model.choice', { name: modelName(model.id), state: t(`model.${readiness?.[model.id] ?? 'checking'}`) }))); checkbox.onchange = () => { scheduleSave(); capabilities(); references(); }; models.append(label); }
   capabilities(); references();
 }
@@ -247,8 +253,8 @@ image.onload = () => {
   mask.width = image.naturalWidth; mask.height = image.naturalHeight; scale();
   const owner = session;
   if (owner && image.dataset.asset === owner.draft.source && owner.draft.mask) {
-    const saved = new Image(); saved.crossOrigin = 'anonymous'; const sourceId = image.dataset.asset;
-    saved.onload = () => { if (image.dataset.asset !== sourceId || drawing || maskDirty) return; context.drawImage(saved, 0, 0); const pixels = context.getImageData(0,0,mask.width,mask.height); for (let i=0;i<pixels.data.length;i+=4) { pixels.data[i+3]=pixels.data[i]!; pixels.data[i]=255; pixels.data[i+1]=255; pixels.data[i+2]=255; } context.putImageData(pixels,0,0); };
+    const saved = new Image(); saved.crossOrigin = 'anonymous'; const sourceId = image.dataset.asset, revision = maskRevision;
+    saved.onload = () => { if (image.dataset.asset !== sourceId || revision !== maskRevision || drawing || maskDirty) return; context.drawImage(saved, 0, 0); const pixels = context.getImageData(0,0,mask.width,mask.height); for (let i=0;i<pixels.data.length;i+=4) { pixels.data[i+3]=pixels.data[i]!; pixels.data[i]=255; pixels.data[i+1]=255; pixels.data[i+2]=255; } context.putImageData(pixels,0,0); };
     saved.src = imageUrl(owner.draft.mask);
   }
 };
@@ -272,7 +278,8 @@ async function persistMask() {
   const ctx = output.getContext('2d')!; ctx.fillStyle = 'black'; ctx.fillRect(0,0,output.width,output.height); ctx.drawImage(mask,0,0);
   const blob = await new Promise<Blob>((resolve, reject) => output.toBlob(blob => blob ? resolve(blob) : reject(new UiError('ui.could_not_encode_mask')), 'image/png'));
   const asset: Asset = await api.call('mask', { id: owner.id, bytes: new Uint8Array(await blob.arrayBuffer()) });
-  owner.draft.mask = asset.id; maskDirty = revision !== maskRevision;
+  // A completed older save must not undo a newer clear or stroke.
+  if (revision === maskRevision) { owner.draft.mask = asset.id; maskDirty = false; }
 }
 async function refresh() {
   overview = await api.call('overview');
@@ -334,7 +341,7 @@ action('reuse', async () => { await saveMask(); const run = session!.runs.find(r
 action('editResult', async () => { const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run?.output) return; await saveMask(); session!.draft = targetImage(collect(), run.id); fields(); await flush(); show(); });
 action('fit', () => scale(true)); action('actual', () => { input('zoom').value = '100'; scale(false); }); input('zoom').oninput = () => scale(false);
 action('paint', () => { show(); painting = !painting; mask.classList.toggle('painting', painting); element('paint').textContent = painting ? t('ui.finish_painting') : t('ui.paint_mask'); });
-action('clearMask', async () => { rememberMask(); context.clearRect(0,0,mask.width,mask.height); delete session!.draft.mask; maskDirty = false; await flush(); });
+action('clearMask', async () => { rememberMask(); context.clearRect(0,0,mask.width,mask.height); delete session!.draft.mask; maskDirty = false; maskRevision++; await flush(); });
 action('undoMask', () => { const previous = undo.pop(); if (previous) { redo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(previous,0,0); maskDirty = true; maskRevision++; maskControls(); return saveMask().then(flush); } });
 mask.addEventListener('keydown', event => {
   if (!painting || isComposing(event) || event.altKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
@@ -342,7 +349,7 @@ mask.addEventListener('keydown', event => {
 });
 action('redoMask', () => { const next = redo.pop(); if (next) { undo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(next,0,0); maskDirty = true; maskRevision++; maskControls(); return saveMask().then(flush); } });
 action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { comparisonVisible(false); scale(true); return; } if (selected.length !== 2) throw new UiError('comparison.hint', { modifier: /Mac/.test(navigator.platform) ? 'Cmd' : 'Ctrl' }); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new UiError('ui.choose_completed_results'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); comparisonVisible(true); });
-for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const id = session!.id, runId = selected.at(-1); const includeInputs = sidecar ? await chooseExport() : false; if (includeInputs === undefined) return; const result = await api.call('export', { id, runId, sidecar, includeInputs }); if (result?.status === 'refused') throw Object.assign(new Error(result.message), { code: result.code, effect: result.effect }); if (result?.sidecar?.status === 'failed') throw new UiError('ui.image_saved_its_settings_sidecar_could_not_be_saved'); if (result?.status === 'saved') element('status').textContent = sidecar ? t('ui.image_and_settings_saved') : t('ui.image_saved'); });
+for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); if (closing) return; const id = session!.id, runId = selected.at(-1); const includeInputs = sidecar ? await chooseExport.choose() : false; if (includeInputs === undefined || closing) return; const result = await api.call('export', { id, runId, sidecar, includeInputs }); if (result?.status === 'refused') throw Object.assign(new Error(result.message), { code: result.code, effect: result.effect }); if (result?.sidecar?.status === 'failed') throw new UiError('ui.image_saved_its_settings_sidecar_could_not_be_saved'); if (result?.status === 'saved') element('status').textContent = sidecar ? t('ui.image_and_settings_saved') : t('ui.image_saved'); });
 action('delete', async () => { const id = session!.id; if (await api.call('delete', { id })) { session = undefined; await start(); } });
 action('collection', async () => { await saveMask(); await flush(); if (await api.call('collection')) { session = undefined; await start(); } });
 async function renameSession() {
@@ -369,8 +376,8 @@ const modalObserver = new MutationObserver(() => { void api.call('modalState', {
 for (const dialog of document.querySelectorAll('dialog')) modalObserver.observe(dialog, { attributes: true, attributeFilter: ['open'] });
 window.addEventListener('pagehide', () => modalObserver.disconnect(), { once: true });
 shortcutsModal(); toolbar(element('canvasActions'));
-const setup = setupModal(api, async () => { await checkModels(); await refresh(); }, async id => { session!.draft.modelIds = [id]; fields(); await flush(); });
-managementModal(api, async () => { await checkModels(); await refresh(); }); action('fixModels', setup); const settings = settingsModal(api, async () => { await checkModels(); await refresh(); }, messages); action('showRecords', () => api.call('openLogs'));
+const manage = managementModal(api, async () => { await checkModels(); await refresh(); });
+const setup = setupModal(api, async () => { await checkModels(); await refresh(); }, async id => { session!.draft.modelIds = [id]; fields(); await flush(); }, manage); action('fixModels', setup); const settings = settingsModal(api, async () => { await checkModels(); await refresh(); }, messages); action('showRecords', () => api.call('openLogs'));
 let pan: { x: number; y: number; left: number; top: number } | undefined;
 const viewport = element('canvas');
 viewport.addEventListener('pointerdown', event => { if (!event.altKey || drawing) return; pan = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop }; viewport.setPointerCapture(event.pointerId); event.preventDefault(); });
@@ -390,7 +397,7 @@ function dispatchCommand(id: string) {
   if (id === 'beginClose' || id === 'endClose' || id === 'shutdown') {
     if (!closing && id !== 'endClose') closeFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     closing = id !== 'endClose';
-    if (closing) messages.dismissAll();
+    if (closing) { messages.dismissAll(); chooseExport.dismiss(); }
     for (const element of document.querySelectorAll<HTMLElement>('body > :not(#appMessage)')) element.inert = id !== 'endClose';
     if (!closing && closeFocus?.isConnected) closeFocus.focus();
     return;
@@ -423,7 +430,7 @@ async function boot() {
     await start();
     loaded = true; element('startup').hidden = true; element('appViewport').hidden = false;
     await api.call('ready');
-    if (readiness && !Object.values(readiness).includes('ready')) await setup();
+    if (readiness && Object.keys(readiness).length && !Object.values(readiness).includes('ready')) await setup().catch(issue);
   } catch (error) {
     loaded = false;
     console.error('Workspace startup failed.', error);

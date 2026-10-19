@@ -60,3 +60,12 @@ it('renders readable structured fields as text with localized severity', async (
   expect(el('recordFields').querySelector('b')).toBeNull();
   expect(el('logsList').textContent).toContain('Warning');
 });
+it('keeps the scroll position when appending with an older selected row focused', async () => {
+  (el('logsList').firstElementChild as HTMLButtonElement).click();
+  vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function (this: HTMLElement) { if (this.parentElement?.id === 'logsList') el('logsList').scrollTop = 0; });
+  el('logsList').scrollTop = 200;
+  vi.mocked(api.query).mockResolvedValueOnce({ records: [{ ...row, id: 20 }], more: false });
+  el('older').click();
+  await vi.waitFor(() => expect(el('logsList').children).toHaveLength(2));
+  expect(el('logsList').scrollTop).toBe(200);
+});

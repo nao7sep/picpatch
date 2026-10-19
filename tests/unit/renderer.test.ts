@@ -403,3 +403,65 @@ it('keeps mask undo keys scoped to the focused painting canvas', async () => {
   field('text').focus(); const textUndo = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }); field('text').dispatchEvent(textUndo);
   expect(textUndo.defaultPrevented).toBe(false);
 });
+it('dismisses pending export disclosure before quit waits for commands', async () => {
+  session.runs.push({ id: '33333333-3333-4333-8333-333333333333', modelId: models[0]!.id, seed: 1, draft: structuredClone(session.draft), status: 'completed', created: new Date().toISOString(), output: 'output.png' }); changed();
+  await vi.waitFor(() => expect(document.querySelector('#results [role=option]')).not.toBeNull());
+  (document.querySelector('#results [role=option]') as HTMLButtonElement).click();
+  await vi.waitFor(() => expect(field('saveSettings').disabled).toBe(false));
+  field('saveSettings').click(); await vi.waitFor(() => expect((field('exportOptions') as unknown as HTMLDialogElement).open).toBe(true));
+  field('includePrompts').checked = true;
+  menuCommand('beginClose'); await request({ kind: 'flush' });
+  expect((field('exportOptions') as unknown as HTMLDialogElement).open).toBe(false);
+  expect(call.mock.calls.some(([action]) => action === 'export')).toBe(false);
+  menuCommand('endClose');
+});
+it('keeps the chosen external model when setup opens manual registration', async () => {
+  const original = call.getMockImplementation()!;
+  const external = { id: 'sdxl', variant: 'sdxl', runtime: { name: 'stable-diffusion.cpp' }, acquisition: 'external', capabilities: {} };
+  call.mockImplementation(async (action, payload) => {
+    if (action === 'overview') return { ...await original(action, payload), models: [{ ...models[0], runtime: { name: 'mflux' }, acquisition: 'pinned' }, external] };
+    if (action === 'engines') return { python: { status: 'ready' }, native: { status: 'ready' } };
+    if (action === 'models') return { models: [], entries: [] };
+    return original(action, payload);
+  });
+  field('fixModels').click(); await vi.waitFor(() => expect((field('setup') as unknown as HTMLDialogElement).open).toBe(true));
+  field('setupModel').value = 'sdxl'; field('setupModel').dispatchEvent(new Event('change'));
+  await vi.waitFor(() => expect(field('setupPrepare').disabled).toBe(false)); field('setupPrepare').click();
+  await vi.waitFor(() => expect(field('manageModel').value).toBe('sdxl'));
+  expect((field('management') as unknown as HTMLDialogElement).open).toBe(true);
+  expect((field('setup') as unknown as HTMLDialogElement).open).toBe(false);
+});
+it('uses the comparison selection when returning to a single model', async () => {
+  const original = call.getMockImplementation()!;
+  const second = { ...models[0], id: 'second-model' };
+  call.mockImplementation(async (action, payload) => action === 'overview' ? { ...await original(action, payload), models: [...models, second] } : original(action, payload));
+  const reads = call.mock.calls.filter(([action]) => action === 'get').length;
+  changed(); await vi.waitFor(() => expect(call.mock.calls.filter(([action]) => action === 'get').length).toBeGreaterThan(reads));
+  // Reopen after the refreshed catalogue arrives.
+  (document.querySelector('#sessionList [role=option]') as HTMLButtonElement).click();
+  await vi.waitFor(() => expect(field('modelChoice').children).toHaveLength(2));
+  field('compareModels').checked = true; field('compareModels').dispatchEvent(new Event('change'));
+  expect(field('modelChoice').disabled).toBe(true);
+  const choices = [...document.querySelectorAll<HTMLInputElement>('#modelList input')];
+  choices[0]!.checked = false; choices[1]!.checked = true; choices[1]!.dispatchEvent(new Event('change'));
+  field('compareModels').checked = false; field('compareModels').dispatchEvent(new Event('change')); await flush();
+  expect(field('modelChoice').disabled).toBe(false); expect(field('modelChoice').value).toBe(second.id); expect(session.draft.modelIds).toEqual([second.id]);
+});
+it('does not restore an older mask when its save completes after Clear mask', async () => {
+  field('import').click(); await vi.waitFor(() => expect(field('paint').disabled).toBe(false));
+  field('paint').click(); await vi.waitFor(() => expect(field('mask').classList.contains('painting')).toBe(true));
+  const mask = field('mask') as unknown as HTMLCanvasElement;
+  Object.assign(mask.getContext('2d')!, { beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(4) })) });
+  mask.setPointerCapture = vi.fn();
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['mask'], { type: 'image/png' })));
+  const original = call.getMockImplementation()!; let complete!: (asset: unknown) => void;
+  call.mockImplementation(async (action, payload) => action === 'mask' ? new Promise(resolve => { complete = resolve; }) : original(action, payload));
+  mask.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, clientX: 1, clientY: 1 }));
+  mask.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 }));
+  await vi.waitFor(() => expect(complete).toBeDefined());
+  const writes = call.mock.calls.filter(([action]) => action === 'draft').length;
+  field('clearMask').click(); await vi.waitFor(() => expect(call.mock.calls.filter(([action]) => action === 'draft').length).toBeGreaterThan(writes));
+  complete({ id: 'old-mask' }); await flush();
+  expect(session.draft.mask).toBeUndefined();
+  expect(call.mock.calls.filter(([action]) => action === 'mask')).toHaveLength(1);
+});

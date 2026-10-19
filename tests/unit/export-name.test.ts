@@ -5,3 +5,8 @@ it('suggests portable names with authored text and a stable image ordinal', () =
   expect(exportName('../bad/name: *', 2)).toBe('..-bad-name- - 2.png');
   expect(exportName('  ... ', 1)).toBe('PicPatch 1.png');
 });
+it('bounds multibyte names by filesystem bytes without splitting Unicode characters', () => {
+  const result = exportName('風景🎨'.repeat(100), 12);
+  expect(new TextEncoder().encode(result).length).toBeLessThanOrEqual(255);
+  expect(result.isWellFormed()).toBe(true); expect(result).toMatch(/ 12\.png$/);
+});

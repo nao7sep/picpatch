@@ -8,5 +8,8 @@ export function exportModal() {
   let answer: boolean | undefined;
   document.getElementById('confirmExport')!.onclick = () => { answer = include.checked; shell.close(); };
   surface.addEventListener('close', () => { const resolve = settle; settle = undefined; resolve?.(answer); });
-  return () => new Promise<boolean | undefined>(resolve => { settle = resolve; answer = undefined; include.checked = false; shell.open(); });
+  return {
+    choose: () => new Promise<boolean | undefined>(resolve => { settle = resolve; answer = undefined; include.checked = false; shell.open(); }),
+    dismiss() { answer = undefined; if (surface.open) shell.close(); },
+  };
 }
