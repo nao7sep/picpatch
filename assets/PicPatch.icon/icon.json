@@ -1,0 +1,41 @@
+{
+  "fill": "none",
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "foreground.png",
+          "name": "foreground",
+          "position": {
+            "scale": 1.2208466019417477,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "background.png",
+          "name": "background"
+        }
+      ],
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

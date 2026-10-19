@@ -52,6 +52,10 @@ if (process.platform === 'darwin') {
   const zip = join(electronZipDir, `electron-v${version}-darwin-${process.arch}.zip`);
   await execute('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', join(root, 'node_modules', 'electron', 'dist', 'Electron.app'), zip]);
 }
-const paths = await packager({ dir: staging, out: join(root, 'dist'), name: 'PicPatch', appBundleId: 'picpatch.desktop', extendInfo: { CFBundleLocalizations: ['en', 'de', 'es', 'fr', 'it', 'pt-BR', 'ru', 'ja', 'ko', 'zh-Hans'] }, platform: process.platform, arch: process.arch, electronVersion: version, ...(electronZipDir ? { electronZipDir } : {}), ...(process.platform === 'darwin' ? { icon } : {}), overwrite: true, asar: false, prune: true });
-if (process.platform === 'darwin') await execute('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', join(paths[0], 'PicPatch.app')]);
+const paths = await packager({ dir: staging, out: join(root, 'dist'), name: 'PicPatch', appBundleId: 'picpatch.desktop', extendInfo: { CFBundleIconName: 'PicPatch', CFBundleLocalizations: ['en', 'de', 'es', 'fr', 'it', 'pt-BR', 'ru', 'ja', 'ko', 'zh-Hans'] }, platform: process.platform, arch: process.arch, electronVersion: version, ...(electronZipDir ? { electronZipDir } : {}), ...(process.platform === 'darwin' ? { icon } : {}), overwrite: true, asar: false, prune: true });
+if (process.platform === 'darwin') {
+  // Reuse the compiled Tahoe catalog; retain our classic ICNS rather than actool's fallback.
+  await cp(join(root, 'assets/Assets.car'), join(paths[0], 'PicPatch.app/Contents/Resources/Assets.car'));
+  await execute('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', join(paths[0], 'PicPatch.app')]);
+}
 console.log(paths[0]);

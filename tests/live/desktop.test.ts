@@ -21,6 +21,13 @@ it('packages and starts the real renderer from outside the checkout without mode
     expect(info.CFBundleName).toBe(metadata.productName); expect(info.CFBundleShortVersionString).toBe(metadata.version);
     const icon = await readFile(join(bundle,'Resources',info.CFBundleIconFile));
     expect(icon.subarray(0,4).toString()).toBe('icns'); expect(icon.readUInt32BE(4)).toBe(icon.length);
+    expect(icon.equals(await readFile(join(root, 'dist/PicPatch.icns')))).toBe(true);
+    expect(info.CFBundleIconName).toBe('PicPatch');
+    const catalog = await readFile(join(bundle, 'Resources/Assets.car'));
+    expect(catalog.equals(await readFile(join(root, 'assets/Assets.car')))).toBe(true);
+    const renditions = JSON.parse((await execute('/usr/bin/assetutil', ['--info', join(bundle, 'Resources/Assets.car')])).stdout);
+    expect(renditions).toEqual(expect.arrayContaining([expect.objectContaining({ AssetType: 'IconImageStack', Name: info.CFBundleIconName })]));
+    await execute('/usr/bin/codesign', ['--verify', '--deep', '--strict', join(bundle, '..')]);
     await execute(executable, ['--smoke'], { cwd: tmpdir(), env: environment, timeout: 25_000 });
     const { readdir } = await import('node:fs/promises');
     const sessions = await readdir(join(home, 'sessions'));
