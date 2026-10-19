@@ -4,7 +4,7 @@ import { catalogues, languages, resolveLocale, useLocale, t, UiError, errorText,
 const literalKeys = ['component.clipL','component.clipG','component.t5','ui.vae','ui.photomaker','ui.ipadapter','ui.controlnet','component.vae','component.photoMaker','component.ipAdapter','component.controlNet'];
 const identical: Record<string, string[]> = {
   de: ['logs.info','control.pose','shortcuts.navigation','ui.prompt','ui.seed','ui.zoom','ui.system','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint'],
-  fr: ['control.pose','shortcuts.navigation','ui.sessions','ui.zoom','role.style','native.services'],
+  fr: ['conversation.image','control.pose','shortcuts.navigation','ui.sessions','ui.zoom','role.style','native.services'],
   es: ['logs.error','control.pose',], ja: [], ko: [], 'zh-Hans': [],
   it: ['logs.debug','run.summary','ui.prompt','ui.seed','ui.zoom','ui.checkpoint','ui.file','conditioning.prompt','component.checkpoint'],
   'pt-BR': ['control.pose','ui.prompt','ui.zoom','ui.checkpoint','conditioning.prompt','component.checkpoint'], ru: [],

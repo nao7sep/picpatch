@@ -401,5 +401,16 @@
   "admission.independent": "Use uma foto por pessoa ou objeto, com no máximo dois no total. Mencione cada um na instrução no formato {reference}.",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "Nova imagem",
+  "conversation.command": "Instrução",
+  "conversation.placeholder": "Descreva uma imagem ou uma alteração",
+  "conversation.options": "Opções de imagem",
+  "conversation.send": "Executar instrução",
+  "conversation.target": "Editando: {name}",
+  "conversation.image": "Imagem {number}",
+  "conversation.from": "Editar imagem {number}",
+  "conversation.references": "Usar as referências anexadas",
+  "conversation.generate": "Criar uma nova imagem",
+  "conversation.waiting": "A imagem de destino ainda não está pronta. Aguarde, selecione outra imagem ou escolha Nova imagem."
 }

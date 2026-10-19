@@ -1,6 +1,6 @@
 /** User-authored names, file labels and raw diagnostics are literal-content boundaries. */
-const literal = '#sessionList, #sourceName, #controlName, #recordLines, #resultInfo, #issue';
-const key = /^(?:ui|native|settings|session|reference|parameter|role|conditioning|class|component|status|stage|management|admission|run|common|error)\.[A-Za-z][\w.]*$/;
+const literal = '#results .commandText, #sessionList, #sourceName, #controlName, #recordLines, #resultInfo, #issue';
+const key = /^(?:conversation|ui|native|settings|session|reference|parameter|role|conditioning|class|component|status|stage|management|admission|run|common|error)\.[A-Za-z][\w.]*$/;
 export function leakedMessages(root: HTMLElement): string[] {
   const leaks: string[] = [];
   function visit(element: Element) {

@@ -399,5 +399,16 @@
   "admission.independent": "대상마다 사진 한 장을 사용하며, 최대 두 대상까지 지정할 수 있습니다. 지시문에서 각 대상을 {reference} 형식으로 언급하세요.",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "새 이미지",
+  "conversation.command": "명령",
+  "conversation.placeholder": "이미지 또는 변경 사항을 설명하십시오",
+  "conversation.options": "이미지 옵션",
+  "conversation.send": "명령 실행",
+  "conversation.target": "편집 대상: {name}",
+  "conversation.image": "이미지 {number}",
+  "conversation.from": "이미지 {number} 편집",
+  "conversation.references": "첨부한 참조 이미지를 사용합니다",
+  "conversation.generate": "새 이미지를 생성합니다",
+  "conversation.waiting": "대상 이미지가 아직 준비되지 않았습니다. 기다리거나 다른 이미지를 선택하거나 ‘새 이미지’를 선택하십시오."
 }

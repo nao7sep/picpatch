@@ -402,5 +402,16 @@
   "admission.independent": "Используйте по одной фотографии для каждого персонажа или объекта, не более двух в сумме. Упомяните каждого в инструкции в формате {reference}.",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "Новое изображение",
+  "conversation.command": "Инструкция",
+  "conversation.placeholder": "Опишите изображение или изменение",
+  "conversation.options": "Параметры изображения",
+  "conversation.send": "Выполнить инструкцию",
+  "conversation.target": "Редактирование: {name}",
+  "conversation.image": "Изображение {number}",
+  "conversation.from": "Редактировать изображение {number}",
+  "conversation.references": "Использовать прикреплённые образцы",
+  "conversation.generate": "Создать новое изображение",
+  "conversation.waiting": "Целевое изображение ещё не готово. Подождите, выберите другое изображение или нажмите «Новое изображение»."
 }

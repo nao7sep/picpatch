@@ -400,5 +400,16 @@
   "admission.independent": "Use one photo per subject, up to two subjects. Mention each subject as {reference} in the instruction.",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "New image",
+  "conversation.command": "Command",
+  "conversation.placeholder": "Describe an image or a change",
+  "conversation.options": "Image options",
+  "conversation.send": "Run command",
+  "conversation.target": "Editing: {name}",
+  "conversation.image": "Image {number}",
+  "conversation.from": "Editing image {number}",
+  "conversation.references": "Use attached references",
+  "conversation.generate": "Create a new image",
+  "conversation.waiting": "The target image is not ready. Wait, select another image, or choose New image."
 }

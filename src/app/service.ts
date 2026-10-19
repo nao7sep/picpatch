@@ -47,7 +47,7 @@ export class Application {
     return event => this.diagnostic(event.level, event.message, { ...context, event });
   }
   async overview() { return { ...await this.sessions.list(), models: listModels(), queue: structuredClone(this.queue.state), historyIssue: typeof this.historyIssue === 'object' ? { message: this.historyIssue.message, notice: this.historyIssue.notice } : this.historyIssue, settings: structuredClone(this.settings), locations: { ...resolveStoragePaths(this.settings.profile.engineDirectory || this.settings.profile.modelsDirectory ? { engineDirectory: this.settings.profile.engineDirectory, modelsDirectory: this.settings.profile.modelsDirectory } : {}), sessionsDirectory: this.sessions.root } }; }
-  async draft(sessionId: string, draft: Draft) { validateDraft(draft); return this.sessions.update(sessionId, value => { value.draft = structuredClone(draft); }); }
+  async draft(sessionId: string, draft: Draft, selection?: string[]) { validateDraft(draft); return this.sessions.update(sessionId, value => { value.draft = structuredClone(draft); if (selection !== undefined) value.selection = structuredClone(selection); }); }
   async importImage(sessionId: string, path: string) { const asset = await this.sessions.importImage(sessionId, path); this.backup(await this.sessions.imagePath(sessionId, asset.id), undefined, asset.sha256); return asset; }
   async mask(sessionId: string, bytes: Uint8Array) {
     // Authored mask pixels belong to the GUI; the SDK validates their image semantics on execution.

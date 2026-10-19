@@ -401,5 +401,16 @@
   "admission.independent": "Usa una foto por sujeto, con un máximo de dos sujetos. Menciona cada sujeto en las instrucciones con el formato {reference}.",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "Nueva imagen",
+  "conversation.command": "Instrucción",
+  "conversation.placeholder": "Describe una imagen o un cambio",
+  "conversation.options": "Opciones de imagen",
+  "conversation.send": "Ejecutar instrucción",
+  "conversation.target": "Editando: {name}",
+  "conversation.image": "Imagen {number}",
+  "conversation.from": "Editar imagen {number}",
+  "conversation.references": "Usar las referencias adjuntas",
+  "conversation.generate": "Crear una nueva imagen",
+  "conversation.waiting": "La imagen de destino aún no está lista. Espera, selecciona otra imagen o elige Nueva imagen."
 }

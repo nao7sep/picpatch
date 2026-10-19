@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { ImageOutcome, ProgressEvent, SdkEvent } from 'picpatchsdk';
 import type { Draft, Run } from './types.ts';
 import { Sessions, validateDraft } from './sessions.ts';
+import { afterCommand, commandTargetReady, imageCommand } from '../shared/image-command.ts';
 
 export type RunEvents = { signal: AbortSignal; onProgress: (event: ProgressEvent) => void; onEvent: (event: SdkEvent) => void };
 export interface RunCompletion { outcome: ImageOutcome; stopIssue?: string }
@@ -15,14 +16,21 @@ export class Queue {
   private controller: AbortController | undefined;
   state: QueueState = { paused: false };
   constructor(private sessions: Sessions, private run: Runner, private changed: () => void = () => {}) {}
-  async submit(sessionId: string, draft: Draft, samples: number, parent?: string): Promise<Run[]> {
-    validateDraft(draft);
+  async submit(sessionId: string, draft: Draft, samples: number): Promise<Run[]> {
+    draft = imageCommand(validateDraft(draft));
     if (!Number.isSafeInteger(samples) || samples < 1 || samples > 100 || !draft.modelIds.length) throw new Error('Choose 1–100 samples and at least one model.');
     // The same sample seed across selected models makes the comparison intent visible, not identical noise.
     const seeds = Array.from({ length: samples }, (_, i) => draft.seed === undefined ? randomInt(0, 2 ** 32) : (draft.seed + i) % 2 ** 32);
     const created = new Date().toISOString();
-    const runs = seeds.flatMap(seed => draft.modelIds.map(modelId => ({ id: randomUUID(), modelId, seed, draft: structuredClone(draft), ...(parent ? { parent } : {}), status: 'queued' as const, created })));
-    await this.sessions.update(sessionId, session => { session.runs.push(...runs); });
+    const runs: Run[] = seeds.flatMap(seed => draft.modelIds.map(modelId => ({ id: randomUUID(), modelId, seed, draft: structuredClone(draft), status: 'queued' as const, created })));
+    await this.sessions.update(sessionId, session => {
+      if (!commandTargetReady(session, draft)) throw new Error('The target image is not ready. Wait, select another image, or choose New image.');
+      const parent = session.runs.find(run => run.id === draft.source && run.output)?.id;
+      if (parent) runs.forEach(run => { run.parent = parent; });
+      session.runs.push(...runs);
+      session.draft = afterCommand(draft, runs[0]!.id);
+      session.selection = [runs[0]!.id];
+    });
     this.pending.push(...runs.map(run => ({ sessionId, runId: run.id })));
     this.changed(); this.start(); return structuredClone(runs);
   }

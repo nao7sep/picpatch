@@ -400,5 +400,16 @@
   "admission.independent": "Verwenden Sie ein Foto pro Motiv und höchstens zwei Motive. Nennen Sie jedes Motiv in der Anweisung im Format {reference}.",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "Neues Bild",
+  "conversation.command": "Anweisung",
+  "conversation.placeholder": "Beschreiben Sie ein Bild oder eine Änderung",
+  "conversation.options": "Bildoptionen",
+  "conversation.send": "Anweisung ausführen",
+  "conversation.target": "Bearbeiten: {name}",
+  "conversation.image": "Bild {number}",
+  "conversation.from": "Bild {number} bearbeiten",
+  "conversation.references": "Angehängte Referenzbilder verwenden",
+  "conversation.generate": "Ein neues Bild erstellen",
+  "conversation.waiting": "Das Zielbild ist noch nicht bereit. Warten Sie, wählen Sie ein anderes Bild oder wählen Sie „Neues Bild“."
 }

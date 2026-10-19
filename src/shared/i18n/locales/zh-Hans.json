@@ -399,5 +399,16 @@
   "admission.independent": "每个主体使用一张照片，最多两个主体。在指令中以 {reference} 的格式提及每个主体。",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "新建图像",
+  "conversation.command": "指令",
+  "conversation.placeholder": "描述图像或修改内容",
+  "conversation.options": "图像选项",
+  "conversation.send": "执行指令",
+  "conversation.target": "正在编辑：{name}",
+  "conversation.image": "图像 {number}",
+  "conversation.from": "编辑图像 {number}",
+  "conversation.references": "使用附加的参考图像",
+  "conversation.generate": "创建新图像",
+  "conversation.waiting": "目标图像尚未就绪。请等待、选择其他图像，或选择“新建图像”。"
 }

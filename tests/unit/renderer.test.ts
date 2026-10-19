@@ -9,6 +9,7 @@ let session: Session;
 let call: ReturnType<typeof vi.fn<(action: string, payload?: any) => Promise<any>>>;
 let flush: () => Promise<void>;
 let request: (request: import('../../src/shared/messages.ts').RendererRequest) => Promise<unknown>;
+let changed: () => void;
 let menuCommand: (id: string) => void;
 beforeEach(async () => {
   vi.resetModules();
@@ -20,10 +21,14 @@ beforeEach(async () => {
     if (action === 'paneState') return { requestWidth: 300, sidebar: false };
     if (action === 'overview') return { sessions: [session], failures: [], models, queue: { paused: false }, settings: { profile: { version: 1 }, registrations: {} }, locations: {} };
     if (action === 'get') return structuredClone(session);
-    if (action === 'draft') { session.draft = structuredClone(payload.draft); return session; }
-    if (action === 'import') return [{ id: '22222222-2222-4222-8222-222222222222', name: 'photo.png' }];
+    if (action === 'draft') { session.draft = structuredClone(payload.draft); session.selection = payload.selection; return session; }
+    if (action === 'import') { const asset = { id: '22222222-2222-4222-8222-222222222222', name: 'photo.png', file: 'assets/photo.png', bytes: 1, sha256: '0'.repeat(64) }; session.assets.push(asset); return [asset]; }
+    if (action === 'submit') {
+      const run = { id: '33333333-3333-4333-8333-333333333333', modelId: payload.draft.modelIds[0], seed: 42, draft: structuredClone(payload.draft), status: 'queued' as const, created: new Date().toISOString() };
+      session.runs.push(run); return [run];
+    }
   });
-  window.picpatch = { call, onChange: () => () => {}, onCommand: listener => { menuCommand = listener; return () => {}; }, onRequest: listener => { flush = async () => { await listener({ kind: 'flush' }); }; request = listener; }, droppedFile: () => '/fixture/photo.png' };
+  window.picpatch = { call, onChange: listener => { changed = listener; return () => {}; }, onCommand: listener => { menuCommand = listener; return () => {}; }, onRequest: listener => { flush = async () => { await listener({ kind: 'flush' }); }; request = listener; }, droppedFile: () => '/fixture/photo.png' };
   await import('../../src/renderer/main.ts');
   await vi.waitFor(() => expect(call).toHaveBeenCalledWith('ready'));
 });
@@ -37,12 +42,13 @@ it('keeps reference edits attached after changing prompt text', async () => {
   name.value = 'person'; name.dispatchEvent(new Event('change')); await flush();
   expect(session.draft.references[0]!.id).toBe('person'); expect(session.draft.text).toBe('New draft');
 });
-it('does not silently submit edit inputs as generation', async () => {
+it('uses attached references as explicit edit inputs without a mode switch', async () => {
   field('addReference').click(); await vi.waitFor(() => expect(document.querySelector('#references input')).not.toBeNull());
   field('text').value = 'Draft'; field('text').dispatchEvent(new Event('input'));
-  expect(field('run').disabled).toBe(true);
-  expect(document.getElementById('admission')!.textContent).toContain('Switch to Edit');
-  field('run').click(); expect(call.mock.calls.some(([action]) => action === 'submit')).toBe(false);
+  expect(field('run').disabled).toBe(false);
+  field('run').click();
+  await vi.waitFor(() => expect(call).toHaveBeenCalledWith('submit', expect.objectContaining({ draft: expect.objectContaining({ mode: 'edit', text: 'Draft' }) })));
+  await flush();
 });
 it('changes interface language without changing authored draft content or selected models', async () => {
   field('text').value = '私の画像 prompt'; field('text').dispatchEvent(new Event('input')); await flush();
@@ -282,4 +288,36 @@ it('passes selected native text encoders through local model registration', asyn
   field('component-checkpoint').value = 'sd35.safetensors';
   field('register').click();
   await vi.waitFor(() => expect(call).toHaveBeenCalledWith('prepare', expect.objectContaining({ modelId: 'sd35-large', components: { clipL: 'encoders/clip-l.safetensors', clipG: 'encoders/clip-g.safetensors', t5: 'encoders/t5.safetensors' } })));
+});
+
+it('keeps the next instruction during inference, selects earlier images to branch and starts independent commands', async () => {
+  field('text').value = 'A garden'; field('text').dispatchEvent(new Event('input')); field('run').click();
+  await vi.waitFor(() => expect(field('text').value).toBe(''));
+  expect(field('sourceName').textContent).toContain('Image 1');
+  field('text').value = 'Add a bench'; field('text').dispatchEvent(new Event('input'));
+  expect(field('run').disabled).toBe(true);
+  expect(field('admission').textContent).toContain('not ready');
+  session.runs[0]!.output = 'outputs/first.png'; session.runs[0]!.status = 'completed'; changed();
+  await vi.waitFor(() => expect(field('run').disabled).toBe(false));
+  expect(field('text').value).toBe('Add a bench'); expect(field('paint').disabled).toBe(false);
+  expect(field('results').textContent).toContain('A garden');
+  field('clearSource').click(); await vi.waitFor(() => expect(field('sourceName').textContent).toBe('Create a new image'));
+  expect(field('text').value).toBe('Add a bench');
+  (document.querySelector('#results button') as HTMLButtonElement).click();
+  await vi.waitFor(() => expect(field('sourceName').textContent).toContain('Image 1'));
+  await flush();
+  expect(session.draft.source).toBe(session.runs[0]!.id); expect(session.selection).toEqual([session.runs[0]!.id]);
+  expect(session.draft.text).toBe('Add a bench'); expect(session.runs).toHaveLength(1);
+});
+
+it('keeps a failed command and its attachments for correction, and never consumes the draft when submission fails', async () => {
+  field('addReference').click(); await vi.waitFor(() => expect(session.assets).toHaveLength(1));
+  field('text').value = 'ui.settings'; field('text').dispatchEvent(new Event('input'));
+  const previous = call.getMockImplementation()!;
+  call.mockImplementation(async (action, payload) => { if (action === 'submit') throw new Error('Unavailable'); return previous(action, payload); });
+  field('run').click(); await vi.waitFor(() => expect(field('requestIssues').hidden).toBe(false));
+  expect(field('text').value).toBe('ui.settings'); expect(document.querySelector('#references img')).not.toBeNull();
+  expect(session.runs).toHaveLength(0);
+  const literal = document.createElement('div'); literal.innerHTML = '<div id="results"><div class="commandText">ui.settings</div><span>conversation.send</span></div>';
+  expect(leakedMessages(literal)).toEqual(['conversation.send']);
 });

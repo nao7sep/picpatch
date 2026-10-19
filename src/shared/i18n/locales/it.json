@@ -401,5 +401,16 @@
   "admission.independent": "Usa una foto per soggetto, fino a un massimo di due soggetti. Indica ogni soggetto nelle istruzioni nel formato {reference}.",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "Nuova immagine",
+  "conversation.command": "Istruzione",
+  "conversation.placeholder": "Descrivi un’immagine o una modifica",
+  "conversation.options": "Opzioni immagine",
+  "conversation.send": "Esegui istruzione",
+  "conversation.target": "Modifica: {name}",
+  "conversation.image": "Immagine {number}",
+  "conversation.from": "Modifica immagine {number}",
+  "conversation.references": "Usa i riferimenti allegati",
+  "conversation.generate": "Crea una nuova immagine",
+  "conversation.waiting": "L’immagine di destinazione non è ancora pronta. Attendi, seleziona un’altra immagine o scegli Nuova immagine."
 }

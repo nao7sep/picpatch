@@ -401,5 +401,16 @@
   "admission.independent": "Utilisez une photo par sujet, pour deux sujets au maximum. Mentionnez chaque sujet dans les instructions au format {reference}.",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "Nouvelle image",
+  "conversation.command": "Instruction",
+  "conversation.placeholder": "Décrivez une image ou une modification",
+  "conversation.options": "Options de l’image",
+  "conversation.send": "Exécuter l’instruction",
+  "conversation.target": "Modification\u00a0: {name}",
+  "conversation.image": "Image {number}",
+  "conversation.from": "Modifier l’image {number}",
+  "conversation.references": "Utiliser les références jointes",
+  "conversation.generate": "Créer une nouvelle image",
+  "conversation.waiting": "L’image cible n’est pas encore prête. Patientez, sélectionnez une autre image ou choisissez Nouvelle image."
 }

@@ -399,5 +399,16 @@
   "admission.independent": "被写体ごとに写真を1枚、最大2つの被写体を指定してください。指示にはそれぞれの被写体を {reference} の形式で記述してください。",
   "component.clipL": "CLIP-L",
   "component.clipG": "CLIP-G",
-  "component.t5": "T5"
+  "component.t5": "T5",
+  "conversation.newImage": "新しい画像",
+  "conversation.command": "指示",
+  "conversation.placeholder": "画像や変更内容を入力してください",
+  "conversation.options": "画像のオプション",
+  "conversation.send": "実行",
+  "conversation.target": "編集対象：{name}",
+  "conversation.image": "画像 {number}",
+  "conversation.from": "画像 {number} を編集",
+  "conversation.references": "添付した参照画像を使用します",
+  "conversation.generate": "新しい画像を生成します",
+  "conversation.waiting": "対象の画像はまだ使用できません。待つか、別の画像を選択するか、「新しい画像」を選んでください。"
 }

@@ -42,6 +42,8 @@ export function validateSession(value: unknown): Session {
     if (run.record) validateArtifactRecord(run.record);
     if (run.status === 'completed' && (!run.output || !run.record)) throw new Error('Incomplete saved result.');
   }
+  if (session.selection !== undefined && (!Array.isArray(session.selection) || new Set(session.selection).size !== session.selection.length || session.selection.some(key => !runs.has(key)))) throw new Error('Invalid selected results.');
+  for (const run of session.runs) if (run.parent !== undefined && (!runs.has(run.parent) || run.parent === run.id)) throw new Error('Invalid parent image.');
   const check = (draft: Draft) => { for (const key of [draft.source, draft.mask, draft.control?.image, ...draft.references.flatMap(group => group.images)]) if (key !== undefined && !ids.has(key) && !runs.has(key)) throw new Error('Session references a missing image.'); };
   check(session.draft); session.runs.forEach(run => check(run.draft));
   return structuredClone(session);

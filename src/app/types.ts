@@ -17,6 +17,8 @@ export interface Run {
 export interface Session {
   version: 1; id: string; name: string; created: string; updated: string;
   draft: Draft; assets: Asset[]; runs: Run[];
+  /** Selected history results, independent of the command's explicit source image. */
+  selection?: string[];
 }
 export interface SessionSummary { id: string; name: string; updated: string; results: number }
 export const initialDraft = (): Draft => ({ mode: 'generate', text: '', modelIds: ['flux2-klein-4b-4bit'], width: 1024, height: 1024, parameters: {}, references: [] });

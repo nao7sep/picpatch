@@ -78,3 +78,33 @@ it('keeps diagnostic events separate from stage and progress display', async () 
   await queue.submit(session.id, session.draft, 1); await queue.settled();
   expect((await sessions.get(session.id)).runs[0]!.status).toBe('refused');
 });
+
+it('saves the accepted command and pending target atomically, refusing edits of unavailable results', async () => {
+  const sessions = new Sessions(root), session = await sessions.create();
+  const queue = new Queue(sessions, async () => ({ outcome: refusal })); queue.state.paused = true;
+  const [run] = await queue.submit(session.id, { ...session.draft, text: 'Create a quiet garden', seed: 7 }, 1);
+  const saved = await new Sessions(root).get(session.id);
+  expect(saved.draft).toMatchObject({ text: '', source: run!.id, mode: 'edit', seed: 7 });
+  expect(saved.selection).toEqual([run!.id]);
+  expect(saved.runs[0]!.draft).toMatchObject({ text: 'Create a quiet garden', mode: 'generate' });
+  await expect(queue.submit(session.id, { ...saved.draft, text: 'Add a bench' }, 1)).rejects.toThrow('not ready');
+  expect((await sessions.get(session.id)).runs).toHaveLength(1);
+});
+
+it('branches from the explicit source and restores selection without replaying commands', async () => {
+  const sessions = new Sessions(root), session = await sessions.create();
+  const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
+  const runner = async () => ({ outcome: { model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 1, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record } });
+  const queue = new Queue(sessions, runner);
+  const [first] = await queue.submit(session.id, { ...session.draft, text: 'A garden' }, 1); await queue.settled();
+  const draft = { ...(await sessions.get(session.id)).draft, text: 'Add a bench' };
+  const [second] = await queue.submit(session.id, draft, 1); await queue.settled();
+  const [third] = await queue.submit(session.id, { ...draft, text: 'Add a fountain instead' }, 1); await queue.settled();
+  const reopened = await new Sessions(root).get(session.id);
+  expect(reopened.runs.map(run => run.parent)).toEqual([undefined, first!.id, first!.id]);
+  expect(reopened.runs.map(run => run.draft.text)).toEqual(['A garden', 'Add a bench', 'Add a fountain instead']);
+  expect(reopened.selection).toEqual([third!.id]); expect(reopened.draft.source).toBe(third!.id);
+  expect(reopened.runs[1]!.id).toBe(second!.id);
+  const idle = new Queue(new Sessions(root), async () => { throw new Error('Must not replay'); });
+  await idle.settled(); expect(idle.state.active).toBeUndefined();
+});
