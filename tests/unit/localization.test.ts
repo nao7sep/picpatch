@@ -3,8 +3,8 @@ import { expect, it } from 'vitest';
 import { catalogues, languages, resolveLocale, useLocale, t, UiError, errorText, errorNotice, number } from '../../src/shared/i18n/index.ts';
 const literalKeys = ['ui.vae','ui.photomaker','ui.ipadapter','ui.canny_controlnet','component.vae','component.photoMaker','component.ipAdapter','component.controlNet'];
 const identical: Record<string, string[]> = {
-  de: ['ui.prompt','ui.seed','ui.zoom','ui.system','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint'],
-  fr: ['ui.sessions','ui.zoom','role.style','native.services'],
+  de: ['shortcuts.navigation','ui.prompt','ui.seed','ui.zoom','ui.system','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint'],
+  fr: ['shortcuts.navigation','ui.sessions','ui.zoom','role.style','native.services'],
   es: [], ja: [], ko: [], 'zh-Hans': [],
   it: ['run.summary','ui.prompt','ui.seed','ui.zoom','ui.checkpoint','ui.file','conditioning.prompt','component.checkpoint'],
   'pt-BR': ['ui.prompt','ui.zoom','ui.checkpoint','conditioning.prompt','component.checkpoint'], ru: [],

@@ -27,7 +27,7 @@ beforeEach(async () => {
   await import('../../src/renderer/main.ts');
   await vi.waitFor(() => expect(call).toHaveBeenCalledWith('ready'));
 });
-afterEach(async () => { if (flush) await flush(); expect(leakedMessages(document.body)).toEqual([]); vi.restoreAllMocks(); document.body.replaceChildren(); });
+afterEach(async () => { window.dispatchEvent(new Event('pagehide')); if (flush) await flush(); expect(leakedMessages(document.body)).toEqual([]); vi.restoreAllMocks(); document.body.replaceChildren(); });
 const field = (id: string) => document.getElementById(id)! as HTMLInputElement;
 it('keeps reference edits attached after changing prompt text', async () => {
   field('addReference').click();
@@ -160,4 +160,24 @@ it('retires a failed Settings submission after explicit discard', async () => {
   (document.querySelector('#appMessage footer button:last-child') as HTMLButtonElement).click();
   await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(false));
   await flush(); expect(call.mock.calls.filter(([action]) => action === 'preferences')).toHaveLength(1);
+});
+
+it('opens the shortcut reference through its binding, lists real commands and closes only the modal', async () => {
+  const { shortcuts, shortcutText } = await import('../../src/shared/shortcuts.ts');
+  field('shortcutsButton').focus();
+  field('shortcutsButton').dispatchEvent(new KeyboardEvent('keydown',{key:'/',ctrlKey:true,shiftKey:true,bubbles:true,cancelable:true}));
+  expect((field('shortcuts') as unknown as HTMLDialogElement).open).toBe(true);
+  expect([...document.querySelectorAll('#shortcuts dd')].map(row => row.textContent)).toEqual(shortcuts.map(entry => shortcutText(entry,/Mac/.test(navigator.platform))));
+  expect(document.activeElement).toBe(field('closeShortcuts'));
+  field('closeShortcuts').dispatchEvent(new KeyboardEvent('keydown',{key:'w',metaKey:true,bubbles:true,cancelable:true}));
+  await vi.waitFor(() => expect((field('shortcuts') as unknown as HTMLDialogElement).open).toBe(false));
+  expect(call.mock.calls.some(([action]) => action === 'closeWindow')).toBe(false);
+  expect(document.activeElement).toBe(field('shortcutsButton'));
+});
+it('keeps workspace accelerators behind modal guards while Quit still uses the guarded close flow', async () => {
+  menuCommand('settingsButton'); await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+  field('engineDirectory').dispatchEvent(new KeyboardEvent('keydown',{key:'n',metaKey:true,bubbles:true,cancelable:true}));
+  expect(call.mock.calls.some(([action]) => action === 'create')).toBe(false);
+  field('engineDirectory').dispatchEvent(new KeyboardEvent('keydown',{key:'q',metaKey:true,bubbles:true,cancelable:true}));
+  expect(call).toHaveBeenCalledWith('closeWindow');
 });

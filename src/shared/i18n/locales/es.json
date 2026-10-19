@@ -357,5 +357,15 @@
   "ui.discard_unsaved_settings": "¿Descartar la configuración sin guardar?",
   "ui.discard_changes": "Descartar cambios",
   "ui.drop_one_source": "Arrastra una sola imagen de origen a la vez.",
-  "ui.reference_role": "Función de la referencia"
+  "ui.reference_role": "Función de la referencia",
+  "shortcuts.title": "Atajos de teclado",
+  "shortcuts.workspace": "Espacio de trabajo",
+  "shortcuts.canvas": "Acciones de imagen",
+  "shortcuts.scope": "Los comandos del espacio de trabajo se suspenden mientras hay un diálogo abierto. Cerrar cierra el diálogo que está al frente; Salir sigue el proceso habitual.",
+  "shortcuts.modifiers": "Funcionan tanto Cmd como Ctrl. En macOS, usa Cmd al editar texto. Los atajos se suspenden durante la composición de texto.",
+  "shortcuts.navigation": "Navegación",
+  "shortcuts.toolbar": "Acciones de imagen: Tab entra o sale de la barra; Left/Right mueve el foco; Home/End va al principio o al final. Enter/Space activa la acción. Los controles de zoom y comparación conservan sus teclas habituales.",
+  "shortcuts.collections": "Sesiones y resultados: las flechas mueven el foco; Enter selecciona. En los resultados, Space alterna la selección y Shift la amplía. Home/End va al principio o al final; PageUp/PageDown avanza o retrocede cinco elementos.",
+  "shortcuts.splitter": "Divisor del panel de solicitud: Left/Right ajusta el ancho; Home lo restablece.",
+  "shortcuts.native": "Los atajos estándar de edición de texto y ventanas siguen los menús del sistema."
 }

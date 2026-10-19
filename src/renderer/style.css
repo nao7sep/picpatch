@@ -17,3 +17,6 @@ dialog[open]{display:flex;flex-direction:column}.modalHeader,.modalFooter{flex:n
 #sessionList button{overflow:hidden;text-overflow:ellipsis;text-align:left;min-width:0}.reference{display:flex;flex-wrap:wrap;gap:8px}.reference>label{flex-basis:100%;margin:0}.reference>input,.reference>select{min-width:0;max-width:100%}
 
 #appMessage{width:440px}.danger{background:light-dark(#b42318,#a12620);border-color:transparent;color:white}.danger:hover{background:light-dark(#9e2118,#8e211c)}.danger:active{background:#781c17}
+
+#canvasActions,.canvasAdjustments{display:flex;align-items:center;gap:8px;flex-wrap:wrap}#canvasActions:focus-visible{outline:2px solid var(--accent)}#shortcuts dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px}#shortcuts dd{margin:0;white-space:nowrap}#shortcuts p{line-height:1.5}
+#canvasActions button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}

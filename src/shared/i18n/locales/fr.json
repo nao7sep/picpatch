@@ -357,5 +357,15 @@
   "ui.discard_unsaved_settings": "Abandonner les paramètres non enregistrés\u00a0?",
   "ui.discard_changes": "Abandonner les modifications",
   "ui.drop_one_source": "Déposez une seule image source à la fois.",
-  "ui.reference_role": "Rôle de la référence"
+  "ui.reference_role": "Rôle de la référence",
+  "shortcuts.title": "Raccourcis clavier",
+  "shortcuts.workspace": "Espace de travail",
+  "shortcuts.canvas": "Actions sur l’image",
+  "shortcuts.scope": "Les commandes de l’espace de travail sont suspendues lorsqu’une boîte de dialogue est ouverte. Fermer ferme la boîte de dialogue au premier plan\u00a0; Quitter suit la procédure habituelle.",
+  "shortcuts.modifiers": "Cmd et Ctrl fonctionnent tous les deux. Sur macOS, utilisez Cmd lors de la modification du texte. Les raccourcis sont suspendus pendant la composition du texte.",
+  "shortcuts.navigation": "Navigation",
+  "shortcuts.toolbar": "Actions sur l’image\u00a0: Tab permet d’entrer dans la barre ou d’en sortir\u00a0; Left/Right déplace le focus\u00a0; Home/End va au début ou à la fin. Enter/Space active l’action. Les commandes de zoom et de comparaison conservent leurs touches habituelles.",
+  "shortcuts.collections": "Sessions et résultats\u00a0: les flèches déplacent le focus\u00a0; Enter sélectionne. Dans les résultats, Space sélectionne ou désélectionne l’élément et Shift étend la sélection. Home/End va au début ou à la fin\u00a0; PageUp/PageDown se déplace de cinq éléments.",
+  "shortcuts.splitter": "Séparateur du panneau de requête\u00a0: Left/Right ajuste la largeur\u00a0; Home la réinitialise.",
+  "shortcuts.native": "Les raccourcis standard de modification du texte et de gestion des fenêtres suivent les menus du système."
 }

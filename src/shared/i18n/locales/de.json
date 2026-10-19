@@ -356,5 +356,15 @@
   "ui.discard_unsaved_settings": "Nicht gespeicherte Einstellungen verwerfen?",
   "ui.discard_changes": "Änderungen verwerfen",
   "ui.drop_one_source": "Ziehen Sie jeweils nur ein Ausgangsbild hierher.",
-  "ui.reference_role": "Referenzrolle"
+  "ui.reference_role": "Referenzrolle",
+  "shortcuts.title": "Tastenkürzel",
+  "shortcuts.workspace": "Arbeitsbereich",
+  "shortcuts.canvas": "Bildaktionen",
+  "shortcuts.scope": "Befehle für den Arbeitsbereich sind bei geöffnetem Dialog ausgesetzt. Schließen schließt den vordersten Dialog; Beenden folgt dem normalen Ablauf.",
+  "shortcuts.modifiers": "Cmd und Ctrl funktionieren beide. Verwenden Sie unter macOS beim Bearbeiten von Text Cmd. Während eine Eingabemethode Text zusammensetzt, sind Tastenkürzel ausgesetzt.",
+  "shortcuts.navigation": "Navigation",
+  "shortcuts.toolbar": "Bildaktionen: Tab führt in die Symbolleiste oder aus ihr heraus; Left/Right verschiebt den Fokus; Home/End springt zum Anfang oder Ende. Enter/Space aktiviert die Aktion. Zoom- und Vergleichssteuerungen behalten ihre üblichen Tasten.",
+  "shortcuts.collections": "Sitzungen und Ergebnisse: Pfeiltasten verschieben den Fokus; Enter wählt aus. In den Ergebnissen schaltet Space die Auswahl um und Shift erweitert sie. Home/End springt zum Anfang oder Ende; PageUp/PageDown bewegt sich um fünf Einträge.",
+  "shortcuts.splitter": "Trennlinie des Eingabebereichs: Left/Right passt die Breite an; Home setzt sie zurück.",
+  "shortcuts.native": "Die Standardtastenkürzel für Textbearbeitung und Fenster entsprechen den Systemmenüs."
 }

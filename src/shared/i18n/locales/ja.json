@@ -355,5 +355,15 @@
   "ui.discard_unsaved_settings": "保存していない設定を破棄しますか？",
   "ui.discard_changes": "変更を破棄",
   "ui.drop_one_source": "元画像は一度に1枚ずつドロップしてください。",
-  "ui.reference_role": "参照の役割"
+  "ui.reference_role": "参照の役割",
+  "shortcuts.title": "キーボードショートカット",
+  "shortcuts.workspace": "ワークスペース",
+  "shortcuts.canvas": "画像操作",
+  "shortcuts.scope": "ダイアログが開いている間は、ワークスペースのコマンドは無効になります。「閉じる」は最前面のダイアログを閉じ、「終了」は通常の終了処理を行います。",
+  "shortcuts.modifiers": "Cmd と Ctrl の両方が使えます。macOS でテキストを編集するときは Cmd を使います。文字の変換中はショートカットは無効になります。",
+  "shortcuts.navigation": "移動",
+  "shortcuts.toolbar": "画像操作：Tab でツールバーに入るか離れます。Left/Right でフォーカスを移動し、Home/End で先頭か末尾に移動します。Enter/Space で操作を実行します。ズームと比較のコントロールは通常のキー操作を使います。",
+  "shortcuts.collections": "セッションと結果：矢印キーでフォーカスを移動し、Enter で選択します。結果では Space で選択を切り替え、Shift で選択範囲を広げます。Home/End で先頭か末尾に移動し、PageUp/PageDown で5項目移動します。",
+  "shortcuts.splitter": "リクエストペインの区切り：Left/Right で幅を調整し、Home で元に戻します。",
+  "shortcuts.native": "標準のテキスト編集とウィンドウ操作のショートカットは、システムのメニューに従います。"
 }

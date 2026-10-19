@@ -1,3 +1,6 @@
+import { commandShortcuts } from './shortcuts.ts';
+import { shortcutsModal } from './ShortcutsModal.ts';
+import { toolbar } from './toolbar.ts';
 import { messageModal } from './MessageModal.ts';
 import { closeTopModal } from './Modal.ts';
 import { isComposing } from './ime.ts';
@@ -131,8 +134,9 @@ function results() {
   }
   renderCollection(holder, items, { label: t('ui.results'), empty: t('ui.generated_images_and_queued_attempts_appear_here'), selected, multiple: true, horizontal: true, select: keys => { void command(async () => { await saveMask(); await flush(); selected = keys; results(); show(); }).catch(() => {}); } });
 }
+function comparisonVisible(visible: boolean) { comparison.hidden = !visible; element('compare').setAttribute('aria-pressed', String(visible)); }
 function show() {
-  if (selected.length !== 2) { comparison.hidden = true; element('imageStage').classList.remove('wipe'); input('wipePosition').hidden = true; }
+  if (selected.length !== 2) { comparisonVisible(false); element('imageStage').classList.remove('wipe'); input('wipePosition').hidden = true; }
   const run = session!.runs.find(r => r.id === selected[selected.length - 1]);
   const asset = run?.output ? run.id : session!.draft.source;
   element('empty').hidden = Boolean(asset); element('imageStage').hidden = !asset;
@@ -237,7 +241,7 @@ action('paint', () => { selected = []; show(); painting = !painting; mask.classL
 action('clearMask', async () => { context.clearRect(0,0,mask.width,mask.height); delete session!.draft.mask; maskDirty = false; await flush(); });
 action('undoMask', () => { const previous = undo.pop(); if (previous) { redo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(previous,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
 action('redoMask', () => { const next = redo.pop(); if (next) { undo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(next,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
-action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { second.hidden = true; scale(true); return; } if (selected.length !== 2) throw new UiError('ui.commandclick_two_completed_results_to_compare'); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new UiError('ui.choose_completed_results'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); second.hidden = false; });
+action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { comparisonVisible(false); scale(true); return; } if (selected.length !== 2) throw new UiError('ui.commandclick_two_completed_results_to_compare'); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new UiError('ui.choose_completed_results'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); comparisonVisible(true); });
 for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const result = await api.call('export', { id: session!.id, runId: selected.at(-1), sidecar, includeInputs: input('includePrompts').checked }); if (result?.status === 'refused') throw Object.assign(new Error(result.message), { code: result.code, effect: result.effect }); if (result?.sidecar?.status === 'failed') throw new UiError('ui.image_saved_its_settings_sidecar_could_not_be_saved'); if (result?.status === 'saved') element('status').textContent = sidecar ? t('ui.image_and_settings_saved') : t('ui.image_saved'); });
 action('delete', async () => { const id = session!.id; if (await api.call('delete', { id })) { session = undefined; await start(); } });
 action('collection', async () => { await saveMask(); await flush(); if (await api.call('collection')) { session = undefined; await start(); } });
@@ -248,6 +252,7 @@ let closing = false;
 let closeFocus: HTMLElement | undefined;
 let flushing: Promise<void> | undefined;
 const messages = messageModal();
+shortcutsModal(); toolbar(element('canvasActions'));
 managementModal(api, refresh); const settings = settingsModal(api, refresh, messages); recordsModal(api);
 let pan: { x: number; y: number; left: number; top: number } | undefined;
 const viewport = element('canvas');
@@ -264,7 +269,7 @@ api.onRequest(async request => {
   flushing ??= (async () => { await commands; if (session) session.draft = collect(); await saveMask(); await flush(); await settings.settleSave(); })().finally(() => { flushing = undefined; });
   return flushing;
 });
-api.onCommand(id => {
+function dispatchCommand(id: string) {
   if (id === 'beginClose' || id === 'endClose' || id === 'shutdown') {
     if (!closing && id !== 'endClose') closeFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     closing = id !== 'endClose';
@@ -279,8 +284,10 @@ api.onCommand(id => {
     if (!closeTopModal()) void api.call('closeWindow').catch(issue);
     return;
   }
+  if (id === 'quit') { void api.call('closeWindow').catch(issue); return; }
   if (closing) return;
   const target = document.getElementById(id);
   if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click();
-});
+}
+api.onCommand(dispatchCommand); window.addEventListener('pagehide', commandShortcuts(dispatchCommand), { once: true });
 void api.call('locale').then(locale => localize(locale ?? { language: 'en', format: 'en' })).then(() => paneLayout(api, issue)).then(start).then(() => api.call('ready')).catch(async error => { await localize({ language: 'en', format: 'en' }); issue(error); });

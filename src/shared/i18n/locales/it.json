@@ -357,5 +357,15 @@
   "ui.discard_unsaved_settings": "Scartare le impostazioni non salvate?",
   "ui.discard_changes": "Scarta modifiche",
   "ui.drop_one_source": "Trascina una sola immagine di partenza alla volta.",
-  "ui.reference_role": "Ruolo del riferimento"
+  "ui.reference_role": "Ruolo del riferimento",
+  "shortcuts.title": "Scorciatoie da tastiera",
+  "shortcuts.workspace": "Area di lavoro",
+  "shortcuts.canvas": "Azioni immagine",
+  "shortcuts.scope": "I comandi dell’area di lavoro sono sospesi quando è aperta una finestra di dialogo. Chiudi chiude la finestra di dialogo in primo piano; Esci segue la procedura normale.",
+  "shortcuts.modifiers": "Funzionano sia Cmd che Ctrl. Su macOS, usa Cmd durante la modifica del testo. Le scorciatoie sono sospese durante la composizione del testo.",
+  "shortcuts.navigation": "Navigazione",
+  "shortcuts.toolbar": "Azioni immagine: Tab entra o esce dalla barra; Left/Right sposta il focus; Home/End va all’inizio o alla fine. Enter/Space attiva l’azione. I controlli di zoom e confronto mantengono i tasti abituali.",
+  "shortcuts.collections": "Sessioni e risultati: le frecce spostano il focus; Enter seleziona. Nei risultati, Space attiva o disattiva la selezione e Shift la estende. Home/End va all’inizio o alla fine; PageUp/PageDown si sposta di cinque elementi.",
+  "shortcuts.splitter": "Divisore del pannello di richiesta: Left/Right regola la larghezza; Home la ripristina.",
+  "shortcuts.native": "Le scorciatoie standard per modificare il testo e gestire le finestre seguono i menu di sistema."
 }

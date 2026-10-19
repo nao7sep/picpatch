@@ -355,5 +355,15 @@
   "ui.discard_unsaved_settings": "要放弃未保存的设置吗？",
   "ui.discard_changes": "放弃更改",
   "ui.drop_one_source": "请一次只拖入一张原图。",
-  "ui.reference_role": "参考图角色"
+  "ui.reference_role": "参考图角色",
+  "shortcuts.title": "键盘快捷键",
+  "shortcuts.workspace": "工作区",
+  "shortcuts.canvas": "图像操作",
+  "shortcuts.scope": "打开对话框时，工作区命令会暂停。“关闭”会关闭最前面的对话框；“退出”会执行正常的退出流程。",
+  "shortcuts.modifiers": "Cmd 和 Ctrl 均可使用。在 macOS 上编辑文本时，请使用 Cmd。使用输入法组合文字期间，快捷键会暂停。",
+  "shortcuts.navigation": "导航",
+  "shortcuts.toolbar": "图像操作：Tab 进入或离开工具栏；Left/Right 移动焦点；Home/End 移至开头或末尾。Enter/Space 执行操作。缩放和比较控件保留各自的默认按键。",
+  "shortcuts.collections": "会话和结果：方向键移动焦点；Enter 选择。在结果中，Space 切换选择状态，Shift 扩大选择范围。Home/End 移至开头或末尾；PageUp/PageDown 移动五个项目。",
+  "shortcuts.splitter": "请求面板分隔线：Left/Right 调整宽度；Home 重置宽度。",
+  "shortcuts.native": "标准文本编辑和窗口快捷键遵循系统菜单。"
 }
