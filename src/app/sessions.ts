@@ -52,7 +52,7 @@ export class Sessions {
   private tail: Promise<unknown> = Promise.resolve();
   private loaded = new Map<string, Session>();
   constructor(root: string, private saved: (path: string, bytes: Buffer) => void = () => {}, private existingCollection = false) {
-    if (!isAbsolute(root)) throw new Error('Session collection must be absolute.');
+    if (!isAbsolute(root)) throw new Error('The session collection path must be absolute.');
     this.root = root;
   }
   directory(key: string): string { id(key); return join(this.root, key); }
@@ -71,7 +71,7 @@ export class Sessions {
     id(key);
     const cached = this.loaded.get(key); if (cached) return structuredClone(cached);
     const directory = this.directory(key);
-    if ((await lstat(directory)).isSymbolicLink()) throw new Error('Linked sessions are not supported.');
+    if ((await lstat(directory)).isSymbolicLink()) throw new Error('Symbolically linked session folders are not supported.');
     const session = validateSession(JSON.parse(await readFile(join(directory, 'session.json'), 'utf8')));
     if (session.id !== key) throw new Error('Session identity does not match its directory.');
     // Reopening never schedules inference. Queued work requires an explicit resume.
@@ -102,7 +102,7 @@ export class Sessions {
     const file = session.assets.find(a => a.id === assetId)?.file ?? session.runs.find(r => r.id === assetId)?.output;
     if (!file) throw new Error('Image is not part of this session.');
     const directory = await realpath(this.directory(key)); const path = await realpath(join(directory, file)); const part = relative(directory, path);
-    if (part.startsWith(`..${sep}`) || part === '..' || isAbsolute(part)) throw new Error('Image escapes its session.');
+    if (part.startsWith(`..${sep}`) || part === '..' || isAbsolute(part)) throw new Error('The image path points outside its session folder.');
     return path;
   }
   async importImage(key: string, source: string): Promise<Asset> {

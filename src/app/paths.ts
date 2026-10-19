@@ -4,7 +4,7 @@ import { chmod, mkdir } from 'node:fs/promises';
 
 export interface AppPaths { root: string; sessions: string; config: string; state: string; backups: string }
 /** App-only ambient resolution. The SDK continues to receive absolute arguments. */
-export async function appPaths(): Promise<AppPaths> {
+export function resolveAppPaths(): AppPaths {
   const home = homedir();
   const value = process.env.PICPATCH_DATA_DIR;
   let selected = value?.trim() ? value : join(home, '.picpatch');
@@ -14,7 +14,12 @@ export async function appPaths(): Promise<AppPaths> {
     return replacement;
   });
   const root = isAbsolute(selected) ? selected : resolve(home, selected);
-  await mkdir(root, { recursive: true, mode: 0o700 });
-  if (process.platform !== 'win32') await chmod(root, 0o700);
   return { root, sessions: join(root, 'sessions'), config: join(root, 'config.json'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') };
+}
+
+export async function appPaths(): Promise<AppPaths> {
+  const paths = resolveAppPaths();
+  await mkdir(paths.root, { recursive: true, mode: 0o700 });
+  if (process.platform !== 'win32') await chmod(paths.root, 0o700);
+  return paths;
 }

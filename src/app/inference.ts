@@ -12,11 +12,11 @@ export function inference(sessions: Sessions, settings: () => Settings): Runner 
     const selected = listModels().find(model => model.id === run.modelId);
     if (!selected) throw new PicPatchSdkError('INVALID_REQUEST', 'Choose an available model.');
     const opened = await openModel(config.registrations[run.modelId] ?? run.modelId, { profile: config.profile, signal: events.signal });
-    if (opened.status !== 'ready') throw new PicPatchSdkError('MODEL_IO', 'Prepare this model in Managed models before running it.');
+    if (opened.status !== 'ready') throw new PicPatchSdkError('MODEL_IO', 'Prepare this model in Managed tools and models before running it.');
     let nativeExecutable = config.profile.nativeExecutable;
     if (selected.runtime.name === 'stable-diffusion.cpp' && !nativeExecutable) {
       const native = await inspectNativeEngine({ profile: config.profile, signal: events.signal });
-      if (native.status !== 'ready') throw new PicPatchSdkError('ENGINE_MISSING', 'Install the native engine in Managed tools.');
+      if (native.status !== 'ready') throw new PicPatchSdkError('ENGINE_MISSING', 'Install the native engine in Managed tools and models.');
       nativeExecutable = native.nativeExecutable;
     }
     const editor = createEditor({ model: opened.model, ...(selected.runtime.name === 'stable-diffusion.cpp' ? { nativeExecutable } : { profile: config.profile }) });

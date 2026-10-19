@@ -1,3 +1,5 @@
+import { localize } from './localization.ts';
+import { t, term, number, errorText, UiError } from '../shared/i18n/index.ts';
 import { renderCollection } from './collection.ts';
 import { paneLayout } from './layout.ts';
 import { fitScale, imagePoint, wipeCompatible } from '../shared/viewport.ts';
@@ -30,7 +32,8 @@ let maskSave = Promise.resolve();
 let fitting = true;
 const comparison = element<HTMLImageElement>('comparison');
 let lastStroke: { x: number; y: number } | undefined;
-function issue(error: unknown) { element('issue').hidden = false; element('issue').querySelector('span')!.textContent = error instanceof Error ? error.message : String(error); }
+let currentIssue: unknown;
+function issue(error: unknown) { currentIssue = error; element('issue').hidden = false; element('issue').querySelector('span')!.textContent = errorText(error); }
 function action(id: string, work: () => unknown) { element(id).addEventListener('click', () => { void command(work).catch(() => {}); }); }
 const imageUrl = (id: string) => `picpatch-image://${session!.id}/${id}`;
 function button(text: string, work: () => unknown) { const b = document.createElement('button'); b.textContent = text; b.onclick = () => { void command(work).catch(() => {}); }; return b; }
@@ -68,28 +71,28 @@ function fields() {
 }
 function admission() {
   if (!session) return;
-  const messages = session.draft.modelIds.flatMap(id => { const model = overview.models.find((m: any) => m.id === id); return model ? incompatibilities(session!.draft, model.capabilities).map(message => `${id}: ${message}`) : [`${id}: model unavailable.`]; });
-  element('admission').textContent = messages.join('\n');
+  const messages = session.draft.modelIds.flatMap(id => { const model = overview.models.find((m: any) => m.id === id); return model ? incompatibilities(session!.draft, model.capabilities).map(message => t('admission.reason', { model: id, reason: message })) : [t('admission.unavailable', { model: id })]; });
+  element('admission').textContent = messages.reduce((first, rest) => t('common.lines', { first, rest }), '');
   input('run').disabled = !session.draft.modelIds.length || messages.length > 0;
 }
 function capabilities() {
   const d = session!.draft; const model = overview.models.find((m: any) => m.id === d.modelIds[0]); const caps: ModelCapabilities | undefined = model?.capabilities;
-  element('editControls').hidden = d.mode !== 'edit'; element('run').textContent = d.mode === 'edit' ? 'Edit' : 'Generate';
-  element('maskSemantics').textContent = caps?.maskMode === 'composite' || caps?.maskMode === 'latent-composite' ? 'Masked edits preserve normalized pixels outside the edited region.' : caps?.maskMode === 'native' ? 'Native inpainting: pixels outside the mask may change.' : 'This model does not support masks.';
+  element('editControls').hidden = d.mode !== 'edit'; element('run').textContent = d.mode === 'edit' ? t('ui.edit') : t('ui.generate');
+  element('maskSemantics').textContent = caps?.maskMode === 'composite' || caps?.maskMode === 'latent-composite' ? t('ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region') : caps?.maskMode === 'native' ? t('ui.native_inpainting_pixels_outside_the_mask_may_change') : t('ui.this_model_does_not_support_masks');
   input('paint').disabled = !d.source || !caps || caps.maskMode === 'none'; input('expand').disabled = !caps?.outpainting;
   admission();
   input('addControl').disabled = !caps?.controlKinds?.includes('canny');
-  element('controlName').textContent = d.control ? session!.assets.find(a => a.id === d.control!.image)?.name ?? 'Control image' : 'No Canny map';
+  element('controlName').textContent = d.control ? session!.assets.find(a => a.id === d.control!.image)?.name ?? t('ui.control_image') : t('ui.no_canny_map');
   input('controlStrength').value = d.control?.strength === undefined ? '' : String(d.control.strength);
   const parameters = element('parameters'); parameters.replaceChildren();
   for (const key of ['steps', 'guidance', 'strength', 'identityStyleStrength', 'appearanceStrength', 'sampler', 'scheduler', 'negativePrompt']) {
     const descriptor = (caps?.parameters as any)?.[key]; const existing = (d.parameters as any)[key];
     if (!descriptor && existing === undefined) continue;
-    const label = document.createElement('label'); label.append(document.createTextNode(`${key}${descriptor ? '' : ' (unsupported by selected model)'}`));
+    const label = document.createElement('label'); label.append(document.createTextNode(descriptor ? term('parameter', key) : t('parameter.unsupported', { name: term('parameter', key) })));
     let field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    if (descriptor?.values) { field = document.createElement('select'); const blank = document.createElement('option'); blank.value = ''; blank.textContent = `Default (${descriptor.default})`; field.append(blank); for (const value of descriptor.values) { const opt = document.createElement('option'); opt.value = value; opt.textContent = value; field.append(opt); } }
+    if (descriptor?.values) { field = document.createElement('select'); const blank = document.createElement('option'); blank.value = ''; blank.textContent = t('parameter.default', { value: typeof descriptor.default === 'number' ? descriptor.default : String(descriptor.default) }); field.append(blank); for (const value of descriptor.values) { const opt = document.createElement('option'); opt.value = value; opt.textContent = value; field.append(opt); } }
     else if (key === 'negativePrompt') field = document.createElement('textarea');
-    else { field = document.createElement('input'); field.type = 'number'; field.step = descriptor?.integer ? '1' : 'any'; field.dataset.numeric = 'true'; field.placeholder = descriptor?.default === undefined ? 'Default' : String(descriptor.default); }
+    else { field = document.createElement('input'); field.type = 'number'; field.step = descriptor?.integer ? '1' : 'any'; field.dataset.numeric = 'true'; field.placeholder = descriptor?.default === undefined ? t('ui.default') : typeof descriptor.default === 'number' ? number(descriptor.default) : String(descriptor.default); }
     field.dataset.key = key; field.value = existing === undefined ? '' : String(existing); field.oninput = scheduleSave; label.append(field); parameters.append(label);
   }
 }
@@ -97,30 +100,30 @@ function references() {
   const holder = element('references'); holder.replaceChildren();
   for (const [index, group] of session!.draft.references.entries()) {
     const box = document.createElement('div'); box.className = 'reference';
-    const name = document.createElement('input'); name.value = group.id; name.setAttribute('aria-label', 'Reference group name'); name.onchange = () => { group.id = name.value; void flush().catch(issue); }; box.append(name);
-    const role = document.createElement('select'); for (const value of ['subject','object','style','background']) { const option = document.createElement('option'); option.value = value; option.textContent = value; role.append(option); } role.value = group.role; role.onchange = () => { group.role = role.value as typeof group.role; admission(); void flush().catch(issue); }; box.append(role);
+    const name = document.createElement('input'); name.value = group.id; name.setAttribute('aria-label', t('ui.reference_group_name')); name.onchange = () => { group.id = name.value; void flush().catch(issue); }; box.append(name);
+    const role = document.createElement('select'); for (const value of ['subject','object','style','background']) { const option = document.createElement('option'); option.value = value; option.textContent = term('role', value); role.append(option); } role.value = group.role; role.onchange = () => { group.role = role.value as typeof group.role; admission(); void flush().catch(issue); }; box.append(role);
     for (const [key, values] of [['conditioning', ['prompt','identity','appearance']], ['className', ['', 'man','woman','girl','boy']]] as const) {
-      const label = document.createElement('label'); label.textContent = key === 'conditioning' ? 'Conditioning' : 'Identity class';
+      const label = document.createElement('label'); label.textContent = key === 'conditioning' ? t('ui.conditioning') : t('ui.identity_class');
       const select = document.createElement('select');
-      for (const value of values) { const option = document.createElement('option'); option.value = value; option.textContent = value || 'Not selected'; select.append(option); }
+      for (const value of values) { const option = document.createElement('option'); option.value = value; option.textContent = value ? term(key === 'conditioning' ? 'conditioning' : 'class', value) : t('ui.not_selected'); select.append(option); }
       select.value = group[key] ?? (key === 'conditioning' ? 'prompt' : '');
       select.onchange = () => { if (key === 'conditioning') group.conditioning = select.value as typeof group.conditioning; else if (select.value) group.className = select.value as typeof group.className; else delete group.className; admission(); void flush().catch(issue); };
       label.append(select); box.append(label);
     }
-    for (const id of group.images) { const img = document.createElement('img'); img.src = imageUrl(id); img.alt = 'Reference'; box.append(img, button('Remove photo', async () => { group.images = group.images.filter(value => value !== id); await flush(); references(); admission(); })); }
-    box.append(button('Add photos', async () => { const added: Asset[] = await api.call('import', { id: session!.id }); group.images.push(...added.map(asset => asset.id)); await refresh(); await flush(); references(); admission(); }), button('Remove group', async () => { session!.draft.references.splice(index, 1); await flush(); references(); })); holder.append(box);
+    for (const id of group.images) { const img = document.createElement('img'); img.src = imageUrl(id); img.alt = t('ui.reference'); box.append(img, button(t('ui.remove_photo'), async () => { group.images = group.images.filter(value => value !== id); await flush(); references(); admission(); })); }
+    box.append(button(t('ui.add_photos'), async () => { const added: Asset[] = await api.call('import', { id: session!.id }); group.images.push(...added.map(asset => asset.id)); await refresh(); await flush(); references(); admission(); }), button(t('ui.remove_group'), async () => { session!.draft.references.splice(index, 1); await flush(); references(); })); holder.append(box);
   }
-  element('sourceName').textContent = session!.draft.source ? session!.assets.find(a => a.id === session!.draft.source)?.name ?? 'Selected result' : 'No source image';
+  element('sourceName').textContent = session!.draft.source ? session!.assets.find(a => a.id === session!.draft.source)?.name ?? t('ui.selected_result') : t('ui.no_source_image');
 }
 function results() {
   const holder = element('results'); const items = [];
   for (const run of session!.runs) {
     const b = document.createElement('button'); b.className = `result${selected.includes(run.id) ? ' selected' : ''}`;
     if (run.output) { const img = document.createElement('img'); img.src = imageUrl(run.id); img.alt = ''; b.append(img); }
-    const text = document.createElement('div'); text.textContent = `${run.modelId} · ${run.seed} · ${run.status}`; b.append(text);
-    items.push({ key: run.id, label: `${run.modelId} ${run.seed} ${run.status}`, element: b });
+    const text = document.createElement('div'); text.textContent = t('run.card', { model: run.modelId, seed: run.seed, status: term('status', run.status) }); b.append(text);
+    items.push({ key: run.id, label: t('run.card', { model: run.modelId, seed: run.seed, status: term('status', run.status) }), element: b });
   }
-  renderCollection(holder, items, { label: 'Results', empty: 'Generated images and queued attempts appear here.', selected, multiple: true, horizontal: true, select: keys => { void command(async () => { await saveMask(); await flush(); selected = keys; results(); show(); }).catch(() => {}); } });
+  renderCollection(holder, items, { label: t('ui.results'), empty: t('ui.generated_images_and_queued_attempts_appear_here'), selected, multiple: true, horizontal: true, select: keys => { void command(async () => { await saveMask(); await flush(); selected = keys; results(); show(); }).catch(() => {}); } });
 }
 function show() {
   if (selected.length !== 2) { comparison.hidden = true; element('imageStage').classList.remove('wipe'); input('wipePosition').hidden = true; }
@@ -128,7 +131,7 @@ function show() {
   const asset = run?.output ? run.id : session!.draft.source;
   element('empty').hidden = Boolean(asset); element('imageStage').hidden = !asset;
   if (asset && image.dataset.asset !== asset) { image.dataset.asset = asset; image.src = imageUrl(asset); maskDirty = false; undo.length = 0; redo.length = 0; }
-  element('resultInfo').textContent = run ? `${run.status} · ${run.modelId} · seed ${run.seed}${run.issue ? ` · ${run.issue.message}` : ''}${run.notices?.length ? ` · ${run.notices.join(' · ')}` : ''}` : '';
+  element('resultInfo').textContent = run ? [t('run.summary', { status: term('status', run.status), model: run.modelId, seed: run.seed }), ...(run.issue ? [errorText(run.issue.message)] : []), ...(run.notices ?? []).map(errorText)].reduce((first, rest) => t('common.lines', { first, rest })) : '';
   input('cancelSelected').disabled = !session!.runs.some(run => selected.includes(run.id) && ['queued', 'running'].includes(run.status));
   input('reuse').disabled = !run; input('editResult').disabled = !run?.output; input('save').disabled = !run?.output; input('saveSettings').disabled = !run?.output;
 }
@@ -182,20 +185,22 @@ async function persistMask() {
   const owner = session!, revision = maskRevision;
   const output = document.createElement('canvas'); output.width = mask.width; output.height = mask.height;
   const ctx = output.getContext('2d')!; ctx.fillStyle = 'black'; ctx.fillRect(0,0,output.width,output.height); ctx.drawImage(mask,0,0);
-  const blob = await new Promise<Blob>((resolve, reject) => output.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not encode mask.')), 'image/png'));
+  const blob = await new Promise<Blob>((resolve, reject) => output.toBlob(blob => blob ? resolve(blob) : reject(new UiError('ui.could_not_encode_mask')), 'image/png'));
   const asset: Asset = await api.call('mask', { id: owner.id, bytes: new Uint8Array(await blob.arrayBuffer()) });
   owner.draft.mask = asset.id; maskDirty = revision !== maskRevision;
 }
 async function refresh() {
   overview = await api.call('overview');
+  const languageChanged = await localize(overview.locale ?? { language: 'en', format: 'en' });
+  if (languageChanged && session) { fields(); element('paint').textContent = painting ? t('ui.finish_painting') : t('ui.paint_mask'); if (currentIssue !== undefined) issue(currentIssue); }
   document.documentElement.style.colorScheme = overview.settings.theme ?? 'light dark';
   const holder = element('sessionList');
-  renderCollection(holder, overview.sessions.map((item: any) => ({ key: item.id, label: item.name, element: button(item.name, () => {}) })), { label: 'Sessions', empty: 'No saved sessions.', selected: session ? [session.id] : [], select: keys => { if (keys[0]) void command(() => open(keys[0]!)).catch(() => {}); } });
-  for (const failure of overview.failures) { const p = document.createElement('p'); p.textContent = failure.message; holder.append(p); }
+  renderCollection(holder, overview.sessions.map((item: any) => ({ key: item.id, label: item.name, element: button(item.name, () => {}) })), { label: t('ui.sessions'), empty: t('ui.no_saved_sessions'), selected: session ? [session.id] : [], select: keys => { if (keys[0]) void command(() => open(keys[0]!)).catch(() => {}); } });
+  for (const failure of overview.failures) { const p = document.createElement('p'); p.textContent = errorText(failure.message); holder.append(p); }
   if (session) { const owner = session; const fresh: Session = await api.call('get', { id: owner.id }); if (session === owner) { owner.runs = fresh.runs; owner.assets = fresh.assets; results(); show(); } }
   if (overview.historyIssue) issue(overview.historyIssue);
   const active = overview.queue.active;
-  element('status').textContent = overview.queue.paused ? `Queue paused: ${overview.queue.issue ?? 'Resume when ready'}` : active ? `${active.stage} · ${Math.max(0, Math.floor((Date.now() - active.startedAt) / 1000))} s elapsed` : 'Ready';
+  element('status').textContent = overview.queue.paused ? t('run.paused', { reason: overview.queue.issue ? errorText(overview.queue.issue) : t('ui.resume_when_ready') }) : active ? t('run.elapsed', { stage: term('stage', active.stage), count: Math.max(0, Math.floor((Date.now() - active.startedAt) / 1000)) }) : t('ui.ready');
   element('cancel').hidden = !active;
   const progress = element<HTMLProgressElement>('progress'); progress.hidden = !active?.progress;
   if (active?.progress) { progress.max = active.progress.total; progress.value = active.progress.completed; }
@@ -212,7 +217,7 @@ action('new', async () => { await saveMask(); await flush(); const created: Sess
 
 action('import', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (assets[0]) { session!.draft.source = assets[0].id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); } });
 action('clearSource', async () => { delete session!.draft.source; delete session!.draft.mask; maskDirty = false; selected = []; fields(); await flush(); show(); });
-action('addReference', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (!assets.length) return; session!.draft.references.push({ id: `reference-${session!.draft.references.length + 1}`, role: 'subject', images: assets.map(a => a.id) }); await refresh(); references(); admission(); await flush(); });
+action('addReference', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (!assets.length) return; session!.draft.references.push({ id: t('reference.name', { number: session!.draft.references.length + 1 }), role: 'subject', images: assets.map(a => a.id) }); await refresh(); references(); admission(); await flush(); });
 action('addControl', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (assets[0]) { session!.draft.control = { image: assets[0].id, kind: 'canny' }; await refresh(); capabilities(); await flush(); } });
 action('clearControl', async () => { delete session!.draft.control; capabilities(); await flush(); });
 input('controlStrength').oninput = scheduleSave;
@@ -223,17 +228,17 @@ action('cancel', async () => { const active = overview.queue.active; if (active)
 action('reuse', async () => { await saveMask(); const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run) return; session!.draft = structuredClone(run.draft); session!.draft.seed = run.seed; session!.draft.modelIds = [run.modelId]; fields(); await flush(); });
 action('editResult', async () => { const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run?.output) return; await saveMask(); session!.draft.mode = 'edit'; session!.draft.source = run.id; delete session!.draft.mask; parent = run.id; fields(); await flush(); show(); });
 action('fit', () => scale(true)); action('actual', () => { input('zoom').value = '100'; scale(false); }); input('zoom').oninput = () => scale(false);
-action('paint', () => { selected = []; show(); painting = !painting; mask.classList.toggle('painting', painting); element('paint').textContent = painting ? 'Finish painting' : 'Paint mask'; });
+action('paint', () => { selected = []; show(); painting = !painting; mask.classList.toggle('painting', painting); element('paint').textContent = painting ? t('ui.finish_painting') : t('ui.paint_mask'); });
 action('clearMask', async () => { context.clearRect(0,0,mask.width,mask.height); delete session!.draft.mask; maskDirty = false; await flush(); });
 action('undoMask', () => { const previous = undo.pop(); if (previous) { redo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(previous,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
 action('redoMask', () => { const next = redo.pop(); if (next) { undo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(next,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
-action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { second.hidden = true; scale(true); return; } if (selected.length !== 2) throw new Error('Command-click two completed results to compare.'); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new Error('Choose completed results.'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); second.hidden = false; });
-for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const result = await api.call('export', { id: session!.id, runId: selected.at(-1), sidecar, includeInputs: input('includePrompts').checked }); if (result?.status === 'refused') throw new Error(result.message); if (result?.sidecar?.status === 'failed') throw new Error('Image saved; its settings sidecar could not be saved.'); if (result?.status === 'saved') element('status').textContent = sidecar ? 'Image and settings saved.' : 'Image saved.'; });
+action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { second.hidden = true; scale(true); return; } if (selected.length !== 2) throw new UiError('ui.commandclick_two_completed_results_to_compare'); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new UiError('ui.choose_completed_results'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); second.hidden = false; });
+for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const result = await api.call('export', { id: session!.id, runId: selected.at(-1), sidecar, includeInputs: input('includePrompts').checked }); if (result?.status === 'refused') throw new Error(result.message); if (result?.sidecar?.status === 'failed') throw new UiError('ui.image_saved_its_settings_sidecar_could_not_be_saved'); if (result?.status === 'saved') element('status').textContent = sidecar ? t('ui.image_and_settings_saved') : t('ui.image_saved'); });
 action('delete', async () => { const id = session!.id; await api.call('delete', { id }); session = undefined; await start(); });
 action('collection', async () => { await saveMask(); await flush(); await api.call('collection'); session = undefined; await start(); });
 input('sessionName').oninput = () => { session!.name = input('sessionName').value; renamePending = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => { void flush().then(refresh).catch(issue); }, 350); };
 for (const id of ['mode','text','width','height','seed','expand','outWidth','outHeight','outLeft','outTop']) input(id).addEventListener('input', () => { scheduleSave(); if (id === 'mode') capabilities(); });
-element('issue').querySelector('button')!.onclick = () => { element('issue').hidden = true; };
+element('issue').querySelector('button')!.onclick = () => { currentIssue = undefined; element('issue').hidden = true; };
 management(api, refresh);
 let pan: { x: number; y: number; left: number; top: number } | undefined;
 const viewport = element('canvas');
@@ -247,4 +252,4 @@ api.onChange(() => { if (refreshTimer) return; refreshTimer = setTimeout(() => {
 async function start() { await refresh(); const first = overview.sessions[0] ?? await api.call('create'); await open(first.id); }
 api.onFlush(async () => { await commands; if (session) session.draft = collect(); await saveMask(); await flush(); });
 api.onCommand(id => { const target = document.getElementById(id); if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click(); });
-void paneLayout(api, issue).then(start).then(() => api.call('ready')).catch(issue);
+void api.call('locale').then(locale => localize(locale ?? { language: 'en', format: 'en' })).then(() => paneLayout(api, issue)).then(start).then(() => api.call('ready')).catch(async error => { await localize({ language: 'en', format: 'en' }); issue(error); });

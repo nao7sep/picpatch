@@ -1,3 +1,4 @@
+import { leakedMessages } from './rendered-messages.ts';
 // @vitest-environment happy-dom
 import { readFile } from 'node:fs/promises';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
@@ -24,7 +25,7 @@ beforeEach(async () => {
   await import('../../src/renderer/main.ts');
   await vi.waitFor(() => expect(call).toHaveBeenCalledWith('ready'));
 });
-afterEach(async () => { if (flush) await flush(); vi.restoreAllMocks(); document.body.replaceChildren(); });
+afterEach(async () => { if (flush) await flush(); expect(leakedMessages(document.body)).toEqual([]); vi.restoreAllMocks(); document.body.replaceChildren(); });
 const field = (id: string) => document.getElementById(id)! as HTMLInputElement;
 it('keeps reference edits attached after changing prompt text', async () => {
   field('addReference').click();
@@ -40,4 +41,28 @@ it('does not silently submit edit inputs as generation', async () => {
   expect(field('run').disabled).toBe(true);
   expect(document.getElementById('admission')!.textContent).toContain('Switch to Edit');
   field('run').click(); expect(call.mock.calls.some(([action]) => action === 'submit')).toBe(false);
+});
+it('changes interface language without changing authored draft content or selected models', async () => {
+  field('text').value = '私の画像 prompt'; field('text').dispatchEvent(new Event('input')); await flush();
+  field('settingsButton').click();
+  await vi.waitFor(() => expect((document.getElementById('settings') as HTMLDialogElement).open).toBe(true));
+  const original = call.getMockImplementation()!;
+  let chosen = 'en';
+  call.mockImplementation(async (action, payload) => {
+    if (action === 'preferences') { chosen = payload.language; return; }
+    const value = await original(action, payload);
+    if (action === 'overview') return { ...value, locale: { language: chosen, format: chosen, systemLanguage: 'en' }, settings: { ...value.settings, language: chosen } };
+    return value;
+  });
+  field('language').value = 'ja'; field('saveSettingsDialog').click();
+  await vi.waitFor(() => expect(document.documentElement.lang).toBe('ja'));
+  expect(field('text').value).toBe('私の画像 prompt');
+  expect(session.draft.modelIds).toEqual(['flux2-klein-4b-4bit']);
+  expect(field('run').textContent).not.toBe('Generate');
+  expect(field('settingsButton').textContent).not.toBe('Settings');
+});
+
+it('detects leaked message keys while accepting a user name that looks like a key', () => {
+  const root = document.createElement('div'); root.innerHTML = '<button>ui.settings</button><div id="sessionList"><button>ui.settings</button></div>';
+  expect(leakedMessages(root)).toEqual(['ui.settings']);
 });

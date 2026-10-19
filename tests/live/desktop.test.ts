@@ -39,3 +39,19 @@ it('runs generation and saves its sidecar through the packaged application with 
     expect(JSON.parse(await readFile(image.slice(0, -4) + '-picpatchsdk.json', 'utf8'))).toHaveProperty('seed', 42);
   } finally { await rm(home, { recursive: true, force: true }); }
 }, 330_000);
+
+it('localizes the real packaged renderer and checks constrained dialog layout in every language', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'picpatch-languages-'));
+  try {
+    const executable = join(root, 'dist/PicPatch-darwin-arm64/PicPatch.app/Contents/MacOS/PicPatch');
+    const environment: NodeJS.ProcessEnv = { ...process.env, PICPATCH_DATA_DIR: home }; delete environment.ELECTRON_RUN_AS_NODE;
+    const nativeLanguage = async () => { try { return (await execute('/usr/bin/defaults', ['read', 'picpatch.desktop', 'AppleLanguages'])).stdout; } catch { return undefined; } };
+    const before = await nativeLanguage();
+    const info = join(root, 'dist/PicPatch-darwin-arm64/PicPatch.app/Contents/Info.plist');
+    const tags = JSON.parse((await execute('/usr/bin/plutil', ['-extract', 'CFBundleLocalizations', 'json', '-o', '-', info])).stdout);
+    expect(tags.sort()).toEqual(['en','de','es','fr','it','pt-BR','ru','ja','ko','zh-Hans'].sort());
+    await execute(executable, ['--smoke-localization'], { cwd: tmpdir(), env: environment, timeout: 75_000, maxBuffer: 1024 * 1024 });
+    expect(JSON.parse(await readFile(join(home, 'config.json'), 'utf8')).language).toBe('ko');
+    expect(await nativeLanguage()).toBe(before);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});

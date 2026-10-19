@@ -1,3 +1,4 @@
+import { preference } from '../shared/i18n/index.ts';
 import { errorRecord } from './records.ts';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -15,7 +16,7 @@ import type { Settings } from './settings.ts';
 export class Application {
   sessions: Sessions;
   queue: Queue;
-  historyIssue?: string;
+  historyIssue?: string | { message: string; notice?: import('../shared/i18n/index.ts').Message };
   private settingsTail: Promise<unknown> = Promise.resolve();
   private runner(): Runner {
     const run = inference(this.sessions, () => this.settings);
@@ -26,7 +27,7 @@ export class Application {
     this.queue = new Queue(this.sessions, this.runner(), changed);
   }
   static async open(paths: AppPaths, changed: () => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}, diagnostic: (level: 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> { return new Application(paths, await readSettings(paths.config), changed, backup, diagnostic); }
-  async overview() { return { ...await this.sessions.list(), models: listModels(), queue: structuredClone(this.queue.state), historyIssue: this.historyIssue, settings: structuredClone(this.settings), locations: { ...resolveStoragePaths(this.settings.profile.engineDirectory || this.settings.profile.modelsDirectory ? { engineDirectory: this.settings.profile.engineDirectory, modelsDirectory: this.settings.profile.modelsDirectory } : {}), sessionsDirectory: this.sessions.root } }; }
+  async overview() { return { ...await this.sessions.list(), models: listModels(), queue: structuredClone(this.queue.state), historyIssue: typeof this.historyIssue === 'object' ? { message: this.historyIssue.message, notice: this.historyIssue.notice } : this.historyIssue, settings: structuredClone(this.settings), locations: { ...resolveStoragePaths(this.settings.profile.engineDirectory || this.settings.profile.modelsDirectory ? { engineDirectory: this.settings.profile.engineDirectory, modelsDirectory: this.settings.profile.modelsDirectory } : {}), sessionsDirectory: this.sessions.root } }; }
   async draft(sessionId: string, draft: Draft) { validateDraft(draft); return this.sessions.update(sessionId, value => { value.draft = structuredClone(draft); }); }
   async importImage(sessionId: string, path: string) { const asset = await this.sessions.importImage(sessionId, path); this.backup(await this.sessions.imagePath(sessionId, asset.id), undefined, asset.sha256); return asset; }
   async mask(sessionId: string, bytes: Uint8Array) {
@@ -50,13 +51,14 @@ export class Application {
     const prepared = await prepareModel(modelId, { ...components, signal, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
     await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
   }
-  async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark' }) {
+  async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string }) {
     if (this.queue.busy()) throw new Error('Finish or cancel queued work before changing resource settings.');
     if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new Error('Invalid theme.');
     await this.updateSettings(next => {
       for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) {
         if (value[key]) next.profile[key] = value[key]; else delete next.profile[key];
       }
+      const language = preference(value.language); if (language) next.language = language; else delete next.language;
       if (value.theme) next.theme = value.theme; else delete next.theme;
     });
   }

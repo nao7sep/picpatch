@@ -11,7 +11,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const staging = join(root, 'dist', 'package');
 await rm(staging, { recursive: true, force: true }); await mkdir(staging, { recursive: true });
 await mkdir(join(staging,'dist'),{recursive:true});
-for (const file of ['main.mjs','preload.cjs','backup-worker.mjs','records-worker.mjs','renderer.js','index.html','style.css','icon.png']) await cp(join(root,'dist',file),join(staging,'dist',file));
+for (const file of (await readdir(join(root, 'dist'))).filter(name => /\.(?:mjs|cjs|js|html|css|png)$/.test(name))) await cp(join(root,'dist',file),join(staging,'dist',file));
 if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new Error('Desktop dependency delivery is currently qualified for Apple Silicon macOS only.');
 const uvCache = join(root, 'node_modules/.cache/picpatch-desktop/uv-0.13.1');
 await mkdir(join(staging, 'dist/tools'), { recursive: true });
@@ -52,6 +52,6 @@ if (process.platform === 'darwin') {
   const zip = join(electronZipDir, `electron-v${version}-darwin-${process.arch}.zip`);
   await execute('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', join(root, 'node_modules', 'electron', 'dist', 'Electron.app'), zip]);
 }
-const paths = await packager({ dir: staging, out: join(root, 'dist'), name: 'PicPatch', appBundleId: 'picpatch.desktop', platform: process.platform, arch: process.arch, electronVersion: version, ...(electronZipDir ? { electronZipDir } : {}), ...(process.platform === 'darwin' ? { icon } : {}), overwrite: true, asar: false, prune: true });
+const paths = await packager({ dir: staging, out: join(root, 'dist'), name: 'PicPatch', appBundleId: 'picpatch.desktop', extendInfo: { CFBundleLocalizations: ['en', 'de', 'es', 'fr', 'it', 'pt-BR', 'ru', 'ja', 'ko', 'zh-Hans'] }, platform: process.platform, arch: process.arch, electronVersion: version, ...(electronZipDir ? { electronZipDir } : {}), ...(process.platform === 'darwin' ? { icon } : {}), overwrite: true, asar: false, prune: true });
 if (process.platform === 'darwin') await execute('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', join(paths[0], 'PicPatch.app')]);
 console.log(paths[0]);

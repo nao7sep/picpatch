@@ -1,8 +1,10 @@
+import { preference } from '../shared/i18n/index.ts';
+import type { Language } from '../shared/i18n/index.ts';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { validateProfile, validateModelRegistration } from 'picpatchsdk';
 import type { ModelRegistration, PicPatchProfile } from 'picpatchsdk';
-export interface Settings { version: 1; sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; uvExecutable?: string; theme?: 'light' | 'dark' }
+export interface Settings { version: 1; sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; uvExecutable?: string; theme?: 'light' | 'dark'; language?: Language }
 import { writeJson } from './files.ts';
 export async function readSettings(path: string): Promise<Settings> {
   let value: Settings;
@@ -11,6 +13,7 @@ export async function readSettings(path: string): Promise<Settings> {
   if (value.version !== 1 || (value.registrations !== undefined && (typeof value.registrations !== 'object' || value.registrations === null || Array.isArray(value.registrations)))) throw new Error('Settings format is unsupported; the file was preserved.');
   value.profile ??= { version: 1 }; value.registrations ??= {};
   if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) delete value.theme;
+  value.language = preference(value.language);
   validateProfile(value.profile);
   for (const entry of Object.values(value.registrations)) validateModelRegistration(entry);
   for (const path of [value.sessionsDirectory, value.uvExecutable]) if (path !== undefined && !isAbsolute(path)) throw new Error('Stored resource paths must be absolute.');

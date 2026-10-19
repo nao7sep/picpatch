@@ -1,29 +1,30 @@
+import { t, term } from './i18n/index.ts';
 import type { ModelCapabilities } from 'picpatchsdk/types';
 import type { Draft } from '../app/types.ts';
 /** Early GUI explanations; the SDK remains authoritative at execution. Never rewrite a draft. */
 export function incompatibilities(draft: Draft, capabilities: ModelCapabilities): string[] {
   const issues: string[] = [];
   if (draft.mode === 'generate') {
-    if (!capabilities.textToImage) issues.push('Text-only generation is unavailable.');
-    if (draft.source || draft.mask || draft.references.length || draft.outpaint) issues.push('Switch to Edit or clear the editing inputs.');
+    if (!capabilities.textToImage) issues.push(t('ui.textonly_generation_is_unavailable'));
+    if (draft.source || draft.mask || draft.references.length || draft.outpaint) issues.push(t('ui.switch_to_edit_or_clear_the_editing_inputs'));
   } else {
-    if (!capabilities.instructionEditing) issues.push('Editing is unavailable.');
-    if (capabilities.sourceImageRequired && !draft.source) issues.push('Add a source image.');
-    if (capabilities.maskRequired && !draft.mask && !draft.outpaint) issues.push('Paint a mask or expand the canvas.');
-    if (draft.mask && capabilities.maskMode === 'none') issues.push('Masks are unavailable.');
-    if (draft.outpaint && !capabilities.outpainting) issues.push('Canvas expansion is unavailable.');
+    if (!capabilities.instructionEditing) issues.push(t('ui.editing_is_unavailable'));
+    if (capabilities.sourceImageRequired && !draft.source) issues.push(t('ui.add_a_source_image'));
+    if (capabilities.maskRequired && !draft.mask && !draft.outpaint) issues.push(t('ui.paint_a_mask_or_expand_the_canvas'));
+    if (draft.mask && capabilities.maskMode === 'none') issues.push(t('ui.masks_are_unavailable'));
+    if (draft.outpaint && !capabilities.outpainting) issues.push(t('ui.canvas_expansion_is_unavailable'));
     for (const group of draft.references) {
-      if (!capabilities.referenceRoles.includes(group.role)) issues.push(`Reference ${group.id}: role ${group.role} is unavailable.`);
+      if (!capabilities.referenceRoles.includes(group.role)) issues.push(t('admission.role', { name: group.id, role: term('role', group.role) }));
       const method = group.conditioning ?? 'prompt';
       const required = { prompt: 'ordered-images-with-role-prompt', identity: 'pooled-identity', appearance: 'appearance-embedding' }[method];
-      if (capabilities.referenceConditioning !== required) issues.push(`Reference ${group.id}: ${method} conditioning is unavailable.`);
-      if (!group.images.length) issues.push(`Reference ${group.id}: add a photo.`);
-      if (method === 'identity' && !group.className) issues.push(`Reference ${group.id}: select an identity class.`);
+      if (capabilities.referenceConditioning !== required) issues.push(t('admission.conditioning', { name: group.id, method: term('conditioning', method) }));
+      if (!group.images.length) issues.push(t('admission.photo', { name: group.id }));
+      if (method === 'identity' && !group.className) issues.push(t('admission.class', { name: group.id }));
     }
   }
   for (const key of Object.keys(draft.parameters)) {
-    if (!Object.hasOwn(capabilities.parameters ?? {}, key)) issues.push(`Parameter ${key} is unavailable.`);
+    if (!Object.hasOwn(capabilities.parameters ?? {}, key)) issues.push(t('admission.parameter', { name: term('parameter', key) }));
   }
-  if (draft.control && !capabilities.controlKinds?.includes(draft.control.kind)) issues.push('A prepared Canny control model is required.');
+  if (draft.control && !capabilities.controlKinds?.includes(draft.control.kind)) issues.push(t('ui.a_prepared_canny_control_model_is_required'));
   return issues;
 }
