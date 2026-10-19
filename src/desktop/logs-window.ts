@@ -16,7 +16,7 @@ export class LogsWindow {
   private notifyTimer?: ReturnType<typeof setTimeout>;
   private renderer: string;
   private fitMinimum?: () => void;
-  constructor(private here: string, private reader: RecordsReader, private appearance: () => LogsAppearance, private failed: (error: unknown) => void) {
+  constructor(private here: string, private reader: RecordsReader, private appearance: () => LogsAppearance, private failed: (error: unknown) => void, private resizeList: (width: number) => Promise<void> = async () => {}) {
     this.renderer = pathToFileURL(join(here, 'logs.html')).href;
     ipcMain.handle('picpatch:logs', async (event, action: string, payload: unknown) => {
       if (!trustedLogsRequest(event, this.window, this.renderer)) throw new Error('Untrusted logs request.');
@@ -25,6 +25,7 @@ export class LogsWindow {
           case 'query': return { ok: true, value: await reader.query(recordsQuery(payload)) };
           case 'detail': return { ok: true, value: await reader.detail(recordId(payload)) };
           case 'appearance': return { ok: true, value: this.appearance() };
+          case 'resizeList': if (typeof payload !== 'number' || !Number.isFinite(payload) || payload < 320 || payload > 10000) throw new Error('Invalid records pane width.'); await this.resizeList(payload); return { ok: true };
           case 'close': this.window?.close(); return { ok: true };
           default: throw new Error('Unknown logs action.');
         }
@@ -46,12 +47,12 @@ export class LogsWindow {
   async open(visible = true): Promise<BrowserWindow> {
     if (this.opening) return this.opening;
     if (this.window && !this.window.isDestroyed()) { if (this.window.isMinimized()) this.window.restore(); if (visible) { this.window.show(); this.window.focus(); } return this.window; }
-    const window = this.window = new BrowserWindow({ name: 'picpatch-logs', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, title: t('ui.logs'), ...(process.platform === 'darwin' ? {} : { icon: join(this.here, 'icon.png') }), width: 1100, height: 720, minWidth: 760, minHeight: 480, show: false, backgroundColor: this.appearance().dark ? '#17191c' : '#f4f4f2', webPreferences: { zoomFactor: normalizeZoom(this.appearance().uiZoom), preload: join(this.here, 'logs-preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+    const window = this.window = new BrowserWindow({ name: 'picpatch-logs', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, title: t('ui.logs'), ...(process.platform === 'darwin' ? {} : { icon: join(this.here, 'icon.png') }), width: 1100, height: 720, minWidth: 765, minHeight: 480, show: false, backgroundColor: this.appearance().dark ? '#17191c' : '#f4f4f2', webPreferences: { zoomFactor: normalizeZoom(this.appearance().uiZoom), preload: join(this.here, 'logs-preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
     const minimum = () => {
       if (window.isDestroyed()) return;
       const [width, height] = window.getSize(); const [cw, ch] = window.getContentSize();
-      // List 320 + detail 440; controls 200 + list/detail 240 + footer 40.
-      const floor = windowMinimum({ width: 760, height: 480 }, window.webContents.getZoomFactor(), { width: width - cw, height: height - ch }, screen.getDisplayMatching(window.getBounds()).workAreaSize);
+      // List 320 + divider 5 + detail 440; controls 200 + list/detail 240 + footer 40.
+      const floor = windowMinimum({ width: 765, height: 480 }, window.webContents.getZoomFactor(), { width: width - cw, height: height - ch }, screen.getDisplayMatching(window.getBounds()).workAreaSize);
       window.setMinimumSize(floor.width, floor.height);
     };
     this.fitMinimum = minimum;

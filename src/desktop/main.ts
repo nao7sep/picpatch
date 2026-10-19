@@ -140,7 +140,7 @@ async function start() {
     try { const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1)); const response = await net.fetch(pathToFileURL(path).href); const headers = new Headers(response.headers); headers.set('Access-Control-Allow-Origin', '*'); return new Response(response.body, { status: response.status, headers }); }
     catch { return new Response('Image unavailable', { status: 404 }); }
   });
-  logs = new LogsWindow(here, recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }));
+  logs = new LogsWindow(here, recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }), width => storePane({ recordsListWidth: width }));
   const renderer = pathToFileURL(join(here, 'index.html')).href;
   ipcMain.handle('picpatch:call', async (event, action: string, payload: any = {}) => {
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== renderer) throw new Error('Untrusted request.');

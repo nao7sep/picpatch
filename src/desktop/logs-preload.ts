@@ -7,6 +7,7 @@ const call = async (action: string, payload?: unknown) => {
 };
 function subscribe(channel: string, listener: () => void) { const receive = () => listener(); ipcRenderer.on(channel, receive); return () => ipcRenderer.removeListener(channel, receive); }
 contextBridge.exposeInMainWorld('picpatchLogs', {
+  resizeList: width => call('resizeList', width),
   query: query => call('query', query), detail: id => call('detail', id), appearance: () => call('appearance'), close: () => call('close'),
   onRecordsChanged: listener => subscribe('picpatch:logsChanged', listener),
   onAppearanceChanged: listener => subscribe('picpatch:logsAppearance', listener),

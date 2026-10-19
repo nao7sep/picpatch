@@ -8,7 +8,7 @@ const row = { id: 30, session: '2026-10-19T00:00:00Z', time: '2026-10-19T01:00:0
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 beforeEach(async () => {
   document.write((await readFile('src/renderer/logs.html','utf8')).replace(/<script[\s\S]*?<\/script>/g, '').replace(/<link[^>]+>/g, ''));
-  api = { query: vi.fn().mockResolvedValue({ records: [row], more: true }), detail: vi.fn().mockResolvedValue('{"literal":"ui.settings", "full":true}'), appearance: vi.fn().mockResolvedValue({ locale: { language: 'en', format: 'en' }, dark: true }), close: vi.fn().mockResolvedValue(undefined), onRecordsChanged: listener => { changed = listener; return vi.fn(); }, onAppearanceChanged: () => vi.fn() };
+  api = { resizeList: vi.fn().mockResolvedValue(undefined), query: vi.fn().mockResolvedValue({ records: [row], more: true }), detail: vi.fn().mockResolvedValue('{"literal":"ui.settings", "full":true}'), appearance: vi.fn().mockResolvedValue({ locale: { language: 'en', format: 'en' }, dark: true }), close: vi.fn().mockResolvedValue(undefined), onRecordsChanged: listener => { changed = listener; return vi.fn(); }, onAppearanceChanged: () => vi.fn() };
   dispose = logsView(api); await vi.waitFor(() => expect(el('logsList').children.length).toBe(1));
 });
 afterEach(() => { dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); });
@@ -38,4 +38,25 @@ it('discards stale detail after a filter change and supports keyboard selection'
   expect(api.detail).toHaveBeenCalledWith(30);
   el('newest').click(); resolve('stale'); await Promise.resolve();
   expect(el('logsDetail').textContent).not.toBe('stale');
+});
+
+it('debounces typing and appends older pages without discarding selection', async () => {
+  el<HTMLInputElement>('search').value = 'model'; el('search').dispatchEvent(new Event('input'));
+  el<HTMLInputElement>('search').value = 'models'; el('search').dispatchEvent(new Event('input'));
+  await vi.waitFor(() => expect(api.query).toHaveBeenCalledTimes(2));
+  expect(api.query).toHaveBeenLastCalledWith({ current: true, level: 'all', search: 'models' });
+  (el('logsList').firstElementChild as HTMLButtonElement).click();
+  await vi.waitFor(() => expect(api.detail).toHaveBeenCalled());
+  vi.mocked(api.query).mockResolvedValueOnce({ records: [{ ...row, id: 20 }], more: false });
+  el('logsList').dispatchEvent(new Event('scroll'));
+  await vi.waitFor(() => expect(el('logsList').children).toHaveLength(2));
+  expect(el('logsList').querySelector('[aria-selected=true]')?.getAttribute('data-id')).toBe('30');
+  expect(el('logsDetail').textContent).toContain('ui.settings');
+});
+it('renders readable structured fields as text with localized severity', async () => {
+  vi.mocked(api.detail).mockResolvedValueOnce(JSON.stringify({ session: 'launch', event: { time: row.time, verb: 'generate', model: 'Klein', message: '<b>unsafe</b>' } }));
+  (el('logsList').firstElementChild as HTMLButtonElement).click();
+  await vi.waitFor(() => expect(el('recordFields').textContent).toContain('Klein'));
+  expect(el('recordFields').querySelector('b')).toBeNull();
+  expect(el('logsList').textContent).toContain('Warning');
 });

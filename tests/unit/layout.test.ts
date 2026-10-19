@@ -23,3 +23,12 @@ it('retains valid UI zoom beside pane state and drops an invalid zoom independen
     expect(await readPaneState(path)).toEqual({requestWidth:420,sidebar:true});
   } finally { await rm(directory,{recursive:true,force:true}); }
 });
+it('opens sessions on first use when several exist, preserving an explicit hidden choice', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'picpatch-layout-first-'));
+  try {
+    const path = join(root, 'layout.json');
+    expect((await readPaneState(path, true)).sidebar).toBe(true);
+    await savePaneState(path, { requestWidth: 300, sidebar: false, exportDirectory: root, recordsListWidth: 410 });
+    expect(await readPaneState(path, true)).toMatchObject({ sidebar: false, exportDirectory: root, recordsListWidth: 410 });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
