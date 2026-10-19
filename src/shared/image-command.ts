@@ -1,4 +1,4 @@
-import type { Draft, Session } from '../app/types.ts';
+import type { Draft, Run, Session } from '../app/types.ts';
 
 /** The visible inputs choose the operation; command text is never interpreted or rewritten. */
 export function imageCommand(draft: Draft): Draft {
@@ -29,4 +29,15 @@ export function commandTargetReady(session: Session, draft = session.draft): boo
 /** A pending result is an explicit target, never an implicit queued dependency. */
 export function afterCommand(draft: Draft, result: string): Draft {
   return targetImage({ ...draft, text: '' }, result);
+}
+
+/** A terminal attempt cannot remain a pending source. Preserve newer composer edits. */
+export function recoverCommand(draft: Draft, runs: readonly Run[]): Draft {
+  const run = runs.find(item => item.id === draft.source);
+  if (!run || run.output || !['failed', 'refused', 'cancelled', 'interrupted'].includes(run.status)) return draft;
+  const pending = afterCommand(run.draft, run.id);
+  if (JSON.stringify(draft) === JSON.stringify(pending)) return structuredClone(run.draft);
+  const next = { ...draft, text: draft.text || run.draft.text };
+  if (run.draft.source) next.source = run.draft.source; else delete next.source;
+  return imageCommand(next);
 }

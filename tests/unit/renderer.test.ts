@@ -321,3 +321,16 @@ it('keeps a failed command and its attachments for correction, and never consume
   const literal = document.createElement('div'); literal.innerHTML = '<div id="results"><div class="commandText">ui.settings</div><span>conversation.send</span></div>';
   expect(leakedMessages(literal)).toEqual(['conversation.send']);
 });
+
+it.each(['failed', 'refused', 'cancelled', 'interrupted'] as const)('restores a runnable command after a %s result', async status => {
+  field('text').value = 'A blue teapot'; field('text').dispatchEvent(new Event('input'));
+  field('run').click();
+  await vi.waitFor(() => expect(session.runs).toHaveLength(1));
+  await vi.waitFor(() => expect(field('text').value).toBe(''));
+  session.runs[0]!.status = status;
+  changed();
+  await vi.waitFor(() => expect(field('text').value).toBe('A blue teapot'));
+  expect(field('run').disabled).toBe(false);
+  expect(document.getElementById('admission')!.textContent).not.toContain('Wait');
+  await flush(); expect(session.draft.source).toBeUndefined();
+});

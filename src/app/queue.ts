@@ -2,7 +2,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { ImageOutcome, ProgressEvent, SdkEvent } from 'picpatchsdk';
 import type { Draft, Run } from './types.ts';
 import { Sessions, validateDraft } from './sessions.ts';
-import { afterCommand, commandTargetReady, imageCommand } from '../shared/image-command.ts';
+import { afterCommand, commandTargetReady, imageCommand, recoverCommand } from '../shared/image-command.ts';
 
 export type RunEvents = { signal: AbortSignal; onProgress: (event: ProgressEvent) => void; onEvent: (event: SdkEvent) => void };
 export interface RunCompletion { outcome: ImageOutcome; stopIssue?: string }
@@ -69,6 +69,7 @@ export class Queue {
             const run = value.runs.find(r => r.id === selected.runId)!;
             run.status = cause.kind === 'cancelled' ? 'cancelled' : 'failed'; run.ended = new Date().toISOString();
             run.issue = { code: cause.code ?? 'APP_RUN_FAILED', message: cause.message ?? 'Could not complete the attempt.', effect: cause.effect ?? 'unknown' };
+            value.draft = recoverCommand(value.draft, value.runs);
           });
           if (cause.code === 'TERMINATION_FAILED') this.terminationUnconfirmed = true;
           if (cause.code === 'TERMINATION_FAILED' || cause.effect === 'unknown') throw error;
@@ -79,6 +80,7 @@ export class Queue {
           const run = value.runs.find(r => r.id === selected.runId)!; run.ended = new Date().toISOString();
           if ('status' in outcome) { run.status = 'refused'; run.issue = { code: outcome.code, message: outcome.message, effect: outcome.effect }; }
           else { run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record; const notices = [outcome.sidecar?.status === 'failed' ? 'Image saved; its settings sidecar could not be saved.' : undefined, outcome.cleanupWarning?.message].filter((value): value is string => Boolean(value)); if (notices.length) run.notices = notices; }
+          value.draft = recoverCommand(value.draft, value.runs);
         });
         if (completion.stopIssue) { this.terminationUnconfirmed = true; throw new Error(completion.stopIssue); }
       } catch (error) {
@@ -90,7 +92,7 @@ export class Queue {
   async cancel(sessionId: string, runId: string): Promise<void> {
     if (this.state.active?.sessionId === sessionId && this.state.active.runId === runId) { this.controller?.abort(); return; }
     this.pending = this.pending.filter(item => item.sessionId !== sessionId || item.runId !== runId);
-    await this.sessions.update(sessionId, session => { const run = session.runs.find(r => r.id === runId); if (run?.status === 'queued') { run.status = 'cancelled'; run.ended = new Date().toISOString(); } });
+    await this.sessions.update(sessionId, session => { const run = session.runs.find(r => r.id === runId); if (run?.status === 'queued') { run.status = 'cancelled'; run.ended = new Date().toISOString(); session.draft = recoverCommand(session.draft, session.runs); } });
     this.changed();
   }
   busy(sessionId?: string): boolean { return Boolean(this.state.active && (!sessionId || this.state.active.sessionId === sessionId)) || this.pending.some(item => !sessionId || item.sessionId === sessionId); }

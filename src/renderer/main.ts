@@ -1,4 +1,4 @@
-import { afterCommand, commandTargetReady, hasImage, imageCommand, newImage, targetImage } from '../shared/image-command.ts';
+import { afterCommand, recoverCommand, commandTargetReady, hasImage, imageCommand, newImage, targetImage } from '../shared/image-command.ts';
 import { aboutModal } from './AboutModal.ts';
 import { operationResults } from './operation-results.ts';
 import { defaultFont, fixedFont } from '../shared/appearance.ts';
@@ -252,7 +252,7 @@ async function refresh() {
   const holder = element('sessionList');
   renderCollection(holder, overview.sessions.map((item: any) => ({ key: item.id, label: item.name, element: button(item.name, () => {}) })), { label: t('ui.sessions'), empty: t('ui.no_saved_sessions'), selected: session ? [session.id] : [], select: keys => { if (keys[0]) void command(() => open(keys[0]!)).catch(() => {}); } });
   for (const failure of overview.failures) { const p = document.createElement('p'); p.textContent = errorText(failure.message); holder.append(p); }
-  if (session) { const owner = session; const fresh: Session = await api.call('get', { id: owner.id }); if (session === owner) { owner.runs = fresh.runs; owner.assets = fresh.assets; admission(); results(); show(); } }
+  if (session) { const owner = session; const fresh: Session = await api.call('get', { id: owner.id }); if (session === owner) { owner.runs = fresh.runs; owner.assets = fresh.assets; const recovered = recoverCommand(owner.draft, owner.runs); if (recovered !== owner.draft) { owner.draft = recovered; fields(); void flush().catch(error => requestIssues.show('draft', error)); } admission(); results(); show(); } }
   if (overview.historyIssue) shellIssues.show('history', overview.historyIssue); else shellIssues.clear('history');
   const active = overview.queue.active;
   element('status').textContent = overview.queue.paused ? t('run.paused', { reason: overview.queue.issue ? errorText(overview.queue.issue) : t('ui.resume_when_ready') }) : active ? t('run.elapsed', { stage: term('stage', active.stage), count: Math.max(0, Math.floor((Date.now() - active.startedAt) / 1000)) }) : t('ui.ready');

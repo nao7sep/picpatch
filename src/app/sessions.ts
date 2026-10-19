@@ -1,3 +1,4 @@
+import { recoverCommand } from '../shared/image-command.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, readdir, readFile, rename, rm, realpath, lstat } from 'node:fs/promises';
@@ -78,6 +79,7 @@ export class Sessions {
     if (session.id !== key) throw new Error('Session identity does not match its directory.');
     // Reopening never schedules inference. Queued work requires an explicit resume.
     for (const run of session.runs) if (run.status === 'running') { run.status = 'interrupted'; run.issue = { code: 'INTERRUPTED', message: 'The app closed before this attempt settled.', effect: 'unknown' }; }
+    session.draft = recoverCommand(session.draft, session.runs);
     this.loaded.set(key, session); return structuredClone(session);
   }
   async create(name = 'Untitled session'): Promise<Session> {
