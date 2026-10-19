@@ -1,9 +1,14 @@
+import { closeTopModal } from './Modal.ts';
+import { isComposing } from './ime.ts';
 import { localize } from './localization.ts';
 import { t, term, number, errorText, UiError } from '../shared/i18n/index.ts';
 import { renderCollection } from './collection.ts';
 import { paneLayout } from './layout.ts';
 import { fitScale, imagePoint, wipeCompatible } from '../shared/viewport.ts';
-import { management } from './management.ts';
+import { managementModal } from './ManagementModal.ts';
+import { settingsModal } from './SettingsModal.ts';
+import { recordsModal } from './RecordsModal.ts';
+import { sourceDrop } from './source-drop.ts';
 import { incompatibilities } from '../shared/admission.ts';
 import type { Bridge } from '../shared/bridge.ts';
 import type { Session, Draft, Asset, Run } from '../app/types.ts';
@@ -101,7 +106,7 @@ function references() {
   for (const [index, group] of session!.draft.references.entries()) {
     const box = document.createElement('div'); box.className = 'reference';
     const name = document.createElement('input'); name.value = group.id; name.setAttribute('aria-label', t('ui.reference_group_name')); name.onchange = () => { group.id = name.value; void flush().catch(issue); }; box.append(name);
-    const role = document.createElement('select'); for (const value of ['subject','object','style','background']) { const option = document.createElement('option'); option.value = value; option.textContent = term('role', value); role.append(option); } role.value = group.role; role.onchange = () => { group.role = role.value as typeof group.role; admission(); void flush().catch(issue); }; box.append(role);
+    const role = document.createElement('select'); for (const value of ['subject','object','style','background']) { const option = document.createElement('option'); option.value = value; option.textContent = term('role', value); role.append(option); } role.setAttribute('aria-label', t('ui.reference_role')); role.value = group.role; role.onchange = () => { group.role = role.value as typeof group.role; admission(); void flush().catch(issue); }; box.append(role);
     for (const [key, values] of [['conditioning', ['prompt','identity','appearance']], ['className', ['', 'man','woman','girl','boy']]] as const) {
       const label = document.createElement('label'); label.textContent = key === 'conditioning' ? t('ui.conditioning') : t('ui.identity_class');
       const select = document.createElement('select');
@@ -193,7 +198,6 @@ async function refresh() {
   overview = await api.call('overview');
   const languageChanged = await localize(overview.locale ?? { language: 'en', format: 'en' });
   if (languageChanged && session) { fields(); element('paint').textContent = painting ? t('ui.finish_painting') : t('ui.paint_mask'); if (currentIssue !== undefined) issue(currentIssue); }
-  document.documentElement.style.colorScheme = overview.settings.theme ?? 'light dark';
   const holder = element('sessionList');
   renderCollection(holder, overview.sessions.map((item: any) => ({ key: item.id, label: item.name, element: button(item.name, () => {}) })), { label: t('ui.sessions'), empty: t('ui.no_saved_sessions'), selected: session ? [session.id] : [], select: keys => { if (keys[0]) void command(() => open(keys[0]!)).catch(() => {}); } });
   for (const failure of overview.failures) { const p = document.createElement('p'); p.textContent = errorText(failure.message); holder.append(p); }
@@ -234,22 +238,21 @@ action('undoMask', () => { const previous = undo.pop(); if (previous) { redo.pus
 action('redoMask', () => { const next = redo.pop(); if (next) { undo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(next,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
 action('compare', async () => { const second = element<HTMLImageElement>('comparison'); if (!second.hidden) { second.hidden = true; scale(true); return; } if (selected.length !== 2) throw new UiError('ui.commandclick_two_completed_results_to_compare'); const run = session!.runs.find(r => r.id === selected[0]); if (!run?.output) throw new UiError('ui.choose_completed_results'); await saveMask(); painting = false; mask.classList.remove('painting'); second.src = imageUrl(run.id); second.hidden = false; });
 for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const result = await api.call('export', { id: session!.id, runId: selected.at(-1), sidecar, includeInputs: input('includePrompts').checked }); if (result?.status === 'refused') throw Object.assign(new Error(result.message), { code: result.code, effect: result.effect }); if (result?.sidecar?.status === 'failed') throw new UiError('ui.image_saved_its_settings_sidecar_could_not_be_saved'); if (result?.status === 'saved') element('status').textContent = sidecar ? t('ui.image_and_settings_saved') : t('ui.image_saved'); });
-action('delete', async () => { const id = session!.id; await api.call('delete', { id }); session = undefined; await start(); });
-action('collection', async () => { await saveMask(); await flush(); await api.call('collection'); session = undefined; await start(); });
+action('delete', async () => { const id = session!.id; if (await api.call('delete', { id })) { session = undefined; await start(); } });
+action('collection', async () => { await saveMask(); await flush(); if (await api.call('collection')) { session = undefined; await start(); } });
 input('sessionName').oninput = () => { session!.name = input('sessionName').value; renamePending = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => { void flush().then(refresh).catch(issue); }, 350); };
 for (const id of ['mode','text','width','height','seed','expand','outWidth','outHeight','outLeft','outTop']) input(id).addEventListener('input', () => { scheduleSave(); if (id === 'mode') capabilities(); });
 element('issue').querySelector('button')!.onclick = () => { currentIssue = undefined; element('issue').hidden = true; };
-management(api, refresh);
+managementModal(api, refresh); settingsModal(api, refresh); recordsModal(api);
 let pan: { x: number; y: number; left: number; top: number } | undefined;
 const viewport = element('canvas');
 viewport.addEventListener('pointerdown', event => { if (!event.altKey || drawing) return; pan = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop }; viewport.setPointerCapture(event.pointerId); event.preventDefault(); });
 viewport.addEventListener('pointermove', event => { if (pan) { viewport.scrollLeft = pan.left - event.clientX + pan.x; viewport.scrollTop = pan.top - event.clientY + pan.y; } });
 viewport.addEventListener('pointerup', () => { pan = undefined; }); viewport.addEventListener('pointercancel', () => { pan = undefined; });
-element('canvas').ondragover = event => { event.preventDefault(); };
-element('canvas').ondrop = event => { event.preventDefault(); const file = event.dataTransfer?.files[0]; if (!file) return; void command(async () => { const added: Asset[] = await api.call('import', { id: session!.id, path: api.droppedFile(file) }); session!.draft.source = added[0]!.id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); }).catch(() => {}); };
+sourceDrop(viewport, file => command(async () => { await saveMask(); await flush(); const added: Asset[] = await api.call('import', { id: session!.id, path: api.droppedFile(file) }); session!.draft.source = added[0]!.id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); }).catch(() => {}), issue);
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 api.onChange(() => { if (refreshTimer) return; refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh().catch(issue); }, 100); });
 async function start() { await refresh(); const first = overview.sessions[0] ?? await api.call('create'); await open(first.id); }
 api.onFlush(async () => { await commands; if (session) session.draft = collect(); await saveMask(); await flush(); });
-api.onCommand(id => { const target = document.getElementById(id); if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click(); });
+api.onCommand(id => { if (isComposing()) return; if (id === 'closeWindow') { if (!closeTopModal()) void api.call('closeWindow').catch(issue); return; } const target = document.getElementById(id); if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click(); });
 void api.call('locale').then(locale => localize(locale ?? { language: 'en', format: 'en' })).then(() => paneLayout(api, issue)).then(start).then(() => api.call('ready')).catch(async error => { await localize({ language: 'en', format: 'en' }); issue(error); });

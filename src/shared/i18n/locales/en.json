@@ -352,5 +352,9 @@
   "native.zoomWindow": "Zoom Window",
   "native.bringAllFront": "Bring All to Front",
   "native.pasteMatch": "Paste and Match Style",
-  "native.delete": "Delete"
+  "native.delete": "Delete",
+  "ui.discard_unsaved_settings": "Discard unsaved settings?",
+  "ui.discard_changes": "Discard changes",
+  "ui.drop_one_source": "Drop one source image at a time.",
+  "ui.reference_role": "Reference role"
 }

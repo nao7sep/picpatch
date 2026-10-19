@@ -353,5 +353,9 @@
   "native.zoomWindow": "Ingrandisci finestra",
   "native.bringAllFront": "Porta tutto in primo piano",
   "native.pasteMatch": "Incolla e adatta lo stile",
-  "native.delete": "Elimina"
+  "native.delete": "Elimina",
+  "ui.discard_unsaved_settings": "Scartare le impostazioni non salvate?",
+  "ui.discard_changes": "Scarta modifiche",
+  "ui.drop_one_source": "Trascina una sola immagine di partenza alla volta.",
+  "ui.reference_role": "Ruolo del riferimento"
 }

@@ -22,3 +22,12 @@ it('supports toggle and range selection without activating hovered items', () =>
   holder.children[1]!.dispatchEvent(new MouseEvent('click', { ctrlKey: true })); expect(select).toHaveBeenLastCalledWith(['a', 'c']);
   holder.children[0]!.dispatchEvent(new MouseEvent('mouseover')); expect((document.activeElement as HTMLElement).dataset.key).toBe('b'); holder.remove();
 });
+
+it('recovers to the neighboring item and ignores composition navigation', () => {
+  const holder = document.createElement('div'); document.body.append(holder); const select = vi.fn();
+  const options = { label: 'Items', selected: [], empty: 'Empty', select };
+  renderCollection(holder, entries(), options); (holder.children[1] as HTMLElement).focus();
+  holder.children[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 229, bubbles: true })); expect(select).not.toHaveBeenCalled();
+  renderCollection(holder, entries().filter(item => item.key !== 'b'), options);
+  expect((document.activeElement as HTMLElement).dataset.key).toBe('c'); holder.remove();
+});

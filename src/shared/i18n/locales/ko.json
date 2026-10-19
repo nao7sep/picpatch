@@ -351,5 +351,9 @@
   "native.zoomWindow": "윈도우 확대",
   "native.bringAllFront": "모두 앞으로 가져오기",
   "native.pasteMatch": "붙여넣고 스타일 일치",
-  "native.delete": "삭제"
+  "native.delete": "삭제",
+  "ui.discard_unsaved_settings": "저장하지 않은 설정을 버리시겠습니까?",
+  "ui.discard_changes": "변경 사항 버리기",
+  "ui.drop_one_source": "원본 이미지는 한 번에 하나씩 놓으십시오.",
+  "ui.reference_role": "참조 역할"
 }

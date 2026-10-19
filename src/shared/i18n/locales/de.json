@@ -352,5 +352,9 @@
   "native.zoomWindow": "Fenster vergrößern",
   "native.bringAllFront": "Alle nach vorne bringen",
   "native.pasteMatch": "Einsetzen und Stil anpassen",
-  "native.delete": "Löschen"
+  "native.delete": "Löschen",
+  "ui.discard_unsaved_settings": "Nicht gespeicherte Einstellungen verwerfen?",
+  "ui.discard_changes": "Änderungen verwerfen",
+  "ui.drop_one_source": "Ziehen Sie jeweils nur ein Ausgangsbild hierher.",
+  "ui.reference_role": "Referenzrolle"
 }

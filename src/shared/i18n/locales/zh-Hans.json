@@ -351,5 +351,9 @@
   "native.zoomWindow": "缩放窗口",
   "native.bringAllFront": "前置全部窗口",
   "native.pasteMatch": "粘贴并匹配样式",
-  "native.delete": "删除"
+  "native.delete": "删除",
+  "ui.discard_unsaved_settings": "要放弃未保存的设置吗？",
+  "ui.discard_changes": "放弃更改",
+  "ui.drop_one_source": "请一次只拖入一张原图。",
+  "ui.reference_role": "参考图角色"
 }

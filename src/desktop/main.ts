@@ -2,7 +2,7 @@ import { bootstrapLanguage, selectLanguage, localeState, prepareChromiumLanguage
 import { t, term, number, errorText, errorNotice, UiError } from '../shared/i18n/index.ts';
 import { Records, errorRecord } from '../app/records.ts';
 import { readPaneState, savePaneState } from '../app/layout-state.ts';
-import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor, nativeTheme } from 'electron';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, basename, relative, isAbsolute, delimiter } from 'node:path';
@@ -66,8 +66,11 @@ async function start() {
     }
     catch (error) { records?.write(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Command did not complete.', { action, error: errorRecord(error) }); return { ok: false, message: errorText(error), ...(isPicPatchSdkError(error) ? { code: error.code, kind: error.kind, effect: error.effect } : {}), notice: errorNotice(error) }; }
   });
+  nativeTheme.themeSource = service.settings.theme ?? 'system';
+  nativeTheme.on('updated', () => window?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2'));
   menus();
-  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', icon: join(here, 'icon.png'), show: false, backgroundColor: '#17191c', webPreferences: { preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', icon: join(here, 'icon.png'), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2', webPreferences: { preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  window.webContents.on('before-input-event', (_event, input) => { window?.webContents.setIgnoreMenuShortcuts(input.isComposing); });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => { if (url !== renderer) event.preventDefault(); });
   window.webContents.session.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' picpatch-image: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"] } }));
@@ -111,6 +114,7 @@ async function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections
 }
 async function dispatch(action: string, payload: any, signal?: AbortSignal) {
   switch (action) {
+    case 'closeWindow': void close(); return;
     case 'records': return records?.list() ?? [];
     case 'ready': if (smoke) { if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, join(here, 'tools/uv')); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
     case 'paneState': if (payload.requestWidth !== undefined) { await savePaneState(paths.state, payload); return; } return readPaneState(paths.state);
@@ -121,7 +125,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'get': return service.sessions.get(payload.id);
     case 'draft': return service.draft(payload.id, payload.draft as Draft);
     case 'rename': if (typeof payload.name !== 'string' || !payload.name.trim()) throw new UiError('ui.enter_a_session_name'); return service.sessions.update(payload.id, session => { session.name = payload.name; });
-    case 'delete': { const answer = await dialog.showMessageBox(window!, { message: t('ui.delete_this_session_and_its_retained_images'), detail: t('ui.exported_images_and_original_files_are_kept'), buttons: [t('ui.keep_session'), t('ui.delete_session')], cancelId: 0, defaultId: 0 }); if (answer.response === 1) await service.remove(payload.id); return; }
+    case 'delete': { const answer = await dialog.showMessageBox(window!, { message: t('ui.delete_this_session_and_its_retained_images'), detail: t('ui.exported_images_and_original_files_are_kept'), buttons: [t('ui.keep_session'), t('ui.delete_session')], cancelId: 0, defaultId: 0 }); if (answer.response !== 1) return false; await service.remove(payload.id); return true; }
     case 'import': { const files = payload.path ? [payload.path] : await pick(['openFile', 'multiSelections'], t('ui.add_images')); const assets = []; for (const path of files) assets.push(await service.importImage(payload.id, path)); return assets; }
     case 'mask': return service.mask(payload.id, payload.bytes);
     case 'submit': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.submit(payload.id, payload.draft, payload.samples, payload.parent);
@@ -129,7 +133,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'resume': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.resume(payload.id);
     case 'export': { const result = await dialog.showSaveDialog(window!, { title: t('ui.save_image'), defaultPath: 'image.png', filters: [{ name: t('ui.png_image'), extensions: ['png'] }] }); if (result.canceled || !result.filePath) return; return service.export(payload.id, payload.runId, result.filePath, payload.sidecar === true, payload.includeInputs === true); }
     case 'cancelManaged': managed?.controller.abort(); return;
-    case 'preferences': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); await service.preferences(payload); await selectLanguage(service.settings.language); menus(); window?.webContents.send('picpatch:changed'); return service.overview();
+    case 'preferences': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); window?.webContents.send('picpatch:changed'); return service.overview();
     case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location')))[0];
     case 'pickComponent': {
       if (typeof payload.directory !== 'string' || !isAbsolute(payload.directory)) throw new UiError('ui.choose_the_model_bundle_first');
@@ -149,7 +153,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'engines': return { mflux: await inspectEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
     case 'installNative': return installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal });
     case 'installPython': { const uvExecutable = app.isPackaged ? join(here, 'tools/uv') : join(here, '../node_modules/.cache/picpatch-desktop/uv-0.13.1/uv-aarch64-apple-darwin/uv'); return installEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
-    case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (paths[0]) await service.collection(paths[0]); return; }
+    case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }
 }
@@ -160,6 +164,6 @@ function menus() {
     { label: t('ui.file'), submenu: [{ label: t('ui.new_session_2'), accelerator: 'CmdOrCtrl+N', click: () => command('new') }, { label: t('ui.open_source_image'), accelerator: 'CmdOrCtrl+O', click: () => command('import') }, { label: t('ui.save_image_2'), accelerator: 'CmdOrCtrl+S', click: () => command('save') }, { label: t('ui.save_image_with_settings'), accelerator: 'CmdOrCtrl+Shift+S', click: () => command('saveSettings') }, { type: 'separator' }, { label: t('ui.generate_or_edit'), accelerator: 'CmdOrCtrl+Enter', click: () => command('run') }] },
     { label: t('native.edit'), submenu: [{ role: 'undo', label: t('native.undo') }, { role: 'redo', label: t('native.redo') }, { type: 'separator' }, { role: 'cut', label: t('native.cut') }, { role: 'copy', label: t('native.copy') }, { role: 'paste', label: t('native.paste') }, { role: 'pasteAndMatchStyle', label: t('native.pasteMatch') }, { role: 'delete', label: t('native.delete') }, { role: 'selectAll', label: t('native.selectAll') }] },
     { label: t('native.view'), submenu: [{ role: 'reload', label: t('native.reload') }, { role: 'forceReload', label: t('native.forceReload') }, { role: 'toggleDevTools', label: t('native.developerTools') }, { type: 'separator' }, { role: 'zoomIn', label: t('native.zoomIn') }, { role: 'zoomOut', label: t('native.zoomOut') }, { role: 'resetZoom', label: t('native.resetZoom') }, { role: 'togglefullscreen', label: t('native.fullscreen') }] },
-    { label: t('native.window'), role: 'windowMenu', submenu: [{ role: 'minimize', label: t('native.minimize') }, { role: 'close', label: t('native.close') }, { role: 'zoom', label: t('native.zoomWindow') }, { role: 'front', label: t('native.bringAllFront') }] },
+    { label: t('native.window'), role: 'windowMenu', submenu: [{ role: 'minimize', label: t('native.minimize') }, { label: t('native.close'), accelerator: 'CmdOrCtrl+W', click: () => command('closeWindow') }, { role: 'zoom', label: t('native.zoomWindow') }, { role: 'front', label: t('native.bringAllFront') }] },
   ]));
 }

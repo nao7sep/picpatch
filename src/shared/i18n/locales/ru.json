@@ -354,5 +354,9 @@
   "native.zoomWindow": "Увеличить окно",
   "native.bringAllFront": "Все окна на передний план",
   "native.pasteMatch": "Вставить и согласовать стиль",
-  "native.delete": "Удалить"
+  "native.delete": "Удалить",
+  "ui.discard_unsaved_settings": "Отменить несохранённые настройки?",
+  "ui.discard_changes": "Отменить изменения",
+  "ui.drop_one_source": "Перетаскивайте по одному исходному изображению.",
+  "ui.reference_role": "Роль референса"
 }

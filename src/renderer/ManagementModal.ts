@@ -1,13 +1,13 @@
-import { languageOptions } from './localization.ts';
+import { modal } from './Modal.ts';
 import { t, term, number, errorText, UiError } from '../shared/i18n/index.ts';
 import type { Bridge } from '../shared/bridge.ts';
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const field = (id: string) => el<HTMLInputElement>(id);
 /** Native dialogs choose paths; this surface only edits caller-owned SDK options. */
-export function management(api: Bridge, changed: () => Promise<void>) {
+export function managementModal(api: Bridge, changed: () => Promise<void>) {
   let overview: any; let busy = false;
-  el('management').addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   const dialog = el<HTMLDialogElement>('management');
+  const shell = modal(dialog, el('closeManagement'), { canClose: () => !busy, focus: () => el('manageModel') });
   const components = ['checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'controlNet'] as const;
   let loras: { path: string; scale?: number }[] = [];
   function action(id: string, work: () => Promise<unknown> | void) {
@@ -56,13 +56,12 @@ export function management(api: Bridge, changed: () => Promise<void>) {
     });
   }
   action('manage', async () => {
-    overview = await api.call('overview'); el('manageIssue').textContent = ''; dialog.showModal();
+    overview = await api.call('overview'); el('manageIssue').textContent = ''; shell.open();
     const select = el<HTMLSelectElement>('manageModel'); select.replaceChildren();
     for (const model of overview.models) { const option = document.createElement('option'); option.value = model.id; option.textContent = model.id; select.append(option); }
     select.onchange = selections; selections(); renderLoras(); await inventory();
   });
   action('cancelManaged', () => api.call('cancelManaged'));
-  action('closeManagement', () => dialog.close());
   action('chooseBundle', async () => { const path = await api.call('pickPath'); if (path) { field('bundleDirectory').value = path; components.forEach(key => { field(`component-${key}`).value = ''; }); loras = []; renderLoras(); } });
   for (const key of components) {
     action(`choose-${key}`, async () => { const path = await api.call('pickComponent', { directory: field('bundleDirectory').value }); if (path) field(`component-${key}`).value = path; });
@@ -82,25 +81,4 @@ export function management(api: Bridge, changed: () => Promise<void>) {
   action('verify', () => operation(() => api.call('verify', { modelId: field('manageModel').value })));
   for (const [id, command] of [['installNative','installNative'], ['installPython','installPython'], ['checkEngines','engines']] as const) action(id, () => operation(() => api.call(command)));
 
-  action('showRecords', async () => { const items = await api.call('records'); el('recordLines').textContent = items.map((item: any) => JSON.stringify(item)).join('\n'); el<HTMLDialogElement>('records').showModal(); });
-  action('closeRecords', () => el<HTMLDialogElement>('records').close());
-  const settings = el<HTMLDialogElement>('settings');
-  action('settingsButton', async () => {
-    overview = await api.call('overview'); el('settingsIssue').textContent = '';
-    for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) { field(key).value = overview.settings.profile[key] ?? ''; field(key).placeholder = overview.locations[key] ?? t('ui.managed_native_engine'); }
-    el<HTMLOptionElement>('theme').querySelector<HTMLOptionElement>('[value=system]')!.textContent = t('settings.system', { value: t(matchMedia('(prefers-color-scheme: dark)').matches ? 'ui.dark' : 'ui.light') });
-    field('theme').value = overview.settings.theme ?? 'system';
-    languageOptions(el<HTMLSelectElement>('language'), overview.locale?.systemLanguage ?? 'en'); field('language').value = overview.settings.language ?? 'system';
-    el('collectionLocation').textContent = overview.locations.sessionsDirectory;
-    settings.showModal();
-  });
-  for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable']) action(`choose-${key}`, async () => { const path = await api.call('pickPath', { file: key === 'nativeExecutable' }); if (path) field(key).value = path; });
-  action('cancelSettings', () => settings.close());
-  el('saveSettingsDialog').onclick = () => { void (async () => {
-    const value: any = {};
-    for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable']) if (field(key).value.trim()) value[key] = field(key).value.trim();
-    if (field('language').value !== 'system') value.language = field('language').value;
-    if (field('theme').value !== 'system') value.theme = field('theme').value;
-    await api.call('preferences', value); await changed(); settings.close();
-  })().catch(error => { el('settingsIssue').textContent = errorText(error); }); };
 }

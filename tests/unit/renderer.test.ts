@@ -8,6 +8,7 @@ import type { Session } from '../../src/app/types.ts';
 let session: Session;
 let call: ReturnType<typeof vi.fn<(action: string, payload?: any) => Promise<any>>>;
 let flush: () => Promise<void>;
+let menuCommand: (id: string) => void;
 beforeEach(async () => {
   vi.resetModules();
   document.write((await readFile(`${process.cwd()}/src/renderer/index.html`, 'utf8')).replace(/<link[^>]*>/g, '').replace(/<script[\s\S]*?<\/script>/g, ''));
@@ -21,7 +22,7 @@ beforeEach(async () => {
     if (action === 'draft') { session.draft = structuredClone(payload.draft); return session; }
     if (action === 'import') return [{ id: '22222222-2222-4222-8222-222222222222', name: 'photo.png' }];
   });
-  window.picpatch = { call, onChange: () => () => {}, onCommand: () => () => {}, onFlush: listener => { flush = listener; }, droppedFile: () => '/fixture/photo.png' };
+  window.picpatch = { call, onChange: () => () => {}, onCommand: listener => { menuCommand = listener; return () => {}; }, onFlush: listener => { flush = listener; }, droppedFile: () => '/fixture/photo.png' };
   await import('../../src/renderer/main.ts');
   await vi.waitFor(() => expect(call).toHaveBeenCalledWith('ready'));
 });
@@ -54,7 +55,7 @@ it('changes interface language without changing authored draft content or select
     if (action === 'overview') return { ...value, locale: { language: chosen, format: chosen, systemLanguage: 'en' }, settings: { ...value.settings, language: chosen } };
     return value;
   });
-  field('language').value = 'ja'; field('saveSettingsDialog').click();
+  field('language').value = 'ja'; field('language').dispatchEvent(new Event('change', { bubbles: true })); field('saveSettingsDialog').click();
   await vi.waitFor(() => expect(document.documentElement.lang).toBe('ja'));
   expect(field('text').value).toBe('私の画像 prompt');
   expect(session.draft.modelIds).toEqual(['flux2-klein-4b-4bit']);
@@ -65,4 +66,52 @@ it('changes interface language without changing authored draft content or select
 it('detects leaked message keys while accepting a user name that looks like a key', () => {
   const root = document.createElement('div'); root.innerHTML = '<button>ui.settings</button><div id="sessionList"><button>ui.settings</button></div>';
   expect(leakedMessages(root)).toEqual(['ui.settings']);
+});
+
+it('guards dirty settings dismissal and only saves valid changed values', async () => {
+  field('settingsButton').focus(); field('settingsButton').click();
+  await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+  expect(field('saveSettingsDialog').disabled).toBe(true);
+  field('engineDirectory').value = 'relative'; field('engineDirectory').dispatchEvent(new Event('input', { bubbles: true }));
+  expect(field('engineDirectory').getAttribute('aria-invalid')).toBe('true'); expect(field('saveSettingsDialog').disabled).toBe(true);
+  field('engineDirectory').value = '/engine'; field('engineDirectory').dispatchEvent(new Event('input', { bubbles: true }));
+  expect(field('saveSettingsDialog').disabled).toBe(false);
+  menuCommand('closeWindow');
+  await vi.waitFor(() => expect((field('discardSettings') as unknown as HTMLDialogElement).open).toBe(true));
+  expect(document.activeElement).toBe(field('keepSettings'));
+  field('keepSettings').click();
+  await vi.waitFor(() => expect((field('discardSettings') as unknown as HTMLDialogElement).open).toBe(false));
+  expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true); expect(field('engineDirectory').value).toBe('/engine');
+  field('cancelSettings').click();
+  await vi.waitFor(() => expect((field('discardSettings') as unknown as HTMLDialogElement).open).toBe(true));
+  field('discardSettingsConfirm').click();
+  await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(false));
+  expect(document.activeElement).toBe(field('settingsButton'));
+  expect(call.mock.calls.some(([action]) => action === 'preferences' || action === 'closeWindow')).toBe(false);
+});
+it('keeps path-picker failures inside Settings and preserves its draft', async () => {
+  field('settingsButton').click(); await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+  const original = call.getMockImplementation()!;
+  call.mockImplementation(async (action, payload) => { if (action === 'pickPath') throw new Error('private diagnostic'); return original(action, payload); });
+  field('choose-engineDirectory').click();
+  await vi.waitFor(() => expect(field('settingsIssue').textContent).not.toBe(''));
+  expect(field('issue').hidden).toBe(true); expect(field('manageIssue').textContent).toBe('');
+});
+it('does not run menu commands or dismiss a modal while an IME candidate is pending', async () => {
+  field('text').dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  menuCommand('settingsButton'); menuCommand('run');
+  expect(call.mock.calls.some(([action]) => action === 'submit')).toBe(false);
+  expect((field('settings') as unknown as HTMLDialogElement).open).toBe(false);
+  field('text').dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+  await new Promise(requestAnimationFrame); menuCommand('settingsButton');
+  await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+});
+
+it('keeps the current editor when deletion or collection selection is cancelled', async () => {
+  field('text').value = 'Keep this draft'; field('text').dispatchEvent(new Event('input')); await flush();
+  const loads = call.mock.calls.filter(([action]) => action === 'get').length;
+  field('delete').click(); await vi.waitFor(() => expect(call).toHaveBeenCalledWith('delete', { id: session.id }));
+  field('collection').click(); await vi.waitFor(() => expect(call).toHaveBeenCalledWith('collection'));
+  await flush(); expect(field('text').value).toBe('Keep this draft');
+  expect(call.mock.calls.filter(([action]) => action === 'get')).toHaveLength(loads);
 });

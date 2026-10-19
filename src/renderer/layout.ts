@@ -1,3 +1,4 @@
+import { isComposing } from './ime.ts';
 import { layout } from '../shared/layout.ts';
 import type { Bridge } from '../shared/bridge.ts';
 export async function paneLayout(api: Bridge, report: (error: unknown) => void) {
@@ -37,6 +38,7 @@ export async function paneLayout(api: Bridge, report: (error: unknown) => void) 
   splitter.addEventListener('pointerup', () => { if (dragging) { dragging = false; void save().catch(report); } });
   splitter.addEventListener('pointercancel', () => { dragging = false; });
   splitter.addEventListener('keydown', event => {
+    if (isComposing(event)) return;
     if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
     event.preventDefault(); state.requestWidth = event.key === 'Home' ? layout.request : Math.max(layout.request, state.requestWidth + (event.key === 'ArrowRight' ? 20 : -20)); paint(); void save().catch(report);
   });

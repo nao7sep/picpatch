@@ -351,5 +351,9 @@
   "native.zoomWindow": "ウインドウを拡大",
   "native.bringAllFront": "すべてを手前に移動",
   "native.pasteMatch": "ペーストしてスタイルを合わせる",
-  "native.delete": "削除"
+  "native.delete": "削除",
+  "ui.discard_unsaved_settings": "保存していない設定を破棄しますか？",
+  "ui.discard_changes": "変更を破棄",
+  "ui.drop_one_source": "元画像は一度に1枚ずつドロップしてください。",
+  "ui.reference_role": "参照の役割"
 }
