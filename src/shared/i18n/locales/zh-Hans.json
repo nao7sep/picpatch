@@ -366,5 +366,8 @@
   "shortcuts.collections": "会话和结果：方向键移动焦点；Enter 选择。在结果中，Space 切换选择状态，Shift 扩大选择范围。Home/End 移至开头或末尾；PageUp/PageDown 移动五个项目。",
   "shortcuts.splitter": "请求面板分隔线：Left/Right 调整宽度；Home 重置宽度。",
   "shortcuts.native": "标准文本编辑和窗口快捷键遵循系统菜单。",
-  "settings.uiFont": "界面字体"
+  "settings.uiFont": "界面字体",
+  "startup.title": "无法打开 PicPatch",
+  "startup.detail": "无法加载你的工作区。请重试以打开工作区，或退出 PicPatch。",
+  "startup.retry": "重试"
 }

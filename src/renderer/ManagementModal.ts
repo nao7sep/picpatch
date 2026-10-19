@@ -1,3 +1,4 @@
+import { operationResults } from './operation-results.ts';
 import { modal } from './Modal.ts';
 import { t, term, number, errorText, UiError } from '../shared/i18n/index.ts';
 import type { Bridge } from '../shared/bridge.ts';
@@ -7,11 +8,16 @@ const field = (id: string) => el<HTMLInputElement>(id);
 export function managementModal(api: Bridge, changed: () => Promise<void>) {
   let overview: any; let busy = false;
   const dialog = el<HTMLDialogElement>('management');
+  const issues = operationResults(el('manageIssue'));
+  async function attempt(key: string, work: () => Promise<unknown> | void, label?: () => string) {
+    try { const result: any = await work(); if (result?.status === 'refused') issues.show(key, result, label); else issues.clear(key); }
+    catch (error) { issues.show(key, error, label); }
+  }
   const shell = modal(dialog, el('closeManagement'), { canClose: () => !busy, focus: () => el('manageModel') });
   const components = ['checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'controlNet'] as const;
   let loras: { path: string; scale?: number }[] = [];
   function action(id: string, work: () => Promise<unknown> | void) {
-    el(id).onclick = () => { void Promise.resolve().then(work).catch(error => { el('manageIssue').textContent = errorText(error); }); };
+    el(id).onclick = () => { const model = ['register','download','verify'].includes(id) ? field('manageModel').value : ''; const key = `${id}:${model}`; const label = el(id).dataset.i18n; void attempt(key, work, label ? () => model ? t('common.status', { name: model, status: t(label) }) : t(label) : undefined); };
   }
   async function inventory() {
     const inventory = await api.call('models'); const list = el('managedList'); list.replaceChildren();
@@ -20,16 +26,17 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
       const row = document.createElement('div'); row.className = 'row';
       const description = document.createElement('span'); description.textContent = t('management.entry', { model: entry.modelId, revision: entry.name.slice(0, 12), size: number(entry.bytes / 1e9, { maximumFractionDigits: 2 }) });
       const remove = document.createElement('button'); remove.textContent = t('ui.remove_revision');
-      remove.onclick = () => { void operation(() => api.call('removeManaged', { modelId: entry.modelId, name: entry.name })).catch(error => { el('manageIssue').textContent = errorText(error); }); };
+      remove.onclick = () => { void attempt(`remove:${entry.modelId}:${entry.name}`, () => operation(() => api.call('removeManaged', { modelId: entry.modelId, name: entry.name })), () => t('common.status', { name: entry.modelId, status: t('ui.remove_revision') })); };
       row.append(description, remove); list.append(row);
     }
     for (const id of Object.keys(overview.settings.registrations)) { const p = document.createElement('p'); p.textContent = t('management.external', { model: id }); list.append(p); }
   }
   async function operation(work: () => Promise<unknown>) {
     if (busy) throw new UiError('ui.a_resource_operation_is_already_running');
-    busy = true; el('manageIssue').textContent = t('ui.working'); el('cancelManaged').hidden = false;
+    busy = true; el('manageStatus').textContent = t('ui.working'); el('cancelManaged').hidden = false;
     const buttons = [...dialog.querySelectorAll<HTMLButtonElement>('button')]; buttons.forEach(button => { button.disabled = button.id !== 'cancelManaged'; });
-    try { const result = await work(); el('manageIssue').textContent = result === undefined ? '' : describe(result); overview = await api.call('overview'); await inventory(); await changed(); }
+    try { const result = await work(); el('manageStatus').textContent = result === undefined || (result as any)?.status === 'refused' ? '' : describe(result); await attempt('inventory', async () => { overview = await api.call('overview'); await inventory(); }); await attempt('workspace', changed); return result; }
+    catch (error) { el('manageStatus').textContent = ''; throw error; }
     finally { busy = false; el('cancelManaged').hidden = true; buttons.forEach(button => { button.disabled = false; }); selections(); }
   }
   function describe(result: any): string {
@@ -38,7 +45,7 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
     return t('ui.completed');
   }
   function selections() {
-    const selected = overview.models.find((model: any) => model.id === field('manageModel').value);
+    const selected = overview?.models.find((model: any) => model.id === field('manageModel').value);
     const native = selected?.runtime.name === 'stable-diffusion.cpp';
     el('nativeComponents').hidden = !native;
     el('loraControls').hidden = !selected?.capabilities.loraFormats?.length && !loras.length;
@@ -56,7 +63,7 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
     });
   }
   action('manage', async () => {
-    overview = await api.call('overview'); el('manageIssue').textContent = ''; shell.open();
+    shell.open(); issues.localize(); overview = await api.call('overview');
     const select = el<HTMLSelectElement>('manageModel'); select.replaceChildren();
     for (const model of overview.models) { const option = document.createElement('option'); option.value = model.id; option.textContent = model.id; select.append(option); }
     select.onchange = selections; selections(); renderLoras(); await inventory();

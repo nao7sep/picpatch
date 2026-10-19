@@ -202,3 +202,21 @@ it('routes interface zoom separately from the canvas zoom control', () => {
   menuCommand('uiZoomIn'); expect(call).toHaveBeenCalledWith('uiZoom',{direction:'in'});
   expect(field('zoom').value).toBe(before);
 });
+it('keeps management failures while unrelated progress and success occur', async () => {
+  const original = call.getMockImplementation()!;
+  let finish!: (value: unknown) => void;
+  call.mockImplementation(async (action,payload) => {
+    if (action === 'overview') { const value = await original(action,payload); return {...value,models:models.map(model=>({...model,runtime:{name:'mflux'}}))}; }
+    if (action === 'models') return {models:[],entries:[]};
+    if (action === 'verify') throw new Error('EACCES /private/SENTINEL');
+    if (action === 'installPython') return new Promise(resolve => {finish = resolve;});
+    return original(action,payload);
+  });
+  field('manage').click(); await vi.waitFor(() => expect(field('manageModel').children).toHaveLength(1)); field('manageModel').value = models[0]!.id;
+  field('verify').click(); await vi.waitFor(() => expect(field('manageIssue').children).toHaveLength(1));
+  const failure = field('manageIssue').textContent;
+  field('installPython').click(); await vi.waitFor(() => expect(field('manageStatus').textContent).toContain('Working'));
+  expect(field('manageIssue').textContent).toBe(failure); expect(field('manageIssue').textContent).not.toContain('SENTINEL');
+  finish({status:'ready'}); await vi.waitFor(() => expect(field('installPython').disabled).toBe(false));
+  expect(field('manageIssue').textContent).toBe(failure); expect(field('issue').hidden).toBe(true);
+});

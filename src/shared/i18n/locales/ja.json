@@ -366,5 +366,8 @@
   "shortcuts.collections": "セッションと結果：矢印キーでフォーカスを移動し、Enter で選択します。結果では Space で選択を切り替え、Shift で選択範囲を広げます。Home/End で先頭か末尾に移動し、PageUp/PageDown で5項目移動します。",
   "shortcuts.splitter": "リクエストペインの区切り：Left/Right で幅を調整し、Home で元に戻します。",
   "shortcuts.native": "標準のテキスト編集とウィンドウ操作のショートカットは、システムのメニューに従います。",
-  "settings.uiFont": "インターフェースのフォント"
+  "settings.uiFont": "インターフェースのフォント",
+  "startup.title": "PicPatch を開けませんでした",
+  "startup.detail": "ワークスペースを読み込めませんでした。もう一度開くか、PicPatch を終了してください。",
+  "startup.retry": "再試行"
 }

@@ -367,5 +367,8 @@
   "shortcuts.collections": "Sitzungen und Ergebnisse: Pfeiltasten verschieben den Fokus; Enter wählt aus. In den Ergebnissen schaltet Space die Auswahl um und Shift erweitert sie. Home/End springt zum Anfang oder Ende; PageUp/PageDown bewegt sich um fünf Einträge.",
   "shortcuts.splitter": "Trennlinie des Eingabebereichs: Left/Right passt die Breite an; Home setzt sie zurück.",
   "shortcuts.native": "Die Standardtastenkürzel für Textbearbeitung und Fenster entsprechen den Systemmenüs.",
-  "settings.uiFont": "Schriftfamilie der Oberfläche"
+  "settings.uiFont": "Schriftfamilie der Oberfläche",
+  "startup.title": "PicPatch konnte nicht geöffnet werden",
+  "startup.detail": "Ihr Arbeitsbereich konnte nicht geladen werden. Versuchen Sie erneut, ihn zu öffnen, oder beenden Sie PicPatch.",
+  "startup.retry": "Erneut versuchen"
 }

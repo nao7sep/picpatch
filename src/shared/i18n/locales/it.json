@@ -368,5 +368,8 @@
   "shortcuts.collections": "Sessioni e risultati: le frecce spostano il focus; Enter seleziona. Nei risultati, Space attiva o disattiva la selezione e Shift la estende. Home/End va all’inizio o alla fine; PageUp/PageDown si sposta di cinque elementi.",
   "shortcuts.splitter": "Divisore del pannello di richiesta: Left/Right regola la larghezza; Home la ripristina.",
   "shortcuts.native": "Le scorciatoie standard per modificare il testo e gestire le finestre seguono i menu di sistema.",
-  "settings.uiFont": "Famiglia di caratteri dell’interfaccia"
+  "settings.uiFont": "Famiglia di caratteri dell’interfaccia",
+  "startup.title": "Impossibile aprire PicPatch",
+  "startup.detail": "Non è stato possibile caricare la tua area di lavoro. Riprova ad aprirla oppure esci da PicPatch.",
+  "startup.retry": "Riprova"
 }

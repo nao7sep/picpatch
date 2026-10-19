@@ -18,7 +18,7 @@ export async function paneLayout(api: Bridge, report: (error: unknown) => void) 
   let lastMinimum = '';
   function measure() {
     paint();
-    const chromeHeight = ['header', 'footer', '.canvasToolbar', '#resultInfo', '#results'].reduce((height, selector) => height + (document.querySelector(selector)?.getBoundingClientRect().height ?? 0), 0);
+    const chromeHeight = ['header', 'footer', '#issue', '.canvasToolbar', '#resultInfo', '#results'].reduce((height, selector) => height + (document.querySelector(selector)?.getBoundingClientRect().height ?? 0), 0);
     const size = { sidebar: !sidebar.hidden, height: Math.ceil(chromeHeight + layout.canvasHeight) };
     document.getElementById('appFrame')!.style.minWidth = `${layout.request + layout.canvas + layout.divider + (sidebar.hidden ? 0 : layout.sidebar + layout.divider)}px`;
     document.getElementById('appFrame')!.style.minHeight = `${size.height}px`;
@@ -45,6 +45,6 @@ export async function paneLayout(api: Bridge, report: (error: unknown) => void) 
     event.preventDefault(); state.requestWidth = event.key === 'Home' ? layout.request : Math.max(layout.request, state.requestWidth + (event.key === 'ArrowRight' ? 20 : -20)); paint(); void save().catch(report);
   });
   const observer = new ResizeObserver(measure);
-  for (const target of [workspace, ...document.querySelectorAll('header, footer, .canvasToolbar, #resultInfo, #results')]) observer.observe(target);
+  for (const target of [workspace, ...document.querySelectorAll('header, footer, #issue, .canvasToolbar, #resultInfo, #results')]) observer.observe(target);
   measure();
 }

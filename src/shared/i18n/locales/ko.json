@@ -366,5 +366,8 @@
   "shortcuts.collections": "세션과 결과: 화살표로 포커스를 이동하고 Enter로 선택합니다. 결과에서 Space는 선택 상태를 전환하고 Shift는 선택 범위를 확장합니다. Home/End로 처음이나 끝으로 이동하고 PageUp/PageDown으로 다섯 항목씩 이동합니다.",
   "shortcuts.splitter": "요청 패널 구분선: Left/Right로 너비를 조절하고 Home으로 초기화합니다.",
   "shortcuts.native": "표준 텍스트 편집 및 창 단축키는 시스템 메뉴를 따릅니다.",
-  "settings.uiFont": "인터페이스 글꼴"
+  "settings.uiFont": "인터페이스 글꼴",
+  "startup.title": "PicPatch를 열 수 없습니다",
+  "startup.detail": "작업 공간을 불러올 수 없습니다. 다시 열기를 시도하거나 PicPatch를 종료하십시오.",
+  "startup.retry": "다시 시도"
 }

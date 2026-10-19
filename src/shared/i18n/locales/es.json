@@ -368,5 +368,8 @@
   "shortcuts.collections": "Sesiones y resultados: las flechas mueven el foco; Enter selecciona. En los resultados, Space alterna la selección y Shift la amplía. Home/End va al principio o al final; PageUp/PageDown avanza o retrocede cinco elementos.",
   "shortcuts.splitter": "Divisor del panel de solicitud: Left/Right ajusta el ancho; Home lo restablece.",
   "shortcuts.native": "Los atajos estándar de edición de texto y ventanas siguen los menús del sistema.",
-  "settings.uiFont": "Familia de fuentes de la interfaz"
+  "settings.uiFont": "Familia de fuentes de la interfaz",
+  "startup.title": "No se pudo abrir PicPatch",
+  "startup.detail": "No se pudo cargar tu espacio de trabajo. Vuelve a intentar abrirlo o sal de PicPatch.",
+  "startup.retry": "Reintentar"
 }
