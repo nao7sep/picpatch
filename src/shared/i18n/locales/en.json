@@ -366,5 +366,6 @@
   "shortcuts.toolbar": "Image actions: Tab enters or leaves; Left/Right moves focus; Home/End moves to either end. Enter/Space activates. Zoom and comparison controls keep their native keys.",
   "shortcuts.collections": "Sessions and results: arrows move focus; Enter selects. In results, Space toggles and Shift extends selection. Home/End moves to either end; PageUp/PageDown moves five items.",
   "shortcuts.splitter": "Request divider: Left/Right adjusts the width; Home resets it.",
-  "shortcuts.native": "Standard text editing and window shortcuts follow the native menus."
+  "shortcuts.native": "Standard text editing and window shortcuts follow the native menus.",
+  "settings.uiFont": "Interface font family"
 }

@@ -1,3 +1,4 @@
+import { defaultFont, fixedFont } from '../shared/appearance.ts';
 import { commandShortcuts } from './shortcuts.ts';
 import { shortcutsModal } from './ShortcutsModal.ts';
 import { toolbar } from './toolbar.ts';
@@ -201,7 +202,10 @@ async function persistMask() {
 }
 async function refresh() {
   overview = await api.call('overview');
+  document.documentElement.style.setProperty('--font-ui', overview.settings.uiFont || defaultFont);
+  document.documentElement.style.setProperty('--font-mono', fixedFont);
   const languageChanged = await localize(overview.locale ?? { language: 'en', format: 'en' });
+  settings.systemTheme(overview.systemDark);
   if (languageChanged && session) { fields(); element('paint').textContent = painting ? t('ui.finish_painting') : t('ui.paint_mask'); if (currentIssue !== undefined) issue(currentIssue); }
   const holder = element('sessionList');
   renderCollection(holder, overview.sessions.map((item: any) => ({ key: item.id, label: item.name, element: button(item.name, () => {}) })), { label: t('ui.sessions'), empty: t('ui.no_saved_sessions'), selected: session ? [session.id] : [], select: keys => { if (keys[0]) void command(() => open(keys[0]!)).catch(() => {}); } });
@@ -284,10 +288,11 @@ function dispatchCommand(id: string) {
     if (!closeTopModal()) void api.call('closeWindow').catch(issue);
     return;
   }
+  if (['uiZoomIn', 'uiZoomOut', 'uiZoomReset'].includes(id)) { void api.call('uiZoom', { direction: id === 'uiZoomIn' ? 'in' : id === 'uiZoomOut' ? 'out' : 'reset' }).catch(issue); return; }
   if (id === 'quit') { void api.call('closeWindow').catch(issue); return; }
   if (closing) return;
   const target = document.getElementById(id);
   if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click();
 }
 api.onCommand(dispatchCommand); window.addEventListener('pagehide', commandShortcuts(dispatchCommand), { once: true });
-void api.call('locale').then(locale => localize(locale ?? { language: 'en', format: 'en' })).then(() => paneLayout(api, issue)).then(start).then(() => api.call('ready')).catch(async error => { await localize({ language: 'en', format: 'en' }); issue(error); });
+void api.call('locale').then(locale => { document.documentElement.style.setProperty('--font-ui', locale?.uiFont || defaultFont); return localize(locale ?? { language: 'en', format: 'en' }); }).then(() => paneLayout(api, issue)).then(start).then(() => api.call('ready')).catch(async error => { await localize({ language: 'en', format: 'en' }); issue(error); });

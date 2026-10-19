@@ -1,3 +1,4 @@
+import { defaultFont } from '../shared/appearance.ts';
 import { languageOptions } from './localization.ts';
 import { t, errorText, message } from '../shared/i18n/index.ts';
 import { modal } from './Modal.ts';
@@ -13,8 +14,8 @@ export function settingsModal(api: Bridge, changed: () => Promise<void>, message
   let retry: (() => Promise<void>) | undefined;
   let failedAtClose = false;
   let initial = ''; let saving = false;
-  const snapshot = () => JSON.stringify([...paths, 'theme', 'language'].map(key => field(key).value));
-  const shell = modal(surface, el('cancelSettings'), { focus: () => field('engineDirectory'), canClose: async () => {
+  const snapshot = () => JSON.stringify([...paths, 'theme', 'language', 'uiFont'].map(key => field(key).value));
+  const shell = modal(surface, el('cancelSettings'), { focus: () => field('uiFont'), canClose: async () => {
     if (saving) return false;
     if (snapshot() !== initial && !await confirmDiscard()) return false;
     save = undefined; retry = undefined; failedAtClose = false;
@@ -33,11 +34,13 @@ export function settingsModal(api: Bridge, changed: () => Promise<void>, message
     field('saveSettingsDialog').disabled = saving || !valid || snapshot() === initial;
   }
   surface.addEventListener('input', validate); surface.addEventListener('change', validate);
+  function systemTheme(dark: boolean) { el('theme').querySelector<HTMLOptionElement>('[value=system]')!.textContent = t('settings.system', { value: t(dark ? 'ui.dark' : 'ui.light') }); }
   function report(error: unknown) { el('settingsIssue').textContent = errorText(error); }
   el('settingsButton').onclick = () => { void (async () => {
     const overview = await api.call('overview');
     for (const key of paths) { field(key).value = overview.settings.profile[key] ?? ''; field(key).placeholder = overview.locations[key] ?? t('ui.managed_native_engine'); }
-    el('theme').querySelector<HTMLOptionElement>('[value=system]')!.textContent = overview.settings.theme ? t('ui.system') : t('settings.system', { value: t(matchMedia('(prefers-color-scheme: dark)').matches ? 'ui.dark' : 'ui.light') });
+    systemTheme(overview.systemDark);
+    field('uiFont').value = overview.settings.uiFont ?? ''; field('uiFont').placeholder = defaultFont;
     field('theme').value = overview.settings.theme ?? 'system';
     languageOptions(el('language'), overview.locale?.systemLanguage ?? 'en'); field('language').value = overview.settings.language ?? 'system';
     el('collectionLocation').textContent = overview.locations.sessionsDirectory;
@@ -50,6 +53,7 @@ export function settingsModal(api: Bridge, changed: () => Promise<void>, message
     for (const key of paths) if (field(key).value.trim()) value[key] = field(key).value.trim();
     if (field('language').value !== 'system') value.language = field('language').value;
     if (field('theme').value !== 'system') value.theme = field('theme').value;
+    if (field('uiFont').value.trim()) value.uiFont = field('uiFont').value;
     const submitted = snapshot();
     retry = async () => {
       saving = true;
@@ -64,6 +68,7 @@ export function settingsModal(api: Bridge, changed: () => Promise<void>, message
     failedAtClose = false; save = retry(); void save.catch(report);
   };
   return {
+    systemTheme,
     async settleSave() {
       // Retry only the explicitly submitted values, never a subsequently edited draft.
       if (failedAtClose && retry) { save = retry(); void save.catch(report); }

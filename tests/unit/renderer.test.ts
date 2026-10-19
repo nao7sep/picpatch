@@ -181,3 +181,24 @@ it('keeps workspace accelerators behind modal guards while Quit still uses the g
   field('engineDirectory').dispatchEvent(new KeyboardEvent('keydown',{key:'q',metaKey:true,bubbles:true,cancelable:true}));
   expect(call).toHaveBeenCalledWith('closeWindow');
 });
+it('applies font only on Save and shows the independent system theme', async () => {
+  const original = call.getMockImplementation()!; let family: string | undefined;
+  call.mockImplementation(async (action,payload) => {
+    if (action === 'preferences') { family = payload.uiFont; return; }
+    const value = await original(action,payload);
+    if (action === 'overview') return {...value, systemDark:true, settings:{...value.settings, theme:'light', uiFont:family}};
+    return value;
+  });
+  field('settingsButton').click(); await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+  expect(field('theme').querySelector('[value=system]')!.textContent).toContain('Dark');
+  const before = document.documentElement.style.getPropertyValue('--font-ui');
+  field('uiFont').value = 'Arial, sans-serif'; field('uiFont').dispatchEvent(new Event('input',{bubbles:true}));
+  expect(document.documentElement.style.getPropertyValue('--font-ui')).toBe(before);
+  field('saveSettingsDialog').click(); await vi.waitFor(() => expect(document.documentElement.style.getPropertyValue('--font-ui')).toBe('Arial, sans-serif'));
+  expect(family).toBe('Arial, sans-serif');
+});
+it('routes interface zoom separately from the canvas zoom control', () => {
+  const before = field('zoom').value;
+  menuCommand('uiZoomIn'); expect(call).toHaveBeenCalledWith('uiZoom',{direction:'in'});
+  expect(field('zoom').value).toBe(before);
+});

@@ -14,3 +14,12 @@ it('keeps pane intent independently of layout clamps and ignores corrupt disposa
     await writeFile(path, 'bad'); expect(await readPaneState(path)).toEqual({ requestWidth: 300, sidebar: false });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+it('retains valid UI zoom beside pane state and drops an invalid zoom independently', async () => {
+  const directory = await mkdtemp(join(tmpdir(),'picpatch-zoom-')); const path = join(directory,'state.json');
+  try {
+    await savePaneState(path,{requestWidth:420,sidebar:true,uiZoom:1.44});
+    expect(await readPaneState(path)).toEqual({requestWidth:420,sidebar:true,uiZoom:1.44});
+    await writeFile(path,JSON.stringify({requestWidth:420,sidebar:true,uiZoom:'bad'}));
+    expect(await readPaneState(path)).toEqual({requestWidth:420,sidebar:true});
+  } finally { await rm(directory,{recursive:true,force:true}); }
+});

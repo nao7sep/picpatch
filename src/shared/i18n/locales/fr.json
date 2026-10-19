@@ -367,5 +367,6 @@
   "shortcuts.toolbar": "Actions sur l’image\u00a0: Tab permet d’entrer dans la barre ou d’en sortir\u00a0; Left/Right déplace le focus\u00a0; Home/End va au début ou à la fin. Enter/Space active l’action. Les commandes de zoom et de comparaison conservent leurs touches habituelles.",
   "shortcuts.collections": "Sessions et résultats\u00a0: les flèches déplacent le focus\u00a0; Enter sélectionne. Dans les résultats, Space sélectionne ou désélectionne l’élément et Shift étend la sélection. Home/End va au début ou à la fin\u00a0; PageUp/PageDown se déplace de cinq éléments.",
   "shortcuts.splitter": "Séparateur du panneau de requête\u00a0: Left/Right ajuste la largeur\u00a0; Home la réinitialise.",
-  "shortcuts.native": "Les raccourcis standard de modification du texte et de gestion des fenêtres suivent les menus du système."
+  "shortcuts.native": "Les raccourcis standard de modification du texte et de gestion des fenêtres suivent les menus du système.",
+  "settings.uiFont": "Famille de polices de l’interface"
 }

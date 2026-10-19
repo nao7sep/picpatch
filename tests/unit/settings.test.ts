@@ -31,3 +31,13 @@ it('keeps SDK resource homes separate from the app collection and honors explici
   await app.preferences({ engineDirectory: join(root, 'custom-engine'), modelsDirectory: join(root, 'custom-models') });
   expect((await app.overview()).locations).toMatchObject({ engineDirectory: join(root, 'custom-engine'), modelsDirectory: join(root, 'custom-models'), sessionsDirectory: join(root, 'sessions') });
 });
+it('stores the UI family verbatim and clears only that preference for an empty family', async () => {
+  const config = join(root, 'config.json');
+  const app = await Application.open({ root, config, sessions: join(root,'sessions'), state: join(root,'state.json'), backups: join(root,'backups.sqlite3') });
+  const family = ' "Missing Font", Arial, sans-serif ';
+  await app.preferences({ uiFont: family, modelsDirectory: join(root,'models') });
+  expect((await readSettings(config)).uiFont).toBe(family);
+  await app.preferences({ uiFont: '', modelsDirectory: join(root,'models') });
+  expect((await readSettings(config)).uiFont).toBeUndefined();
+  expect((await readSettings(config)).profile.modelsDirectory).toBe(join(root,'models'));
+});

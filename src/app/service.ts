@@ -72,7 +72,7 @@ export class Application {
     const prepared = await prepareModel(modelId, { ...components, onEvent: this.sdkEvents({ action: 'prepare', modelId }), signal, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
     await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
   }
-  async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string }) {
+  async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string; uiFont?: string }) {
     if (this.queue.busy()) throw new Error('Finish or cancel queued work before changing resource settings.');
     if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new Error('Invalid theme.');
     await this.updateSettings(next => {
@@ -81,6 +81,7 @@ export class Application {
       }
       const language = preference(value.language); if (language) next.language = language; else delete next.language;
       if (value.theme) next.theme = value.theme; else delete next.theme;
+      if (typeof value.uiFont === 'string' && value.uiFont.trim()) next.uiFont = value.uiFont; else delete next.uiFont;
     });
   }
   async verify(modelId: string, signal?: AbortSignal) {

@@ -367,5 +367,6 @@
   "shortcuts.toolbar": "Ações de imagem: Tab entra ou sai da barra; Left/Right move o foco; Home/End vai ao início ou ao fim. Enter/Space ativa a ação. Os controles de zoom e comparação mantêm suas teclas habituais.",
   "shortcuts.collections": "Sessões e resultados: as setas movem o foco; Enter seleciona. Nos resultados, Space alterna a seleção e Shift a amplia. Home/End vai ao início ou ao fim; PageUp/PageDown move cinco itens.",
   "shortcuts.splitter": "Divisória do painel de solicitação: Left/Right ajusta a largura; Home a redefine.",
-  "shortcuts.native": "Os atalhos padrão de edição de texto e de janelas seguem os menus do sistema."
+  "shortcuts.native": "Os atalhos padrão de edição de texto e de janelas seguem os menus do sistema.",
+  "settings.uiFont": "Família de fontes da interface"
 }

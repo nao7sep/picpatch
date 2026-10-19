@@ -14,12 +14,14 @@ export async function paneLayout(api: Bridge, report: (error: unknown) => void) 
     splitter.setAttribute('aria-valuenow', String(Math.round(request.getBoundingClientRect().width)));
   }
   let saving = Promise.resolve();
-  function save() { const snapshot = { ...state }; saving = saving.catch(() => {}).then(() => api.call('paneState', snapshot)); return saving; }
+  function save() { const snapshot = { requestWidth: state.requestWidth, sidebar: state.sidebar }; saving = saving.catch(() => {}).then(() => api.call('paneState', snapshot)); return saving; }
   let lastMinimum = '';
   function measure() {
     paint();
     const chromeHeight = ['header', 'footer', '.canvasToolbar', '#resultInfo', '#results'].reduce((height, selector) => height + (document.querySelector(selector)?.getBoundingClientRect().height ?? 0), 0);
     const size = { sidebar: !sidebar.hidden, height: Math.ceil(chromeHeight + layout.canvasHeight) };
+    document.getElementById('appFrame')!.style.minWidth = `${layout.request + layout.canvas + layout.divider + (sidebar.hidden ? 0 : layout.sidebar + layout.divider)}px`;
+    document.getElementById('appFrame')!.style.minHeight = `${size.height}px`;
     const key = JSON.stringify(size); if (key === lastMinimum) return; lastMinimum = key;
     void api.call('layout', size).catch(report);
   }
