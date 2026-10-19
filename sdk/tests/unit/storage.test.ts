@@ -21,21 +21,25 @@ it('closes a late-opened descriptor without using it after the deadline', async 
   pending.resolve(handle); await expect.poll(() => close.mock.calls.length).toBe(1); expect(use).not.toHaveBeenCalled();
 });
 it('bounds a stalled publication, retains owned files, and never resumes sidecar work after late settlement', async () => {
-  const path = join(directory, 'image.png'); const pending = Promise.withResolvers<void>(); let publish: (() => Promise<void>) | undefined;
-  vi.mocked(fs.link).mockImplementation((...args) => { publish = () => actual.link(...args); return pending.promise; });
+  const path = join(directory, 'image.png'); const pending = Promise.withResolvers<void>(); const publicationStarted = Promise.withResolvers<void>(); let publish: (() => Promise<void>) | undefined;
+  vi.mocked(fs.link).mockImplementation((...args) => { publish = () => actual.link(...args); publicationStarted.resolve(); return pending.promise; });
   const render = async (request: { outputPath: string; model: string }) => {
     await sharp({ create: { width: 8, height: 8, channels: 3, background: 'blue' } }).png().toFile(request.outputPath);
     return { image: { path: request.outputPath, mimeType: 'image/png' as const, size: { width: 8, height: 8 } }, model: request.model, modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 1, effectiveParameters: {}, references: [] };
   };
   const editor = new ImageClientImpl({ validate: async () => ({ model: 'fixture', textToImage: true, instructionEditing: true, referenceRoles: [], maskMode: 'none' }), generate: render, edit: render, dispose: async () => {} }, {}, 'fixture');
   try {
-    await expect(editor.generate({ prompt: 'Bowl', outputPath: path, sidecar: {} }, { timeoutMs: 100 })).rejects.toMatchObject({ code: 'TIMEOUT', effect: 'unknown', details: { recoveryDirectory: expect.any(String) } });
+    // Expire at the publication boundary, not while image encoding happens to be slow.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const outcome = expect(editor.generate({ prompt: 'Bowl', outputPath: path, sidecar: {} }, { timeoutMs: 100 })).rejects.toMatchObject({ code: 'TIMEOUT', effect: 'unknown', details: { recoveryDirectory: expect.any(String) } });
+    await publicationStarted.promise;
+    await vi.advanceTimersByTimeAsync(100); await outcome; vi.useRealTimers();
     expect(publish).toBeDefined(); expect((await fs.readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(true);
     await publish!(); pending.resolve();
     await new Promise(resolve => setTimeout(resolve, 10));
     expect((await sharp(path).metadata()).format).toBe('png');
     expect(await fs.readdir(directory)).not.toContain('image-picpatchsdk.json');
-  } finally { await editor.dispose(); }
+  } finally { vi.useRealTimers(); await editor.dispose(); }
 });
 
 it('propagates a nested stalled read to the owner of private writes', async () => {
