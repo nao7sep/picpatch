@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { catalogues, languages, resolveLocale, useLocale, t, UiError, errorText, number } from '../../src/shared/i18n/index.ts';
+import { catalogues, languages, resolveLocale, useLocale, t, UiError, errorText, errorNotice, number } from '../../src/shared/i18n/index.ts';
 const literalKeys = ['ui.vae','ui.photomaker','ui.ipadapter','ui.canny_controlnet','component.vae','component.photoMaker','component.ipAdapter','component.controlNet'];
 const identical: Record<string, string[]> = {
   de: ['ui.prompt','ui.seed','ui.zoom','ui.system','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint'],
@@ -42,8 +42,12 @@ it('renders retained errors and nested values in the current language without tr
   try {
     await useLocale({ language:'ja',format:'ja' }); expect(errorText(error)).not.toBe(englishMessage); expect(error.message).toBe(englishMessage);
     expect(t('common.detail', {status:{key:'status.failed'},detail:'user-authored prompt'})).toContain('user-authored prompt');
-    expect(errorText('my own prose')).toBe('my own prose');
-    await useLocale({language:'de',format:'de-DE'}); expect(number(1234.5)).toBe('1.234,5');
+    expect(errorText(new Error('/private/runtime failed with secret detail'))).toBe(t('ui.the_operation_could_not_finish'));
+    expect(errorText({ code: 'CANCELLED', message: 'private runtime path' })).toBe(t('status.cancelled'));
+    const transported = { notice: errorNotice(new Error('Select a completed image.')) };
+    await useLocale({language:'de',format:'de-DE'});
+    expect(errorText(transported)).toBe(errorText(new Error('Select a completed image.')));
+    expect(number(1234.5)).toBe('1.234,5');
   } finally { await useLocale({language:'en',format:'en'}); }
 });
 

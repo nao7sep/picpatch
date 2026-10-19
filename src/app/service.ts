@@ -3,7 +3,7 @@ import { errorRecord } from './records.ts';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { writeFile, rm } from 'node:fs/promises';
-import { listModels, inspectModels, prepareModel, saveArtifact, validateProfile, openModel, verifyModel, removeModel, resolveStoragePaths } from 'picpatchsdk';
+import { listModels, inspectModels, prepareModel, saveArtifact, validateProfile, openModel, verifyModel, removeModel, resolveStoragePaths, isPicPatchSdkError } from 'picpatchsdk';
 import type { AppPaths } from './paths.ts';
 import { Sessions, validateDraft } from './sessions.ts';
 import { Queue } from './queue.ts';
@@ -11,7 +11,7 @@ import { inference } from './inference.ts';
 import { readSettings, saveSettings } from './settings.ts';
 import type { Runner } from './queue.ts';
 import type { Draft } from './types.ts';
-import type { PrepareModelOptions } from 'picpatchsdk';
+import type { PrepareModelOptions, SdkEvent } from 'picpatchsdk';
 import type { Settings } from './settings.ts';
 export class Application {
   sessions: Sessions;
@@ -20,13 +20,32 @@ export class Application {
   private settingsTail: Promise<unknown> = Promise.resolve();
   private runner(): Runner {
     const run = inference(this.sessions, () => this.settings);
-    return async (sessionId, attempt, events) => { let completion; try { completion = await run(sessionId, attempt, { ...events, onEvent: event => { if (event.level !== 'debug') this.diagnostic(event.level, event.message, { sessionId, runId: attempt.id, event }); events.onEvent(event); } }); } catch (error) { this.diagnostic('error', 'Image attempt failed.', { sessionId, runId: attempt.id, error: errorRecord(error) }); throw error; } const result = completion.outcome; if (!('status' in result)) this.backup(result.image.path, undefined, result.record.sha256); return completion; };
+    return async (sessionId, attempt, events) => {
+      const context = { sessionId, runId: attempt.id };
+      let completion;
+      try {
+        completion = await run(sessionId, attempt, { ...events, onEvent: event => { this.sdkEvents(context)(event); events.onEvent(event); } });
+      } catch (error) {
+        this.diagnostic(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Image attempt ended without a result.', { ...context, error: errorRecord(error) });
+        throw error;
+      }
+      const result = completion.outcome;
+      if (!('status' in result)) {
+        if (result.sidecar?.status === 'failed') this.diagnostic('warn', 'Image saved; its settings sidecar could not be saved.', { ...context, sidecar: result.sidecar });
+        if (result.cleanupWarning) this.diagnostic('warn', 'Image saved with a cleanup warning.', { ...context, warning: result.cleanupWarning });
+        this.backup(result.image.path, undefined, result.record.sha256);
+      }
+      return completion;
+    };
   }
-  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: () => void, private backup: (path: string, bytes?: Buffer, sha256?: string) => void, private diagnostic: (level: 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
+  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: () => void, private backup: (path: string, bytes?: Buffer, sha256?: string) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
     this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined);
     this.queue = new Queue(this.sessions, this.runner(), changed);
   }
-  static async open(paths: AppPaths, changed: () => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}, diagnostic: (level: 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> { return new Application(paths, await readSettings(paths.config), changed, backup, diagnostic); }
+  static async open(paths: AppPaths, changed: () => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> { return new Application(paths, await readSettings(paths.config), changed, backup, diagnostic); }
+  sdkEvents(context: Record<string, unknown> = {}): (event: SdkEvent) => void {
+    return event => this.diagnostic(event.level, event.message, { ...context, event });
+  }
   async overview() { return { ...await this.sessions.list(), models: listModels(), queue: structuredClone(this.queue.state), historyIssue: typeof this.historyIssue === 'object' ? { message: this.historyIssue.message, notice: this.historyIssue.notice } : this.historyIssue, settings: structuredClone(this.settings), locations: { ...resolveStoragePaths(this.settings.profile.engineDirectory || this.settings.profile.modelsDirectory ? { engineDirectory: this.settings.profile.engineDirectory, modelsDirectory: this.settings.profile.modelsDirectory } : {}), sessionsDirectory: this.sessions.root } }; }
   async draft(sessionId: string, draft: Draft) { validateDraft(draft); return this.sessions.update(sessionId, value => { value.draft = structuredClone(draft); }); }
   async importImage(sessionId: string, path: string) { const asset = await this.sessions.importImage(sessionId, path); this.backup(await this.sessions.imagePath(sessionId, asset.id), undefined, asset.sha256); return asset; }
@@ -43,12 +62,14 @@ export class Application {
     if (!run?.record || !run.output) throw new Error('Select a completed image.');
     const record = structuredClone(run.record);
     if (!includeInputs) { delete record.inputs; delete record.effectiveParameters.negativePrompt; record.inputsIncluded = false; }
-    return saveArtifact(await this.sessions.imagePath(sessionId, runId), destination, record, { sidecar });
+    const result = await saveArtifact(await this.sessions.imagePath(sessionId, runId), destination, record, { sidecar, onEvent: this.sdkEvents({ sessionId, runId, action: 'export' }) });
+    if (result.status === 'saved' && result.sidecar?.status === 'failed') this.diagnostic('warn', 'Image saved; its settings sidecar could not be saved.', { sessionId, runId, sidecar: result.sidecar });
+    return result;
   }
-  async models() { return inspectModels({ profile: this.settings.profile }); }
+  async models() { return inspectModels({ profile: this.settings.profile, onEvent: this.sdkEvents({ action: 'models' }) }); }
   async prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelOptions, 'vae' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}, signal?: AbortSignal) {
     if (this.queue.busy()) throw new Error('Finish or cancel queued work before changing prepared models.');
-    const prepared = await prepareModel(modelId, { ...components, signal, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
+    const prepared = await prepareModel(modelId, { ...components, onEvent: this.sdkEvents({ action: 'prepare', modelId }), signal, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
     await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
   }
   async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string }) {
@@ -63,13 +84,13 @@ export class Application {
     });
   }
   async verify(modelId: string, signal?: AbortSignal) {
-    const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile, signal });
+    const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile, signal, onEvent: this.sdkEvents({ modelId }) });
     if (opened.status !== 'ready') return opened;
-    return verifyModel(opened.model.directory, opened.model.manifest, { signal });
+    return verifyModel(opened.model.directory, opened.model.manifest, { signal, onEvent: this.sdkEvents({ modelId }) });
   }
   async removeManaged(modelId: string, name: string, signal?: AbortSignal) {
     if (this.queue.busy()) throw new Error('Finish or cancel queued work before removing models.');
-    return removeModel(modelId, name, { profile: this.settings.profile, signal });
+    return removeModel(modelId, name, { profile: this.settings.profile, signal, onEvent: this.sdkEvents({ modelId }) });
   }
   private updateSettings(change: (value: Settings) => void): Promise<void> {
     const next = this.settingsTail.then(async () => {

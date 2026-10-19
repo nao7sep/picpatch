@@ -8,7 +8,8 @@ import { Application } from '../../src/app/service.ts';
 it('exports through the SDK without prompts and preserves independently exported files after session deletion', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-export-'));
   try {
-    const app = await Application.open({ root, sessions: join(root, 'sessions'), config: join(root, 'config.json'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
+    const diagnostics: { level: string; message: string; details: Record<string, unknown> }[] = [];
+    const app = await Application.open({ root, sessions: join(root, 'sessions'), config: join(root, 'config.json'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') }, undefined, undefined, (level, message, details) => diagnostics.push({ level, message, details }));
     const session = await app.sessions.create(); const runId = randomUUID();
     // Opaque 1x1 PNG, deliberately supplied through the public artifact contract.
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4//8/AAX+Av5Y8msOAAAAAElFTkSuQmCC', 'base64');
@@ -26,6 +27,9 @@ it('exports through the SDK without prompts and preserves independently exported
     await writeFile(join(exports, 'partial-picpatchsdk.json'), 'existing sidecar');
     expect(await app.export(session.id, runId, join(exports, 'partial.png'), true, false)).toMatchObject({ status: 'saved', sidecar: { status: 'failed', code: 'OUTPUT_CONFLICT' } });
     expect(await readFile(join(exports, 'partial.png'))).toEqual(png);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: 'warn', details: expect.objectContaining({ sessionId: session.id, runId, sidecar: expect.objectContaining({ code: 'OUTPUT_CONFLICT' }) }) }));
+    expect(diagnostics.filter(item => (item.details.event as { name?: string } | undefined)?.name === 'operation.started')).toHaveLength(3);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ details: expect.objectContaining({ event: expect.objectContaining({ name: 'operation.refused', refusal: { code: 'OUTPUT_CONFLICT', effect: 'none' } }) }) }));
     expect(await readFile(join(exports, 'partial-picpatchsdk.json'), 'utf8')).toBe('existing sidecar');
     await app.remove(session.id); expect(await readFile(join(exports, 'selected.png'))).toEqual(png);
   } finally { await rm(root, { recursive: true, force: true }); }

@@ -1,5 +1,5 @@
 import { bootstrapLanguage, selectLanguage, localeState, prepareChromiumLanguage } from './language.ts';
-import { t, term, number, errorText, UiError } from '../shared/i18n/index.ts';
+import { t, term, number, errorText, errorNotice, UiError } from '../shared/i18n/index.ts';
 import { Records, errorRecord } from '../app/records.ts';
 import { readPaneState, savePaneState } from '../app/layout-state.ts';
 import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor } from 'electron';
@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, basename, relative, isAbsolute, delimiter } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { qualifyInference, qualifyLocalization } from './qualification.ts';
-import { installEngine, installNativeEngine, inspectEngine, inspectNativeEngine } from 'picpatchsdk';
+import { installEngine, installNativeEngine, inspectEngine, inspectNativeEngine, isPicPatchSdkError } from 'picpatchsdk';
 import { appPaths, resolveAppPaths } from '../app/paths.ts';
 import { Application } from '../app/service.ts';
 import { minimum } from '../shared/layout.ts';
@@ -64,7 +64,7 @@ async function start() {
       }
       return { ok: true, value: await dispatch(action, payload) };
     }
-    catch (error) { records?.write('error', 'Command failed.', { action, error: errorRecord(error) }); return { ok: false, message: error instanceof Error ? error.message : t('ui.the_operation_could_not_finish'), ...(error instanceof UiError ? { notice: error.notice } : {}) }; }
+    catch (error) { records?.write(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Command did not complete.', { action, error: errorRecord(error) }); return { ok: false, message: errorText(error), ...(isPicPatchSdkError(error) ? { code: error.code, kind: error.kind, effect: error.effect } : {}), notice: errorNotice(error) }; }
   });
   menus();
   window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', icon: join(here, 'icon.png'), show: false, backgroundColor: '#17191c', webPreferences: { preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
@@ -146,9 +146,9 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return; let checkpoint: string | undefined = payload.checkpoint;
       if (!checkpoint && (await service.overview()).models.find(m => m.id === payload.modelId)?.runtime.name === 'stable-diffusion.cpp') { const files = await pick(['openFile'], t('ui.select_the_checkpoint_inside_that_bundle')); if (!files[0] || dirname(files[0]) !== paths[0]) throw new UiError('ui.choose_a_checkpoint_in_the_selected_bundle'); checkpoint = basename(files[0]); }
       return service.prepare(payload.modelId, paths[0], checkpoint, false, payload.components, signal); }
-    case 'engines': return { mflux: await inspectEngine({ profile: service.settings.profile }), native: await inspectNativeEngine({ profile: service.settings.profile }) };
-    case 'installNative': return installNativeEngine({ profile: service.settings.profile, signal });
-    case 'installPython': { const uvExecutable = app.isPackaged ? join(here, 'tools/uv') : join(here, '../node_modules/.cache/picpatch-desktop/uv-0.13.1/uv-aarch64-apple-darwin/uv'); return installEngine({ profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
+    case 'engines': return { mflux: await inspectEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
+    case 'installNative': return installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal });
+    case 'installPython': { const uvExecutable = app.isPackaged ? join(here, 'tools/uv') : join(here, '../node_modules/.cache/picpatch-desktop/uv-0.13.1/uv-aarch64-apple-darwin/uv'); return installEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (paths[0]) await service.collection(paths[0]); return; }
     default: throw new Error('Unknown action.');
   }

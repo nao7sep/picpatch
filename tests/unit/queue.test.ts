@@ -63,3 +63,18 @@ it('retains the actual output and pauses after a result metadata write fails', a
   expect(queue.state.paused).toBe(true); expect(await readFile(produced, 'utf8')).toBe('published');
   expect((await new Sessions(root).get(session.id)).runs.map(run => run.status)).toEqual(['interrupted', 'queued']);
 });
+
+it('keeps diagnostic events separate from stage and progress display', async () => {
+  const sessions = new Sessions(root); const session = await sessions.create();
+  const queue = new Queue(sessions, async (_session, _run, events) => {
+    const event = { type: 'event' as const, operationId: 'fixture', verb: 'generate', time: new Date().toISOString(), level: 'info' as const, message: 'Stage changed.' };
+    events.onProgress({ type: 'progress', stage: 'generating', completed: 2, total: 4 });
+    events.onEvent({ ...event, name: 'hook.failed', stage: 'hook-failed' });
+    expect(queue.state.active).toMatchObject({ stage: 'generating', progress: { completed: 2, total: 4 } });
+    events.onEvent({ ...event, name: 'operation.stage', stage: 'saving' });
+    expect(queue.state.active?.stage).toBe('saving'); expect(queue.state.active?.progress).toBeUndefined();
+    return { outcome: refusal };
+  });
+  await queue.submit(session.id, session.draft, 1); await queue.settled();
+  expect((await sessions.get(session.id)).runs[0]!.status).toBe('refused');
+});

@@ -34,7 +34,7 @@ export function management(api: Bridge, changed: () => Promise<void>) {
   }
   function describe(result: any): string {
     if (result.mflux && result.native) return t('management.engines', { python: term('status', result.mflux.status), native: term('status', result.native.status) });
-    if (result.status) return result.message ? t('common.detail', { status: term('status', result.status), detail: errorText(result.message) }) : term('status', result.status);
+    if (result.status) return result.status === 'refused' ? t('common.detail', { status: term('status', result.status), detail: errorText(result) }) : term('status', result.status);
     return t('ui.completed');
   }
   function selections() {

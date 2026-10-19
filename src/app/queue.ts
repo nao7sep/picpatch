@@ -52,8 +52,8 @@ export class Queue {
         try {
           completion = await this.run(selected.sessionId, attempt, {
             signal: this.controller.signal,
-            onEvent: event => { if (this.state.active) { this.state.active.stage = event.stage; this.changed(); } },
-            onProgress: event => { if (this.state.active) { this.state.active.progress = { completed: event.completed, total: event.total }; this.changed(); } },
+            onEvent: event => { if (this.state.active && event.name === 'operation.stage') { if (this.state.active.stage !== event.stage) delete this.state.active.progress; this.state.active.stage = event.stage; this.changed(); } },
+            onProgress: event => { if (this.state.active) { this.state.active.stage = event.stage; this.state.active.progress = { completed: event.completed, total: event.total }; this.changed(); } },
           });
         } catch (error) {
           const cause = error as { code?: string; kind?: string; effect?: 'none' | 'unknown'; message?: string };
@@ -70,7 +70,7 @@ export class Queue {
         await this.sessions.update(selected.sessionId, value => {
           const run = value.runs.find(r => r.id === selected.runId)!; run.ended = new Date().toISOString();
           if ('status' in outcome) { run.status = 'refused'; run.issue = { code: outcome.code, message: outcome.message, effect: outcome.effect }; }
-          else { run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record; const notices = [outcome.sidecar?.status === 'failed' ? outcome.sidecar.message : undefined, outcome.cleanupWarning?.message].filter((value): value is string => Boolean(value)); if (notices.length) run.notices = notices; }
+          else { run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record; const notices = [outcome.sidecar?.status === 'failed' ? 'Image saved; its settings sidecar could not be saved.' : undefined, outcome.cleanupWarning?.message].filter((value): value is string => Boolean(value)); if (notices.length) run.notices = notices; }
         });
         if (completion.stopIssue) { this.terminationUnconfirmed = true; throw new Error(completion.stopIssue); }
       } catch (error) {

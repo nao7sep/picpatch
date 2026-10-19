@@ -1,12 +1,12 @@
 import { Worker } from 'node:worker_threads';
-export interface AppRecord { time: string; level: 'info' | 'warn' | 'error'; message: string; [key: string]: unknown }
+export interface AppRecord { time: string; level: 'debug' | 'info' | 'warn' | 'error'; message: string; [key: string]: unknown }
 export function errorRecord(error: unknown): unknown {
   const seen = new Set<unknown>();
   function describe(value: unknown): unknown {
     if (!(value instanceof Error)) return String(value);
     if (seen.has(value)) return { name: value.name, message: 'Repeated cause' }; seen.add(value);
-    const cause = value as Error & { code?: string; kind?: string; effect?: string };
-    return { name: cause.name, message: cause.message, stack: cause.stack, code: cause.code, kind: cause.kind, effect: cause.effect, ...(cause.cause ? { cause: describe(cause.cause) } : {}) };
+    const cause = value as Error & { code?: string; kind?: string; effect?: string; subject?: string; details?: unknown };
+    return { name: cause.name, message: cause.message, stack: cause.stack, code: cause.code, kind: cause.kind, effect: cause.effect, subject: cause.subject, details: cause.details, ...(cause.cause ? { cause: describe(cause.cause) } : {}) };
   }
   return describe(error);
 }

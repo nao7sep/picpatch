@@ -1,5 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { readSettings, saveSettings } from '../../src/app/settings.ts';
@@ -23,4 +23,11 @@ it('leaves unsupported settings untouched and rejects relative resource paths be
   const app = await Application.open({ root, config, sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
   await expect(app.preferences({ modelsDirectory: 'relative' })).rejects.toMatchObject({ kind: 'invalid' });
   expect(app.settings.profile).toEqual({ version: 1 }); await expect(readFile(config)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('keeps SDK resource homes separate from the app collection and honors explicit overrides', async () => {
+  const app = await Application.open({ root, config: join(root, 'config.json'), sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
+  expect((await app.overview()).locations).toMatchObject({ engineDirectory: join(homedir(), '.picpatchsdk', 'engine'), modelsDirectory: join(homedir(), '.picpatchsdk', 'models'), sessionsDirectory: join(root, 'sessions') });
+  await app.preferences({ engineDirectory: join(root, 'custom-engine'), modelsDirectory: join(root, 'custom-models') });
+  expect((await app.overview()).locations).toMatchObject({ engineDirectory: join(root, 'custom-engine'), modelsDirectory: join(root, 'custom-models'), sessionsDirectory: join(root, 'sessions') });
 });

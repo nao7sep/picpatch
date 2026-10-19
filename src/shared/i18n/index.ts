@@ -54,8 +54,14 @@ export class UiError extends Error {
 }
 const phrases = new Map(Object.entries(english).filter((entry): entry is [Key, string] => typeof entry[1] === 'string').map(([key, value]) => [value, key]));
 /** Fixed application errors can stay English in diagnostics; only presentation translates them. */
-export function errorText(value: unknown): string {
-  if (value && typeof value === 'object' && 'notice' in value && value.notice && typeof value.notice === 'object' && 'key' in value.notice) { const note = value.notice as Message; return t(note.key, note.values); }
-  const text = value instanceof Error ? value.message : String(value);
-  const key = phrases.get(text); return key ? t(key) : text;
+export function errorNotice(value: unknown): Message {
+  if (value && typeof value === 'object' && 'notice' in value && value.notice && typeof value.notice === 'object' && 'key' in value.notice) { const note = value.notice as Message; return note; }
+  if (value && typeof value === 'object' && 'code' in value) {
+    const keys: Record<string, Key> = { MODEL_IO: 'error.prepare_this_model_in_managed_models_before_running_it', CANCELLED: 'status.cancelled' };
+    const key = keys[String(value.code)]; if (key) return message(key);
+  }
+  const text = value && typeof value === 'object' && 'message' in value ? String(value.message) : String(value);
+  const key = phrases.get(text); return message(key ?? 'ui.the_operation_could_not_finish');
 }
+
+export function errorText(value: unknown): string { const notice = errorNotice(value); return t(notice.key, notice.values); }
