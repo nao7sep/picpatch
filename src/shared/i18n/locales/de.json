@@ -141,7 +141,6 @@
   "ui.wait_for_the_current_managed_operation_or_cancel_it": "Warten Sie auf den laufenden Verwaltungsvorgang oder brechen Sie ihn ab.",
   "ui.the_operation_could_not_finish": "Der Vorgang konnte nicht abgeschlossen werden.",
   "ui.about_picpatch": "Über PicPatch",
-  "ui.generate_and_refine_images_with_local_aigpl30orlater": "Bilder mit lokaler KI generieren und verfeinern.\nGPL-3.0-or-later",
   "ui.file": "Datei",
   "ui.new_session_2": "Neue Sitzung",
   "ui.open_source_image": "Ausgangsbild öffnen",

@@ -141,7 +141,6 @@
   "ui.wait_for_the_current_managed_operation_or_cancel_it": "请等待当前托管操作完成，或将其取消。",
   "ui.the_operation_could_not_finish": "操作未能完成。",
   "ui.about_picpatch": "关于 PicPatch",
-  "ui.generate_and_refine_images_with_local_aigpl30orlater": "使用本地 AI 生成和优化图像。\nGPL-3.0-or-later",
   "ui.file": "文件",
   "ui.new_session_2": "新建会话",
   "ui.open_source_image": "打开原图",

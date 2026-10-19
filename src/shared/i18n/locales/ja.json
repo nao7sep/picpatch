@@ -141,7 +141,6 @@
   "ui.wait_for_the_current_managed_operation_or_cancel_it": "現在の管理操作が終わるまで待つか、キャンセルしてください。",
   "ui.the_operation_could_not_finish": "操作を完了できませんでした。",
   "ui.about_picpatch": "PicPatchについて",
-  "ui.generate_and_refine_images_with_local_aigpl30orlater": "ローカルAIで画像を生成し、仕上げます。\nGPL-3.0-or-later",
   "ui.file": "ファイル",
   "ui.new_session_2": "新規セッション",
   "ui.open_source_image": "元画像を開く",

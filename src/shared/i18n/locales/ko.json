@@ -141,7 +141,6 @@
   "ui.wait_for_the_current_managed_operation_or_cancel_it": "현재 관리 작업이 끝날 때까지 기다리거나 취소하십시오.",
   "ui.the_operation_could_not_finish": "작업을 완료하지 못했습니다.",
   "ui.about_picpatch": "PicPatch에 관하여",
-  "ui.generate_and_refine_images_with_local_aigpl30orlater": "로컬 AI로 이미지를 생성하고 다듬습니다.\nGPL-3.0-or-later",
   "ui.file": "파일",
   "ui.new_session_2": "새 세션",
   "ui.open_source_image": "원본 이미지 열기",

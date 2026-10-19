@@ -141,7 +141,6 @@
   "ui.wait_for_the_current_managed_operation_or_cancel_it": "Дождитесь завершения текущей операции с ресурсами или отмените её.",
   "ui.the_operation_could_not_finish": "Не удалось завершить операцию.",
   "ui.about_picpatch": "О PicPatch",
-  "ui.generate_and_refine_images_with_local_aigpl30orlater": "Создавайте и дорабатывайте изображения с помощью локального ИИ.\nGPL-3.0-or-later",
   "ui.file": "Файл",
   "ui.new_session_2": "Новый сеанс",
   "ui.open_source_image": "Открыть исходное изображение",

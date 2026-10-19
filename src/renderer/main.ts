@@ -1,3 +1,4 @@
+import { appMenu } from './AppMenu.ts';
 import { afterCommand, recoverCommand, commandTargetReady, hasImage, imageCommand, newImage, targetImage } from '../shared/image-command.ts';
 import { aboutModal } from './AboutModal.ts';
 import { operationResults } from './operation-results.ts';
@@ -340,6 +341,12 @@ let closeFocus: HTMLElement | undefined;
 let flushing: Promise<void> | undefined;
 const messages = messageModal();
 const about = aboutModal(api);
+appMenu(element<HTMLButtonElement>('menuButton'), element('appMenu'));
+element('aboutButton').onclick = () => dispatchCommand('about');
+for (const [id, command] of [['menuZoomIn','uiZoomIn'],['menuZoomOut','uiZoomOut'],['menuZoomReset','uiZoomReset']]) element(id!).onclick = () => dispatchCommand(command!);
+const modalObserver = new MutationObserver(() => { void api.call('modalState', { open: Boolean(document.querySelector('dialog[open]')) }).catch(issue); });
+for (const dialog of document.querySelectorAll('dialog')) modalObserver.observe(dialog, { attributes: true, attributeFilter: ['open'] });
+window.addEventListener('pagehide', () => modalObserver.disconnect(), { once: true });
 shortcutsModal(); toolbar(element('canvasActions'));
 managementModal(api, refresh); const settings = settingsModal(api, refresh, messages); action('showRecords', () => api.call('openLogs'));
 let pan: { x: number; y: number; left: number; top: number } | undefined;

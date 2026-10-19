@@ -141,7 +141,6 @@
   "ui.wait_for_the_current_managed_operation_or_cancel_it": "Aguarde a operação gerenciada atual ou cancele-a.",
   "ui.the_operation_could_not_finish": "Não foi possível concluir a operação.",
   "ui.about_picpatch": "Sobre o PicPatch",
-  "ui.generate_and_refine_images_with_local_aigpl30orlater": "Gere e refine imagens com IA local.\nGPL-3.0-or-later",
   "ui.file": "Arquivo",
   "ui.new_session_2": "Nova sessão",
   "ui.open_source_image": "Abrir imagem de origem",

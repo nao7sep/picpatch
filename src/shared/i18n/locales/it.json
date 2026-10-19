@@ -141,7 +141,6 @@
   "ui.wait_for_the_current_managed_operation_or_cancel_it": "Attendi il completamento dell'operazione di gestione in corso oppure annullala.",
   "ui.the_operation_could_not_finish": "Impossibile completare l'operazione.",
   "ui.about_picpatch": "Informazioni su PicPatch",
-  "ui.generate_and_refine_images_with_local_aigpl30orlater": "Genera e perfeziona immagini con l'IA locale.\nGPL-3.0-or-later",
   "ui.file": "File",
   "ui.new_session_2": "Nuova sessione",
   "ui.open_source_image": "Apri immagine di partenza",

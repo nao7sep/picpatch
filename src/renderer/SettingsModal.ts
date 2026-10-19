@@ -1,3 +1,4 @@
+import { isComposing } from './ime.ts';
 import { defaultFont } from '../shared/appearance.ts';
 import { languageOptions } from './localization.ts';
 import { t, errorText, message } from '../shared/i18n/index.ts';
@@ -34,8 +35,22 @@ export function settingsModal(api: Bridge, changed: () => Promise<void>, message
     el('settingsIssue').textContent = valid ? '' : t('error.stored_resource_paths_must_be_absolute');
     field('saveSettingsDialog').disabled = saving || !valid || snapshot() === initial;
   }
+  const tabs = [el<HTMLButtonElement>('generalTab'), el<HTMLButtonElement>('resourcesTab')];
+  function selectTab(index: number) {
+    tabs.forEach((tab, position) => { const selected = index === position; tab.tabIndex = selected ? 0 : -1; tab.setAttribute('aria-selected', String(selected)); el(tab.getAttribute('aria-controls')!).hidden = !selected; });
+  }
+  tabs.forEach((tab, index) => {
+    tab.onclick = () => selectTab(index);
+    tab.onkeydown = event => {
+      if (isComposing(event) || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+      event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : Math.max(0, Math.min(1, index + (event.key === 'ArrowRight' ? 1 : -1)));
+      selectTab(next); tabs[next]!.focus();
+    };
+  });
+  for (const radio of surface.querySelectorAll<HTMLInputElement>('[name=themeChoice]')) radio.onchange = () => { if (radio.checked) field('theme').value = radio.value; validate(); };
+  el('resetFonts').onclick = () => { field('uiFont').value = ''; validate(); };
   surface.addEventListener('input', validate); surface.addEventListener('change', validate);
-  function systemTheme(dark: boolean) { el('theme').querySelector<HTMLOptionElement>('[value=system]')!.textContent = t('settings.system', { value: t(dark ? 'ui.dark' : 'ui.light') }); }
+  function systemTheme(dark: boolean) { el('systemTheme').textContent = t('settings.system', { value: t(dark ? 'ui.dark' : 'ui.light') }); }
   function report(error: unknown) { el('settingsIssue').textContent = errorText(error); }
   el('settingsButton').onclick = () => { void (async () => {
     const overview = await api.call('overview');
@@ -45,6 +60,8 @@ export function settingsModal(api: Bridge, changed: () => Promise<void>, message
     systemTheme(overview.systemDark);
     field('uiFont').value = overview.settings.uiFont ?? ''; field('uiFont').placeholder = defaultFont;
     field('theme').value = overview.settings.theme ?? 'system';
+    for (const radio of surface.querySelectorAll<HTMLInputElement>('[name=themeChoice]')) radio.checked = radio.value === field('theme').value;
+    selectTab(0);
     languageOptions(el('language'), overview.locale?.systemLanguage ?? 'en'); field('language').value = overview.settings.language ?? 'system';
     el('collectionLocation').textContent = overview.locations.sessionsDirectory;
     initial = snapshot(); validate(); shell.open();

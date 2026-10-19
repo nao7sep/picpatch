@@ -8,7 +8,7 @@ export function shortcutsModal() {
     const rows = surface.querySelector('dl')!; rows.replaceChildren();
     for (const entry of shortcuts) {
       const label = document.createElement('dt'); label.textContent = t(entry.label);
-      const chord = document.createElement('dd'); chord.textContent = shortcutText(entry, /Mac/.test(navigator.platform));
+      const chord = document.createElement('dd'); const keys = document.createElement('kbd'); keys.textContent = shortcutText(entry, /Mac/.test(navigator.platform)); chord.append(keys);
       rows.append(label, chord);
     }
     shell.open();

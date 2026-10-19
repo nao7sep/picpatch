@@ -1,3 +1,4 @@
+import { menuTemplate } from './menu-template.ts';
 import { pythonRuntime } from '../app/engines.ts';
 import { RecordsReader } from '../app/records-reader.ts';
 import { focusWorkspaceForCommand } from './workspace-command.ts';
@@ -143,7 +144,7 @@ async function start() {
   ipcMain.handle('picpatch:call', async (event, action: string, payload: any = {}) => {
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== renderer) throw new Error('Untrusted request.');
     try {
-      if (!['ready', 'overview', 'get', 'draft', 'layout', 'paneState'].includes(action)) records?.write('info', 'Command requested.', { action });
+      if (!['ready', 'overview', 'get', 'draft', 'layout', 'paneState', 'modalState'].includes(action)) records?.write('info', 'Command requested.', { action });
       if (['prepare', 'verify', 'removeManaged', 'installPython', 'installNative'].includes(action)) {
         if (managed) throw new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it');
         const controller = new AbortController(); const task = dispatch(action, payload, controller.signal);
@@ -184,6 +185,7 @@ async function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections
 }
 async function dispatch(action: string, payload: any, signal?: AbortSignal) {
   switch (action) {
+    case 'modalState': modalOpen = payload.open === true; for (const id of ['picpatch-about','picpatch-settings']) { const item = Menu.getApplicationMenu()?.getMenuItemById(id); if (item) item.enabled = !modalOpen; } return;
     case 'closeWindow': void lifetime.close(); return;
     case 'openProjectLink': { if (payload.destination !== 'repository' && payload.destination !== 'issues') throw new Error('Unknown project link.'); await shell.openExternal(about[payload.destination as 'repository' | 'issues']); return; }
     case 'openLogs': try { await logs?.open(); } catch (error) { records?.write('error', 'Logs window could not open.', { error: errorRecord(error) }); throw new UiError('logs.openFailed'); } return;
@@ -235,12 +237,9 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
   }
 }
 
+let modalOpen = false;
 function menus() {
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'PicPatch', submenu: [{ label: t('ui.settings'), accelerator: accelerator('settingsButton'), click: () => command('settingsButton') }, { type: 'separator' }, { label: t('ui.about_picpatch'), click: () => command('about') }, { type: 'separator' }, { role: 'services', label: t('native.services') }, { role: 'hide', label: t('native.hide') }, { role: 'hideOthers', label: t('native.hideOthers') }, { role: 'unhide', label: t('native.showAll') }, { type: 'separator' }, { label: t('native.quit'), accelerator: accelerator('quit'), click: () => command('quit') }] },
-    { label: t('ui.file'), submenu: [{ label: t('ui.new_session_2'), accelerator: accelerator('new'), click: () => command('new') }, { label: t('ui.open_source_image'), accelerator: accelerator('import'), click: () => command('import') }, { label: t('ui.save_image_2'), accelerator: accelerator('save'), click: () => command('save') }, { label: t('ui.save_image_with_settings'), accelerator: accelerator('saveSettings'), click: () => command('saveSettings') }, { type: 'separator' }, { label: t('ui.generate_or_edit'), accelerator: accelerator('run'), click: () => command('run') }] },
-    { label: t('native.edit'), submenu: [{ role: 'undo', label: t('native.undo') }, { role: 'redo', label: t('native.redo') }, { type: 'separator' }, { role: 'cut', label: t('native.cut') }, { role: 'copy', label: t('native.copy') }, { role: 'paste', label: t('native.paste') }, { role: 'pasteAndMatchStyle', label: t('native.pasteMatch') }, { role: 'delete', label: t('native.delete') }, { role: 'selectAll', label: t('native.selectAll') }] },
-    { label: t('native.view'), submenu: [{ label: t('ui.logs'), click: () => command('showRecords') }, { label: t('shortcuts.title'), accelerator: accelerator('shortcutsButton'), click: () => command('shortcutsButton') }, { type: 'separator' }, { role: 'reload', label: t('native.reload') }, { role: 'forceReload', label: t('native.forceReload') }, { role: 'toggleDevTools', label: t('native.developerTools') }, { type: 'separator' }, { label: t('native.zoomIn'), accelerator: accelerator('uiZoomIn'), click: () => command('uiZoomIn') }, { label: t('native.zoomOut'), accelerator: accelerator('uiZoomOut'), click: () => command('uiZoomOut') }, { label: t('native.resetZoom'), accelerator: accelerator('uiZoomReset'), click: () => command('uiZoomReset') }, { role: 'togglefullscreen', label: t('native.fullscreen') }] },
-    { label: t('native.window'), role: 'windowMenu', submenu: [{ role: 'minimize', label: t('native.minimize') }, { label: t('native.close'), accelerator: accelerator('closeWindow'), click: () => { const focused = BrowserWindow.getFocusedWindow(); if (focused && focused !== window) focused.close(); else command('closeWindow'); } }, { role: 'zoom', label: t('native.zoomWindow') }, { role: 'front', label: t('native.bringAllFront') }] },
-  ]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform === 'darwin', app.isPackaged, modalOpen, command, () => {
+    const focused = BrowserWindow.getFocusedWindow(); if (focused && focused !== window) focused.close(); else command('closeWindow');
+  })));
 }

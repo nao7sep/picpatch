@@ -94,7 +94,7 @@ it('guards dirty settings dismissal and only saves valid changed values', async 
   await vi.waitFor(() => expect((field('appMessage') as unknown as HTMLDialogElement).open).toBe(true));
   (document.querySelector('#appMessage footer button:last-child') as HTMLButtonElement).click();
   await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(false));
-  expect(document.activeElement).toBe(field('settingsButton'));
+  expect(document.activeElement).toBe(field('menuButton'));
   expect(call.mock.calls.some(([action]) => action === 'preferences' || action === 'closeWindow')).toBe(false);
 });
 it('keeps path-picker failures inside Settings and preserves its draft', async () => {
@@ -178,7 +178,7 @@ it('opens the shortcut reference through its binding, lists real commands and cl
   field('closeShortcuts').dispatchEvent(new KeyboardEvent('keydown',{key:'w',metaKey:true,bubbles:true,cancelable:true}));
   await vi.waitFor(() => expect((field('shortcuts') as unknown as HTMLDialogElement).open).toBe(false));
   expect(call.mock.calls.some(([action]) => action === 'closeWindow')).toBe(false);
-  expect(document.activeElement).toBe(field('shortcutsButton'));
+  expect(document.activeElement).toBe(field('menuButton'));
 });
 it('keeps workspace accelerators behind modal guards while Quit still uses the guarded close flow', async () => {
   menuCommand('settingsButton'); await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
@@ -196,7 +196,7 @@ it('applies font only on Save and shows the independent system theme', async () 
     return value;
   });
   field('settingsButton').click(); await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
-  expect(field('theme').querySelector('[value=system]')!.textContent).toContain('Dark');
+  expect(field('systemTheme').textContent).toContain('Dark');
   const before = document.documentElement.style.getPropertyValue('--font-ui');
   field('uiFont').value = 'Arial, sans-serif'; field('uiFont').dispatchEvent(new Event('input',{bubbles:true}));
   expect(document.documentElement.style.getPropertyValue('--font-ui')).toBe(before);
@@ -346,4 +346,28 @@ it('offers comparison only for two completed results', async () => {
   expect(field('compare').disabled).toBe(true);
   expect(field('compareMode').hidden).toBe(true);
   expect(field('resume').hidden).toBe(true);
+});
+it('navigates the app menu without activating commands and returns to its trigger', async () => {
+  field('menuButton').click();
+  expect(document.activeElement).toBe(field('new'));
+  field('new').dispatchEvent(new KeyboardEvent('keydown', { key:'ArrowDown', bubbles:true }));
+  expect(document.activeElement).toBe(field('settingsButton'));
+  expect((field('settings') as unknown as HTMLDialogElement).open).toBe(false);
+  field('settingsButton').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  expect(field('appMenu').hidden).toBe(true); expect(document.activeElement).toBe(field('menuButton'));
+  field('menuButton').click(); field('settingsButton').click();
+  await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+  expect(field('appMenu').hidden).toBe(true);
+});
+it('keeps Settings tab navigation and font reset inside its unsaved draft', async () => {
+  field('settingsButton').click();
+  await vi.waitFor(() => expect((field('settings') as unknown as HTMLDialogElement).open).toBe(true));
+  field('generalTab').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+  expect(document.activeElement).toBe(field('resourcesTab')); expect(field('generalSettings').hidden).toBe(true);
+  field('generalTab').click(); field('uiFont').value='Example'; field('uiFont').dispatchEvent(new Event('input',{bubbles:true}));
+  field('resetFonts').click(); expect(field('uiFont').value).toBe(''); expect(field('saveSettingsDialog').disabled).toBe(true);
+  expect(call.mock.calls.some(([action]) => action === 'preferences')).toBe(false);
+  field('uiFont').value='Example'; field('uiFont').dispatchEvent(new Event('input',{bubbles:true}));
+  (document.querySelector('#settings .modalClose') as HTMLButtonElement).click();
+  await vi.waitFor(() => expect((field('appMessage') as unknown as HTMLDialogElement).open).toBe(true));
 });
