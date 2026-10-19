@@ -17,7 +17,9 @@ it('keeps readable source text catalogued and rejects missing message keys', asy
       if (node.type === 'ObjectProperty' && ['label','title','message','detail','empty'].includes(node.key.name) && node.value.type === 'StringLiteral') expect(['PicPatch',''].includes(node.value.value), `${file}:${node.value.value}`).toBe(true);
     });
   }
-  const html = await readFile('src/renderer/index.html','utf8');
+  for (const name of (await readdir('src/renderer')).filter(name => name.endsWith('.html'))) {
+  const html = await readFile(join('src/renderer', name),'utf8');
   for (const match of html.matchAll(/data-i18n(?:-[a-z-]+)?="([^"]+)"/g)) expect(Object.hasOwn(en,match[1]!),match[1]).toBe(true);
   expect(html.replace(/<script[\s\S]*?<\/script>/g,'').replace(/<title>PicPatch<\/title>/g,'')).not.toMatch(/>[\s]*[A-Za-z][^<]*</);
+  }
 });

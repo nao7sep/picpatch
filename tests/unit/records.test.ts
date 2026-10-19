@@ -25,3 +25,38 @@ it('keeps the cause chain and stack for diagnostics', () => {
   const error = new Error('outer', { cause: new TypeError('inner') });
   expect(errorRecord(error)).toMatchObject({ name: 'Error', message: 'outer', stack: expect.any(String), cause: { name: 'TypeError', message: 'inner' } });
 });
+
+import { RecordsReader } from '../../src/app/records-reader.ts';
+import { recordsQuery, recordId } from '../../src/shared/records.ts';
+it('validates untrusted query and detail arguments', () => {
+  expect(() => recordsQuery({ current: true, level: 'fatal', search: '' })).toThrow();
+  expect(() => recordsQuery({ current: true, level: 'all', search: 'x'.repeat(501) })).toThrow();
+  expect(() => recordsQuery({ current: true, level: 'all', search: '', before: -1 })).toThrow();
+  expect(() => recordId('1')).toThrow();
+  expect(recordsQuery({ current: false, level: 'attention', search: '%_quoted' })).toEqual({ current: false, level: 'attention', search: '%_quoted' });
+});
+it('reads bounded historical pages, filters and full selected details without changing stored events', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'picpatch-records-reader-'));
+  const reader = new RecordsReader(root, 'current', new URL('../../src/app/records-reader-worker.ts', import.meta.url));
+  try {
+    expect(await reader.query({ current: false, level: 'all', search: '' })).toEqual({ records: [], more: false });
+    const db = new DatabaseSync(join(root, 'records.sqlite3'));
+    db.exec('CREATE TABLE records(id INTEGER PRIMARY KEY,session TEXT,time TEXT,level TEXT,message TEXT,json TEXT)');
+    const insert = db.prepare('INSERT INTO records VALUES(?,?,?,?,?,?)');
+    for (let id = 1; id <= 205; id++) insert.run(id, id > 200 ? 'current' : 'previous', '2026-10-19T00:00:00Z', id % 2 ? 'info' : 'warn', `Message ${id}`, JSON.stringify({ message: `Message ${id}`, nested: { literal: '%_needle' }, time: '2026-10-19T00:00:00Z' }));
+    db.close();
+    const first = await reader.query({ current: false, level: 'all', search: '' }); expect(first.records).toHaveLength(100); expect(first.more).toBe(true); expect(first.records[0]!.id).toBe(205);
+    const second = await reader.query({ current: false, level: 'all', search: '', before: first.records.at(-1)!.id }); expect(second.records[0]!.id).toBe(105);
+    const filtered = await reader.query({ current: true, level: 'attention', search: '%_needle' }); expect(filtered.records.map(row => row.id)).toEqual([204,202]);
+    const detail = JSON.parse((await reader.detail(204))!); expect(detail).toMatchObject({ session: 'current', event: { nested: { literal: '%_needle' } } });
+    expect(await reader.detail(999)).toBe(null);
+  } finally { await reader.close(); await rm(root, { recursive: true, force: true }); }
+});
+it('rejects corrupt history without claiming an empty successful page', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'picpatch-records-corrupt-'));
+  const reader = new RecordsReader(root, 'current', new URL('../../src/app/records-reader-worker.ts', import.meta.url));
+  try {
+    await mkdir(join(root, 'records.sqlite3'));
+    await expect(reader.query({ current: false, level: 'all', search: '' })).rejects.toThrow();
+  } finally { await reader.close(); await rm(root, { recursive: true, force: true }); }
+});

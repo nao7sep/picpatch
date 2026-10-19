@@ -1,3 +1,6 @@
+import { RecordsReader } from '../app/records-reader.ts';
+import { focusWorkspaceForCommand } from './workspace-command.ts';
+import { LogsWindow } from './logs-window.ts';
 import { about } from '../shared/about.ts';
 import { normalizeZoom, nextZoom, windowMinimum } from '../shared/appearance.ts';
 import type { PaneState } from '../app/layout-state.ts';
@@ -14,7 +17,7 @@ import { Worker } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, basename, relative, isAbsolute, delimiter } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { qualifyInference, qualifyLocalization } from './qualification.ts';
+import { qualifyInference, qualifyLocalization, qualifyLogs } from './qualification.ts';
 import { installEngine, installNativeEngine, inspectEngine, inspectNativeEngine, isPicPatchSdkError } from 'picpatchsdk';
 import { appPaths, resolveAppPaths } from '../app/paths.ts';
 import { Application } from '../app/service.ts';
@@ -27,6 +30,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'picpatch-image', privileges: { 
 let window: BrowserWindow | undefined; let service: Application; let quitting = false;
 let backup: Worker | undefined;
 let records: Records | undefined;
+let logs: LogsWindow | undefined;
+let recordsReader: RecordsReader | undefined;
 let managed: { controller: AbortController; task: Promise<unknown> } | undefined;
 const paths = await appPaths();
 app.setPath('userData', paths.root); app.setPath('sessionData', join(paths.root, 'browser'));
@@ -92,6 +97,7 @@ const lifetime = quitFlow({
     await service.queue.stop();
     if (quitting) return;
     if (backup) { await new Promise<void>(resolve => { const timer = setTimeout(resolve, 500); const done = (reply: any) => { if (reply.flushed === 'quit') { clearTimeout(timer); backup?.off('message', done); resolve(); } }; backup!.on('message', done); backup!.postMessage({ flush: 'quit' }); }); await backup.terminate(); }
+    logs?.close(); await recordsReader?.close();
     records?.write('info', 'PicPatch closed normally.'); await records?.close();
     quitting = true; app.quit();
   },
@@ -115,10 +121,11 @@ async function startupFailure(error: unknown) {
   await dialog.showMessageBox({ type: 'error', message: t('ui.picpatch_could_not_start'), detail: errorText(error) });
   app.exit(1);
 }
-function command(id: string) { if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('picpatch:command', id); }
+function command(id: string) { if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) { focusWorkspaceForCommand(window, id); window.webContents.send('picpatch:command', id); } }
 async function start() {
   await bootstrapLanguage(paths.config);
-  records = new Records(paths.root, join(here, 'records-worker.mjs'));
+  records = new Records(paths.root, join(here, 'records-worker.mjs'), () => logs?.changed());
+  recordsReader = new RecordsReader(paths.root, records.session, join(here, 'records-reader-worker.mjs'));
   records.write('info', 'PicPatch started.', { version: app.getVersion() });
   process.on('uncaughtExceptionMonitor', error => records?.write('error', 'Uncaught exception.', { error: errorRecord(error) }));
   backup = new Worker(join(here, 'backup-worker.mjs'));
@@ -129,11 +136,12 @@ async function start() {
     try { const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1)); const response = await net.fetch(pathToFileURL(path).href); const headers = new Headers(response.headers); headers.set('Access-Control-Allow-Origin', '*'); return new Response(response.body, { status: response.status, headers }); }
     catch { return new Response('Image unavailable', { status: 404 }); }
   });
+  logs = new LogsWindow(here, recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }));
   const renderer = pathToFileURL(join(here, 'index.html')).href;
   ipcMain.handle('picpatch:call', async (event, action: string, payload: any = {}) => {
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== renderer) throw new Error('Untrusted request.');
     try {
-      if (!['ready', 'overview', 'get', 'draft', 'layout', 'paneState', 'records'].includes(action)) records?.write('info', 'Command requested.', { action });
+      if (!['ready', 'overview', 'get', 'draft', 'layout', 'paneState'].includes(action)) records?.write('info', 'Command requested.', { action });
       if (['prepare', 'verify', 'removeManaged', 'installPython', 'installNative'].includes(action)) {
         if (managed) throw new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it');
         const controller = new AbortController(); const task = dispatch(action, payload, controller.signal);
@@ -146,7 +154,7 @@ async function start() {
   });
   paneState = await readPaneState(paths.state);
   nativeTheme.themeSource = service.settings.theme ?? 'system';
-  nativeTheme.on('updated', () => { window?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2'); if (rendererReady) window?.webContents.send('picpatch:changed'); });
+  nativeTheme.on('updated', () => { logs?.updateAppearance(); window?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2'); if (rendererReady) window?.webContents.send('picpatch:changed'); });
   menus();
   window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', ...(process.platform === 'darwin' ? {} : { icon: join(here, 'icon.png') }), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2', webPreferences: { zoomFactor: normalizeZoom(paneState.uiZoom), preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   window.on('move', fitMinimum);
@@ -176,15 +184,15 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
   switch (action) {
     case 'closeWindow': void lifetime.close(); return;
     case 'openProjectLink': { if (payload.destination !== 'repository' && payload.destination !== 'issues') throw new Error('Unknown project link.'); await shell.openExternal(about[payload.destination as 'repository' | 'issues']); return; }
-    case 'records': return records?.list() ?? [];
-    case 'ready': rendererReady = true; if (smoke) { if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, join(here, 'tools/uv')); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
+    case 'openLogs': try { await logs?.open(); } catch (error) { records?.write('error', 'Logs window could not open.', { error: errorRecord(error) }); throw new UiError('logs.openFailed'); } return;
+    case 'ready': rendererReady = true; if (smoke) { if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root); await qualifyLogs(await logs!.open(false), window!); logs!.close(); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, join(here, 'tools/uv')); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
     case 'paneState': if (payload.requestWidth !== undefined) { await storePane({ requestWidth: payload.requestWidth, sidebar: payload.sidebar }); return; } return paneState;
     case 'layout': { const size = minimum(payload.sidebar === true); contentFloor = { width: size.width, height: Number.isFinite(payload.height) ? Math.max(size.height, payload.height) : size.height }; fitMinimum(); return; }
     case 'uiZoom': {
       if (!['in', 'out', 'reset'].includes(payload.direction)) throw new Error('Invalid UI zoom command.');
       const zoom = nextZoom(window!.webContents.getZoomFactor(), payload.direction);
       window!.webContents.setZoomFactor(zoom); fitMinimum();
-      await storePane({ uiZoom: zoom }).catch(error => records?.write('warn', 'UI zoom could not be retained.', { error: errorRecord(error) })); return;
+      await storePane({ uiZoom: zoom }).catch(error => records?.write('warn', 'UI zoom could not be retained.', { error: errorRecord(error) })); logs?.updateAppearance(); return;
     }
     case 'locale': return { ...localeState(), uiFont: service.settings.uiFont };
     case 'overview': return { ...await service.overview(), locale: localeState(), systemDark: systemDark() };
@@ -200,7 +208,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'resume': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.resume(payload.id);
     case 'export': { const result = await dialog.showSaveDialog(window!, { title: t('ui.save_image'), defaultPath: 'image.png', filters: [{ name: t('ui.png_image'), extensions: ['png'] }] }); if (result.canceled || !result.filePath) return; return service.export(payload.id, payload.runId, result.filePath, payload.sidecar === true, payload.includeInputs === true); }
     case 'cancelManaged': managed?.controller.abort(); return;
-    case 'preferences': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); window?.webContents.send('picpatch:changed'); return service.overview();
+    case 'preferences': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
     case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location')))[0];
     case 'pickComponent': {
       if (typeof payload.directory !== 'string' || !isAbsolute(payload.directory)) throw new UiError('ui.choose_the_model_bundle_first');
@@ -217,9 +225,9 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return; let checkpoint: string | undefined = payload.checkpoint;
       if (!checkpoint && (await service.overview()).models.find(m => m.id === payload.modelId)?.runtime.name === 'stable-diffusion.cpp') { const files = await pick(['openFile'], t('ui.select_the_checkpoint_inside_that_bundle')); if (!files[0] || dirname(files[0]) !== paths[0]) throw new UiError('ui.choose_a_checkpoint_in_the_selected_bundle'); checkpoint = basename(files[0]); }
       return service.prepare(payload.modelId, paths[0], checkpoint, false, payload.components, signal); }
-    case 'engines': return { mflux: await inspectEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
+    case 'engines': return { python: await inspectEngine({ runtime: (await service.overview()).models.find(model => model.id === payload.modelId)?.runtime.name === 'dreamo' ? 'dreamo' : 'mflux', profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
     case 'installNative': return installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal });
-    case 'installPython': { const uvExecutable = app.isPackaged ? join(here, 'tools/uv') : join(here, '../node_modules/.cache/picpatch-desktop/uv-0.13.1/uv-aarch64-apple-darwin/uv'); return installEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
+    case 'installPython': { const uvExecutable = app.isPackaged ? join(here, 'tools/uv') : join(here, '../node_modules/.cache/picpatch-desktop/uv-0.13.1/uv-aarch64-apple-darwin/uv'); return installEngine({ runtime: (await service.overview()).models.find(model => model.id === payload.modelId)?.runtime.name === 'dreamo' ? 'dreamo' : 'mflux', onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }
@@ -230,7 +238,7 @@ function menus() {
     { label: 'PicPatch', submenu: [{ label: t('ui.settings'), accelerator: accelerator('settingsButton'), click: () => command('settingsButton') }, { type: 'separator' }, { label: t('ui.about_picpatch'), click: () => command('about') }, { type: 'separator' }, { role: 'services', label: t('native.services') }, { role: 'hide', label: t('native.hide') }, { role: 'hideOthers', label: t('native.hideOthers') }, { role: 'unhide', label: t('native.showAll') }, { type: 'separator' }, { label: t('native.quit'), accelerator: accelerator('quit'), click: () => command('quit') }] },
     { label: t('ui.file'), submenu: [{ label: t('ui.new_session_2'), accelerator: accelerator('new'), click: () => command('new') }, { label: t('ui.open_source_image'), accelerator: accelerator('import'), click: () => command('import') }, { label: t('ui.save_image_2'), accelerator: accelerator('save'), click: () => command('save') }, { label: t('ui.save_image_with_settings'), accelerator: accelerator('saveSettings'), click: () => command('saveSettings') }, { type: 'separator' }, { label: t('ui.generate_or_edit'), accelerator: accelerator('run'), click: () => command('run') }] },
     { label: t('native.edit'), submenu: [{ role: 'undo', label: t('native.undo') }, { role: 'redo', label: t('native.redo') }, { type: 'separator' }, { role: 'cut', label: t('native.cut') }, { role: 'copy', label: t('native.copy') }, { role: 'paste', label: t('native.paste') }, { role: 'pasteAndMatchStyle', label: t('native.pasteMatch') }, { role: 'delete', label: t('native.delete') }, { role: 'selectAll', label: t('native.selectAll') }] },
-    { label: t('native.view'), submenu: [{ label: t('shortcuts.title'), accelerator: accelerator('shortcutsButton'), click: () => command('shortcutsButton') }, { type: 'separator' }, { role: 'reload', label: t('native.reload') }, { role: 'forceReload', label: t('native.forceReload') }, { role: 'toggleDevTools', label: t('native.developerTools') }, { type: 'separator' }, { label: t('native.zoomIn'), accelerator: accelerator('uiZoomIn'), click: () => command('uiZoomIn') }, { label: t('native.zoomOut'), accelerator: accelerator('uiZoomOut'), click: () => command('uiZoomOut') }, { label: t('native.resetZoom'), accelerator: accelerator('uiZoomReset'), click: () => command('uiZoomReset') }, { role: 'togglefullscreen', label: t('native.fullscreen') }] },
-    { label: t('native.window'), role: 'windowMenu', submenu: [{ role: 'minimize', label: t('native.minimize') }, { label: t('native.close'), accelerator: accelerator('closeWindow'), click: () => command('closeWindow') }, { role: 'zoom', label: t('native.zoomWindow') }, { role: 'front', label: t('native.bringAllFront') }] },
+    { label: t('native.view'), submenu: [{ label: t('ui.logs'), click: () => command('showRecords') }, { label: t('shortcuts.title'), accelerator: accelerator('shortcutsButton'), click: () => command('shortcutsButton') }, { type: 'separator' }, { role: 'reload', label: t('native.reload') }, { role: 'forceReload', label: t('native.forceReload') }, { role: 'toggleDevTools', label: t('native.developerTools') }, { type: 'separator' }, { label: t('native.zoomIn'), accelerator: accelerator('uiZoomIn'), click: () => command('uiZoomIn') }, { label: t('native.zoomOut'), accelerator: accelerator('uiZoomOut'), click: () => command('uiZoomOut') }, { label: t('native.resetZoom'), accelerator: accelerator('uiZoomReset'), click: () => command('uiZoomReset') }, { role: 'togglefullscreen', label: t('native.fullscreen') }] },
+    { label: t('native.window'), role: 'windowMenu', submenu: [{ role: 'minimize', label: t('native.minimize') }, { label: t('native.close'), accelerator: accelerator('closeWindow'), click: () => { const focused = BrowserWindow.getFocusedWindow(); if (focused && focused !== window) focused.close(); else command('closeWindow'); } }, { role: 'zoom', label: t('native.zoomWindow') }, { role: 'front', label: t('native.bringAllFront') }] },
   ]));
 }

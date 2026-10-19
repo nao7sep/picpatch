@@ -262,3 +262,24 @@ it('keeps a prepared map modality and strength through draft edits', async () =>
     expect(session.draft.text).toBe('Authored text');
   } finally { delete capabilities.controlKinds; }
 });
+it('passes selected native text encoders through local model registration', async () => {
+  const previous = call.getMockImplementation()!;
+  call.mockImplementation(async (action, payload) => {
+    if (action === 'overview') return { ...await previous(action, payload), models: [{ id: 'sd35-large', variant: 'sd35-large', runtime: { name: 'stable-diffusion.cpp' }, acquisition: 'external', capabilities: {} }] };
+    if (action === 'models') return { models: [], entries: [] };
+    if (action === 'pickComponent') return 'encoders/clip-l.safetensors';
+    return previous(action, payload);
+  });
+  field('manage').click();
+  await vi.waitFor(() => expect(document.querySelector('#manageModel option')?.getAttribute('value')).toBe('sd35-large'));
+  field('manageModel').value = 'sd35-large'; field('manageModel').dispatchEvent(new Event('change'));
+  expect(field('textEncoderComponents').hidden).toBe(false);
+  field('bundleDirectory').value = '/models/local';
+  field('choose-clipL').click();
+  await vi.waitFor(() => expect(field('component-clipL').value).toBe('encoders/clip-l.safetensors'));
+  field('component-clipG').value = 'encoders/clip-g.safetensors';
+  field('component-t5').value = 'encoders/t5.safetensors';
+  field('component-checkpoint').value = 'sd35.safetensors';
+  field('register').click();
+  await vi.waitFor(() => expect(call).toHaveBeenCalledWith('prepare', expect.objectContaining({ modelId: 'sd35-large', components: { clipL: 'encoders/clip-l.safetensors', clipG: 'encoders/clip-g.safetensors', t5: 'encoders/t5.safetensors' } })));
+});

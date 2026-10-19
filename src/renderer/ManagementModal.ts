@@ -14,7 +14,7 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
     catch (error) { issues.show(key, error, label); }
   }
   const shell = modal(dialog, el('closeManagement'), { canClose: () => !busy, focus: () => el('manageModel') });
-  const components = ['checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'controlNet'] as const;
+  const components = ['checkpoint', 'vae', 'clipL', 'clipG', 't5', 'photoMaker', 'ipAdapter', 'clipVision', 'controlNet'] as const;
   let loras: { path: string; scale?: number }[] = [];
   function action(id: string, work: () => Promise<unknown> | void) {
     el(id).onclick = () => { const model = ['register','download','verify'].includes(id) ? field('manageModel').value : ''; const key = `${id}:${model}`; const label = el(id).dataset.i18n; void attempt(key, work, label ? () => model ? t('common.status', { name: model, status: t(label) }) : t(label) : undefined); };
@@ -40,7 +40,7 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
     finally { busy = false; el('cancelManaged').hidden = true; buttons.forEach(button => { button.disabled = false; }); selections(); }
   }
   function describe(result: any): string {
-    if (result.mflux && result.native) return t('management.engines', { python: term('status', result.mflux.status), native: term('status', result.native.status) });
+    if (result.python && result.native) return t('management.engines', { python: term('status', result.python.status), native: term('status', result.native.status) });
     if (result.status) return result.status === 'refused' ? t('common.detail', { status: term('status', result.status), detail: errorText(result) }) : term('status', result.status);
     return t('ui.completed');
   }
@@ -48,6 +48,8 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
     const selected = overview?.models.find((model: any) => model.id === field('manageModel').value);
     const native = selected?.runtime.name === 'stable-diffusion.cpp';
     el('nativeComponents').hidden = !native;
+    el('textEncoderComponents').hidden = !['sd35-large', 'chroma', 'chroma-radiance'].includes(selected?.variant);
+    for (const key of ['clipL', 'clipG']) el(`group-${key}`).hidden = selected?.variant !== 'sd35-large';
     el('loraControls').hidden = !selected?.capabilities.loraFormats?.length && !loras.length;
     field('download').disabled = selected?.acquisition !== 'pinned';
   }
@@ -86,6 +88,6 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
   }));
   action('download', () => operation(() => api.call('prepare', { modelId: field('manageModel').value, download: true })));
   action('verify', () => operation(() => api.call('verify', { modelId: field('manageModel').value })));
-  for (const [id, command] of [['installNative','installNative'], ['installPython','installPython'], ['checkEngines','engines']] as const) action(id, () => operation(() => api.call(command)));
+  for (const [id, command] of [['installNative','installNative'], ['installPython','installPython'], ['checkEngines','engines']] as const) action(id, () => operation(() => api.call(command, { modelId: field('manageModel').value })));
 
 }

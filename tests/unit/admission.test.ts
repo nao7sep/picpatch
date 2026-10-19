@@ -19,3 +19,8 @@ it('does not mistake an unsupported parameter or mask for an ignored hint', () =
   expect(issues).toContain('Add a source image.');
   expect(issues).toContain('Parameter Identity/style mixing strength is unavailable.');
 });
+it('allows independently bound subject groups without PhotoMaker class words', () => {
+  const model = listModels().find(model => model.variant === 'flux1-dreamo-v1.1')!;
+  const draft = { ...initialDraft(), mode: 'edit' as const, references: [{ id: 'person', role: 'subject' as const, images: ['photo'], conditioning: 'identity' as const }] };
+  expect(incompatibilities(draft, model.capabilities)).toEqual([]);
+});

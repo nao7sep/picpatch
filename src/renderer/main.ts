@@ -14,7 +14,6 @@ import { paneLayout } from './layout.ts';
 import { fitScale, imagePoint, wipeCompatible } from '../shared/viewport.ts';
 import { managementModal } from './ManagementModal.ts';
 import { settingsModal } from './SettingsModal.ts';
-import { recordsModal } from './RecordsModal.ts';
 import { sourceDrop } from './source-drop.ts';
 import { incompatibilities } from '../shared/admission.ts';
 import type { Bridge } from '../shared/bridge.ts';
@@ -84,7 +83,7 @@ function fields() {
   input('expand').checked = Boolean(d.outpaint);
   if (d.outpaint) { input('outWidth').value = String(d.outpaint.width); input('outHeight').value = String(d.outpaint.height); input('outLeft').value = String(d.outpaint.left); input('outTop').value = String(d.outpaint.top); }
   const models = element('modelList'); models.replaceChildren();
-  for (const model of overview.models) { const label = document.createElement('label'); const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = model.id; checkbox.checked = d.modelIds.includes(model.id); label.append(checkbox, document.createTextNode(` ${model.id}`)); checkbox.onchange = () => { scheduleSave(); capabilities(); }; models.append(label); }
+  for (const model of overview.models) { const label = document.createElement('label'); const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = model.id; checkbox.checked = d.modelIds.includes(model.id); label.append(checkbox, document.createTextNode(` ${model.id}`)); checkbox.onchange = () => { scheduleSave(); capabilities(); references(); }; models.append(label); }
   capabilities(); references();
 }
 function admission() {
@@ -117,11 +116,16 @@ function capabilities() {
 }
 function references() {
   const holder = element('references'); holder.replaceChildren();
+  const selectedModels = overview.models.filter((model: any) => session!.draft.modelIds.includes(model.id));
+  const independent = selectedModels.some((model: any) => model.capabilities.referenceConditioning === 'independent-subject');
+  const pooled = selectedModels.some((model: any) => model.capabilities.referenceConditioning === 'pooled-identity');
+  if (independent) { const hint = document.createElement('p'); hint.textContent = t('admission.independent', { reference: '{group-name}' }); holder.append(hint); }
   for (const [index, group] of session!.draft.references.entries()) {
     const box = document.createElement('div'); box.className = 'reference';
     const name = document.createElement('input'); name.value = group.id; name.setAttribute('aria-label', t('ui.reference_group_name')); name.onchange = () => { group.id = name.value; void flush().catch(error => requestIssues.show('draft', error)); }; box.append(name);
     const role = document.createElement('select'); for (const value of ['subject','object','style','background']) { const option = document.createElement('option'); option.value = value; option.textContent = term('role', value); role.append(option); } role.setAttribute('aria-label', t('ui.reference_role')); role.value = group.role; role.onchange = () => { group.role = role.value as typeof group.role; admission(); void flush().catch(error => requestIssues.show('draft', error)); }; box.append(role);
     for (const [key, values] of [['conditioning', ['prompt','identity','appearance']], ['className', ['', 'man','woman','girl','boy']]] as const) {
+      if (key === 'className' && independent && !pooled && !group.className) continue;
       const label = document.createElement('label'); label.textContent = key === 'conditioning' ? t('ui.conditioning') : t('ui.identity_class');
       const select = document.createElement('select');
       for (const value of values) { const option = document.createElement('option'); option.value = value; option.textContent = value ? term(key === 'conditioning' ? 'conditioning' : 'class', value) : t('ui.not_selected'); select.append(option); }
@@ -267,7 +271,7 @@ let flushing: Promise<void> | undefined;
 const messages = messageModal();
 const about = aboutModal(api);
 shortcutsModal(); toolbar(element('canvasActions'));
-managementModal(api, refresh); const settings = settingsModal(api, refresh, messages); recordsModal(api);
+managementModal(api, refresh); const settings = settingsModal(api, refresh, messages); action('showRecords', () => api.call('openLogs'));
 let pan: { x: number; y: number; left: number; top: number } | undefined;
 const viewport = element('canvas');
 viewport.addEventListener('pointerdown', event => { if (!event.altKey || drawing) return; pan = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop }; viewport.setPointerCapture(event.pointerId); event.preventDefault(); });

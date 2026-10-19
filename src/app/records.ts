@@ -15,20 +15,18 @@ export class Records {
   private worker: Worker;
   private pending = 0;
   private failed = false;
-  private recent: AppRecord[] = [];
-  constructor(root: string, script: string | URL) {
-    this.worker = new Worker(script, { workerData: { root, session: new Date().toISOString() } });
-    this.worker.on('message', message => { if (message.written) this.pending = Math.max(0, this.pending - 1); });
+  readonly session = new Date().toISOString();
+  constructor(root: string, script: string | URL, private changed: () => void = () => {}) {
+    this.worker = new Worker(script, { workerData: { root, session: this.session } });
+    this.worker.on('message', message => { if (message.written) { this.pending = Math.max(0, this.pending - 1); if (message.stored) this.changed(); } });
     this.worker.on('error', error => { this.failed = true; process.stderr.write(`PicPatch records worker failed: ${String(error)}\n`); });
   }
   write(level: AppRecord['level'], message: string, details: Record<string, unknown> = {}) {
     const record: AppRecord = { ...details, time: new Date().toISOString(), level, message };
-    this.recent.push(record); if (this.recent.length > 200) this.recent.shift();
     if (this.failed || this.pending >= 256) { process.stderr.write(JSON.stringify(record) + '\n'); return; }
     try { this.worker.postMessage(record); this.pending++; }
     catch { process.stderr.write(JSON.stringify(record) + '\n'); }
   }
-  list(): AppRecord[] { return structuredClone(this.recent); }
   async close(): Promise<void> {
     await new Promise<void>(resolve => {
       const done = (message: any) => { if (message.flushed) { clearTimeout(timer); this.worker.off('message', done); resolve(); } };

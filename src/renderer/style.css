@@ -6,7 +6,6 @@ header{flex-wrap:wrap;min-height:54px}header>label{margin:0;font-size:12px}#admi
 
 #requestSplitter{width:5px;flex-shrink:0;cursor:col-resize;touch-action:none;background:var(--line)}#requestSplitter:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}#request{flex-shrink:0}
 
-#recordLines{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
 
 [role=listbox]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}#sessionList .selected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
 
@@ -21,7 +20,6 @@ dialog[open]{display:flex;flex-direction:column}.modalHeader,.modalFooter{flex:n
 #canvasActions,.canvasAdjustments{display:flex;align-items:center;gap:8px;flex-wrap:wrap}#canvasActions:focus-visible{outline:2px solid var(--accent)}#shortcuts dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px}#shortcuts dd{margin:0;white-space:nowrap}#shortcuts p{line-height:1.5}
 #canvasActions button[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
 
-#recordLines{font-family:var(--font-mono,ui-monospace,"Menlo","Consolas",monospace)}
 
 #collectionLocation{margin-inline-start:.35em;overflow-wrap:anywhere}
 

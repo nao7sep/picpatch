@@ -17,9 +17,9 @@ export function incompatibilities(draft: Draft, capabilities: ModelCapabilities)
       if (!capabilities.referenceRoles.includes(group.role)) issues.push(t('admission.role', { name: group.id, role: term('role', group.role) }));
       const method = group.conditioning ?? 'prompt';
       const required = { prompt: 'ordered-images-with-role-prompt', identity: 'pooled-identity', appearance: 'appearance-embedding' }[method];
-      if (capabilities.referenceConditioning !== required) issues.push(t('admission.conditioning', { name: group.id, method: term('conditioning', method) }));
+      if (capabilities.referenceConditioning !== required && !(method === 'identity' && capabilities.referenceConditioning === 'independent-subject')) issues.push(t('admission.conditioning', { name: group.id, method: term('conditioning', method) }));
       if (!group.images.length) issues.push(t('admission.photo', { name: group.id }));
-      if (method === 'identity' && !group.className) issues.push(t('admission.class', { name: group.id }));
+      if (method === 'identity' && capabilities.referenceConditioning !== 'independent-subject' && !group.className) issues.push(t('admission.class', { name: group.id }));
     }
   }
   for (const key of Object.keys(draft.parameters)) {
