@@ -42,6 +42,7 @@ it('generates, edits with references, branches and reopens through the real rend
       case 'modelReadiness': return app.readiness();
       case 'overview': return { ...await app.overview(), resourcesBusy: false, locale: { language: 'en', format: 'en' }, systemDark: false };
       case 'get': return app.sessions.get(p.id);
+      case 'focus': return app.queue.focus(p.id);
       case 'draft': return app.draft(p.id, p.draft);
       case 'import': return Promise.all(referencePaths.map(path => app.importImage(p.id, path)));
       case 'submit': return app.queue.submit(p.id, p.draft, p.samples);
@@ -101,7 +102,7 @@ it('generates, edits with references, branches and reopens through the real rend
     for (const run of reopened.runs) expect(await sharp(await app.sessions.imagePath(created.id, run.id)).metadata()).toHaveProperty('format', 'png');
     console.log(JSON.stringify({ session: app.sessions.directory(created.id), reopened: true }));
   } finally {
-    if (app.queue.busy()) { const active = app.queue.state.active; if (active) await app.queue.cancel(active.sessionId, active.runId); await app.queue.settled(); }
+    if (app.queue.busy()) { for (const active of [...app.queue.state.active]) await app.queue.cancel(active.sessionId, active.runId); await app.queue.settled(); }
     cleanup();
   }
 }, 900_000);

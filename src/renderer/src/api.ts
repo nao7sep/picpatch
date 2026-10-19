@@ -18,7 +18,7 @@ export type ModelState = 'ready' | 'missing' | 'engineMissing';
 export type Readiness = Record<string, ModelState>;
 export interface LocaleState { language: Language; format: string; systemLanguage?: string; uiFont?: string }
 export interface ResourcePaths { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }
-export interface AppSettings { profile: ResourcePaths; uiFont?: string; theme?: 'light' | 'dark'; language?: Language }
+export interface AppSettings { profile: ResourcePaths; uiFont?: string; theme?: 'light' | 'dark'; language?: Language; concurrency?: number }
 export interface Overview {
   sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string }; models: CatalogModel[]; queue: QueueState;
   historyIssue?: string | { message: string; notice?: Message }; settings: AppSettings;
@@ -32,7 +32,7 @@ export interface Engines { python: EngineStatus; native: EngineStatus }
 export interface ManagedEntry { modelId: string; name: string; bytes: number }
 export interface Inventory { entries: ManagedEntry[] }
 export interface Components { vae?: string; clipL?: string; clipG?: string; t5?: string; photoMaker?: string; ipAdapter?: string; clipVision?: string; controlNet?: { path: string; kind: string }; loras?: { path: string; scale?: number }[] }
-export type Preferences = ResourcePaths & { theme?: 'light' | 'dark'; language?: Language; uiFont?: string };
+export type Preferences = ResourcePaths & { theme?: 'light' | 'dark'; language?: Language; uiFont?: string; concurrency?: number };
 
 const call = <T>(action: string, payload?: unknown): Promise<T> => window.picpatch.call(action, payload);
 
@@ -55,6 +55,8 @@ export const api = {
   create: () => call<Session>('create'),
   get: (id: string) => call<Session>('get', { id }),
   saveDraft: (id: string, draft: Draft) => call<void>('draft', { id, draft }),
+  /** The open session's queued runs take the next free slot. */
+  focus: (id: string) => call<void>('focus', { id }),
   rename: (id: string, name: string) => call<Session>('rename', { id, name }),
   remove: (id: string) => call<boolean>('delete', { id }),
   /** Without a path, opens the file picker; `multiple: false` where only one image is used. */

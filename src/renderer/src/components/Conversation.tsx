@@ -210,7 +210,7 @@ function SavedFlash({ count }: { count: number }) {
 /** A queued or running result: a frame of the requested shape with its stage, time and Cancel. */
 function Developing({ run, queue, caption, onCancel }: { run: Run; queue: QueueState; caption: string; onCancel: () => void }) {
   const { t, term } = useI18n();
-  const active = queue.active?.runId === run.id ? queue.active : undefined;
+  const active = queue.active.find(item => item.runId === run.id);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!active) return;

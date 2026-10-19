@@ -10,16 +10,17 @@ import { Modal } from './Modal.tsx';
 export interface SettingsGuard { approveQuit: () => Promise<boolean>; settleSave: () => Promise<void> }
 
 const PATHS = ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const;
-type Form = { theme: 'system' | 'light' | 'dark'; language: 'system' | Language; uiFont: string } & Record<typeof PATHS[number], string>;
+type Form = { theme: 'system' | 'light' | 'dark'; language: 'system' | Language; uiFont: string; concurrency: number } & Record<typeof PATHS[number], string>;
+const MAX_CONCURRENCY = 8;
 
 const absolute = (value: string) => !value || (/Win/.test(navigator.platform) ? /^(?:[a-z]:[\\/]|\\\\)/i.test(value) : value.startsWith('/'));
 
 export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscard }: {
   overview: Overview; guard: Ref<SettingsGuard>; onClose: () => void; onSaved: (overview: Overview) => void; confirmDiscard: () => Promise<boolean>;
 }) {
-  const { t, errorText } = useI18n();
+  const { t, errorText, number } = useI18n();
   const initial = useRef<Form>({
-    theme: overview.settings.theme ?? 'system', language: overview.settings.language ?? 'system', uiFont: overview.settings.uiFont ?? '',
+    theme: overview.settings.theme ?? 'system', language: overview.settings.language ?? 'system', uiFont: overview.settings.uiFont ?? '', concurrency: overview.settings.concurrency ?? 1,
     engineDirectory: overview.settings.profile.engineDirectory ?? '', modelsDirectory: overview.settings.profile.modelsDirectory ?? '', nativeExecutable: overview.settings.profile.nativeExecutable ?? '',
   });
   const [form, setForm] = useState<Form>(initial.current);
@@ -49,6 +50,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
     if (submitted.language !== 'system') value.language = submitted.language;
     if (submitted.theme !== 'system') value.theme = submitted.theme;
     if (submitted.uiFont.trim()) value.uiFont = submitted.uiFont;
+    if (submitted.concurrency !== 1) value.concurrency = submitted.concurrency;
     const attempt = async () => {
       setSaving(true); setFailure(undefined);
       try {
@@ -131,6 +133,13 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
               </label>
             ))}
             {invalid.length > 0 && <p className="field-error">{t('error.stored_resource_paths_must_be_absolute')}</p>}
+            <label className="field">
+              <span className="field-label">{t('settings.concurrency')}</span>
+              <select value={form.concurrency} onChange={event => set('concurrency', Number(event.target.value))}>
+                {Array.from({ length: MAX_CONCURRENCY }, (_, index) => index + 1).map(count => <option key={count} value={count}>{number(count)}</option>)}
+              </select>
+              <span className="field-help">{t('settings.concurrencyHelp')}</span>
+            </label>
             <div className="field">
               <span className="field-label">{t('ui.sessions_2')}</span>
               <span className="path-value" title={overview.locations.sessionsDirectory}>{overview.locations.sessionsDirectory}</span>

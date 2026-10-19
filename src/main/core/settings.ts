@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { validateProfile, validateModelRegistration } from 'picpatchsdk';
 import type { ModelRegistration, PicPatchProfile } from 'picpatchsdk';
-export interface Settings { version: 1; sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; uiFont?: string; theme?: 'light' | 'dark'; language?: Language }
+export interface Settings { version: 1; sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; concurrency?: number; uiFont?: string; theme?: 'light' | 'dark'; language?: Language }
 import { writeJson } from './files.ts';
 export async function readSettings(path: string): Promise<Settings> {
   let value: Settings;
@@ -15,6 +15,7 @@ export async function readSettings(path: string): Promise<Settings> {
   if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) delete value.theme;
   value.language = preference(value.language);
   if (typeof value.uiFont !== 'string' || !value.uiFont.trim()) delete value.uiFont;
+  if (!validConcurrency(value.concurrency) || value.concurrency === 1) delete value.concurrency;
   validateProfile(value.profile);
   for (const entry of Object.values(value.registrations)) validateModelRegistration(entry);
   delete (value as { uvExecutable?: unknown }).uvExecutable; // Retired: the bundled uv is always used.
@@ -22,3 +23,6 @@ export async function readSettings(path: string): Promise<Settings> {
   return value;
 }
 export async function saveSettings(path: string, value: Settings): Promise<Buffer> { validateProfile(value.profile); const stored: Partial<Settings> = structuredClone(value); if (Object.keys(value.profile).length === 1) delete stored.profile; if (!Object.keys(value.registrations).length) delete stored.registrations; return writeJson(path, stored); }
+/** How many images may generate at once; 1 unless the user's machine has memory for several models. */
+export const maxConcurrency = 8;
+export const validConcurrency = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 1 && (value as number) <= maxConcurrency;

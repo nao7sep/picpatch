@@ -22,5 +22,6 @@ export interface Session {
 }
 /** cover is the latest completed result, shown as the session's picture. */
 export interface SessionSummary { id: string; name: string; updated: string; results: number; cover?: string }
-export interface QueueState { active?: { sessionId: string; runId: string; stage: string; startedAt: number; progress?: { completed: number; total: number } }; paused: boolean; issue?: { code?: string; message: string; notice?: Message } }
+/** `active` lists every run executing now, in the order they started. */
+export interface QueueState { active: { sessionId: string; runId: string; stage: string; startedAt: number; progress?: { completed: number; total: number } }[]; paused: boolean; issue?: { code?: string; message: string; notice?: Message } }
 export const initialDraft = (): Draft => ({ mode: 'generate', text: '', modelIds: ['flux2-klein-4b-4bit'], width: 1024, height: 1024, parameters: {}, references: [] });

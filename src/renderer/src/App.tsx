@@ -108,6 +108,7 @@ export function App() {
   const load = useCallback((next: Session) => {
     sessionRef.current = next; setSession(next);
     draftRef.current = next.draft; setDraftState(next.draft);
+    void api.focus(next.id).catch(() => {});
   }, []);
   const patchSession = useCallback((change: (value: Session) => Session) => {
     const owner = sessionRef.current; if (!owner) return;
@@ -370,7 +371,7 @@ export function App() {
           <>
             <div className="shell" inert={closing} style={{ minWidth: minimum(pane.optionsPane).width, minHeight: minimum(pane.optionsPane).height }}>
               <Rail
-                sessions={overview.sessions} failures={overview.failures.length} currentId={session.id} workingId={overview.queue.active?.sessionId}
+                sessions={overview.sessions} failures={overview.failures.length} currentId={session.id} working={new Set(overview.queue.active.map(item => item.sessionId))}
                 width={pane.railWidth} optionsPane={pane.optionsPane} onWidth={setRailWidth}
                 onOpen={id => void open(id)} onNew={() => void newSession()} onRename={() => push({ kind: 'rename' })} onDelete={() => void deleteSession()}
                 onMenu={dispatch}
@@ -478,7 +479,7 @@ function StageNotices({ notices, onDismiss, queue, session, onResume, history, o
   history: Overview['historyIssue']; onDismissHistory: () => void;
 }) {
   const { t, errorText } = useI18n();
-  const waiting = queue.paused || (session.runs.some(run => run.status === 'queued') && !queue.active);
+  const waiting = queue.paused || (session.runs.some(run => run.status === 'queued') && !queue.active.length);
   return (
     <div className="stage-notices">
       {waiting && (

@@ -14,7 +14,8 @@ export interface RailProps {
   sessions: readonly SessionSummary[];
   failures: number;
   currentId: string | undefined;
-  workingId: string | undefined;
+  /** Sessions with a run executing now. */
+  working: ReadonlySet<string>;
   width: number;
   optionsPane: boolean;
   onWidth: (width: number) => void;
@@ -102,12 +103,12 @@ export function Rail(props: RailProps) {
             >
               <span className="session-cover">
                 {session.cover ? <img src={imageUrl(session.id, session.cover, true)} alt="" draggable={false} /> : <ImageIcon />}
-                {props.workingId === session.id && <span className="session-working" aria-hidden="true" />}
+                {props.working.has(session.id) && <span className="session-working" aria-hidden="true" />}
               </span>
               <span className="session-text">
                 <span className="session-title">{session.name}</span>
                 <span className="session-meta">
-                  {props.workingId === session.id ? t('rail.working') : (session.results ? t('rail.meta', { when: relativeTime(session.updated), count: session.results }) : relativeTime(session.updated))}
+                  {props.working.has(session.id) ? t('rail.working') : (session.results ? t('rail.meta', { when: relativeTime(session.updated), count: session.results }) : relativeTime(session.updated))}
                 </span>
               </span>
             </div>

@@ -185,7 +185,7 @@ async function start() {
   ipcMain.handle('picpatch:call', async (event, action: string, payload: any = {}) => {
     if (!trustedSender(event, window, renderer)) throw new Error('Untrusted request.');
     try {
-      if (!['ready', 'listening', 'renderer-error', 'overview', 'get', 'draft', 'layout', 'paneState', 'modalState'].includes(action)) records?.write('info', 'Command requested.', { action });
+      if (!['ready', 'listening', 'renderer-error', 'overview', 'get', 'draft', 'layout', 'paneState', 'modalState', 'focus'].includes(action)) records?.write('info', 'Command requested.', { action });
       if (['prepare', 'verify', 'removeManaged', 'installPython', 'installNative'].includes(action)) {
         if (managed) throw new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it');
         const controller = new AbortController(); const task = dispatch(action, payload, controller.signal);
@@ -250,6 +250,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'overview': return { ...await service.overview(), resourcesBusy: Boolean(managed) || service.queue.busy(), locale: localeState(), systemDark: systemDark() };
     case 'create': return service.sessions.create(t('session.untitled'));
     case 'get': return service.sessions.get(payload.id);
+    case 'focus': service.queue.focus(typeof payload.id === 'string' ? payload.id : undefined); return;
     case 'draft': return service.draft(payload.id, payload.draft as Draft);
     case 'rename': if (typeof payload.name !== 'string' || !payload.name.trim()) throw new UiError('ui.enter_a_session_name'); return service.sessions.update(payload.id, session => { session.name = payload.name; });
     case 'delete': { if (service.queue.busy(payload.id)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); const answer = await ask({ message: message('ui.delete_this_session_and_its_retained_images'), detail: message('ui.exported_images_and_original_files_are_kept'), buttons: [message('ui.keep_session'), message('ui.delete_session')] }); if (answer.response !== 1) return false; await service.remove(payload.id); return true; }
