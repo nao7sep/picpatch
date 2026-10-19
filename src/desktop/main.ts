@@ -26,11 +26,11 @@ import { installEngine, installNativeEngine, inspectEngine, inspectNativeEngine,
 import { appPaths, resolveAppPaths } from '../app/paths.ts';
 import { Application } from '../app/service.ts';
 import { minimum } from '../shared/layout.ts';
+import { contentSecurityPolicy, locations } from './locations.ts';
 import type { Draft } from '../app/types.ts';
 app.setName('PicPatch');
 let earlyFailure: unknown;
 try { prepareChromiumLanguage(resolveAppPaths().config); } catch (error) { earlyFailure = error; }
-const here = dirname(fileURLToPath(import.meta.url));
 protocol.registerSchemesAsPrivileged([{ scheme: 'picpatch-image', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 let window: BrowserWindow | undefined; let service: Application; let quitting = false;
 let backup: Worker | undefined;
@@ -142,11 +142,11 @@ function command(id: string) { if (window && !window.isDestroyed() && !window.we
 async function start() {
   if (earlyFailure) throw earlyFailure;
   await bootstrapLanguage(paths.config);
-  records = new Records(paths.root, join(here, 'records-worker.mjs'), () => logs?.changed());
-  recordsReader = new RecordsReader(paths.root, records.session, join(here, 'records-reader-worker.mjs'));
+  records = new Records(paths.root, locations.worker('records-worker'), () => logs?.changed());
+  recordsReader = new RecordsReader(paths.root, records.session, locations.worker('records-reader-worker'));
   records.write('info', 'PicPatch started.', { version: app.getVersion() });
   process.on('uncaughtExceptionMonitor', error => records?.write('error', 'Uncaught exception.', { error: errorRecord(error) }));
-  backup = new Worker(join(here, 'backup-worker.mjs'));
+  backup = new Worker(locations.worker('backup-worker'));
   backup.on('error', () => { if (service) service.historyIssue = new UiError('ui.backup_history_is_unavailable_primary_session_saves_remain_active'); });
   backup.on('message', message => { if (message.issue && service) { records?.write('warn', 'Backup capture failed.', { diagnostic: message.issue }); service.historyIssue = new UiError('ui.backup_history_could_not_capture_some_work_primary_session'); window?.webContents.send('picpatch:changed'); } });
   service = await Application.open(paths, () => window?.webContents.send('picpatch:changed'), (path, bytes, sha256) => backup?.postMessage({ database: paths.backups, path, bytes, sha256 }), (level, message, details) => records?.write(level, message, details));
@@ -154,8 +154,8 @@ async function start() {
     try { const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1)); const response = await net.fetch(pathToFileURL(path).href); const headers = new Headers(response.headers); headers.set('Access-Control-Allow-Origin', '*'); return new Response(response.body, { status: response.status, headers }); }
     catch { return new Response('Image unavailable', { status: 404 }); }
   });
-  logs = new LogsWindow(here, recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }), width => storePane({ recordsListWidth: width }));
-  const renderer = pathToFileURL(join(here, 'index.html')).href;
+  logs = new LogsWindow(recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }), width => storePane({ recordsListWidth: width }));
+  const renderer = locations.page('index');
   ipcMain.handle('picpatch:call', async (event, action: string, payload: any = {}) => {
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== renderer) throw new Error('Untrusted request.');
     try {
@@ -170,20 +170,20 @@ async function start() {
     }
     catch (error) { records?.write(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Command did not complete.', { action, error: errorRecord(error) }); return { ok: false, message: errorText(error), ...(isPicPatchSdkError(error) ? { code: error.code, kind: error.kind, effect: error.effect } : {}), notice: errorNotice(error) }; }
   });
-  paneState = await readPaneState(paths.state, (await service.sessions.list()).sessions.length > 1);
+  paneState = await readPaneState(paths.state);
   nativeTheme.themeSource = service.settings.theme ?? 'system';
-  nativeTheme.on('updated', () => { logs?.updateAppearance(); window?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2'); if (rendererReady) window?.webContents.send('picpatch:changed'); });
+  nativeTheme.on('updated', () => { logs?.updateAppearance(); window?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#11181b' : '#f3f4f1'); if (rendererReady) window?.webContents.send('picpatch:changed'); });
   menus();
-  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', ...(process.platform === 'darwin' ? {} : { icon: join(here, 'icon.png') }), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2', webPreferences: { zoomFactor: normalizeZoom(paneState.uiZoom), preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', ...(process.platform === 'darwin' ? {} : { icon: locations.icon() }), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#11181b' : '#f3f4f1', webPreferences: { zoomFactor: normalizeZoom(paneState.uiZoom), preload: locations.preload('preload'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   window.on('move', fitMinimum);
   screen.on('display-metrics-changed', fitMinimum);
   fitMinimum();
   window.webContents.on('before-input-event', (_event, input) => { window?.webContents.setIgnoreMenuShortcuts(input.isComposing || shortcutCommand({ key: input.key, metaKey: input.meta, ctrlKey: input.control, altKey: input.alt, shiftKey: input.shift }) !== undefined); });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => { if (url !== renderer) event.preventDefault(); });
-  window.webContents.session.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' picpatch-image: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"] } }));
+  if (contentSecurityPolicy) window.webContents.session.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [contentSecurityPolicy!] } }));
   window.once('ready-to-show', () => { if (!smoke) { if (backgroundReload) window?.showInactive(); else window?.show(); } });
-  if (smoke) smokeTimer = setTimeout(() => { app.exit(1); }, qualification ? 300_000 : localizationSmoke ? 60_000 : 15000);
+  if (smoke) smokeTimer = setTimeout(() => { app.exit(1); }, qualification ? 300_000 : localizationSmoke ? 240_000 : 15000);
   window.on('close', event => { if (!quitting) { event.preventDefault(); void lifetime.close(); } });
   process.on('SIGTERM', () => lifetime.shutdown());
   window.on('query-session-end', () => lifetime.shutdown());
@@ -204,9 +204,9 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'closeWindow': void lifetime.close(); return;
     case 'openProjectLink': { if (payload.destination !== 'repository' && payload.destination !== 'issues') throw new Error('Unknown project link.'); await shell.openExternal(about[payload.destination as 'repository' | 'issues']); return; }
     case 'openLogs': try { await logs?.open(); } catch (error) { records?.write('error', 'Logs window could not open.', { error: errorRecord(error) }); throw new UiError('logs.openFailed'); } return;
-    case 'ready': rendererReady = true; if (smoke) { if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root); await qualifyLogs(await logs!.open(false), window!); logs!.close(); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, join(here, 'tools/uv')); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
-    case 'paneState': if (payload.requestWidth !== undefined) { await storePane({ requestWidth: payload.requestWidth, sidebar: payload.sidebar }); return; } return paneState;
-    case 'layout': { const size = minimum(payload.sidebar === true); contentFloor = { width: size.width, height: Number.isFinite(payload.height) ? Math.max(size.height, payload.height) : size.height }; fitMinimum(); return; }
+    case 'ready': rendererReady = true; if (smoke) { if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root, command); await qualifyLogs(await logs!.open(false), window!); logs!.close(); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, locations.uv()); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
+    case 'paneState': if (payload.railWidth !== undefined) { await storePane({ railWidth: payload.railWidth, optionsPane: payload.optionsPane }); return; } return paneState;
+    case 'layout': { const size = minimum(payload.optionsPane === true); contentFloor = { width: size.width, height: Number.isFinite(payload.height) ? Math.max(size.height, payload.height) : size.height }; fitMinimum(); return; }
     case 'uiZoom': {
       if (!['in', 'out', 'reset'].includes(payload.direction)) throw new Error('Invalid UI zoom command.');
       const zoom = nextZoom(window!.webContents.getZoomFactor(), payload.direction);
@@ -257,7 +257,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       return service.prepare(payload.modelId, paths[0], checkpoint, false, payload.components, signal); }
     case 'engines': return { python: await inspectEngine({ runtime: pythonRuntime((await service.overview()).models, payload.modelId), profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
     case 'installNative': return installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal });
-    case 'installPython': { const uvExecutable = app.isPackaged ? join(here, 'tools/uv') : join(here, '../node_modules/.cache/picpatch-desktop/uv-0.13.1/uv-aarch64-apple-darwin/uv'); return installEngine({ runtime: pythonRuntime((await service.overview()).models, payload.modelId), onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
+    case 'installPython': { const uvExecutable = locations.uv(); return installEngine({ runtime: pythonRuntime((await service.overview()).models, payload.modelId), onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }

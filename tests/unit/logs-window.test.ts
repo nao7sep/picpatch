@@ -13,23 +13,25 @@ vi.mock('electron', async () => {
     async loadURL(url: string) { this.webContents.mainFrame.url = url; await mocks.load; }
     destroy() { this.destroyed = true; this.emit('closed'); } close() { this.destroy(); }
   }
-  return { BrowserWindow: Window, ipcMain: { handle: (name: string, callback: any) => mocks.handlers.set(name, callback) }, screen: Object.assign(new EventEmitter(), { getDisplayMatching: () => ({ workAreaSize: { width: 1440, height: 900 } }) }) };
+  return { app: { isPackaged: false }, BrowserWindow: Window, ipcMain: { handle: (name: string, callback: any) => mocks.handlers.set(name, callback) }, screen: Object.assign(new EventEmitter(), { getDisplayMatching: () => ({ workAreaSize: { width: 1440, height: 900 } }) }) };
 });
 import { LogsWindow, trustedLogsRequest } from '../../src/desktop/logs-window.ts';
+import { locations } from '../../src/desktop/locations.ts';
 import type { RecordsReader } from '../../src/app/records-reader.ts';
 beforeEach(() => { mocks.windows.length = 0; mocks.handlers.clear(); mocks.load = undefined; });
 function setup() {
   const reader = { query: vi.fn().mockResolvedValue({ records: [], more: false }), detail: vi.fn().mockResolvedValue(null) };
   const failed = vi.fn();
-  const owner = new LogsWindow('/app', reader as unknown as RecordsReader, () => ({ locale: { language:'en', format:'en' }, dark:false }), failed);
+  const owner = new LogsWindow(reader as unknown as RecordsReader, () => ({ locale: { language:'en', format:'en' }, dark:false }), failed);
   return { owner, reader, failed };
 }
 it('creates one durable sandboxed window and refuses subframes, changed pages and main-workspace calls', async () => {
   const { owner, reader } = setup(); await owner.open(); await owner.open();
   expect(mocks.windows).toHaveLength(1); const window = mocks.windows[0];
-  expect(window.options).toMatchObject({ name:'picpatch-logs', windowStatePersistence: { bounds:true }, webPreferences: { sandbox:true, contextIsolation:true, nodeIntegration:false, preload:'/app/logs-preload.cjs' } });
+  expect(window.options).toMatchObject({ name:'picpatch-logs', windowStatePersistence: { bounds:true }, webPreferences: { sandbox:true, contextIsolation:true, nodeIntegration:false, preload: locations.preload('records-preload') } });
   const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
-  expect(trustedLogsRequest(event, window, 'file:///app/logs.html')).toBe(true);
+  expect(window.webContents.mainFrame.url).toBe(locations.page('records'));
+  expect(trustedLogsRequest(event, window, locations.page('records'))).toBe(true);
   const handler = mocks.handlers.get('picpatch:logs')!;
   await expect(handler({ ...event, senderFrame: {} }, 'query', {})).rejects.toThrow('Untrusted');
   expect((await handler(event, 'query', { current:true, level:'all', search:'' })).ok).toBe(true);

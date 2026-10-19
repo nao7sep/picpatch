@@ -20,5 +20,7 @@ export interface Session {
   /** Selected history results, independent of the command's explicit source image. */
   selection?: string[];
 }
-export interface SessionSummary { id: string; name: string; updated: string; results: number }
+/** cover is the latest completed result, shown as the session's picture. */
+export interface SessionSummary { id: string; name: string; updated: string; results: number; cover?: string }
+export interface QueueState { active?: { sessionId: string; runId: string; stage: string; startedAt: number; progress?: { completed: number; total: number } }; paused: boolean; issue?: string }
 export const initialDraft = (): Draft => ({ mode: 'generate', text: '', modelIds: ['flux2-klein-4b-4bit'], width: 1024, height: 1024, parameters: {}, references: [] });

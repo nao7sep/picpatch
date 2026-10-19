@@ -6,17 +6,19 @@ export type Entry = string | Partial<Record<Intl.LDMLPluralRule, string>>;
 export type Catalogue = Record<Key, Entry>;
 export interface Message { key: string; values?: Record<string, string | number | Message> }
 export interface Locale { language: Language; format: string }
+// Bundlers turn each catalogue into a module of its own, loaded only when chosen; an import
+// attribute here would make the development server reject the module it serves.
 const loaders = {
   en: async () => english,
-  de: async () => (await import('./locales/de.json', { with: { type: 'json' } })).default,
-  es: async () => (await import('./locales/es.json', { with: { type: 'json' } })).default,
-  fr: async () => (await import('./locales/fr.json', { with: { type: 'json' } })).default,
-  it: async () => (await import('./locales/it.json', { with: { type: 'json' } })).default,
-  'pt-BR': async () => (await import('./locales/pt-BR.json', { with: { type: 'json' } })).default,
-  ru: async () => (await import('./locales/ru.json', { with: { type: 'json' } })).default,
-  'zh-Hans': async () => (await import('./locales/zh-Hans.json', { with: { type: 'json' } })).default,
-  ja: async () => (await import('./locales/ja.json', { with: { type: 'json' } })).default,
-  ko: async () => (await import('./locales/ko.json', { with: { type: 'json' } })).default,
+  de: async () => (await import('./locales/de.json')).default,
+  es: async () => (await import('./locales/es.json')).default,
+  fr: async () => (await import('./locales/fr.json')).default,
+  it: async () => (await import('./locales/it.json')).default,
+  'pt-BR': async () => (await import('./locales/pt-BR.json')).default,
+  ru: async () => (await import('./locales/ru.json')).default,
+  'zh-Hans': async () => (await import('./locales/zh-Hans.json')).default,
+  ja: async () => (await import('./locales/ja.json')).default,
+  ko: async () => (await import('./locales/ko.json')).default,
 } satisfies Record<Language, () => Promise<Catalogue>>;
 export const catalogues = loaders;
 export function preference(value: unknown): Language | undefined { return languages.some(([tag]) => tag === value) ? value as Language : undefined; }

@@ -18,6 +18,13 @@ export function newImage(draft: Draft): Draft {
   return imageCommand(next);
 }
 
+/** Removes the image being edited and what belongs to it, keeping references and options. */
+export function withoutTarget(draft: Draft): Draft {
+  const next = structuredClone(draft);
+  delete next.source; delete next.mask; delete next.outpaint;
+  return imageCommand(next);
+}
+
 export function hasImage(session: Session, key: string): boolean {
   return session.assets.some(asset => asset.id === key) || session.runs.some(run => run.id === key && Boolean(run.output));
 }

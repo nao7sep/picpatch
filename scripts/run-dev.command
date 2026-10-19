@@ -1,14 +1,73 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 set -euo pipefail
-script_dir="${0:A:h}"
-function failed() {
-  local result=$?
-  if (( result != 0 && result != 129 && result != 130 && result != 143 )); then
-    print -u2 "PicPatch launcher failed. Read the message above."
-    if [[ -t 0 ]]; then read '?Press Enter to close…'; fi
+
+# run-dev: run the app from source with live reload, in its loosest configuration.
+# For active coding and debugging. The strict, production-faithful launchers are
+# run-built (launch the existing packaged app bundle without rebuilding) and
+# rebuild (build and package a fresh bundle, then launch).
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+RUNTIME_HELPER="$SCRIPT_DIR/launcher-runtime.mjs"
+RUNTIME_TOKEN="run-dev-$$-$(date +%s)-$RANDOM"
+RENDERER_URL="http://127.0.0.1:23297"
+
+log_step() {
+  printf '\n==> %s\n' "$1"
+}
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Missing required command: $1" >&2
+    exit 1
   fi
 }
-trap failed EXIT
-if ! command -v node >/dev/null; then print -u2 'Node.js 24 or newer is required for development launchers.'; exit 1; fi
-print 'PicPatch: run-dev '
-node "$script_dir/launch.mjs" dev
+
+pause_on_failure() {
+  local status="$1"
+  if [[ "$status" -ne 0 && ( "$status" -lt 128 || "$status" -gt 143 ) ]]; then
+    echo
+    echo "picpatch run-dev failed with exit code $status."
+    read -r -p "Press Enter to close..."
+  fi
+}
+
+cleanup() {
+  local status="$?"
+  trap - EXIT
+  if node "$RUNTIME_HELPER" is-owner "$RUNTIME_TOKEN" >/dev/null 2>&1; then
+    node "$RUNTIME_HELPER" stop-if-owner "$RUNTIME_TOKEN" electron "PicPatch" "PicPatch" >/dev/null 2>&1 || true
+  fi
+  pause_on_failure "$status"
+  exit "$status"
+}
+
+trap cleanup EXIT
+
+require_command node
+require_command npm
+
+cd "$REPO_DIR"
+
+log_step "Replacing any existing PicPatch runtime"
+node "$RUNTIME_HELPER" claim "$RUNTIME_TOKEN"
+node "$RUNTIME_HELPER" stop electron "PicPatch" "PicPatch"
+node "$RUNTIME_HELPER" check-endpoint 127.0.0.1 23297
+
+log_step "Installing dependencies"
+npm install --no-audit --no-fund
+
+# npm install skips the Electron binary if the package is already at the locked version.
+log_step "Verifying Electron binary"
+if [[ ! -f node_modules/electron/path.txt ]]; then
+  echo "Electron binary missing; downloading..."
+  node node_modules/electron/install.js
+fi
+
+log_step "Starting PicPatch in development mode"
+npm run dev &
+DEV_PID=$!
+node "$RUNTIME_HELPER" wait-http "$RENDERER_URL" 60000
+node "$RUNTIME_HELPER" wait-process "$REPO_DIR/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron" 60000
+log_step "PicPatch is ready at $RENDERER_URL"
+wait "$DEV_PID"

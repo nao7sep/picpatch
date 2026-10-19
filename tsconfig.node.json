@@ -1,24 +1,5 @@
 {
-  "compilerOptions": {
-    "target": "ES2024",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": [
-      "ES2024"
-    ],
-    "types": [
-      "node"
-    ],
-    "strict": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true
-  },
-  "include": [
-    "src/app/**/*.ts",
-    "src/desktop/**/*.ts",
-    "src/shared/**/*.ts"
-  ]
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2024"], "types": ["node"] },
+  "include": ["src/app/**/*.ts", "src/desktop/**/*.ts", "src/shared/**/*.ts", "electron.vite.config.ts"]
 }

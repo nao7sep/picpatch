@@ -1,14 +1,92 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 set -euo pipefail
-script_dir="${0:A:h}"
-function failed() {
-  local result=$?
-  if (( result != 0 && result != 129 && result != 130 && result != 143 )); then
-    print -u2 "PicPatch launcher failed. Read the message above."
-    if [[ -t 0 ]]; then read '?Press Enter to close…'; fi
+
+# rebuild: produce a fresh production build, package it into a real .app bundle,
+# and launch that bundle. Slow — run this after changing source. The build runs
+# the production type checks and re-bundles from clean, so type, import, CSP, and
+# packaged-layout errors that run-dev hides surface here; packaging then gives the
+# app its own bundle identity (correct dock/menu name). run-built is the fast,
+# no-build launcher for everything after this.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+APP_NAME="PicPatch"
+RUNTIME_HELPER="$SCRIPT_DIR/launcher-runtime.mjs"
+RUNTIME_TOKEN="rebuild-$$-$(date +%s)-$RANDOM"
+OUT_DIR="dist"
+
+log_step() {
+  printf '\n==> %s\n' "$1"
+}
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Missing required command: $1" >&2
+    exit 1
   fi
 }
-trap failed EXIT
-if ! command -v node >/dev/null; then print -u2 'Node.js 24 or newer is required for development launchers.'; exit 1; fi
-print 'PicPatch: rebuild '
-node "$script_dir/launch.mjs" rebuild
+
+pause_on_failure() {
+  local status="$1"
+  if [[ "$status" -ne 0 && ( "$status" -lt 128 || "$status" -gt 143 ) ]]; then
+    echo
+    echo "picpatch rebuild failed with exit code $status."
+    read -r -p "Press Enter to close..."
+  fi
+}
+
+trap 'pause_on_failure $?' EXIT
+
+require_command node
+require_command npm
+
+cd "$REPO_DIR"
+
+log_step "Installing dependencies"
+npm install --no-audit --no-fund
+
+# npm install skips the Electron binary if the package is already at the locked version.
+log_step "Verifying Electron binary"
+if [[ ! -f node_modules/electron/path.txt ]]; then
+  echo "Electron binary missing; downloading..."
+  node node_modules/electron/install.js
+fi
+
+# Remove stale output so a build that fails to emit a file can't be masked by a
+# leftover artifact from a previous run.
+log_step "Cleaning previous build"
+rm -rf out "$OUT_DIR"
+
+# The release build type-checks the shipped sources (main/preload + renderer);
+# the dev server skips this entirely. Tests are checked separately and are not
+# part of the release build, so they are not gated here.
+log_step "Type-checking production sources (node + web)"
+node_modules/.bin/tsc --noEmit -p tsconfig.node.json
+node_modules/.bin/tsc --noEmit -p tsconfig.web.json
+
+# The packaged app carries uv for explicit engine setup. The pinned, checksummed
+# download is cached, so only the first rebuild fetches it.
+log_step "Preparing the bundled setup tool"
+node scripts/prepare-tools.mjs
+
+log_step "Building production bundle"
+node_modules/.bin/electron-vite build
+
+# Package the built output into a real .app bundle — the .app only, no dmg/zip
+# installer; electron-builder ad-hoc-signs on macOS by default. The bundle gives
+# the app its own identity, so the dock and menu show "PicPatch" rather than the
+# generic "Electron".
+log_step "Packaging the app bundle"
+node_modules/.bin/electron-builder --dir --mac --arm64
+
+APP_BUNDLE="$(find "$OUT_DIR" -maxdepth 2 -name "$APP_NAME.app" -type d 2>/dev/null | head -1 || true)"
+if [[ -z "$APP_BUNDLE" ]]; then
+  echo "Packaging did not produce $APP_NAME.app under $OUT_DIR/." >&2
+  exit 1
+fi
+
+log_step "Launching the packaged app"
+node "$RUNTIME_HELPER" claim "$RUNTIME_TOKEN"
+node "$RUNTIME_HELPER" stop electron "PicPatch" "PicPatch"
+open -n "$APP_BUNDLE"
+node "$RUNTIME_HELPER" wait-process "$APP_BUNDLE/Contents/MacOS/PicPatch" 30000

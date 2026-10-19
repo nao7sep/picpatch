@@ -1,50 +1,75 @@
 {
   "name": "picpatch",
+  "productName": "PicPatch",
   "version": "0.0.0",
   "private": true,
+  "packageManager": "npm@12.2.0",
+  "description": "Generate and edit images with local AI models.",
+  "license": "GPL-3.0-or-later",
+  "author": {
+    "name": "Yoshinao Inoguchi",
+    "email": "yoshinao@inoguchi.com",
+    "url": "https://github.com/nao7sep"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nao7sep/picpatch.git"
+  },
   "type": "module",
+  "main": "out/main/main.js",
   "workspaces": [
     "sdk"
   ],
-  "packageManager": "npm@12.2.0",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "typecheck": "npm run typecheck:app && npm run typecheck --workspace picpatchsdk",
-    "test": "npm run test:app && npm run test --workspace picpatchsdk",
-    "test:coverage": "npm run typecheck:app && vitest run --coverage && npm run test:coverage --workspace picpatchsdk",
-    "example:request": "npm run example:request --workspace picpatchsdk",
-    "contracts:generate": "npm run contracts:generate --workspace picpatchsdk",
-    "contracts:check": "npm run contracts:check --workspace picpatchsdk",
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck:app && electron-vite build",
+    "prepare:tools": "node scripts/prepare-tools.mjs",
+    "typecheck": "npm run typecheck:app && tsc -p tsconfig.test.json && npm run typecheck --workspace picpatchsdk",
+    "typecheck:app": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "test": "npm run typecheck && vitest run && npm run test --workspace picpatchsdk",
+    "test:coverage": "npm run typecheck && vitest run --coverage && npm run test:coverage --workspace picpatchsdk",
+    "test:full": "npm test && npm run test:full --workspace picpatchsdk && vitest run --config vitest.live.config.ts",
     "test:python": "npm run test:python --workspace picpatchsdk",
     "test:python:coverage": "npm run test:python:coverage --workspace picpatchsdk",
-    "test:full": "npm run test:app && npm run test:full --workspace picpatchsdk && vitest run --config vitest.live.config.ts",
+    "contracts:generate": "npm run contracts:generate --workspace picpatchsdk",
+    "contracts:check": "npm run contracts:check --workspace picpatchsdk",
+    "example:request": "npm run example:request --workspace picpatchsdk",
     "example:worker": "npm run example:worker --workspace picpatchsdk",
-    "build": "node scripts/build.mjs",
-    "start": "node scripts/launch.mjs dev",
-    "typecheck:app": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && tsc -p tsconfig.test.json",
-    "test:app": "npm run typecheck:app && vitest run && npm run build",
-    "package": "npm run build && node scripts/package.mjs",
-    "prepare:tools": "node scripts/prepare-tools.mjs"
+    "check:release-tag": "node scripts/check-release-tag.mjs"
   },
-  "productName": "PicPatch",
-  "license": "GPL-3.0-or-later",
-  "author": "Yoshinao Inoguchi <yoshinao@inoguchi.com>",
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "sharp": "^0.35.5",
+    "stream-json": "^3.7.0"
+  },
   "devDependencies": {
     "@babel/parser": "^7.29.9",
-    "@electron/packager": "^20.3.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
     "@vitest/coverage-v8": "^5.0.5",
     "electron": "^44.9.0",
-    "esbuild": "^0.28.2",
+    "electron-builder": "^26.17.0",
+    "electron-vite": "^5.0.0",
     "happy-dom": "^21.0.3",
-    "sharp": "^0.35.5",
+    "jsdom": "^30.1.2",
+    "picpatchsdk": "*",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "typescript": "^7.0.2",
+    "vite": "^7.3.7",
     "vitest": "^5.0.5"
   },
-  "main": "dist/main.mjs",
-  "dependencies": {
-    "picpatchsdk": "^0.0.0"
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": false
   }
 }

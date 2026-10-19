@@ -66,7 +66,7 @@ export class Sessions {
     const sessions: SessionSummary[] = [], failures: { id: string; message: string }[] = [];
     for (const entry of await readdir(this.root, { withFileTypes: true })) {
       if (!uuid.test(entry.name) || !entry.isDirectory()) continue;
-      try { const s = await this.get(entry.name); sessions.push({ id: s.id, name: s.name, updated: s.updated, results: s.runs.filter(r => r.status === 'completed').length }); }
+      try { const s = await this.get(entry.name); const done = s.runs.filter(r => r.status === 'completed' && r.output); const cover = done.at(-1)?.id; sessions.push({ id: s.id, name: s.name, updated: s.updated, results: done.length, ...(cover ? { cover } : {}) }); }
       catch (error) { failures.push({ id: entry.name, message: error instanceof Error ? error.message : 'Could not read session.' }); }
     }
     return { sessions: sessions.sort((a, b) => b.updated.localeCompare(a.updated)), failures };

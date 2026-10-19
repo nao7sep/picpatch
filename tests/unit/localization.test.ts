@@ -1,13 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { catalogues, languages, resolveLocale, useLocale, t, UiError, errorText, errorNotice, number } from '../../src/shared/i18n/index.ts';
-const literalKeys = ['component.clipL','component.clipG','component.t5','ui.vae','ui.photomaker','ui.ipadapter','ui.controlnet','component.vae','component.photoMaker','component.ipAdapter','component.controlNet'];
+const literalKeys = ['component.clipL','component.clipG','component.t5','component.vae','component.photoMaker','component.ipAdapter','component.controlNet','conversation.size'];
 const identical: Record<string, string[]> = {
-  de: ['setup.size','ui.checkpoint','logs.info','control.pose','shortcuts.navigation','ui.prompt','ui.seed','ui.zoom','ui.system','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint'],
-  fr: ['menu.open','logs.action','logs.session','logs.message','conversation.image','control.pose','shortcuts.navigation','ui.sessions','ui.zoom','role.style','native.services'],
-  es: ['settings.general','logs.error','control.pose',], ja: [], ko: [], 'zh-Hans': [],
-  it: ['menu.open','about.repository','setup.size','logs.debug','run.summary','ui.prompt','ui.seed','ui.zoom','ui.checkpoint','ui.file','conditioning.prompt','component.checkpoint'],
-  'pt-BR': ['menu.open','setup.size','control.pose','ui.prompt','ui.zoom','ui.checkpoint','conditioning.prompt','component.checkpoint'], ru: [],
+  de: ['ui.seed','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint','control.pose','logs.info','setup.size','about.version'],
+  fr: ['ui.sessions','role.style','native.services','control.pose','conversation.image','menu.open','logs.action','logs.session','logs.message','about.version','composer.portrait','conversation.count','conversation.label','rail.meta','reference.photos'],
+  es: ['control.pose','logs.error','settings.general'], ja: [], ko: [], 'zh-Hans': [],
+  it: ['ui.seed','ui.file','conditioning.prompt','component.checkpoint','logs.debug','menu.open','about.repository','setup.size'],
+  'pt-BR': ['conditioning.prompt','component.checkpoint','control.pose','menu.open','setup.size'], ru: [],
 };
 it('ships independently reviewed catalogues with matching keys, placeholders, punctuation and intentional literals', async () => {
   const en = await catalogues.en();
@@ -28,7 +28,8 @@ it('ships independently reviewed catalogues with matching keys, placeholders, pu
         if (tag !== 'en' && /[A-Za-z]/.test(text.replace(/\{\w+\}|GB/g, '')) && !literalKeys.includes(key) && !identical[tag]?.includes(key)) expect(text, `${tag}:${key}`).not.toBe(source);
       }
     }
-    for (const key of [...literalKeys, ...(identical[tag] ?? [])]) if (tag !== 'en') expect(values[key as keyof typeof en], `${tag}:${key} stale equality exception`).toBe(en[key as keyof typeof en]);
+    const other = (entry: unknown) => typeof entry === 'string' ? entry : (entry as Record<string, string>).other;
+    for (const key of [...literalKeys, ...(identical[tag] ?? [])]) if (tag !== 'en') expect(other(values[key as keyof typeof en]), `${tag}:${key} stale equality exception`).toBe(other(en[key as keyof typeof en]));
   }
 });
 it('resolves System in preference order, normalizes regional variants and keeps formatting regional only within the interface language', () => {
@@ -41,7 +42,8 @@ it('renders retained errors and nested values in the current language without tr
   const error = new UiError('ui.choose_completed_results'); const englishMessage = error.message;
   try {
     await useLocale({ language:'ja',format:'ja' }); expect(errorText(error)).not.toBe(englishMessage); expect(error.message).toBe(englishMessage);
-    expect(t('common.detail', {status:{key:'status.failed'},detail:'user-authored prompt'})).toContain('user-authored prompt');
+    expect(t('conversation.edited', { name: 'user-authored prompt' })).toContain('user-authored prompt');
+    expect(t('run.paused', { reason: { key: 'status.failed' } })).toContain(t('status.failed'));
     expect(errorText(new Error('/private/runtime failed with secret detail'))).toBe(t('error.unknown'));
     expect(errorText({ code: 'CANCELLED', message: 'private runtime path' })).toBe(t('status.cancelled'));
     const transported = { notice: errorNotice(new Error('Select a completed image.')) };

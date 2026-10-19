@@ -1,14 +1,14 @@
 import { UiError } from '../shared/i18n/index.ts';
 import { randomInt, randomUUID } from 'node:crypto';
 import type { ImageOutcome, ProgressEvent, SdkEvent } from 'picpatchsdk';
-import type { Draft, Run } from './types.ts';
+import type { Draft, Run, QueueState } from './types.ts';
+export type { QueueState } from './types.ts';
 import { Sessions, validateDraft } from './sessions.ts';
 import { afterCommand, commandTargetReady, imageCommand, recoverCommand } from '../shared/image-command.ts';
 
 export type RunEvents = { signal: AbortSignal; onProgress: (event: ProgressEvent) => void; onEvent: (event: SdkEvent) => void };
 export interface RunCompletion { outcome: ImageOutcome; stopIssue?: string }
 export type Runner = (sessionId: string, run: Run, events: RunEvents) => Promise<RunCompletion>;
-export interface QueueState { active?: { sessionId: string; runId: string; stage: string; startedAt: number; progress?: { completed: number; total: number } }; paused: boolean; issue?: string }
 /** One app queue, with no coordination of other processes or apps. */
 export class Queue {
   private pending: { sessionId: string; runId: string }[] = [];

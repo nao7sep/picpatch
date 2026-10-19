@@ -6,16 +6,20 @@ For scripts and app integrations, start with the [PicPatchSdk guide](sdk/README.
 
 ## Run from source
 
-Use Node 24 or newer and npm. From the repository root:
+Use Node 24 or newer. Double-click the launcher for your platform (`scripts/run-dev.command` on macOS, `scripts/run-dev.ps1` on Windows), or run it by hand:
 
-```sh
+```bash
 npm install
-npm start
+npm run dev
 ```
 
-The app owns its settings, sessions and records. SDK engine and model resources default under `~/.picpatchsdk`, independently of the app's `~/.picpatch` home. Model downloads and runtime setup are explicit operations.
+`scripts/rebuild.command` builds and launches the packaged app as it would be released, and `scripts/run-built.command` launches that build again without rebuilding. The packaged app carries uv for engine setup; `npm run prepare:tools` fetches the pinned build once.
 
-Run `npm test` for the default app and SDK gate. See the [SDK development instructions](sdk/README.md#development) for its independent gate and live-test requirements.
+On first launch, setup guides you through choosing a model, installing its engine and downloading or registering the model. Nothing is downloaded until you choose it. The app keeps its settings, sessions and records under `~/.picpatch`; SDK engines and models default to `~/.picpatchsdk`, independently of the app.
+
+## Tests
+
+`npm test` runs the type check and the ordinary app and SDK suites. See the [SDK development instructions](sdk/README.md#development) for the SDK's own gate and live-test requirements.
 
 ## License
 

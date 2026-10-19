@@ -1,13 +1,99 @@
-$ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
-try {
-  if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js 24 or newer is required for development launchers.' }
-  Write-Host 'PicPatch: run-dev '
-  & node (Join-Path $PSScriptRoot 'launch.mjs') dev
-  if ($LASTEXITCODE -in @(129, 130, 143)) { exit $LASTEXITCODE }
-  if ($LASTEXITCODE -ne 0) { throw "PicPatch launcher exited with $LASTEXITCODE." }
-} catch {
-  Write-Host $_ -ForegroundColor Red
-  if (-not [Console]::IsInputRedirected -and [Environment]::UserInteractive) { Read-Host 'Press Enter to close' }
-  exit 1
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$scriptExitCode = 0
+
+# run-dev: run the app from source with live reload, in its loosest configuration.
+# For active coding and debugging. The strict, production-faithful launchers are
+# run-built (launch the existing packaged app bundle without rebuilding) and
+# rebuild (build and package a fresh bundle, then launch).
+
+function Set-Utf8Console {
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [Console]::InputEncoding = $utf8NoBom
+    [Console]::OutputEncoding = $utf8NoBom
+    $global:OutputEncoding = $utf8NoBom
+    if (Get-Command chcp.com -ErrorAction SilentlyContinue) {
+        & chcp.com 65001 > $null
+        $null = $LASTEXITCODE
+    }
 }
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host ""
+    Write-Host "==> $Message" -ForegroundColor Cyan
+}
+
+function Require-Command {
+    param([string]$Name)
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "Missing required command: $Name"
+    }
+}
+
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$ArgumentList = @(),
+        [int[]]$AllowedExitCodes = @(0)
+    )
+
+    & $FilePath @ArgumentList
+    $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+    if ($AllowedExitCodes -notcontains $exitCode) {
+        throw "Command failed with exit code ${exitCode}: $FilePath $($ArgumentList -join ' ')"
+    }
+}
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoDir = Split-Path -Parent $scriptDir
+$runtimeHelper = Join-Path $scriptDir "launcher-runtime.mjs"
+$runtimeToken = [guid]::NewGuid().ToString("N")
+$rendererUrl = "http://127.0.0.1:23297"
+
+try {
+    Set-Utf8Console
+    Require-Command node
+    Require-Command npm
+
+    Set-Location $repoDir
+
+    Write-Step "Replacing any existing PicPatch runtime"
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "claim", $runtimeToken)
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "stop", "electron", "PicPatch", "PicPatch")
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "check-endpoint", "127.0.0.1", "23297")
+
+    Write-Step "Installing dependencies"
+    Invoke-Native -FilePath "npm" -ArgumentList @("install", "--no-audit", "--no-fund")
+
+    # npm install skips the Electron binary if the package is already at the locked version.
+    Write-Step "Verifying Electron binary"
+    if (-not (Test-Path "node_modules/electron/path.txt")) {
+        Write-Host "Electron binary missing; downloading..."
+        Invoke-Native -FilePath "node" -ArgumentList @("node_modules/electron/install.js")
+    }
+
+    Write-Step "Starting PicPatch in development mode"
+    $devProcess = Start-Process -FilePath (Get-Command "npm.cmd").Source -ArgumentList @("run", "dev") -NoNewWindow -PassThru
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "wait-http", $rendererUrl, "60000")
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "wait-process", (Join-Path $repoDir "node_modules/electron/dist/electron.exe"), "60000")
+    Write-Step "PicPatch is ready at $rendererUrl"
+    $devProcess.WaitForExit()
+    if ($devProcess.ExitCode -notin @(0, 130, -1073741510)) {
+        throw "PicPatch development runtime failed with exit code $($devProcess.ExitCode)."
+    }
+}
+catch {
+    Write-Host ""
+    Write-Host "picpatch run-dev failed: $($_.Exception.Message)" -ForegroundColor Red
+    $scriptExitCode = 1
+}
+finally {
+    & node $runtimeHelper is-owner $runtimeToken *> $null
+    if ($LASTEXITCODE -eq 0) {
+        & node $runtimeHelper stop-if-owner $runtimeToken electron "PicPatch" "PicPatch" *> $null
+        Read-Host "Press Enter to close" | Out-Null
+    }
+}
+
+exit $scriptExitCode
