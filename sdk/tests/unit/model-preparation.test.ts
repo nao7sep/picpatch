@@ -33,6 +33,17 @@ it('lists independent immutable pins, source, license, runtime and total size', 
   model.manifest.components.length = 0;
   expect(listModels().find(model => model.acquisition === 'pinned')!.manifest.components.length).toBeGreaterThan(0);
 });
+it.each([
+  ['z-image-turbo-4bit', 'z-image-turbo', 'z-image', 'Apache-2.0', 5902983962, 'f427e257d8e6ffa03edd4d9ac554a05809da456c'],
+  ['flux1-fill-dev-4bit', 'flux1-fill-dev', 'flux1-fill', 'flux-1-dev-non-commercial-license', 9619370039, 'a165707a846d60e70a2106980ece147ed66636f9'],
+])('keeps %s acquisition distinct from Klein and the external variant', (id, variant, family, license, bytes, revision) => {
+  const pinned = listModels().find(model => model.id === id)!;
+  expect(pinned).toMatchObject({ family, variant, acquisition: 'pinned', evidence: 'inference-tested', license: { id: license } });
+  if (pinned.acquisition !== 'pinned') throw new Error('Expected pinned acquisition.');
+  expect(pinned.downloadBytes).toBe(bytes);
+  expect(pinned.manifest.source.revision).toBe(revision);
+  expect(listModels().find(model => model.id === variant)).toMatchObject({ acquisition: 'external', evidence: 'api-tested' });
+});
 it('requires explicit acquisition and rejects unknown catalog IDs without creating storage', async () => {
   await expect(prepareModel(listModels().find(model => model.acquisition === 'pinned')!.id)).rejects.toMatchObject({ code: 'MODEL_IO' });
   await expect(prepareModel('unknown', { download: true })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });

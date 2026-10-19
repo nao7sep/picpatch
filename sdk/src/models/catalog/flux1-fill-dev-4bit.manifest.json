@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "model": "flux1-fill-dev-4bit",
+  "source": {
+    "repository": "mflux-community/flux-1-dev-fill-mflux-q4",
+    "revision": "a165707a846d60e70a2106980ece147ed66636f9"
+  },
+  "components": [
+    {
+      "path": "transformer/0.safetensors",
+      "role": "weights",
+      "bytes": 2130179793,
+      "sha256": "fe98f5c5e5a92a5d502d5f40018dffe92a25118e0fbbe662cb227b05ccaf81b0"
+    },
+    {
+      "path": "transformer/1.safetensors",
+      "role": "weights",
+      "bytes": 2141393739,
+      "sha256": "07ab277ea005ee2c137d63b9db3b976e61c3490050b289816a9195cd419f5922"
+    },
+    {
+      "path": "transformer/2.safetensors",
+      "role": "weights",
+      "bytes": 2130572511,
+      "sha256": "92094af96d874a0f3fa75186d81d530c45c27f0140d1340abf6c2ce3fb61190c"
+    },
+    {
+      "path": "transformer/3.safetensors",
+      "role": "weights",
+      "bytes": 297640198,
+      "sha256": "afd2c33e9814a3518094040cd516b1eeb4f6d67ffa632bf30e54e5303be9aa36"
+    },
+    {
+      "path": "transformer/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 146914,
+      "sha256": "d08c9a40e12f7e16f8eddd0546d6966a0529d8063b9d9256010b9c5ebffbee19"
+    },
+    {
+      "path": "vae/0.safetensors",
+      "role": "weights",
+      "bytes": 164654179,
+      "sha256": "88d1caebda2c0350c6c68a4e91e90e30a1d456c275ef5e4b4c886f47ce1898a6"
+    },
+    {
+      "path": "vae/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 17386,
+      "sha256": "09234dd3b7612c0eee49eb15378733ec3222cc52d8110ef2dfaf3a7c8b06eee9"
+    },
+    {
+      "path": "text_encoder/0.safetensors",
+      "role": "weights",
+      "bytes": 69436741,
+      "sha256": "3177675c6487af86601c4c44bad8f26729bd568b032afa367fabb17d75081157"
+    },
+    {
+      "path": "text_encoder/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 25037,
+      "sha256": "b3008c7d279529b1660f64ed67e9ac5e02044d340353778405a30594f4eff8f3"
+    },
+    {
+      "path": "tokenizer/tokenizer_config.json",
+      "role": "tokenizer",
+      "bytes": 389,
+      "sha256": "d0eda7377bb939de0be71e262c5475a96a7dfe3dc114b6d84f8823eada34ac97"
+    },
+    {
+      "path": "tokenizer/tokenizer.json",
+      "role": "tokenizer",
+      "bytes": 3642073,
+      "sha256": "6d9109cc838977f3ca94a379eec36aecc7c807e1785cd729660ca2fc0171fb35"
+    },
+    {
+      "path": "text_encoder_2/0.safetensors",
+      "role": "weights",
+      "bytes": 2145878333,
+      "sha256": "879c9b3a00b330b2406452bf77444b6c860fe34c596dd64bd2c41fb3a4879501"
+    },
+    {
+      "path": "text_encoder_2/1.safetensors",
+      "role": "weights",
+      "bytes": 533312140,
+      "sha256": "ada72140a8e2deeaddf403dcb93e9ab47764363b2bf4b54f618fce9ccb7361a8"
+    },
+    {
+      "path": "text_encoder_2/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 44072,
+      "sha256": "a082b0edf3922e442ea62d84023cea048194119283d20cb72172fcec4e98a32a"
+    },
+    {
+      "path": "tokenizer_2/tokenizer_config.json",
+      "role": "tokenizer",
+      "bytes": 2465,
+      "sha256": "e31ed19bc5455323aa107a7f51fc0ee2534ac4145c24105bb6cf6893d0794867"
+    },
+    {
+      "path": "tokenizer_2/tokenizer.json",
+      "role": "tokenizer",
+      "bytes": 2424069,
+      "sha256": "2432e8aa83414a69884a5cbd54a68f528c042d1f30780affbefcbb85091f022e"
+    }
+  ]
+}

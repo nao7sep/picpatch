@@ -4,6 +4,12 @@ from .runtime import MfluxAdapter
 
 
 class FillAdapter(MfluxAdapter):
+    def configure_pipeline(self, pipeline):
+        from mflux.callbacks.instances.memory_saver import MemorySaver
+        # One image per pipeline: encoders are dead after conditioning, the
+        # transformer after denoising. Do not alter cache or VAE tiling policy.
+        pipeline.callbacks.register(MemorySaver(model=pipeline, keep_transformer=False, cache_limit_bytes=None))
+
     def import_pipeline(self, operation):
         from mflux.models.common.config import ModelConfig
         from mflux.models.flux.variants.fill.flux_fill import Flux1Fill

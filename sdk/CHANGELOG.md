@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add pinned, inference-tested Z-Image Turbo Q4 generation and FLUX.1 Fill Q4 native masked-edit bundles, with source revisions, complete component fingerprints and license information. External selections remain available.
+- Release completed encoder and transformer stages in Z-Image and Fill single-image pipelines without changing cache limits or decode tiling.
+
 - Record the effective mask mechanism in image results and private sidecars, including outpainting. Older records without the field remain readable and do not imply a preservation guarantee.
 - Accept prepared SD1.5/SDXL depth and pose maps alongside Canny, with matching full ControlNet assets and family-specific architecture checks. Native selections expose conventional Euler, Heun and DPM samplers with discrete, Karras and exponential schedules; defaults remain unchanged. These additional choices have contract/source evidence, not trained-map quality claims.
 

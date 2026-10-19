@@ -4,6 +4,13 @@ from .errors import InvalidEditInput
 
 
 class GenerationAdapter(MfluxAdapter):
+    def configure_pipeline(self, pipeline):
+        if self.definition['family'] == 'z-image':
+            from mflux.callbacks.instances.memory_saver import MemorySaver
+            # Z-Image finishes all prompt encoding before its loop and releases
+            # its prediction closure before decoding; no model is reused here.
+            pipeline.callbacks.register(MemorySaver(model=pipeline, keep_transformer=False, cache_limit_bytes=None))
+
     def import_pipeline(self, operation):
         from mflux.models.common.config import ModelConfig
         import mlx.core as mx

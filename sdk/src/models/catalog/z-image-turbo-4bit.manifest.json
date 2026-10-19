@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "model": "z-image-turbo-4bit",
+  "source": {
+    "repository": "mflux-community/z-image-turbo-mflux-q4",
+    "revision": "f427e257d8e6ffa03edd4d9ac554a05809da456c"
+  },
+  "components": [
+    {
+      "path": "transformer/0.safetensors",
+      "role": "weights",
+      "bytes": 2140225820,
+      "sha256": "6dd1c55ab672d2148171b13b9c6e719465aecf12743ccb6d97d5ee1978f7e9ba"
+    },
+    {
+      "path": "transformer/1.safetensors",
+      "role": "weights",
+      "bytes": 1323528823,
+      "sha256": "135062103c799495abe92f9966b163f39498b590a2244954679c0d709acb8b61"
+    },
+    {
+      "path": "transformer/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 61606,
+      "sha256": "0df7a81a99805452f75e45a9887b1d5fcb9fd99dca8da23878f242abdb708f5e"
+    },
+    {
+      "path": "vae/0.safetensors",
+      "role": "weights",
+      "bytes": 164654177,
+      "sha256": "531f8197f218382e2f5d300bee1a0b42edbc50ad7f181e37e994b9d1ca471a58"
+    },
+    {
+      "path": "vae/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 17378,
+      "sha256": "ba128a93e6b3c2272c89d77a9df440d22b5ab558855884fc7cd02d1392c617bb"
+    },
+    {
+      "path": "text_encoder/0.safetensors",
+      "role": "weights",
+      "bytes": 2135435241,
+      "sha256": "ecf4b7e89098b92e79e8910ff6ddef8e7fbc1c5d6dffc930faf903bde06c9d07"
+    },
+    {
+      "path": "text_encoder/1.safetensors",
+      "role": "weights",
+      "bytes": 127582075,
+      "sha256": "8b32bbec7881a83ca6f9de71c131c20881447e31f1d46cebb2d3720591026be8"
+    },
+    {
+      "path": "text_encoder/model.safetensors.index.json",
+      "role": "shard-index",
+      "bytes": 51332,
+      "sha256": "0beda6f2b898d2aacce9f9adfa2708b9b8afb55e88f222bb68c9b7c64c6be741"
+    },
+    {
+      "path": "tokenizer/chat_template.jinja",
+      "role": "tokenizer",
+      "bytes": 4168,
+      "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+    },
+    {
+      "path": "tokenizer/tokenizer_config.json",
+      "role": "tokenizer",
+      "bytes": 692,
+      "sha256": "1cc816812993bff176eb4f7495433b736f06fba9b6e7b05cac7b4a1780650c95"
+    },
+    {
+      "path": "tokenizer/tokenizer.json",
+      "role": "tokenizer",
+      "bytes": 11422650,
+      "sha256": "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506"
+    }
+  ]
+}
