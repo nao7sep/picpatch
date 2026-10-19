@@ -3,14 +3,14 @@ import { inferenceOptions, testEngineDirectory } from '../helpers/engine.ts';
 import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { referenceWorkload } from '../../benchmarks/reference-workload.ts';
 import { createImageClient, listModels, prepareModel, inspectReadiness, discoverModels, resolveStoragePaths, type ImageClientOptions, type SdkEvent } from '../../src/index.ts';
+import { liveCache } from '../helpers/live-cache.ts';
 
 async function localOptions(): Promise<ImageClientOptions> {
-  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
   let options: ImageClientOptions;
   try { options = JSON.parse(await readFile(path, 'utf8')) as ImageClientOptions; }
   catch (cause) { throw new Error('Prepare the local inference test cache or set PICPATCH_INFERENCE_CONFIG to an editor-options JSON file. This test never downloads models.', { cause }); }

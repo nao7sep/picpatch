@@ -3,9 +3,10 @@ import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
+import { liveCache } from '../helpers/live-cache.ts';
 
 it('checks parameter mappings, defaults and scheduler construction against every installed pipeline without weights', async () => {
-  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
   const { pythonExecutable } = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
   const worker = fileURLToPath(new URL('../../runtimes/mflux/src', import.meta.url));
   const script = `import inspect

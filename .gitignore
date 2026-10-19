@@ -18,7 +18,6 @@ __pycache__/
 *.safetensors
 *.gguf
 *.ckpt
-sdk/benchmarks/results/
 
 # Local environment
 .env

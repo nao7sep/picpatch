@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
+import { liveCache } from './tests/helpers/live-cache.ts';
 export default defineConfig({
-  cacheDir: 'node_modules/.cache/picpatch-live',
+  cacheDir: liveCache('vitest'),
   test: {
     include: ['tests/live/**/*.test.ts'],
     globalSetup: ['tests/helpers/setup-engine.ts'],

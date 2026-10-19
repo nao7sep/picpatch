@@ -3,9 +3,10 @@ import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
+import { liveCache } from '../helpers/live-cache.ts';
 
 it('checks every installed family constructor and mapping, rejects ignored tensors, and composes unbaked adapters', async () => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url)), 'utf8'));
+  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json'), 'utf8'));
   const script = `import importlib, inspect, json, tempfile
 from types import SimpleNamespace
 from pathlib import Path

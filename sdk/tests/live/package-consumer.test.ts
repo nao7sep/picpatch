@@ -10,6 +10,7 @@ import type { ImageClientOptions } from 'picpatchsdk';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import pkg from '../../package.json' with { type: 'json' };
+import { liveCache } from '../helpers/live-cache.ts';
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(import.meta.url);
@@ -40,7 +41,7 @@ it('packs a source SDK and runs its public worker journey from an unrelated cons
       if (!installed) throw new Error(`Install the declared dependency: ${dependency}`);
       await symlink(installed, join(modules, dependency));
     }
-    const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(root, 'node_modules/.cache/picpatch-live/inference-config.json'), 'utf8'));
+    const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json'), 'utf8'));
     const script = join(directory, 'consumer.ts');
     await writeFile(script, `import { inspectEngine, inspectRuntime, createImageClient, listModels } from 'picpatchsdk';
 const engine = await inspectEngine({engineDirectory:${JSON.stringify(testEngineDirectory)}});
@@ -66,7 +67,7 @@ console.log('consumer passed');\n`);
       await link(await realpath(join(model.directory, component.path)), destination);
     }
     const outputDirectory = join(directory, 'images'); await mkdir(outputDirectory);
-    const native = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(root, 'node_modules/.cache/picpatch-live/native-inference-config.json'), 'utf8'));
+    const native = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? liveCache('native-inference-config.json'), 'utf8'));
     const inputs = join(directory, 'inputs.json');
     await writeFile(inputs, JSON.stringify({ engineDirectory: testEngineDirectory, modelId: model.manifest.model, modelsDirectory, outputDirectory, native }));
     const journey = join(directory, 'journey.ts');

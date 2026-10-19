@@ -3,9 +3,10 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { delimiter } from 'node:path';
 import { expect, it } from 'vitest';
+import { liveCache } from '../helpers/live-cache.ts';
 
 it('runs the actual DreamO pipeline with tiny random weights on CPU and Metal', async () => {
-  const python = process.env.PICPATCH_DREAMO_PYTHON ?? fileURLToPath(new URL('../../node_modules/.cache/dreamo-audit/venv/bin/python', import.meta.url));
+  const python = process.env.PICPATCH_DREAMO_PYTHON ?? liveCache('dreamo-audit/venv/bin/python');
   const source = ['common', 'dreamo'].map(name => fileURLToPath(new URL(`../../runtimes/${name}/src`, import.meta.url))).join(delimiter);
   const result = await promisify(execFile)(python, [fileURLToPath(new URL('./dreamo_runtime_probe.py', import.meta.url))], {
     timeout: 60_000, env: { ...process.env, PYTHONPATH: source, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' },

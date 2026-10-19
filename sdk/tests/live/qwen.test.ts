@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { createImageClient } from '../../src/index.ts';
 import { testPython } from '../helpers/python.ts';
+import { liveCache } from '../helpers/live-cache.ts';
 
 it('rejects Qwen total-image and geometry violations over worker pipes before image I/O', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-qwen-admission-'));
@@ -24,7 +25,7 @@ it('rejects Qwen total-image and geometry violations over worker pipes before im
 });
 
 it('binds Qwen adapter calls to installed APIs and preserves synthetic RGBA output without weights', async () => {
-  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
   const config = JSON.parse(await readFile(path, 'utf8')) as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-qwen-api-'));
   const worker = fileURLToPath(new URL('../../runtimes/mflux/src', import.meta.url));

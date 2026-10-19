@@ -3,13 +3,13 @@ import { Readable } from 'node:stream';
 import { mkdtemp, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { expect, it, vi } from 'vitest';
 import { installNativeEngine, inspectNativeEngine } from 'picpatchsdk';
 import { nativeRelease } from '../../src/runtime/engine/native-release.ts';
+import { liveCache } from '../helpers/live-cache.ts';
 
 it('installs and probes the authenticated official native archive without downloading it during tests', async () => {
-  const archive = process.env.PICPATCH_NATIVE_ARCHIVE ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/native-runtime.zip', import.meta.url));
+  const archive = process.env.PICPATCH_NATIVE_ARCHIVE ?? liveCache('native-runtime.zip');
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-native-installation-'));
   const transport = vi.fn(async (url: unknown) => {
     expect(String(url)).toBe(nativeRelease.url);

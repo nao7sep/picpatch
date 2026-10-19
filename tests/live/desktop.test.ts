@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
+import { liveCache } from '../../sdk/tests/helpers/live-cache.ts';
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
 it('packages and starts the real renderer from outside the checkout without models or system Node', async () => {
@@ -43,7 +44,7 @@ it('runs generation and saves its sidecar through the packaged application with 
   try {
     const executable = join(root, 'dist/mac-arm64/PicPatch.app/Contents/MacOS/PicPatch');
     const environment: NodeJS.ProcessEnv = { ...process.env, PICPATCH_DATA_DIR: home, PATH: '/usr/bin:/bin' }; delete environment.ELECTRON_RUN_AS_NODE;
-    await execute(executable, ['--smoke-inference', join(root, 'sdk/node_modules/.cache/picpatch-live/native-inference-config.json')], { cwd: tmpdir(), env: environment, timeout: 310_000, maxBuffer: 1024 * 1024 });
+    await execute(executable, ['--smoke-inference', liveCache('native-inference-config.json')], { cwd: tmpdir(), env: environment, timeout: 310_000, maxBuffer: 1024 * 1024 });
     const { readdir } = await import('node:fs/promises');
     const sessions = await readdir(join(home, 'sessions'));
     const completed = (await Promise.all(sessions.map(async id => JSON.parse(await readFile(join(home, 'sessions', id, 'session.json'), 'utf8'))))).find(session => session.runs.length);

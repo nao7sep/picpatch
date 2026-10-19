@@ -1,14 +1,14 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel } from 'picpatchsdk';
 import { testEngineDirectory } from '../helpers/engine.ts';
+import { liveCache } from '../helpers/live-cache.ts';
 
 it('generates with Z-Image Turbo then performs native masked editing with FLUX Fill', async () => {
-  const models = process.env.PICPATCH_COMPLEMENTARY_MODELS ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/complementary-models/', import.meta.url));
+  const models = process.env.PICPATCH_COMPLEMENTARY_MODELS ?? liveCache('complementary-models/');
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-complementary-'));
   try {
     const generation = await prepareModel('z-image-turbo-4bit', { directory: join(models, 'z-image-turbo-q4') });

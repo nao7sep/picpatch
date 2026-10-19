@@ -1,8 +1,8 @@
 import { parseArgs } from 'node:util';
 import { isAbsolute, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { inspectEngine, listModels, prepareModel } from 'picpatchsdk';
+import { liveCacheRoot } from '../tests/helpers/live-cache.ts';
 
 const { values } = parseArgs({ options: { engine: { type: 'string' }, directory: { type: 'string' }, download: { type: 'boolean', default: false }, model: { type: 'string' }, output: { type: 'string' } } });
 if (values.output && !isAbsolute(values.output)) throw new Error('Supply --output with an absolute configuration file path.');
@@ -12,7 +12,7 @@ const prepared = await prepareModel(values.model ?? listModels()[0]!.id, {
   download: values.download,
   ...(values.directory ? { directory: values.directory } : {}),
 });
-const cache = fileURLToPath(new URL('../node_modules/.cache/picpatch-live/', import.meta.url));
+const cache = liveCacheRoot;
 await mkdir(cache, { recursive: true, mode: 0o700 });
 const staging = await mkdtemp(join(cache, '.config-'));
 try {

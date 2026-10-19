@@ -2,14 +2,14 @@ import { testEngineDirectory } from '../helpers/engine.ts';
 import { mkdtemp, mkdir, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel, type ImageClientOptions } from 'picpatchsdk';
 import { kleinLoraWeights } from '../helpers/lora-weights.ts';
+import { liveCache } from '../helpers/live-cache.ts';
 
 it('applies local LoRAs to real quantized Klein generation and editing without baking or leaking paths', async () => {
-  const config: ImageClientOptions = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url)), 'utf8'));
+  const config: ImageClientOptions = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json'), 'utf8'));
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-mflux-lora-'));
   try {
     for (const component of config.model!.manifest.components) {

@@ -1,14 +1,14 @@
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel } from 'picpatchsdk';
 import assets from '../fixtures/native-sd15-assets.json' with { type: 'json' };
+import { liveCache } from '../helpers/live-cache.ts';
 
 it('runs SD1.5 generation, variation and trained inpainting with thresholded masks and resized canvases', async () => {
-  const path = process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/native-inference-config.json', import.meta.url));
+  const path = process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? liveCache('native-inference-config.json');
   const config = JSON.parse(await readFile(path, 'utf8')) as { directory: string; executable: string; sd15Checkpoint: string; sd15InpaintCheckpoint: string };
   if (!config.sd15Checkpoint || !config.sd15InpaintCheckpoint) throw new Error('Prepare the documented SD1.5 base/inpaint test assets. This test never downloads weights.');
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-native-inpaint-'));

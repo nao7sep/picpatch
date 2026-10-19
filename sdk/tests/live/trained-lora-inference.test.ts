@@ -4,13 +4,13 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdtemp, mkdir, readFile, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel, type ImageClientOptions } from 'picpatchsdk';
+import { liveCacheRoot } from '../helpers/live-cache.ts';
 const assets: { family: string; filename: string; bytes: number; sha256: string; scale: number; steps: number }[] = JSON.parse(await readFile(new URL('../fixtures/trained-lora-assets.json', import.meta.url), 'utf8'));
 
-const cache = fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/', import.meta.url));
+const cache = liveCacheRoot;
 it.each(assets)('applies the pinned trained $family pixel-art adapter through the public SDK', async asset => {
   const adapter = join(process.env.PICPATCH_TRAINED_LORA_DIRECTORY ?? join(cache, 'trained-loras'), asset.filename);
   expect((await stat(adapter)).size).toBe(asset.bytes);

@@ -3,13 +3,13 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { createImageClient, inspectReadiness, listModels, type LocalModel } from '../../src/index.ts';
+import { liveCache } from '../helpers/live-cache.ts';
 
 // These tests import the real installed family classes but never load synthetic weights.
 it.each(['qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1', 'flux1-kontext-dev', 'z-image', 'ernie-image', 'ernie-image-turbo', 'flux1-dev', 'flux1-krea-dev', 'flux1-fill-dev', 'z-image-turbo', 'flux1-schnell', 'flux2-klein-4b', 'flux2-klein-9b', 'flux2-klein-base-4b', 'flux2-klein-base-9b'] as const)('checks installed %s imports and rejects unsupported operations before image I/O', async adapter => {
-  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? fileURLToPath(new URL('../../node_modules/.cache/picpatch-live/inference-config.json', import.meta.url));
+  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
   const { pythonExecutable } = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-family-import-'));
   const bytes = Buffer.from('Import-only fixture; never load as weights.');
