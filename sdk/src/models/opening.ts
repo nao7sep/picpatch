@@ -92,14 +92,14 @@ function select(input: string | ModelRegistration, options: ModelOpenOptions): M
   return { version: 1, model: { variant: entry.variant, directory: options.directory ?? join(root(options), entry.id, entry.manifest.source.revision), manifest: entry.manifest } };
 }
 /** Cheap presence only: never reads model contents, installs packages or starts inference. */
-export function openModel(input: string | ModelRegistration, options: ModelOpenOptions = {}): Promise<import('../logging.ts').Logged<ModelOpenResult>> {
+export function openModel(input: string | ModelRegistration, options: ModelOpenOptions = {}): Promise<ModelOpenResult> {
   return withDiagnostics('openModel', options, operation => boundary(operation, async signal => {
     const registration = select(input, operation);
     return 'status' in registration ? registration : presence(registration, signal);
   }));
 }
 /** Reads only the explicitly selected registration file. The caller owns its persistence. */
-export function readModelRegistration(path: string, options: ModelOpenOptions = {}): Promise<import('../logging.ts').Logged<{ status: 'read'; registration: ModelRegistration } | ModelOpenRefusal>> {
+export function readModelRegistration(path: string, options: ModelOpenOptions = {}): Promise<{ status: 'read'; registration: ModelRegistration } | ModelOpenRefusal> {
   return withDiagnostics('readModelRegistration', options, operation => boundary(operation, async signal => {
     absolutePath(path); checkSignal(signal);
     const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -115,7 +115,7 @@ export function readModelRegistration(path: string, options: ModelOpenOptions = 
   }));
 }
 /** Catalog inventory in one selected SDK resource root; arbitrary folders use discoverModels. */
-export function inspectModels(options: ModelOpenOptions = {}): Promise<import('../logging.ts').Logged<ManagedModelInventory>> {
+export function inspectModels(options: ModelOpenOptions = {}): Promise<ManagedModelInventory> {
   return withDiagnostics('inspectModels', options, operation => boundary(operation, async signal => {
     if (operation.directory !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Inventory takes a model root, not one bundle directory.');
     const models: ManagedModelInventory['models'] = [];

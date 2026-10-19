@@ -17,7 +17,7 @@ export interface PicPatchProfile {
 }
 export interface ProfileReadOptions extends EventOptions { signal?: AbortSignal; timeoutMs?: number }
 export interface ProfileRefusal { status: 'refused'; code: 'PROFILE_VERSION_UNSUPPORTED'; message: string; effect: 'none'; subject: string; version: number }
-export type ProfileReadResult = import('./logging.ts').Logged<{ status: 'read'; profile: PicPatchProfile } | ProfileRefusal>;
+export type ProfileReadResult = { status: 'read'; profile: PicPatchProfile } | ProfileRefusal;
 
 export function validateTimeouts(value: unknown): Partial<WorkerTimeouts> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid worker timeouts.');

@@ -51,10 +51,10 @@ export function createEditor(options: EditorOptions = {}): Editor {
   if (model && isNativeVariant(model.variant)) {
     const executable = options.nativeExecutable ?? profile?.nativeExecutable;
     if (options.engineDirectory !== undefined || typeof executable !== 'string' || !isAbsolute(executable) || executable.includes('\0')) throw new PicPatchSdkError('INVALID_REQUEST', 'Native models require an absolute nativeExecutable, without engineDirectory.');
-    return new ImageEditor(new NativeBackend(executable, model, timeouts), settings, model.manifest.model);
+    return new ImageEditor(new NativeBackend(executable, model, timeouts), settings, model.manifest.model, { backend: 'stable-diffusion-cpp', timeouts });
   }
   if (options.nativeExecutable !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'nativeExecutable requires a native model.');
   const engineDirectory = options.engineDirectory ?? profile?.engineDirectory;
   const root = resolveStoragePaths(engineDirectory === undefined ? {} : { engineDirectory }).engineDirectory;
-  return new ImageEditor(new ManagedBackend(root, model, timeouts), settings, model?.manifest.model);
+  return new ImageEditor(new ManagedBackend(root, model, timeouts), settings, model?.manifest.model, { backend: 'mflux', timeouts });
 }

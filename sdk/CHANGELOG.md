@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove SDK-owned log files and log result fields. Caller-owned onEvent receives stable event names, a startup record with SDK/runtime identity, and opt-in debug progress; onProgress remains independent.
+
 - Add an erased browser-types entry for GUI consumers, keeping browser contracts separate from Node runtime imports.
 
 - Add explicit native engine inspection and installation for the pinned official Apple Silicon build (macOS 26+), with integrity/architecture checks and complete-directory publication. Model and runtime acquisition share bounded HTTPS transport.
@@ -14,7 +16,7 @@
 
 - Bound stalled filesystem/native-image waits while retaining pending-write ownership and recovery locations. Late completion cannot resume expired work; optional sidecar settlement remains independent of the saved image.
 
-- Separate stage events from throttled counted progress, add optional exclusive JSONL logs with bounded best-effort flush, and return parsed profile/record/registration data in named read-result fields. Enforce Python worker package/ambient-state boundaries and declare directly imported runtime dependencies.
+- Separate stage events from throttled counted progress, return parsed profile/record/registration data in named read-result fields. Enforce Python worker package/ambient-state boundaries and declare directly imported runtime dependencies.
 
 - Return private versioned artifact records on every saved image, with SDK/caller identity and encoded input/output hashes. Add record reading and artifact verification; optional sidecars use `-picpatchsdk.json` and fail independently of images.
 

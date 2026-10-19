@@ -150,10 +150,10 @@ async function discoverModelsOperation(roots?: string[], options: ModelOperation
   });
 }
 
-export function inspectModel(path: string, options: ModelOperationOptions = {}): Promise<import('../logging.ts').Logged<ModelInspection>> {
+export function inspectModel(path: string, options: ModelOperationOptions = {}): Promise<ModelInspection> {
   return withDiagnostics('inspectModel', options, operation => inspectModelOperation(path, operation));
 }
 
-export function discoverModels(roots?: string[], options: ModelOperationOptions = {}): Promise<import('../logging.ts').Logged<ModelDiscovery>> {
+export function discoverModels(roots?: string[], options: ModelOperationOptions = {}): Promise<ModelDiscovery> {
   return withDiagnostics('discoverModels', options, operation => discoverModelsOperation(roots, operation));
 }

@@ -79,6 +79,6 @@ async function inspectReadinessOperation(executable: string, input: LocalEditing
   });
 }
 
-export function inspectReadiness(executable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<import('../logging.ts').Logged<ModelReadiness>> {
+export function inspectReadiness(executable: string, input: LocalEditingModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
   return withDiagnostics('inspectReadiness', options, operation => inspectReadinessOperation(executable, input, operation));
 }

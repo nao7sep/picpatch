@@ -25,4 +25,4 @@ export interface OperationRefusal {
   details: import('./errors.ts').ErrorDetails;
 }
 export type ImageResult = import('./contracts.generated.ts').EditResult & { record: import('./contracts.generated.ts').ArtifactRecord };
-export type ImageOutcome = import('./logging.ts').Logged<ImageResult | OperationRefusal>;
+export type ImageOutcome = ImageResult | OperationRefusal;

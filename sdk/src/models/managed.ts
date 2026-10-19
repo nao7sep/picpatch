@@ -7,7 +7,6 @@ import { resolveStoragePaths } from '../paths.ts';
 import { validateProfile } from '../profile.ts';
 import { catalogModel } from './catalog.ts';
 import type { ModelOpenOptions } from './opening.ts';
-import type { Logged } from '../logging.ts';
 
 export interface ManagedModelEntry {
   modelId: string;
@@ -62,7 +61,7 @@ export type RemoveModelResult = { status: 'removed' | 'missing'; modelId: string
  * Other processes are not coordinated: a concurrent user may fail visibly, never gain partial ready weights.
  * Symlink targets and caller-owned external bundles are never traversed.
  */
-export function removeModel(modelId: string, name: string, options: ModelOpenOptions = {}): Promise<Logged<RemoveModelResult>> {
+export function removeModel(modelId: string, name: string, options: ModelOpenOptions = {}): Promise<RemoveModelResult> {
   return withDiagnostics('removeModel', options, async operation => {
     validateOperation(operation, ['profile', 'modelsDirectory']);
     const model = catalogModel(modelId);

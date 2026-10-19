@@ -139,7 +139,7 @@ it('reserves edit admission before diagnostic callbacks and settles diagnostics 
     if (event.stage === 'started') reentrant = expect(editor.edit(request)).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT' });
   } });
   await reentrant;
-  expect(events[0]?.stage).toBe('started'); expect(events.at(-1)?.stage).toBe('succeeded');
+  expect(events[0]?.name).toBe('sdk.startup'); expect(events[1]?.name).toBe('operation.started'); expect(events.at(-1)?.stage).toBe('succeeded');
   expect(await readdir(directory)).toEqual(['out.png', 'source.png']);
   await editor.dispose();
   expect(events.at(-1)?.stage).toBe('succeeded');

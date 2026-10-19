@@ -166,6 +166,6 @@ export async function verifyModelOperation(path: string, input: ModelManifest, o
   });
 }
 
-export function verifyModel(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<import('../logging.ts').Logged<ModelVerification>> {
+export function verifyModel(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<ModelVerification> {
   return withDiagnostics('verifyModel', options, operation => verifyModelOperation(path, input, operation));
 }

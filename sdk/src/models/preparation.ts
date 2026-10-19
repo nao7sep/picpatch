@@ -164,6 +164,6 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
   }
 }
 
-export function prepareModel(id: string, options: PrepareModelOptions = {}): Promise<import('../logging.ts').Logged<PreparedModel>> {
+export function prepareModel(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
   return withDiagnostics('prepareModel', options, operation => prepareModelOperation(id, operation));
 }

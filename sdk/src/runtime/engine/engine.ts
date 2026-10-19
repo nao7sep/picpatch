@@ -63,7 +63,7 @@ async function inspect(root: string, identity: EngineIdentity, signal: AbortSign
   return result;
 }
 /** Read-only: checks actual interpreter/dependency imports; never installs or loads weights. */
-export function inspectEngine(options: EngineOptions = {}): Promise<import('../../logging.ts').Logged<EngineInspection>> {
+export function inspectEngine(options: EngineOptions = {}): Promise<EngineInspection> {
   return withDiagnostics('inspectEngine', options, async operation => {
     const root = validate(operation, false);
     return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Engine inspection timed out.', async signal => {
@@ -87,7 +87,7 @@ async function syncDirectory(path: string): Promise<void> {
   try { await handle.sync(); } finally { await handle.close(); }
 }
 /** Explicit install-or-reuse. Environments stay at stable paths; only complete readiness references are replaced. */
-export function installEngine(options: InstallEngineOptions): Promise<import('../../logging.ts').Logged<EngineInstallation>> {
+export function installEngine(options: InstallEngineOptions): Promise<EngineInstallation> {
   return withDiagnostics('installEngine', options, async operation => {
     const root = validate(operation, true);
     absolutePath(operation.uvExecutable);

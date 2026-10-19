@@ -11,7 +11,7 @@ export function checkSignal(signal?: AbortSignal): void {
   if (signal?.aborted) throw storageCancellation() ?? new PicPatchSdkError('CANCELLED', 'The operation was cancelled.');
 }
 export function validateOperation(options: unknown, extraKeys: string[] = []): void {
-  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['signal', 'logPath', 'caller', 'onProgress', 'onEvent', 'timeoutMs', ...extraKeys].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid operation options.');
+  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['signal', 'debug', 'caller', 'onProgress', 'onEvent', 'timeoutMs', ...extraKeys].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid operation options.');
   const caller = (options as { caller?: unknown }).caller;
   if (caller !== undefined && (!caller || typeof caller !== 'object' || Array.isArray(caller) || Object.keys(caller).some(key => !['name', 'version'].includes(key)) || ['name', 'version'].some(key => typeof (caller as Record<string, unknown>)[key] !== 'string' || !(caller as Record<string, string>)[key]?.trim()))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid caller identity.');
   timeBudget((options as { timeoutMs?: unknown }).timeoutMs, 1_800_000);

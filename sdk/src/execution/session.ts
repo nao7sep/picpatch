@@ -2,7 +2,7 @@ import { storageScope, storageStalled } from '../storage.ts';
 import { planImage, type ImagePlan, type GenerateImagePlan, type EditImagePlan } from '../images/planning.ts';
 import { resolveGenerateRequest, resolveEditRequest, type GenerateInput, type EditDefaults, type EditInput } from '../defaults.ts';
 import { emitProgress, validateOperation, timeBudget, withDeadline } from '../operations.ts';
-import { withDiagnostics } from '../diagnostics.ts';
+import { diagnosticLifetime, withDiagnostics, type RuntimeConfiguration } from '../diagnostics.ts';
 import type { Editor } from '../client.ts';
 import type { EditBackend } from './backend.ts';
 import type { ImageRequest, ImageOutcome, OperationOptions, OperationRefusal } from '../types.ts';
@@ -12,6 +12,7 @@ import { ImageWorkspace } from '../images/output.ts';
 
 /** Coordinates files with the worker's actual settlement, including disposal. */
 export class ImageEditor implements Editor {
+  private readonly diagnostics;
   private readonly backend: EditBackend;
   private readonly lifetime = new AbortController();
   private tail: Promise<void> = Promise.resolve();
@@ -19,7 +20,7 @@ export class ImageEditor implements Editor {
   private readonly plans = new WeakSet<ImagePlan>();
   private readonly defaults: EditDefaults;
   private readonly model: string | undefined;
-  constructor(backend: EditBackend, defaults: EditDefaults = {}, model?: string) { this.backend = backend; this.defaults = defaults; this.model = model; }
+  constructor(backend: EditBackend, defaults: EditDefaults = {}, model?: string, configuration: RuntimeConfiguration = {}) { this.diagnostics = diagnosticLifetime(configuration); this.backend = backend; this.defaults = defaults; this.model = model; }
 
   edit(input: EditInput | EditImagePlan, options: OperationOptions = {}): Promise<ImageOutcome> {
     const plan = this.acceptPlan(input, 'edit');
@@ -51,7 +52,7 @@ export class ImageEditor implements Editor {
         const result = await planImage(request, this.backend.describe(request), signal);
         return result;
       } catch (error) { const refused = refusal(error); if (refused) return refused; throw error; }
-    })));
+    }), this.diagnostics));
     const accepted = pending.then(result => { if (result.status === 'planned') { Object.freeze(result); this.plans.add(result); } return result; });
     this.tail = Promise.allSettled([this.tail, accepted]).then(() => {});
     return accepted;
@@ -89,7 +90,7 @@ export class ImageEditor implements Editor {
         }
         throw error;
       }
-    })).finally(() => clearTimeout(timer));
+    }, this.diagnostics)).finally(() => clearTimeout(timer));
     // A cancelled waiter settles promptly, but cannot let later calls overtake its predecessor.
     this.tail = Promise.allSettled([previous, operation]).then(() => {});
     return operation;

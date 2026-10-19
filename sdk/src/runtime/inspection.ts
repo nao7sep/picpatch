@@ -29,6 +29,6 @@ async function inspectRuntimeOperation(pythonExecutable: string, options: Runtim
   return result;
 }
 
-export function inspectRuntime(pythonExecutable: string, options: RuntimeOperationOptions = {}): Promise<import('../logging.ts').Logged<RuntimeInspection>> {
+export function inspectRuntime(pythonExecutable: string, options: RuntimeOperationOptions = {}): Promise<RuntimeInspection> {
   return withDiagnostics('inspectRuntime', options, operation => inspectRuntimeOperation(pythonExecutable, operation));
 }

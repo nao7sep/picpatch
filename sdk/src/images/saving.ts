@@ -4,7 +4,6 @@ import { withDiagnostics, type EventOptions } from '../diagnostics.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import type { ArtifactRecord, ImageArtifact, SidecarOutcome } from '../contracts.generated.ts';
-import type { Logged } from '../logging.ts';
 import { validateArtifactRecord } from './records.ts';
 import { inspectImage } from './fingerprint.ts';
 import { snapshotImage } from './validation.ts';
@@ -35,7 +34,7 @@ export interface SaveArtifactRefusal {
   details: import('../errors.ts').ErrorDetails;
 }
 /** Save an existing PNG without inference, re-encoding, overwriting or modifying its source. */
-export function saveArtifact(imagePath: string, outputPath: string, input: ArtifactRecord, options: SaveArtifactOptions = {}): Promise<Logged<SavedArtifact | SaveArtifactRefusal>> {
+export function saveArtifact(imagePath: string, outputPath: string, input: ArtifactRecord, options: SaveArtifactOptions = {}): Promise<SavedArtifact | SaveArtifactRefusal> {
   return withDiagnostics('saveArtifact', options, async operation => {
     validateOperation(operation, ['sidecar']); absolutePath(imagePath); absolutePath(outputPath);
     if (!outputPath.toLowerCase().endsWith('.png') || (operation.sidecar !== undefined && typeof operation.sidecar !== 'boolean')) throw new PicPatchSdkError('INVALID_REQUEST', 'Save to a PNG path with an optional boolean sidecar selection.');
