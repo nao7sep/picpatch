@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Accept explicit prompt reference conditioning in GLM-Image and FLUX.2 Dev, matching their advertised capabilities; dedicated appearance and identity conditioning remain unsupported.
+
 - Add experimental external GLM-Image and FLUX.2 Dev generation/reference-editing selections through a separately managed Diffusers runtime. Preparation fingerprints the complete local pipeline; these adapters have weight-free runtime evidence, not trained-weight qualification.
 - Add source-audited native HiDream O1/Dev generation and ordered-reference editing, and MFLUX Ideogram4 generation with explicit steps and scalar guidance. Ideogram quality presets are not exposed; its supported output dimensions are 256–2048 pixels in multiples of sixteen.
 - Model geometry can declare minimum dimensions, enforced before inference alongside existing multiples and maximum dimensions.

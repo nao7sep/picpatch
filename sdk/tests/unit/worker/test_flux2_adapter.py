@@ -59,3 +59,14 @@ def test_small_reference_refuses_before_model_load(monkeypatch):
     with pytest.raises(InvalidEditInput, match='at least 64 pixels'):
         adapter.edit({'model': 'fixture', 'instruction': 'Edit.', 'sourceImage': '/small.png', 'outputPath': '/output.png'}, threading.Event(), lambda _event: None)
     assert loaded == []
+
+
+def test_explicit_prompt_conditioning_matches_the_default():
+    group = {'id': 'person', 'role': 'subject', 'images': ['/person.png']}
+    request = {'instruction': 'Place the person in the scene.', 'references': [group]}
+    expected = module.conditioning(request)
+    group['conditioning'] = 'prompt'
+    assert module.conditioning(request) == expected
+    group['conditioning'] = 'appearance'
+    with pytest.raises(InvalidEditInput):
+        module.conditioning(request)

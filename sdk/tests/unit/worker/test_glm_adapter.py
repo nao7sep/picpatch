@@ -51,3 +51,14 @@ def test_capabilities_are_fresh_and_do_not_promise_masks_or_identity_binding():
     assert caps['referenceConditioning'] == 'ordered-images-with-role-prompt'
     caps['parameters']['steps']['default'] = 1
     assert adapter.capabilities['parameters']['steps']['default'] == 50
+
+
+def test_explicit_prompt_conditioning_matches_the_default():
+    group = {'id': 'person', 'role': 'subject', 'images': ['/person.png']}
+    request = {'instruction': 'Place the person in the scene.', 'references': [group]}
+    expected = module.conditioning(request)
+    group['conditioning'] = 'prompt'
+    assert module.conditioning(request) == expected
+    group['conditioning'] = 'appearance'
+    with pytest.raises(InvalidEditInput):
+        module.conditioning(request)

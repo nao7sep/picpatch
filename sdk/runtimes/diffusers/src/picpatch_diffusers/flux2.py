@@ -23,8 +23,8 @@ def conditioning(request):
         paths.append(request['sourceImage'])
         descriptions.append('Image 1 is the source image to edit.')
     for group in request.get('references', []):
-        if group.get('conditioning', 'appearance') != 'appearance' or group.get('className'):
-            raise InvalidEditInput('FLUX.2 Dev supports ordered appearance references only.')
+        if group.get('conditioning', 'prompt') != 'prompt' or group.get('className'):
+            raise InvalidEditInput('FLUX.2 Dev supports ordered prompt references only.')
         numbers = []
         for path in group['images']:
             paths.append(path)
