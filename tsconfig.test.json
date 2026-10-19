@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts",
+    "vitest.live.config.ts"
+  ]
+}

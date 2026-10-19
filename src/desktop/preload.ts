@@ -1,0 +1,8 @@
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { Bridge } from '../shared/bridge.ts';
+contextBridge.exposeInMainWorld('picpatch', {
+  call: async (action: string, payload?: unknown) => { const reply = await ipcRenderer.invoke('picpatch:call', action, payload); if (!reply.ok) throw new Error(reply.message); return reply.value; },
+  onChange: (listener: () => void) => { const receive = () => listener(); ipcRenderer.on('picpatch:changed', receive); return () => ipcRenderer.removeListener('picpatch:changed', receive); },
+  onFlush: (listener: () => Promise<void>) => { ipcRenderer.on('picpatch:flush', () => { void listener().then(() => ipcRenderer.send('picpatch:flushed', { ok: true }), error => ipcRenderer.send('picpatch:flushed', { ok: false, message: String(error) })); }); },
+  droppedFile: (file: File) => webUtils.getPathForFile(file),
+} satisfies Bridge);
