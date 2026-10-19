@@ -13,7 +13,7 @@ export function runCommand(executable: string, args: string[], cwd: string, env:
     const kill = (value: NodeJS.Signals) => {
       if (!child.pid) return;
       try { process.kill(-child.pid, value); }
-      catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') failure = new PicPatchSdkError('TERMINATION_FAILED', 'Could not signal the engine process.', { cause }); }
+      catch (cause) { if (!['ESRCH', 'EPERM'].includes((cause as NodeJS.ErrnoException).code ?? '')) failure = new PicPatchSdkError('TERMINATION_FAILED', 'Could not signal the engine process.', { cause }); }
     };
     const stop = (reason: Error) => {
       if (closed || escalation) return;
@@ -48,7 +48,7 @@ export function runCommand(executable: string, args: string[], cwd: string, env:
       // uv may close its pipes before a compiler child stops. Settle the whole owned group
       // before the installer is allowed to delete its private environment.
       kill('SIGKILL');
-      void confirmGroupStopped(child.pid).then(() => reject(failure), cause => reject(new PicPatchSdkError('TERMINATION_FAILED', 'Engine subprocess group termination could not be confirmed.', { cause })));
+      void confirmGroupStopped(child.pid).then(() => reject(failure), cause => reject(new PicPatchSdkError('TERMINATION_FAILED', 'Engine subprocess group termination could not be confirmed.', { cause: new AggregateError([failure, cause]) })));
     });
     if (signal.aborted) abort();
   });
@@ -59,7 +59,13 @@ async function confirmGroupStopped(pid: number | undefined): Promise<void> {
   const deadline = performance.now() + 2_000;
   for (;;) {
     try { process.kill(-pid, 0); }
-    catch (cause) { if ((cause as NodeJS.ErrnoException).code === 'ESRCH') return; throw cause; }
+    catch (cause) {
+      const code = (cause as NodeJS.ErrnoException).code;
+      if (code === 'ESRCH') return;
+      // A group being reaped can briefly report EPERM after SIGKILL. It is not
+      // termination evidence: keep checking within the same bound for ESRCH.
+      if (code !== 'EPERM') throw cause;
+    }
     if (performance.now() >= deadline) throw new Error('An engine subprocess still exists.');
     await new Promise(resolve => setTimeout(resolve, 20));
   }

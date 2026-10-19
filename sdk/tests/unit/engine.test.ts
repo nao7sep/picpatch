@@ -143,3 +143,21 @@ it('keeps DreamO and MFLUX installations distinct in one caller-selected engine 
   expect(await inspectEngine({ engineDirectory: dreamo.engineDirectory, runtime: 'dreamo' })).toMatchObject({ status: 'ready', pythonExecutable: dreamo.pythonExecutable });
   expect(await inspectEngine({ engineDirectory: mflux.engineDirectory })).toMatchObject({ status: 'ready', pythonExecutable: mflux.pythonExecutable });
 });
+
+it('waits for disappearance after transient process-group permission errors during teardown', async () => {
+  const script = join(directory, 'teardown.mjs');
+  await writeFile(script, 'setInterval(()=>{},1000);');
+  const originalKill = process.kill.bind(process);
+  let observed = false;
+  const spy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid < 0 && signal === 0 && !observed) {
+      observed = true;
+      throw Object.assign(new Error('Group is being reaped'), { code: 'EPERM' });
+    }
+    return originalKill(pid, signal);
+  });
+  try {
+    await expect(runCommand(process.execPath, [script], directory, {}, new AbortController().signal, 500)).rejects.toMatchObject({ code: 'TIMEOUT' });
+    expect(observed).toBe(true);
+  } finally { spy.mockRestore(); }
+});
