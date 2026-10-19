@@ -244,3 +244,21 @@ it('shows app-owned About metadata and routes only its fixed project links', asy
   links[1]!.click(); expect(call).toHaveBeenCalledWith('openProjectLink',{destination:'issues'});
   field('closeAbout').click(); await vi.waitFor(()=>expect((field('about') as unknown as HTMLDialogElement).open).toBe(false));
 });
+
+it('keeps a prepared map modality and strength through draft edits', async () => {
+  const capabilities = models[0]!.capabilities as typeof models[number]['capabilities'] & { controlKinds?: string[] };
+  capabilities.controlKinds = ['canny', 'depth', 'pose'];
+  try {
+    field('controlKind').value = 'depth'; field('controlKind').dispatchEvent(new Event('change'));
+    expect(field('addControl').disabled).toBe(false);
+    field('addControl').click();
+    await vi.waitFor(() => expect(call.mock.calls.some(([action]) => action === 'import')).toBe(true));
+    await flush();
+    expect(session.draft.control?.kind).toBe('depth');
+    field('controlKind').value = 'pose'; field('controlKind').dispatchEvent(new Event('change'));
+    field('controlStrength').value = '0.45'; field('controlStrength').dispatchEvent(new Event('input'));
+    field('text').value = 'Authored text'; field('text').dispatchEvent(new Event('input')); await flush();
+    expect(session.draft.control).toMatchObject({ kind: 'pose', strength: 0.45 });
+    expect(session.draft.text).toBe('Authored text');
+  } finally { delete capabilities.controlKinds; }
+});

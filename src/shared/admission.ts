@@ -25,6 +25,6 @@ export function incompatibilities(draft: Draft, capabilities: ModelCapabilities)
   for (const key of Object.keys(draft.parameters)) {
     if (!Object.hasOwn(capabilities.parameters ?? {}, key)) issues.push(t('admission.parameter', { name: term('parameter', key) }));
   }
-  if (draft.control && !capabilities.controlKinds?.includes(draft.control.kind)) issues.push(t('ui.a_prepared_canny_control_model_is_required'));
+  if (draft.control && !capabilities.controlKinds?.includes(draft.control.kind)) issues.push(t('ui.a_matching_control_model_is_required'));
   return issues;
 }

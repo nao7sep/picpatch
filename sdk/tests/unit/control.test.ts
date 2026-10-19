@@ -10,7 +10,8 @@ let directory: string;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-control-')); });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
 const controlNet = { path: 'canny.safetensors', kind: 'canny' as const };
-it('fingerprints compatible local auxiliary weights without altering them', async () => {
+it.each(['canny', 'depth', 'pose'] as const)('fingerprints compatible %s auxiliary weights without altering them', async kind => {
+  const controlNet = { path: `${kind}.safetensors`, kind };
   await nativeCheckpoint(join(directory, 'base.safetensors'), 'sd15');
   await tensorFile(join(directory, controlNet.path), controlNetShapes());
   const original = await readFile(join(directory, controlNet.path));
@@ -19,7 +20,7 @@ it('fingerprints compatible local auxiliary weights without altering them', asyn
   expect(prepared.model.manifest.components).toHaveLength(2);
   expect(await readFile(join(directory, controlNet.path))).toEqual(original);
 });
-it.each(['sdxl', 'sd15-inpaint', 'sd15-ip-adapter', 'wrong-context', 'missing-hint'])('rejects incompatible %s before hashing', async failure => {
+it.each(['sd15-inpaint', 'sd15-ip-adapter', 'wrong-context', 'missing-hint'])('rejects incompatible %s before hashing', async failure => {
   const variant = failure.startsWith('sd') ? failure : 'sd15';
   await nativeCheckpoint(join(directory, 'base.safetensors'), variant);
   const shapes = controlNetShapes(failure === 'wrong-context' ? 2048 : 768);
@@ -33,10 +34,10 @@ it('rejects unsupported maps and malformed capability metadata before input IO',
   const caps = listModels().find(item => item.id === 'sd15')!.capabilities;
   const request = { model: 'sd15', prompt: 'A bowl.', outputPath: '/out.png', control: { kind: 'canny', image: '/map.png' } };
   expect(() => validateGenerateRequest(request, caps)).not.toThrow();
-  for (const control of [{ kind: 'depth', image: '/map.png' }, { kind: 'canny', image: 'relative.png' }, { kind: 'canny', image: '/map.png', strength: -1 }, { kind: 'canny', image: '/map.png', strength: Infinity }]) expect(() => validateGenerateRequest({ ...request, control }, caps)).toThrow();
+  for (const control of [{ kind: 'unknown', image: '/map.png' }, { kind: 'canny', image: 'relative.png' }, { kind: 'canny', image: '/map.png', strength: -1 }, { kind: 'canny', image: '/map.png', strength: Infinity }]) expect(() => validateGenerateRequest({ ...request, control }, caps)).toThrow();
   expect(() => validateGenerateRequest({ ...request, outputPath: '/map.png' }, caps)).toThrow(expect.objectContaining({ code: 'OUTPUT_CONFLICT' }));
   expect(() => validateGenerateRequest(request, { ...caps, controlKinds: {} } as never)).toThrow(expect.objectContaining({ code: 'INVALID_CAPABILITIES' }));
-  for (const model of ['sdxl', 'flux2-klein-4b']) expect(() => validateGenerateRequest({ ...request, model }, listModels().find(item => item.id === model)!.capabilities)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
+  for (const model of ['sdxl-inpaint', 'flux2-klein-4b']) expect(() => validateGenerateRequest({ ...request, model }, listModels().find(item => item.id === model)!.capabilities)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
   await nativeCheckpoint(join(directory, 'base.safetensors'), 'sd15');
   const prepared = await prepareModel('sd15', { directory, checkpoint: 'base.safetensors' });
   const editor = createEditor({ model: prepared.model, nativeExecutable: '/missing-executable' });
@@ -65,4 +66,15 @@ it.each(['valid', 'orientation', 'wrong-size', 'alpha', 'jpeg', 'cancel'])('prep
   } finally { await workspace.cleanup(); }
   expect(await readFile(image)).toEqual(original);
   expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
+});
+
+it.each(['valid', 'sd15-weights', 'lightweight', 'missing-adm'])('checks SDXL ControlNet architecture for %s', async kind => {
+  await nativeCheckpoint(join(directory, 'base.safetensors'), 'sdxl');
+  const shapes = controlNetShapes(kind === 'sd15-weights' ? 768 : 2048);
+  if (kind === 'lightweight') delete shapes['control_model.input_blocks.7.1.transformer_blocks.9.attn2.to_k.weight'];
+  if (kind === 'missing-adm') delete shapes['control_model.label_emb.0.0.weight'];
+  await tensorFile(join(directory, 'control.safetensors'), shapes);
+  const prepare = prepareModel('sdxl', { directory, checkpoint: 'base.safetensors', controlNet: { path: 'control.safetensors', kind: 'depth' } });
+  if (kind === 'valid') expect((await prepare).model.controlNet?.kind).toBe('depth');
+  else await expect(prepare).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });

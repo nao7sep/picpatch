@@ -29,8 +29,15 @@ async function inspectAssets(model: LocalEditingModel, signal?: AbortSignal): Pr
       !shape(control, 'input_hint_block.0.weight', [16, 3, 3, 3]) ||
       !shape(control, 'zero_convs.0.0.weight', [320, 320, 1, 1]) ||
       !shape(control, 'middle_block_out.0.weight', [1280, 1280, 1, 1]) ||
-      !shape(control, 'input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight', [320, 768])) incompatible();
-    // Shapes establish SD1.5 ControlNet architecture; callers explicitly select
+      !(context === 2048
+        ? shape(control, 'input_blocks.4.1.transformer_blocks.0.attn2.to_k.weight', [640, 2048]) &&
+          shape(control, 'input_blocks.7.1.transformer_blocks.9.attn2.to_k.weight', [1280, 2048]) &&
+          shape(control, 'label_emb.0.0.weight', [1280, 2816])
+        : shape(control, 'input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight', [320, 768]))) incompatible();
+    // The pinned native runtime uses SDXL transformer depths {1,2,10} and ADM=2816.
+    // Reject incompatible lightweight shapes rather than inferring compatibility from context alone.
+    // These checks recognize conventional architecture, not every auxiliary tensor or union variant.
+    // Shapes establish the selected ControlNet architecture; callers explicitly select
     // the map kind, which cannot be inferred from equal-shaped trained weights.
   }
   // GGUF architecture remains an explicit caller selection, checked by runtime loading.

@@ -3,7 +3,7 @@ export interface ReferenceDraft extends Omit<ReferenceGroup, 'images'> { images:
 export interface Draft {
   mode: 'generate' | 'edit'; text: string; modelIds: string[]; width: number; height: number;
   seed?: number; parameters: SamplingParameters; source?: string; references: ReferenceDraft[];
-  control?: { image: string; kind: 'canny'; strength?: number };
+  control?: { image: string; kind: 'canny' | 'depth' | 'pose'; strength?: number };
   mask?: string; outpaint?: { width: number; height: number; left: number; top: number };
 }
 export interface Asset { id: string; name: string; file: string; bytes: number; sha256: string }

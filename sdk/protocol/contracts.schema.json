@@ -278,7 +278,9 @@
           "type": "array",
           "items": {
             "enum": [
-              "canny"
+              "canny",
+              "depth",
+              "pose"
             ]
           },
           "uniqueItems": true
@@ -405,6 +407,14 @@
         },
         "control": {
           "$ref": "#/definitions/ControlProvenance"
+        },
+        "maskMode": {
+          "enum": [
+            "native",
+            "composite",
+            "latent-composite"
+          ],
+          "description": "Effective masked-edit mechanism. Native conditioning may change unmasked pixels. Composite blends normalized RGBA using white-to-edit masks; latent-composite restores fully black normalized pixels after latent masking. Absent for an unmasked operation or a legacy record with unknown mechanism."
         }
       },
       "required": [
@@ -1319,6 +1329,14 @@
             ],
             "additionalProperties": false
           }
+        },
+        "maskMode": {
+          "enum": [
+            "native",
+            "composite",
+            "latent-composite"
+          ],
+          "description": "Effective masked-edit mechanism. Native conditioning may change unmasked pixels. Composite blends normalized RGBA using white-to-edit masks; latent-composite restores fully black normalized pixels after latent masking. Absent for an unmasked operation or a legacy record with unknown mechanism."
         }
       },
       "required": [
@@ -1487,8 +1505,11 @@
         },
         "kind": {
           "enum": [
-            "canny"
-          ]
+            "canny",
+            "depth",
+            "pose"
+          ],
+          "description": "Caller-declared training modality. Supply a matching trained ControlNet and precomputed RGB map; no detection, depth estimation or pose extraction runs implicitly."
         }
       },
       "required": [
@@ -1507,8 +1528,11 @@
         },
         "kind": {
           "enum": [
-            "canny"
-          ]
+            "canny",
+            "depth",
+            "pose"
+          ],
+          "description": "Caller-declared training modality. Supply a matching trained ControlNet and precomputed RGB map; no detection, depth estimation or pose extraction runs implicitly."
         },
         "strength": {
           "type": "number",
@@ -1527,8 +1551,11 @@
       "properties": {
         "kind": {
           "enum": [
-            "canny"
-          ]
+            "canny",
+            "depth",
+            "pose"
+          ],
+          "description": "Caller-declared training modality. Supply a matching trained ControlNet and precomputed RGB map; no detection, depth estimation or pose extraction runs implicitly."
         },
         "strength": {
           "type": "number",

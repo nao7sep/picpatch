@@ -18,7 +18,7 @@ export function validateDraft(value: unknown): Draft {
     if (!group || typeof group.id !== 'string' || !Array.isArray(group.images)) throw new Error('Invalid reference group.');
     group.images.forEach(id);
   }
-  if (draft.control && (draft.control.kind !== 'canny' || (draft.control.strength !== undefined && !Number.isFinite(draft.control.strength)))) throw new Error('Invalid structural control.');
+  if (draft.control && (!['canny', 'depth', 'pose'].includes(draft.control.kind) || (draft.control.strength !== undefined && !Number.isFinite(draft.control.strength)))) throw new Error('Invalid structural control.');
   return structuredClone(draft);
 }
 export function validateSession(value: unknown): Session {

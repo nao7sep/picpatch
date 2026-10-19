@@ -80,7 +80,7 @@ export function managementModal(api: Bridge, changed: () => Promise<void>) {
   action('addLora', async () => { const path = await api.call('pickComponent', { directory: field('bundleDirectory').value }); if (path) { loras.push({ path }); renderLoras(); } });
   action('register', () => operation(() => {
     const extras: any = {};
-    for (const key of components.filter(key => key !== 'checkpoint')) if (field(`component-${key}`).value) extras[key] = key === 'controlNet' ? { path: field(`component-${key}`).value, kind: 'canny' } : field(`component-${key}`).value;
+    for (const key of components.filter(key => key !== 'checkpoint')) if (field(`component-${key}`).value) extras[key] = key === 'controlNet' ? { path: field(`component-${key}`).value, kind: field('component-controlKind').value } : field(`component-${key}`).value;
     if (loras.length) extras.loras = loras;
     return api.call('prepare', { modelId: field('manageModel').value, directory: field('bundleDirectory').value || undefined, checkpoint: field('component-checkpoint').value || undefined, components: extras });
   }));

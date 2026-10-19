@@ -111,7 +111,10 @@ export interface OutpaintCanvas {
  */
 export interface StructuralControl {
   image: string;
-  kind: "canny";
+  /**
+   * Caller-declared training modality. Supply a matching trained ControlNet and precomputed RGB map; no detection, depth estimation or pose extraction runs implicitly.
+   */
+  kind: "canny" | "depth" | "pose";
   strength?: number;
 }
 /**
@@ -185,7 +188,7 @@ export interface ModelCapabilities {
    */
   outpainting?: boolean;
   loraFormats?: ("sd-unet-safetensors" | "mflux-lora-safetensors")[];
-  controlKinds?: "canny"[];
+  controlKinds?: ("canny" | "depth" | "pose")[];
 }
 /**
  * Absent controls are unsupported. Descriptors apply to every advertised operation of this model.
@@ -291,6 +294,10 @@ export interface EditResult {
   conditioning?: ConditioningProvenance;
   loras?: LoraProvenance[];
   control?: ControlProvenance;
+  /**
+   * Effective masked-edit mechanism. Native conditioning may change unmasked pixels. Composite blends normalized RGBA using white-to-edit masks; latent-composite restores fully black normalized pixels after latent masking. Absent for an unmasked operation or a legacy record with unknown mechanism.
+   */
+  maskMode?: "native" | "composite" | "latent-composite";
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -343,7 +350,10 @@ export interface LoraProvenance {
  * via the `definition` "ControlProvenance".
  */
 export interface ControlProvenance {
-  kind: "canny";
+  /**
+   * Caller-declared training modality. Supply a matching trained ControlNet and precomputed RGB map; no detection, depth estimation or pose extraction runs implicitly.
+   */
+  kind: "canny" | "depth" | "pose";
   strength: number;
   asset: {
     filename: string;
@@ -462,7 +472,10 @@ export interface LocalLora {
  */
 export interface LocalControlNet {
   path: string;
-  kind: "canny";
+  /**
+   * Caller-declared training modality. Supply a matching trained ControlNet and precomputed RGB map; no detection, depth estimation or pose extraction runs implicitly.
+   */
+  kind: "canny" | "depth" | "pose";
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -581,4 +594,8 @@ export interface ArtifactRecord {
     sha256: string;
     bytes: number;
   }[];
+  /**
+   * Effective masked-edit mechanism. Native conditioning may change unmasked pixels. Composite blends normalized RGBA using white-to-edit masks; latent-composite restores fully black normalized pixels after latent masking. Absent for an unmasked operation or a legacy record with unknown mechanism.
+   */
+  maskMode?: "native" | "composite" | "latent-composite";
 }

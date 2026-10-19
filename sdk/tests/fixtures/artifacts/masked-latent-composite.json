@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "writer": {
+    "name": "picpatchsdk",
+    "version": "0.0.0"
+  },
+  "operation": "edit",
+  "inputsIncluded": false,
+  "image": {
+    "filename": "fixture.png",
+    "mimeType": "image/png",
+    "size": {
+      "width": 8,
+      "height": 8
+    }
+  },
+  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "bytes": 100,
+  "model": "fixture",
+  "modelRevision": "fixture",
+  "runtime": {
+    "name": "fixture",
+    "version": "1"
+  },
+  "seed": 42,
+  "effectiveParameters": {
+    "steps": 4
+  },
+  "fingerprints": [],
+  "maskMode": "latent-composite"
+}

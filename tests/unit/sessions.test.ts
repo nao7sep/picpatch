@@ -47,3 +47,11 @@ it('does not recreate an unavailable configured collection', async () => {
   await expect(sessions.list()).rejects.toMatchObject({ code: 'ENOENT' });
   await expect(readdir(join(root, 'unavailable-volume'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
+
+it.each(['canny', 'depth', 'pose'] as const)('retains %s conditioning when a session reopens', async kind => {
+  const sessions = new Sessions(root); const session = await sessions.create();
+  const input = join(root, 'map.png'); await writeFile(input, 'map fixture');
+  const image = await sessions.importImage(session.id, input);
+  await sessions.update(session.id, value => { value.draft.control = { kind, image: image.id, strength: 0.5 }; });
+  expect((await new Sessions(root).get(session.id)).draft.control).toEqual({ kind, image: image.id, strength: 0.5 });
+});

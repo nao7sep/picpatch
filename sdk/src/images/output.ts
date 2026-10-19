@@ -24,6 +24,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   private readonly geometry: InputGeometry[] = [];
   private readonly fingerprints: ArtifactRecord['fingerprints'] = [];
   private outpaint: EditResult['outpaint'];
+  private maskMode: EditResult['maskMode'];
   private constructor(directory: string, destination: string, request: T) {
     storageRecovery(directory);
     this.directory = directory; this.destination = destination; this.request = request;
@@ -90,6 +91,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       }
       this.workerRequest.maskImage = mask.path;
     }
+    if ('maskImage' in this.workerRequest && this.workerRequest.maskImage && maskMode !== 'none') this.maskMode = maskMode;
     const identities = new Set<string>();
     for (const group of this.workerRequest.references ?? []) {
       for (let i = 0; i < group.images.length; i++) {
@@ -122,8 +124,9 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       throw new PicPatchSdkError('INVALID_OUTPUT', 'Worker output is missing, malformed, or inconsistent with its metadata.', { cause });
     }
     checkCancellation(signal);
-    const { sidecar: _runtimeSidecar, outpaint: _runtimeCanvas, ...response } = result;
+    const { sidecar: _runtimeSidecar, outpaint: _runtimeCanvas, maskMode: _runtimeMaskMode, ...response } = result;
     const saved: EditResult = { ...response, image: { ...result.image, path: this.request.outputPath }, references: structuredClone('instruction' in this.request ? this.request.references ?? [] : []), inputGeometry: structuredClone(this.geometry) };
+    if (this.maskMode) saved.maskMode = this.maskMode;
     if (this.outpaint) saved.outpaint = structuredClone(this.outpaint);
     const record = await createArtifactRecord(this.request, saved, complete, this.fingerprints, caller);
     const published: ImageResult = { ...saved, record };

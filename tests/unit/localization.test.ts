@@ -1,13 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { catalogues, languages, resolveLocale, useLocale, t, UiError, errorText, errorNotice, number } from '../../src/shared/i18n/index.ts';
-const literalKeys = ['ui.vae','ui.photomaker','ui.ipadapter','ui.canny_controlnet','component.vae','component.photoMaker','component.ipAdapter','component.controlNet'];
+const literalKeys = ['ui.vae','ui.photomaker','ui.ipadapter','ui.controlnet','component.vae','component.photoMaker','component.ipAdapter','component.controlNet'];
 const identical: Record<string, string[]> = {
-  de: ['shortcuts.navigation','ui.prompt','ui.seed','ui.zoom','ui.system','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint'],
-  fr: ['shortcuts.navigation','ui.sessions','ui.zoom','role.style','native.services'],
-  es: [], ja: [], ko: [], 'zh-Hans': [],
+  de: ['control.pose','shortcuts.navigation','ui.prompt','ui.seed','ui.zoom','ui.system','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint'],
+  fr: ['control.pose','shortcuts.navigation','ui.sessions','ui.zoom','role.style','native.services'],
+  es: ['control.pose',], ja: [], ko: [], 'zh-Hans': [],
   it: ['run.summary','ui.prompt','ui.seed','ui.zoom','ui.checkpoint','ui.file','conditioning.prompt','component.checkpoint'],
-  'pt-BR': ['ui.prompt','ui.zoom','ui.checkpoint','conditioning.prompt','component.checkpoint'], ru: [],
+  'pt-BR': ['control.pose','ui.prompt','ui.zoom','ui.checkpoint','conditioning.prompt','component.checkpoint'], ru: [],
 };
 it('ships independently reviewed catalogues with matching keys, placeholders, punctuation and intentional literals', async () => {
   const en = await catalogues.en();

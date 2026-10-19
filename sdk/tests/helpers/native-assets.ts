@@ -41,6 +41,10 @@ export function controlNetShapes(context = 768): Record<string, number[]> {
     'input_hint_block.0.weight': [16, 3, 3, 3],
     'zero_convs.0.0.weight': [320, 320, 1, 1],
     'middle_block_out.0.weight': [1280, 1280, 1, 1],
-    'input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight': [320, context],
+    ...(context === 2048 ? {
+      'input_blocks.4.1.transformer_blocks.0.attn2.to_k.weight': [640, 2048],
+      'input_blocks.7.1.transformer_blocks.9.attn2.to_k.weight': [1280, 2048],
+      'label_emb.0.0.weight': [1280, 2816],
+    } : { 'input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight': [320, context] }),
   }).map(([key, value]) => [`control_model.${key}`, value]));
 }

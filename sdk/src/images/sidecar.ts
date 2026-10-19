@@ -19,6 +19,7 @@ export async function createArtifactRecord(request: ImageRequest, result: EditRe
     const record: ArtifactRecord = {
       version: 1, writer: { name: 'picpatchsdk', version: packageInfo.version }, fingerprints, ...(caller ? { caller } : {}), operation: 'prompt' in request ? 'generate' : 'edit', inputsIncluded,
       image: { filename: basename(result.image.path), mimeType: result.image.mimeType, size: result.image.size }, sha256: hash.digest('hex'), bytes,
+      ...(result.maskMode ? { maskMode: result.maskMode } : {}),
       ...(result.control ? { control: result.control } : {}),
       ...(result.loras ? { loras: result.loras } : {}),
       ...(result.conditioning ? { conditioning: result.conditioning } : {}),

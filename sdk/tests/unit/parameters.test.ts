@@ -65,3 +65,13 @@ it('requires a source for Qwen source-strength edits and rejects strength on gen
   expect(resolveParameters({}, caps, 'generate')).not.toHaveProperty('strength');
   expect(() => validateGenerateRequest({ model, prompt: 'Blue', outputPath: '/out.png', parameters: { strength: 1 } }, caps)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
 });
+
+it('admits conventional native sampling choices while keeping distilled and foreign schedules out', () => {
+  const capabilities = listModels().find(model => model.id === 'sdxl')!.capabilities;
+  for (const sampler of ['euler', 'euler_a', 'heun', 'dpm2', 'dpm++2s_a', 'dpm++2m']) {
+    for (const scheduler of ['discrete', 'karras', 'exponential']) {
+      expect(resolveParameters({ sampler, scheduler }, capabilities, 'generate')).toMatchObject({ sampler, scheduler });
+    }
+  }
+  for (const parameters of [{ sampler: 'lcm' }, { scheduler: 'flow_match_euler_discrete' }]) expect(() => resolveParameters(parameters, capabilities)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
+});

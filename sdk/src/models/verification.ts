@@ -48,7 +48,7 @@ export function validateLocalEditingModel(input: unknown): LocalEditingModel {
     const appearance = input.variant.includes('-ip-adapter');
     if (identity !== (input.photoMaker !== undefined) || appearance !== (input.ipAdapter !== undefined) || appearance !== (input.clipVision !== undefined)) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply exactly the auxiliary assets required by the selected native conditioning method.');
     if (input.loras && !input.checkpoint.toLowerCase().endsWith('.safetensors')) throw new PicPatchSdkError('INVALID_REQUEST', 'LoRA compatibility checks require a safetensors checkpoint.');
-    if (input.controlNet && (input.variant !== 'sd15' || !input.checkpoint.toLowerCase().endsWith('.safetensors') || !input.controlNet.path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchSdkError('INVALID_REQUEST', 'ControlNet currently requires an SD1.5 base safetensors checkpoint and Canny safetensors asset.');
+    if (input.controlNet && (!['sd15', 'sdxl'].includes(input.variant) || !input.checkpoint.toLowerCase().endsWith('.safetensors') || !input.controlNet.path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchSdkError('INVALID_REQUEST', 'ControlNet currently requires an SD1.5 or SDXL base safetensors checkpoint and a matching ControlNet safetensors asset.');
     for (const path of [...loraPaths, input.controlNet?.path, input.checkpoint, input.vae, input.photoMaker, input.ipAdapter, input.clipVision].filter(value => value !== undefined)) {
       if (!input.manifest.components.some(component => component.path === path && component.role === 'weights')) throw new PicPatchSdkError('INVALID_REQUEST', 'Native model files must be declared manifest weights.');
     }

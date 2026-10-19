@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -74,4 +74,34 @@ it('keeps latent-composite masks aligned and rejects output resizing', async () 
   const resized = await ImageWorkspace.create({ ...request, size: { width: 64, height: 64 } });
   try { await expect(resized.prepare(undefined, undefined, 'latent-composite')).rejects.toMatchObject({ code: 'INVALID_MASK' }); }
   finally { await resized.cleanup(); }
+});
+
+
+it.each(['native', 'composite', 'latent-composite'] as const)('records the effective %s mechanism without input paths or runtime overrides', async maskMode => {
+  const request = { ...await fixture(32, 48), sidecar: {} };
+  const workspace = await ImageWorkspace.create(request);
+  try {
+    await workspace.prepare(undefined, undefined, maskMode);
+    await sharp({ create: { width: 32, height: 48, channels: 4, background: 'blue' } }).png().toFile(workspace.workerRequest.outputPath);
+    const saved = await workspace.publish({ model: 'fixture', modelRevision: 'fixture', runtime: { name: 'test', version: '1' }, seed: 1, effectiveParameters: { steps: 1 }, references: [], maskMode: 'native', image: { path: workspace.workerRequest.outputPath, mimeType: 'image/png', size: { width: 32, height: 48 } } });
+    expect(saved.maskMode).toBe(maskMode);
+    expect(saved.record.maskMode).toBe(maskMode);
+    const text = await readFile(saved.sidecar!.path, 'utf8');
+    expect(JSON.parse(text)).toMatchObject({ maskMode, inputsIncluded: false });
+    expect(text).not.toContain(directory);
+  } finally { await workspace.cleanup(); }
+});
+
+it.each(['unmasked', 'outpaint'] as const)('derives mask provenance from the %s operation instead of worker claims', async mode => {
+  const { maskImage: _mask, ...source } = await fixture(32, 48);
+  const request = { ...source, ...(mode === 'outpaint' ? { outpaint: { size: { width: 48, height: 48 }, left: 8, top: 0 } } : {}) };
+  const workspace = await ImageWorkspace.create(request);
+  try {
+    await workspace.prepare(undefined, undefined, 'native');
+    const size = workspace.workerRequest.size ?? { width: 32, height: 48 };
+    await sharp({ create: { ...size, channels: 3, background: 'blue' } }).png().toFile(workspace.workerRequest.outputPath);
+    const saved = await workspace.publish({ model: 'fixture', modelRevision: 'fixture', runtime: { name: 'test', version: '1' }, seed: 1, effectiveParameters: { steps: 1 }, references: [], maskMode: 'composite', image: { path: workspace.workerRequest.outputPath, mimeType: 'image/png', size } });
+    if (mode === 'outpaint') expect(saved.record.maskMode).toBe('native');
+    else { expect(saved).not.toHaveProperty('maskMode'); expect(saved.record).not.toHaveProperty('maskMode'); }
+  } finally { await workspace.cleanup(); }
 });

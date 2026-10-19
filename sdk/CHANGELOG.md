@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Record the effective mask mechanism in image results and private sidecars, including outpainting. Older records without the field remain readable and do not imply a preservation guarantee.
+- Accept prepared SD1.5/SDXL depth and pose maps alongside Canny, with matching full ControlNet assets and family-specific architecture checks. Native selections expose conventional Euler, Heun and DPM samplers with discrete, Karras and exponential schedules; defaults remain unchanged. These additional choices have contract/source evidence, not trained-map quality claims.
+
 - Route rejected editor requests through the shared event/error boundary, including invalid plans and calls after disposal. Validate debug options consistently and retain verification events/counts during readiness checks.
 - Add code/message fields to native engine readiness and code/message/effect fields to model component verification and inspection findings. Export the runtime configuration type used by startup events.
 

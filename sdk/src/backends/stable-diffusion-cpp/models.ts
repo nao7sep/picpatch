@@ -12,13 +12,13 @@ export function nativeCapabilities(variant: string, model: string = variant): Mo
   const appearance = variant.includes('-ip-adapter');
   const conditioned = identity || appearance;
   const dimension = variant.startsWith('sdxl') ? 1024 : 512;
-  return { model, ...(variant === 'sd15' ? { controlKinds: ['canny' as const] } : {}), loraFormats: ['sd-unet-safetensors'], textToImage: !masked && !conditioned, instructionEditing: true, sourceImageRequired: !conditioned, maskRequired: masked, outpainting: masked,
+  return { model, ...(['sd15', 'sdxl'].includes(variant) ? { controlKinds: ['canny' as const, 'depth' as const, 'pose' as const] } : {}), loraFormats: ['sd-unet-safetensors'], textToImage: !masked && !conditioned, instructionEditing: true, sourceImageRequired: !conditioned, maskRequired: masked, outpainting: masked,
     referenceRoles: identity ? ['subject'] : appearance ? ['style'] : [],
     ...(identity ? { referenceConditioning: 'pooled-identity' as const } : appearance ? { referenceConditioning: 'appearance-embedding' as const, maxReferenceImages: 1 } : { maxReferenceImages: 0 }), maskMode: masked ? 'native' : 'none',
     size: { widthMultiple: 8, heightMultiple: 8, maxWidth: 2147483640, maxHeight: 2147483640 }, defaultOutputSize: { width: dimension, height: dimension },
     parameters: { steps: { default: identity ? 50 : 20, minimum: 1, maximum: 2147483647, integer: true },
       guidance: { default: identity ? 5 : 7, minimum: 0, maximum: 3.4028234663852886e38 }, negativePrompt: { default: '' },
-      scheduler: { default: 'discrete', values: ['discrete'] }, sampler: { default: identity ? 'euler' : 'euler_a', values: [identity ? 'euler' : 'euler_a'] },
+      scheduler: { default: 'discrete', values: ['discrete', 'karras', 'exponential'] }, sampler: { default: identity ? 'euler' : 'euler_a', values: ['euler', 'euler_a', 'heun', 'dpm2', 'dpm++2s_a', 'dpm++2m'] },
       ...(identity ? { identityStyleStrength: { default: 20, minimum: 0, maximum: 100 } } : appearance ? { appearanceStrength: { default: 1, minimum: 0, maximum: 3.4028234663852886e38 } } : { strength: { default: masked ? 1 : 0.75, minimum: masked ? 1 : 0, maximum: 1 } }) } };
 }
 export function nativeModels() {

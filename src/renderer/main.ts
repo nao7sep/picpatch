@@ -99,8 +99,9 @@ function capabilities() {
   element('maskSemantics').textContent = caps?.maskMode === 'composite' || caps?.maskMode === 'latent-composite' ? t('ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region') : caps?.maskMode === 'native' ? t('ui.native_inpainting_pixels_outside_the_mask_may_change') : t('ui.this_model_does_not_support_masks');
   input('paint').disabled = !d.source || !caps || caps.maskMode === 'none'; input('expand').disabled = !caps?.outpainting;
   admission();
-  input('addControl').disabled = !caps?.controlKinds?.includes('canny');
-  element('controlName').textContent = d.control ? session!.assets.find(a => a.id === d.control!.image)?.name ?? t('ui.control_image') : t('ui.no_canny_map');
+  if (d.control) input('controlKind').value = d.control.kind;
+  input('addControl').disabled = !caps?.controlKinds?.includes(input('controlKind').value as NonNullable<Draft['control']>['kind']);
+  element('controlName').textContent = d.control ? session!.assets.find(a => a.id === d.control!.image)?.name ?? t('ui.control_image') : t('ui.no_control_map');
   input('controlStrength').value = d.control?.strength === undefined ? '' : String(d.control.strength);
   const parameters = element('parameters'); parameters.replaceChildren();
   for (const key of ['steps', 'guidance', 'strength', 'identityStyleStrength', 'appearanceStrength', 'sampler', 'scheduler', 'negativePrompt']) {
@@ -239,9 +240,10 @@ action('new', async () => { await saveMask(); await flush(); const created: Sess
 action('import', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (assets[0]) { session!.draft.source = assets[0].id; delete session!.draft.mask; session!.draft.mode = 'edit'; selected = []; await refresh(); fields(); await flush(); show(); } });
 action('clearSource', async () => { delete session!.draft.source; delete session!.draft.mask; maskDirty = false; selected = []; fields(); await flush(); show(); });
 action('addReference', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (!assets.length) return; session!.draft.references.push({ id: t('reference.name', { number: session!.draft.references.length + 1 }), role: 'subject', images: assets.map(a => a.id) }); await refresh(); references(); admission(); await flush(); });
-action('addControl', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (assets[0]) { session!.draft.control = { image: assets[0].id, kind: 'canny' }; await refresh(); capabilities(); await flush(); } });
+action('addControl', async () => { const assets: Asset[] = await api.call('import', { id: session!.id }); if (assets[0]) { session!.draft.control = { image: assets[0].id, kind: input('controlKind').value as NonNullable<Draft['control']>['kind'] }; await refresh(); capabilities(); await flush(); } });
 action('clearControl', async () => { delete session!.draft.control; capabilities(); await flush(); });
 input('controlStrength').oninput = scheduleSave;
+input('controlKind').onchange = () => { if (session?.draft.control) session.draft.control.kind = input('controlKind').value as NonNullable<Draft['control']>['kind']; capabilities(); scheduleSave(); };
 action('run', async () => { session!.draft = collect(); await saveMask(); await flush(); await api.call('submit', { id: session!.id, draft: session!.draft, samples: Number(input('samples').value), parent }); await refresh(); });
 action('resume', async () => { await api.call('resume', { id: session!.id }); await refresh(); });
 action('cancelSelected', async () => { const owner = session!; for (const run of owner.runs.filter(run => selected.includes(run.id) && ['queued', 'running'].includes(run.status))) await api.call('cancel', { id: owner.id, runId: run.id }); await refresh(); });

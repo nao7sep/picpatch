@@ -39,3 +39,13 @@ it('derives distinct sidecar names for generated literal basenames', () => {
   expect(new Set(paths).size).toBe(names.length);
   expect(paths.every(path => path.startsWith(directory) && path.endsWith('-picpatchsdk.json'))).toBe(true);
 });
+
+it('reads masked records while preserving legacy records with an unknown mask mechanism', async () => {
+  const original = JSON.parse(await readFile(fixture('current'), 'utf8'));
+  expect(validateArtifactRecord(original)).not.toHaveProperty('maskMode');
+  for (const maskMode of ['native', 'composite', 'latent-composite']) {
+    const data = JSON.parse(await readFile(fixture(`masked-${maskMode}`), 'utf8'));
+    expect(validateArtifactRecord(data).maskMode).toBe(maskMode);
+  }
+  expect(() => validateArtifactRecord({ ...original, maskMode: 'guaranteed-identity' })).toThrow();
+});
