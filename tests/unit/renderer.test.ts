@@ -334,3 +334,16 @@ it.each(['failed', 'refused', 'cancelled', 'interrupted'] as const)('restores a 
   expect(document.getElementById('admission')!.textContent).not.toContain('Wait');
   await flush(); expect(session.draft.source).toBeUndefined();
 });
+it('reverts an empty session name without poisoning draft saves', async () => {
+  field('sessionName').value = ' '; field('sessionName').dispatchEvent(new Event('input'));
+  field('sessionName').dispatchEvent(new Event('blur'));
+  field('text').value = 'Preserved draft'; field('text').dispatchEvent(new Event('input'));
+  await flush();
+  expect(field('sessionName').value).toBe('Test'); expect(session.draft.text).toBe('Preserved draft');
+  expect(call.mock.calls.some(([action]) => action === 'rename')).toBe(false);
+});
+it('offers comparison only for two completed results', async () => {
+  expect(field('compare').disabled).toBe(true);
+  expect(field('compareMode').hidden).toBe(true);
+  expect(field('resume').hidden).toBe(true);
+});

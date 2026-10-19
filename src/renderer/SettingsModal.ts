@@ -13,7 +13,8 @@ export function settingsModal(api: Bridge, changed: () => Promise<void>, message
   let save: Promise<void> | undefined;
   let retry: (() => Promise<void>) | undefined;
   let failedAtClose = false;
-  let initial = ''; let saving = false;
+  let initial = ''; let saving = false; let resourcesBusy = false;
+  function lockResources() { for (const key of paths) { field(key).disabled = resourcesBusy; field(`choose-${key}`).disabled = resourcesBusy; } }
   const snapshot = () => JSON.stringify([...paths, 'theme', 'language', 'uiFont'].map(key => field(key).value));
   const shell = modal(surface, el('cancelSettings'), { focus: () => field('uiFont'), canClose: async () => {
     if (saving) return false;
@@ -39,6 +40,8 @@ export function settingsModal(api: Bridge, changed: () => Promise<void>, message
   el('settingsButton').onclick = () => { void (async () => {
     const overview = await api.call('overview');
     for (const key of paths) { field(key).value = overview.settings.profile[key] ?? ''; field(key).placeholder = overview.locations[key] ?? t('ui.managed_native_engine'); }
+    resourcesBusy = overview.resourcesBusy ?? Boolean(overview.queue?.active); lockResources();
+    el('resourceLock').hidden = !resourcesBusy;
     systemTheme(overview.systemDark);
     field('uiFont').value = overview.settings.uiFont ?? ''; field('uiFont').placeholder = defaultFont;
     field('theme').value = overview.settings.theme ?? 'system';
@@ -63,7 +66,7 @@ export function settingsModal(api: Bridge, changed: () => Promise<void>, message
         await api.call('preferences', value); initial = submitted; await changed();
         if (snapshot() === submitted) shell.close();
         retry = undefined;
-      } finally { saving = false; controls.forEach(control => { control.disabled = false; }); validate(); }
+      } finally { saving = false; controls.forEach(control => { control.disabled = false; }); lockResources(); validate(); }
     };
     failedAtClose = false; save = retry(); void save.catch(report);
   };

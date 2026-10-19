@@ -1,4 +1,4 @@
-import { preference } from '../shared/i18n/index.ts';
+import { preference, UiError } from '../shared/i18n/index.ts';
 import { errorRecord } from './records.ts';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -72,8 +72,11 @@ export class Application {
     const prepared = await prepareModel(modelId, { ...components, onEvent: this.sdkEvents({ action: 'prepare', modelId }), signal, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
     await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
   }
+  resourcesChanged(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }): boolean {
+    return (['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const).some(key => (value[key] || undefined) !== this.settings.profile[key]);
+  }
   async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string; uiFont?: string }) {
-    if (this.queue.busy()) throw new Error('Finish or cancel queued work before changing resource settings.');
+    if (this.queue.busy() && this.resourcesChanged(value)) throw new UiError('error.finish_or_cancel_queued_work_before_changing_resource_settings');
     if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new Error('Invalid theme.');
     await this.updateSettings(next => {
       for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) {

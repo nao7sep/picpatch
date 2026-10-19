@@ -29,7 +29,6 @@ let overview: any;
 let selected: string[] = [];
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saves = Promise.resolve();
-let renamePending = false;
 let commands = Promise.resolve();
 function command(work: () => unknown, key?: string) {
   const owner = key && !['new','delete','collection','save','saveSettings','cancel'].includes(key) ? requestIssues : shellIssues;
@@ -72,8 +71,8 @@ function scheduleSave() { if (!session) return; session.draft = collect(); admis
 async function flush() {
   clearTimeout(saveTimer); saveTimer = undefined;
   if (!session) return;
-  const id = session.id, draft = structuredClone(session.draft), selection = [...selected], name = session.name, rename = renamePending;
-  const next = saves.then(async () => { await api.call('draft', { id, draft, selection }); if (rename) { await api.call('rename', { id, name }); if (session?.id === id && session.name === name) renamePending = false; } });
+  const id = session.id, draft = structuredClone(session.draft), selection = [...selected];
+  const next = saves.then(() => api.call('draft', { id, draft, selection }));
   saves = next.catch(() => {}); await next; requestIssues.clear('draft');
 }
 function fields() {
@@ -94,7 +93,7 @@ function admission() {
   input('paint').disabled = !session.draft.source || !commandTargetReady(session) || !caps || caps.maskMode === 'none';
   const messages = session.draft.modelIds.flatMap(id => { const model = overview.models.find((m: any) => m.id === id); return model ? incompatibilities(session!.draft, model.capabilities).map(message => t('admission.reason', { model: id, reason: message })) : [t('admission.unavailable', { model: id })]; });
   if (!commandTargetReady(session)) messages.unshift(t('conversation.waiting'));
-  element('admission').textContent = messages.reduce((first, rest) => t('common.lines', { first, rest }), '');
+  element('admission').textContent = messages.length ? messages.reduce((first, rest) => t('common.lines', { first, rest })) : '';
   input('run').disabled = !session.draft.text.trim() || !session.draft.modelIds.length || messages.length > 0;
 }
 function capabilities() {
@@ -150,7 +149,11 @@ function target() {
   if (!preview.hidden) preview.src = imageUrl(source!); else preview.removeAttribute('src');
   element('sourceName').textContent = source ? t('conversation.target', { name: session!.assets.find(a => a.id === source)?.name ?? t('conversation.image', { number: session!.runs.findIndex(r => r.id === source) + 1 }) }) : d.references.length ? t('conversation.references') : t('conversation.generate');
 }
+let renderedHistory = '';
 function results() {
+  const signature = JSON.stringify([session!.id, session!.runs, selected, activeLocale()]);
+  if (signature === renderedHistory) return;
+  renderedHistory = signature;
   const holder = element('results'), scrollTop = holder.scrollTop; const items = [];
   for (const [index, run] of session!.runs.entries()) {
     const b = document.createElement('button'); b.className = `result${selected.includes(run.id) ? ' selected' : ''}`;
@@ -164,7 +167,7 @@ function results() {
     }
     b.append(inputs);
     if (run.output) { const img = document.createElement('img'); img.src = imageUrl(run.id); img.alt = ''; img.loading = 'lazy'; b.append(img); }
-    const text = document.createElement('div'); text.textContent = t('run.card', { model: run.modelId, seed: run.seed, status: term('status', run.status) }); b.append(text);
+    const text = document.createElement('div'); text.textContent = t('run.card', { model: run.modelId, seed: String(run.seed), status: term('status', run.status) }); b.append(text);
     items.push({ key: run.id, label: t('common.lines', { first: heading.textContent, rest: t('common.lines', { first: run.draft.text, rest: text.textContent }) }), element: b });
   }
   renderCollection(holder, items, { label: t('ui.results'), empty: t('ui.generated_images_and_queued_attempts_appear_here'), selected, multiple: true, select: keys => { void command(async () => {
@@ -175,7 +178,7 @@ function results() {
   }).catch(() => {}); } });
   holder.scrollTop = scrollTop;
 }
-function comparisonVisible(visible: boolean) { comparison.hidden = !visible; element('compare').setAttribute('aria-pressed', String(visible)); }
+function comparisonVisible(visible: boolean) { comparison.hidden = !visible; input('compareMode').hidden = !visible; input('wipePosition').hidden = !visible || input('compareMode').value !== 'wipe'; element('compare').setAttribute('aria-pressed', String(visible)); }
 function show() {
   if (selected.length !== 2) { comparisonVisible(false); element('imageStage').classList.remove('wipe'); input('wipePosition').hidden = true; }
   const run = session!.runs.find(r => r.id === selected[selected.length - 1]);
@@ -184,7 +187,9 @@ function show() {
   if (asset !== image.dataset.asset) { painting = false; mask.classList.remove('painting'); element('paint').textContent = t('ui.paint_mask'); }
   element('empty').hidden = Boolean(asset); element('imageStage').hidden = !asset;
   if (asset && image.dataset.asset !== asset) { image.dataset.asset = asset; image.src = imageUrl(asset); maskDirty = false; undo.length = 0; redo.length = 0; }
-  element('resultInfo').textContent = run ? [t('run.summary', { status: term('status', run.status), model: run.modelId, seed: run.seed }), ...(run.issue ? [errorText(run.issue)] : []), ...(run.notices ?? []).map(errorText)].reduce((first, rest) => t('common.lines', { first, rest })) : '';
+  element('resultInfo').textContent = run ? [t('run.summary', { status: term('status', run.status), model: run.modelId, seed: String(run.seed) }), ...(run.issue ? [errorText(run.issue)] : []), ...(run.notices ?? []).map(errorText)].reduce((first, rest) => t('common.lines', { first, rest })) : '';
+  input('compare').disabled = selected.length !== 2 || !selected.every(id => session!.runs.some(run => run.id === id && run.output));
+  input('delete').disabled = session!.runs.some(run => ['queued','running'].includes(run.status));
   input('cancelSelected').disabled = !session!.runs.some(run => selected.includes(run.id) && ['queued', 'running'].includes(run.status));
   input('reuse').disabled = !run; input('editResult').disabled = !run?.output; input('save').disabled = !run?.output; input('saveSettings').disabled = !run?.output;
 }
@@ -254,17 +259,24 @@ async function refresh() {
   for (const failure of overview.failures) { const p = document.createElement('p'); p.textContent = errorText(failure.message); holder.append(p); }
   if (session) { const owner = session; const fresh: Session = await api.call('get', { id: owner.id }); if (session === owner) { owner.runs = fresh.runs; owner.assets = fresh.assets; const recovered = recoverCommand(owner.draft, owner.runs); if (recovered !== owner.draft) { owner.draft = recovered; fields(); void flush().catch(error => requestIssues.show('draft', error)); } admission(); results(); show(); } }
   if (overview.historyIssue) shellIssues.show('history', overview.historyIssue); else shellIssues.clear('history');
+  updateRunStatus();
+}
+function updateRunStatus() {
+  if (!overview) return;
   const active = overview.queue.active;
   element('status').textContent = overview.queue.paused ? t('run.paused', { reason: overview.queue.issue ? errorText(overview.queue.issue) : t('ui.resume_when_ready') }) : active ? t('run.elapsed', { stage: term('stage', active.stage), count: Math.max(0, Math.floor((Date.now() - active.startedAt) / 1000)) }) : t('ui.ready');
+  element('resume').hidden = !overview.queue.paused && !session?.runs.some(run => run.status === 'queued');
   element('cancel').hidden = !active;
-  const progress = element<HTMLProgressElement>('progress'); progress.hidden = !active?.progress;
-  if (active?.progress) { progress.max = active.progress.total; progress.value = active.progress.completed; }
+  const progress = element<HTMLProgressElement>('progress'); progress.hidden = !active;
+  if (active?.progress) { progress.max = active.progress.total; progress.value = active.progress.completed; } else progress.removeAttribute('value');
 }
+const statusTimer = setInterval(() => { if (overview?.queue.active) updateRunStatus(); }, 1000);
+window.addEventListener('pagehide', () => clearInterval(statusTimer), { once: true });
 async function open(id: string) {
   element('request').inert = true; input('sessionName').disabled = true;
   try {
   if (session) { await saveMask(); await flush(); }
-  session = await api.call('get', { id }); renamePending = false; selected = session!.selection ?? session!.runs.filter(r => r.output).slice(-1).map(r => r.id);
+  session = await api.call('get', { id }); selected = session!.selection ?? session!.runs.filter(r => r.output).slice(-1).map(r => r.id);
   fields(); results(); show();
   } finally { element('request').inert = false; input('sessionName').disabled = false; }
 }
@@ -294,7 +306,7 @@ action('cancel', async () => { const active = overview.queue.active; if (active)
 action('reuse', async () => { await saveMask(); const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run) return; session!.draft = structuredClone(run.draft); session!.draft.seed = run.seed; session!.draft.modelIds = [run.modelId]; fields(); await flush(); });
 action('editResult', async () => { const run = session!.runs.find(r => r.id === selected.at(-1)); if (!run?.output) return; await saveMask(); session!.draft = targetImage(collect(), run.id); fields(); await flush(); show(); });
 action('fit', () => scale(true)); action('actual', () => { input('zoom').value = '100'; scale(false); }); input('zoom').oninput = () => scale(false);
-action('paint', () => { selected = []; show(); painting = !painting; mask.classList.toggle('painting', painting); element('paint').textContent = painting ? t('ui.finish_painting') : t('ui.paint_mask'); });
+action('paint', () => { show(); painting = !painting; mask.classList.toggle('painting', painting); element('paint').textContent = painting ? t('ui.finish_painting') : t('ui.paint_mask'); });
 action('clearMask', async () => { context.clearRect(0,0,mask.width,mask.height); delete session!.draft.mask; maskDirty = false; await flush(); });
 action('undoMask', () => { const previous = undo.pop(); if (previous) { redo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(previous,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
 action('redoMask', () => { const next = redo.pop(); if (next) { undo.push(context.getImageData(0,0,mask.width,mask.height)); context.putImageData(next,0,0); maskDirty = true; maskRevision++; return saveMask().then(flush); } });
@@ -302,7 +314,17 @@ action('compare', async () => { const second = element<HTMLImageElement>('compar
 for (const [id, sidecar] of [['save',false], ['saveSettings',true]] as const) action(id, async () => { await flush(); const result = await api.call('export', { id: session!.id, runId: selected.at(-1), sidecar, includeInputs: input('includePrompts').checked }); if (result?.status === 'refused') throw Object.assign(new Error(result.message), { code: result.code, effect: result.effect }); if (result?.sidecar?.status === 'failed') throw new UiError('ui.image_saved_its_settings_sidecar_could_not_be_saved'); if (result?.status === 'saved') element('status').textContent = sidecar ? t('ui.image_and_settings_saved') : t('ui.image_saved'); });
 action('delete', async () => { const id = session!.id; if (await api.call('delete', { id })) { session = undefined; await start(); } });
 action('collection', async () => { await saveMask(); await flush(); if (await api.call('collection')) { session = undefined; await start(); } });
-input('sessionName').oninput = () => { session!.name = input('sessionName').value; renamePending = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => { void flush().then(refresh).catch(issue); }, 350); };
+async function renameSession() {
+  const owner = session; if (!owner) return;
+  const name = input('sessionName').value.trim();
+  if (!name) { input('sessionName').value = owner.name; element('renameIssue').textContent = t('ui.enter_a_session_name'); return; }
+  element('renameIssue').textContent = '';
+  if (name === owner.name) return;
+  await api.call('rename', { id: owner.id, name }); owner.name = name;
+}
+input('sessionName').onblur = () => { void command(renameSession, 'rename').catch(() => {}); };
+input('sessionName').onkeydown = event => { if (event.key === 'Enter' && !isComposing(event)) { event.preventDefault(); void command(renameSession, 'rename').catch(() => {}); } };
+
 for (const id of ['text','width','height','seed','expand','outWidth','outHeight','outLeft','outTop']) input(id).addEventListener('input', () => { scheduleSave(); });
 let closing = false;
 let closeFocus: HTMLElement | undefined;

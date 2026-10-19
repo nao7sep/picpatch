@@ -196,12 +196,12 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       await storePane({ uiZoom: zoom }).catch(error => records?.write('warn', 'UI zoom could not be retained.', { error: errorRecord(error) })); logs?.updateAppearance(); return;
     }
     case 'locale': return { ...localeState(), uiFont: service.settings.uiFont };
-    case 'overview': return { ...await service.overview(), locale: localeState(), systemDark: systemDark() };
+    case 'overview': return { ...await service.overview(), resourcesBusy: Boolean(managed) || service.queue.busy(), locale: localeState(), systemDark: systemDark() };
     case 'create': return service.sessions.create(t('session.untitled'));
     case 'get': return service.sessions.get(payload.id);
     case 'draft': return service.draft(payload.id, payload.draft as Draft, payload.selection);
     case 'rename': if (typeof payload.name !== 'string' || !payload.name.trim()) throw new UiError('ui.enter_a_session_name'); return service.sessions.update(payload.id, session => { session.name = payload.name; });
-    case 'delete': { const answer = await ask({ message: message('ui.delete_this_session_and_its_retained_images'), detail: message('ui.exported_images_and_original_files_are_kept'), buttons: [message('ui.keep_session'), message('ui.delete_session')] }); if (answer.response !== 1) return false; await service.remove(payload.id); return true; }
+    case 'delete': { if (service.queue.busy(payload.id)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); const answer = await ask({ message: message('ui.delete_this_session_and_its_retained_images'), detail: message('ui.exported_images_and_original_files_are_kept'), buttons: [message('ui.keep_session'), message('ui.delete_session')] }); if (answer.response !== 1) return false; await service.remove(payload.id); return true; }
     case 'import': { const files = payload.path ? [payload.path] : await pick(['openFile', 'multiSelections'], t('ui.add_images')); const assets = []; for (const path of files) assets.push(await service.importImage(payload.id, path)); return assets; }
     case 'mask': return service.mask(payload.id, payload.bytes);
     case 'submit': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.submit(payload.id, payload.draft, payload.samples);
@@ -209,7 +209,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'resume': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.resume(payload.id);
     case 'export': { const result = await dialog.showSaveDialog(window!, { title: t('ui.save_image'), defaultPath: 'image.png', filters: [{ name: t('ui.png_image'), extensions: ['png'] }] }); if (result.canceled || !result.filePath) return; return service.export(payload.id, payload.runId, result.filePath, payload.sidecar === true, payload.includeInputs === true); }
     case 'cancelManaged': managed?.controller.abort(); return;
-    case 'preferences': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
+    case 'preferences': if (managed && service.resourcesChanged(payload)) throw new UiError('ui.wait_for_the_current_resource_operation'); await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
     case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location')))[0];
     case 'pickComponent': {
       if (typeof payload.directory !== 'string' || !isAbsolute(payload.directory)) throw new UiError('ui.choose_the_model_bundle_first');
