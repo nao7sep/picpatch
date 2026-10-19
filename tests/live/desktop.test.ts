@@ -15,6 +15,12 @@ it('packages and starts the real renderer from outside the checkout without mode
   try {
     const executable = join(root, 'dist/PicPatch-darwin-arm64/PicPatch.app/Contents/MacOS/PicPatch');
     const environment: NodeJS.ProcessEnv = { ...process.env, PICPATCH_DATA_DIR: home }; delete environment.ELECTRON_RUN_AS_NODE;
+    const bundle = join(root, 'dist/PicPatch-darwin-arm64/PicPatch.app/Contents');
+    const info = JSON.parse((await execute('/usr/bin/plutil', ['-convert','json','-o','-',join(bundle,'Info.plist')])).stdout);
+    const metadata = JSON.parse(await readFile(join(root,'package.json'),'utf8'));
+    expect(info.CFBundleName).toBe(metadata.productName); expect(info.CFBundleShortVersionString).toBe(metadata.version);
+    const icon = await readFile(join(bundle,'Resources',info.CFBundleIconFile));
+    expect(icon.subarray(0,4).toString()).toBe('icns'); expect(icon.readUInt32BE(4)).toBe(icon.length);
     await execute(executable, ['--smoke'], { cwd: tmpdir(), env: environment, timeout: 25_000 });
     const { readdir } = await import('node:fs/promises');
     const sessions = await readdir(join(home, 'sessions'));

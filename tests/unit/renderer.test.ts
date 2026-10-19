@@ -232,3 +232,15 @@ it('routes a source drop through import and clears its own batch refusal after c
   expect(call).toHaveBeenCalledWith('import',{id:session.id,path:'/fixture/photo.png'});
   expect(session.draft.mode).toBe('edit'); expect(field('requestIssues').hidden).toBe(true);
 });
+it('shows app-owned About metadata and routes only its fixed project links', async () => {
+  const { about } = await import('../../src/shared/about.ts');
+  const metadata = JSON.parse(await readFile('package.json','utf8'));
+  menuCommand('about');
+  expect((field('about') as unknown as HTMLDialogElement).open).toBe(true);
+  expect(field('aboutIdentity').textContent).toBe(`${metadata.productName} ${metadata.version}`);
+  expect(field('aboutCopyright').textContent).toBe(about.copyright);
+  const links = [...document.querySelectorAll<HTMLAnchorElement>('#aboutLinks a')];
+  expect(links.map(link=>link.href)).toEqual([about.repository,about.issues]);
+  links[1]!.click(); expect(call).toHaveBeenCalledWith('openProjectLink',{destination:'issues'});
+  field('closeAbout').click(); await vi.waitFor(()=>expect((field('about') as unknown as HTMLDialogElement).open).toBe(false));
+});

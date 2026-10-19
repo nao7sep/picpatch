@@ -24,3 +24,5 @@ dialog[open]{display:flex;flex-direction:column}.modalHeader,.modalFooter{flex:n
 #recordLines{font-family:var(--font-mono,ui-monospace,"Menlo","Consolas",monospace)}
 
 #collectionLocation{margin-inline-start:.35em;overflow-wrap:anywhere}
+
+#about{width:420px}#about .modalFooter{border:0}#aboutIdentity{margin-top:0}.aboutIntro{white-space:pre-line}#about a{color:var(--accent);overflow-wrap:anywhere}.visuallyHidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}

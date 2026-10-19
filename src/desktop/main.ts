@@ -1,3 +1,4 @@
+import { about } from '../shared/about.ts';
 import { normalizeZoom, nextZoom, windowMinimum } from '../shared/appearance.ts';
 import type { PaneState } from '../app/layout-state.ts';
 import { accelerator, shortcutCommand } from '../shared/shortcuts.ts';
@@ -8,7 +9,7 @@ import { bootstrapLanguage, selectLanguage, localeState, prepareChromiumLanguage
 import { t, term, number, errorText, errorNotice, UiError, message } from '../shared/i18n/index.ts';
 import { Records, errorRecord } from '../app/records.ts';
 import { readPaneState, savePaneState } from '../app/layout-state.ts';
-import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor, nativeTheme, systemPreferences, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor, nativeTheme, systemPreferences, screen, shell } from 'electron';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, basename, relative, isAbsolute, delimiter } from 'node:path';
@@ -147,7 +148,7 @@ async function start() {
   nativeTheme.themeSource = service.settings.theme ?? 'system';
   nativeTheme.on('updated', () => { window?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2'); if (rendererReady) window?.webContents.send('picpatch:changed'); });
   menus();
-  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', icon: join(here, 'icon.png'), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2', webPreferences: { zoomFactor: normalizeZoom(paneState.uiZoom), preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', ...(process.platform === 'darwin' ? {} : { icon: join(here, 'icon.png') }), show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#17191c' : '#f4f4f2', webPreferences: { zoomFactor: normalizeZoom(paneState.uiZoom), preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   window.on('move', fitMinimum);
   screen.on('display-metrics-changed', fitMinimum);
   fitMinimum();
@@ -174,6 +175,7 @@ async function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections
 async function dispatch(action: string, payload: any, signal?: AbortSignal) {
   switch (action) {
     case 'closeWindow': void lifetime.close(); return;
+    case 'openProjectLink': { if (payload.destination !== 'repository' && payload.destination !== 'issues') throw new Error('Unknown project link.'); await shell.openExternal(about[payload.destination as 'repository' | 'issues']); return; }
     case 'records': return records?.list() ?? [];
     case 'ready': rendererReady = true; if (smoke) { if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, join(here, 'tools/uv')); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
     case 'paneState': if (payload.requestWidth !== undefined) { await storePane({ requestWidth: payload.requestWidth, sidebar: payload.sidebar }); return; } return paneState;
@@ -225,7 +227,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
 
 function menus() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'PicPatch', submenu: [{ label: t('ui.settings'), accelerator: accelerator('settingsButton'), click: () => command('settingsButton') }, { type: 'separator' }, { label: t('ui.about_picpatch'), click: () => { void ask({ message: message('ui.about_picpatch'), detail: message('ui.generate_and_refine_images_with_local_aigpl30orlater') , buttons: [message('ui.close')], destructive: false }).catch(error => records?.write('warn', 'About could not open.', { error: errorRecord(error) })); } }, { type: 'separator' }, { role: 'services', label: t('native.services') }, { role: 'hide', label: t('native.hide') }, { role: 'hideOthers', label: t('native.hideOthers') }, { role: 'unhide', label: t('native.showAll') }, { type: 'separator' }, { label: t('native.quit'), accelerator: accelerator('quit'), click: () => command('quit') }] },
+    { label: 'PicPatch', submenu: [{ label: t('ui.settings'), accelerator: accelerator('settingsButton'), click: () => command('settingsButton') }, { type: 'separator' }, { label: t('ui.about_picpatch'), click: () => command('about') }, { type: 'separator' }, { role: 'services', label: t('native.services') }, { role: 'hide', label: t('native.hide') }, { role: 'hideOthers', label: t('native.hideOthers') }, { role: 'unhide', label: t('native.showAll') }, { type: 'separator' }, { label: t('native.quit'), accelerator: accelerator('quit'), click: () => command('quit') }] },
     { label: t('ui.file'), submenu: [{ label: t('ui.new_session_2'), accelerator: accelerator('new'), click: () => command('new') }, { label: t('ui.open_source_image'), accelerator: accelerator('import'), click: () => command('import') }, { label: t('ui.save_image_2'), accelerator: accelerator('save'), click: () => command('save') }, { label: t('ui.save_image_with_settings'), accelerator: accelerator('saveSettings'), click: () => command('saveSettings') }, { type: 'separator' }, { label: t('ui.generate_or_edit'), accelerator: accelerator('run'), click: () => command('run') }] },
     { label: t('native.edit'), submenu: [{ role: 'undo', label: t('native.undo') }, { role: 'redo', label: t('native.redo') }, { type: 'separator' }, { role: 'cut', label: t('native.cut') }, { role: 'copy', label: t('native.copy') }, { role: 'paste', label: t('native.paste') }, { role: 'pasteAndMatchStyle', label: t('native.pasteMatch') }, { role: 'delete', label: t('native.delete') }, { role: 'selectAll', label: t('native.selectAll') }] },
     { label: t('native.view'), submenu: [{ label: t('shortcuts.title'), accelerator: accelerator('shortcutsButton'), click: () => command('shortcutsButton') }, { type: 'separator' }, { role: 'reload', label: t('native.reload') }, { role: 'forceReload', label: t('native.forceReload') }, { role: 'toggleDevTools', label: t('native.developerTools') }, { type: 'separator' }, { label: t('native.zoomIn'), accelerator: accelerator('uiZoomIn'), click: () => command('uiZoomIn') }, { label: t('native.zoomOut'), accelerator: accelerator('uiZoomOut'), click: () => command('uiZoomOut') }, { label: t('native.resetZoom'), accelerator: accelerator('uiZoomReset'), click: () => command('uiZoomReset') }, { role: 'togglefullscreen', label: t('native.fullscreen') }] },

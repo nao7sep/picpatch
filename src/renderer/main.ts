@@ -1,3 +1,4 @@
+import { aboutModal } from './AboutModal.ts';
 import { operationResults } from './operation-results.ts';
 import { defaultFont, fixedFont } from '../shared/appearance.ts';
 import { commandShortcuts } from './shortcuts.ts';
@@ -262,6 +263,7 @@ let closing = false;
 let closeFocus: HTMLElement | undefined;
 let flushing: Promise<void> | undefined;
 const messages = messageModal();
+const about = aboutModal(api);
 shortcutsModal(); toolbar(element('canvasActions'));
 managementModal(api, refresh); const settings = settingsModal(api, refresh, messages); recordsModal(api);
 let pan: { x: number; y: number; left: number; top: number } | undefined;
@@ -297,6 +299,7 @@ function dispatchCommand(id: string) {
   if (['uiZoomIn', 'uiZoomOut', 'uiZoomReset'].includes(id)) { void api.call('uiZoom', { direction: id === 'uiZoomIn' ? 'in' : id === 'uiZoomOut' ? 'out' : 'reset' }).catch(issue); return; }
   if (id === 'quit') { void api.call('closeWindow').catch(issue); return; }
   if (closing || !loaded) return;
+  if (id === 'about') { if (!document.querySelector('dialog[open]')) about.open(); return; }
   const target = document.getElementById(id);
   if (target instanceof HTMLButtonElement && !target.disabled && !document.querySelector('dialog[open]')) target.click();
 }
