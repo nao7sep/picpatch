@@ -125,8 +125,9 @@ export function installEngine(options: InstallEngineOptions): Promise<EngineInst
         const env = { ...environment(installation), PATH: [...toolDirectories, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':'),
           UV_PROJECT_ENVIRONMENT: join(installation, 'venv'), UV_CACHE_DIR: cache, UV_PYTHON_INSTALL_DIR: python,
           UV_PYTHON_BIN_DIR: join(python, 'bin'), UV_PYTHON_DOWNLOADS: operation.offline ? 'never' : 'automatic', UV_NO_PROGRESS: '1', UV_HTTP_TIMEOUT: '60', UV_LINK_MODE: 'copy' };
+        // Bytecode compiled once here spares every worker start from compiling imports (the worker runs with -B).
         operationStage(operation, 'installing', 'Installing locked Python dependencies.');
-        await runCommand(operation.uvExecutable, ['sync', '--project', project, '--locked', '--no-default-groups', '--extra', 'inference', '--no-install-project', '--no-config', '--python', definition.identity.python, '--managed-python', ...(operation.offline ? ['--offline'] : [])], installation, env, signal, budget);
+        await runCommand(operation.uvExecutable, ['sync', '--project', project, '--locked', '--no-default-groups', '--extra', 'inference', '--no-install-project', '--no-config', '--compile-bytecode', '--python', definition.identity.python, '--managed-python', ...(operation.offline ? ['--offline'] : [])], installation, env, signal, budget);
         const result: ReadyEngine = { status: 'ready', code: 'ENGINE_READY', identity: definition.identity, engineDirectory: root, pythonExecutable: join(installation, 'venv', 'bin', 'python') };
         operationStage(operation, 'checking', 'Checking installed dependency compatibility.');
         await runCommand(operation.uvExecutable, ['pip', 'check', '--python', result.pythonExecutable, '--no-config', '--offline'], installation, env, signal, 60_000);

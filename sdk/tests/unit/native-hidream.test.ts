@@ -15,7 +15,7 @@ it.each(['hidream-o1', 'hidream-o1-dev'])('prepares %s as one fingerprinted comb
   const { model } = await prepareModel(variant, options);
   expect(model.manifest.components).toHaveLength(1);
   expect(nativeWeightArguments(model)).toEqual(['--model', join(directory, options.checkpoint)]);
-  expect(listModels().find(entry => entry.id === variant)).toMatchObject({ acquisition: 'external', evidence: 'source-audited', family: 'hidream-o1' });
+  expect(listModels().find(entry => entry.id === variant)).toMatchObject({ acquisition: 'external', evidence: 'source', family: 'hidream-o1' });
   for (const extra of [{ vae: 'vae.gguf' }, { t5: 't5.gguf' }, { loras: [{ path: 'lora.safetensors' }] }]) {
     await expect(prepareModel(variant, { ...options, ...extra })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   }

@@ -2,6 +2,7 @@ import { hiDreamCapabilities, hiDreamVariants, isHiDream } from './hidream.ts';
 import { flowCapabilities, flowVariants } from './flow.ts';
 import { nativeRelease } from '../../runtime/engine/native-release.ts';
 import type { ModelCapabilities } from '../../contracts.generated.ts';
+import { modelEvidence, modelProfile } from '../../models/profiles.ts';
 
 /** Source-audited CLI contract; native inference evidence remains separate. */
 export { nativeRevision };
@@ -27,7 +28,7 @@ export function nativeCapabilities(variant: string, model: string = variant): Mo
 }
 export function nativeModels() {
   return nativeVariants.map(variant => ({ id: variant, variant, family: variant.startsWith('sdxl') ? 'sdxl' : variant.startsWith('sd15') ? 'sd15' : variant === 'sd35-large' ? 'sd3' : isHiDream(variant) ? 'hidream-o1' : 'chroma',
-    acquisition: 'external' as const, status: 'experimental' as const, evidence: 'source-audited' as const,
+    acquisition: 'external' as const, ...modelEvidence(variant, 'source'), profile: modelProfile(variant),
     capabilities: nativeCapabilities(variant), runtime: { name: 'stable-diffusion.cpp' as const, version: nativeRevision,
       platform: 'darwin' as const, architecture: 'arm64' as const } }));
 }

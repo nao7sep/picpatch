@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { createImageClient, prepareModel } from 'picpatchsdk';
 
-// npx tsx examples/identity-edit.ts MODEL_DIR CHECKPOINT PHOTOMAKER SD_CLI OUTPUT PHOTO [PHOTO...]
+// node examples/identity-edit.ts MODEL_DIR CHECKPOINT PHOTOMAKER SD_CLI OUTPUT PHOTO [PHOTO...]
 const [directory, checkpoint, photoMaker, executable, output, ...photos] = process.argv.slice(2);
 if (!directory || !checkpoint || !photoMaker || !executable || !output || !photos.length) {
   throw new Error('Supply model directory, relative checkpoint/PhotoMaker files, executable, output and photos of one person.');

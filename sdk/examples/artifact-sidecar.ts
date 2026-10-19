@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createImageClient, type ImageClientOptions } from 'picpatchsdk';
 
-// npx tsx examples/artifact-sidecar.ts EDITOR_OPTIONS_JSON OUTPUT_PNG
+// node examples/artifact-sidecar.ts EDITOR_OPTIONS_JSON OUTPUT_PNG
 // Options point to an already prepared model/runtime; this example downloads nothing.
 const [configuration, destination] = process.argv.slice(2);
 if (!configuration || !destination) throw new Error('Supply editor-options JSON and an output PNG path.');

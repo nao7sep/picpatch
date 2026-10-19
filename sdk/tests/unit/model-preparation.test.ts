@@ -29,7 +29,7 @@ const source = (): typeof fetch => vi.fn(async () => new Response(bytes, { heade
 it('lists independent immutable pins, source, license, runtime and total size', () => {
   const model = listModels().find(model => model.acquisition === 'pinned')!;
   expect(model.downloadBytes).toBe(model.manifest.components.reduce((sum, c) => sum + c.bytes, 0));
-  expect(model).toMatchObject({ status: 'experimental', license: { id: 'Apache-2.0' }, runtime: { version: '0.22.0' } });
+  expect(model).toMatchObject({ evidence: 'real-weights', profile: { name: 'FLUX.2 Klein 4B', licence: 'commercial', tier: 'recommended' }, license: { id: 'Apache-2.0' }, runtime: { version: '0.22.0' } });
   model.manifest.components.length = 0;
   expect(listModels().find(model => model.acquisition === 'pinned')!.manifest.components.length).toBeGreaterThan(0);
 });
@@ -38,11 +38,11 @@ it.each([
   ['flux1-fill-dev-4bit', 'flux1-fill-dev', 'flux1-fill', 'flux-1-dev-non-commercial-license', 9619370039, 'a165707a846d60e70a2106980ece147ed66636f9'],
 ])('keeps %s acquisition distinct from Klein and the external variant', (id, variant, family, license, bytes, revision) => {
   const pinned = listModels().find(model => model.id === id)!;
-  expect(pinned).toMatchObject({ family, variant, acquisition: 'pinned', evidence: 'inference-tested', license: { id: license } });
+  expect(pinned).toMatchObject({ family, variant, acquisition: 'pinned', evidence: 'real-weights', license: { id: license } });
   if (pinned.acquisition !== 'pinned') throw new Error('Expected pinned acquisition.');
   expect(pinned.downloadBytes).toBe(bytes);
   expect(pinned.manifest.source.revision).toBe(revision);
-  expect(listModels().find(model => model.id === variant)).toMatchObject({ acquisition: 'external', evidence: 'api-tested' });
+  expect(listModels().find(model => model.id === variant)).toMatchObject({ acquisition: 'external', evidence: 'api', tested: [] });
 });
 it('requires explicit acquisition and rejects unknown catalog IDs without creating storage', async () => {
   await expect(prepareModel(listModels().find(model => model.acquisition === 'pinned')!.id)).rejects.toMatchObject({ code: 'MODEL_IO' });

@@ -7,6 +7,7 @@ import fillManifest from './catalog/flux1-fill-dev-4bit.manifest.json' with { ty
 import type { LocalModel, ModelManifest, ModelCapabilities } from '../contracts.generated.ts';
 import { externalModels, modelCapabilities, modelDefinition, type ExternalModel } from './variants.ts';
 import { PicPatchSdkError } from '../errors.ts';
+import { modelEvidence, modelProfile, type Evidence, type ModelProfile, type Operation } from './profiles.ts';
 import { validateModelManifest } from './verification.ts';
 
 export interface CatalogModel {
@@ -14,9 +15,11 @@ export interface CatalogModel {
   capabilities: ModelCapabilities;
   acquisition: 'pinned';
   family: string;
-  evidence: 'inference-tested';
+  evidence: Evidence;
+  /** Operations that ran with real trained weights for this exact selection. */
+  tested: Operation[];
+  profile: ModelProfile;
   variant: LocalModel['variant'];
-  status: 'experimental';
   manifest: ModelManifest;
   downloadBytes: number;
   sourceUrl: string;
@@ -34,7 +37,7 @@ export function listModels(): ModelCatalogEntry[] {
   ];
   const pinned = configurations.map((configuration): CatalogModel => {
     const pinned = validateModelManifest(configuration.manifest);
-    return { id: pinned.model, capabilities: modelCapabilities(configuration.variant, pinned.model), acquisition: 'pinned', family: modelDefinition(configuration.variant).family, evidence: 'inference-tested', variant: configuration.variant, status: 'experimental', manifest: pinned,
+    return { id: pinned.model, capabilities: modelCapabilities(configuration.variant, pinned.model), acquisition: 'pinned', family: modelDefinition(configuration.variant).family, ...modelEvidence(pinned.model, 'api'), profile: modelProfile(configuration.variant), variant: configuration.variant, manifest: pinned,
       downloadBytes: pinned.components.reduce((total, component) => total + component.bytes, 0),
       sourceUrl: `https://huggingface.co/${pinned.source.repository}/tree/${pinned.source.revision}`,
       license: { id: configuration.license, url: configuration.licenseUrl },

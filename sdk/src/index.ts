@@ -1,3 +1,4 @@
+export { VERSION } from './version.ts';
 export { createImageClient } from './client.ts';
 export type { ImageClient, ImageClientOptions } from './client.ts';
 export type { ImageResult, ImageOutcome, OperationRefusal, GenerateRequest, GenerateResult, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, OperationOptions, ProgressEvent, ReferenceGroup } from './types.ts';
@@ -18,6 +19,7 @@ export type { StorageOptions, StoragePaths } from './paths.ts';
 export { listModels } from './models/catalog.ts';
 export type { ModelVariant, ExternalModel } from './models/variants.ts';
 export type { CatalogModel, ModelCatalogEntry } from './models/catalog.ts';
+export type { Evidence, LicenceKind, MemoryClass, ModelProfile, Operation, Purpose, SpeedClass, Tier } from './models/profiles.ts';
 export { prepareModel } from './models/preparation.ts';
 export type { PrepareModelOptions, PreparedModel } from './models/preparation.ts';
 export { inspectReadiness } from './runtime/readiness.ts';

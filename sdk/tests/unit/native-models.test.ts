@@ -33,7 +33,7 @@ it.each(['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint'])('prepares explicit %s 
   expect((await verifyModel(directory, prepared.model.manifest)).status).toBe('matches-manifest');
   expect((await prepareModel(id, options)).model.manifest).toEqual(prepared.model.manifest);
   expect(await readdir(directory)).toEqual(before);
-  expect(listModels().find(item => item.id === id)).toMatchObject({ evidence: 'source-audited', acquisition: 'external' });
+  expect(listModels().find(item => item.id === id)).toMatchObject({ evidence: id === 'sdxl-inpaint' ? 'source' : 'real-weights', acquisition: 'external' });
   await writeFile(join(directory, 'vae.gguf'), 'replacement');
   expect((await prepareModel(id, options)).model.manifest.source.revision).not.toBe(prepared.model.manifest.source.revision);
 });

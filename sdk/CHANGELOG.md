@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Catalog entries replace `status` with `evidence` (`real-weights`, `tiny-runtime`, `api` or `source`, recorded per selection rather than per acquisition kind), `tested` (the operations that ran with real weights) and `profile` (display name, parameter count, memory and speed classes, licence kind, purposes and tier). `VERSION` is exported from the package entry.
+- Engine installation compiles Python bytecode, so worker starts skip recompiling imports.
+
 - Accept explicit prompt reference conditioning in GLM-Image and FLUX.2 Dev, matching their advertised capabilities; dedicated appearance and identity conditioning remain unsupported.
 
 - Add experimental external GLM-Image and FLUX.2 Dev generation/reference-editing selections through a separately managed Diffusers runtime. Preparation fingerprints the complete local pipeline; these adapters have weight-free runtime evidence, not trained-weight qualification.

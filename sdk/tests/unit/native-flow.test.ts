@@ -26,7 +26,7 @@ it.each(['sd35-large', 'chroma', 'chroma-radiance'])('prepares complete %s asset
   if (variant === 'sd35-large') expect(args).toEqual(expect.arrayContaining(['--clip_l', '--clip_g']));
   if (variant === 'chroma-radiance') expect(args).not.toContain('--vae');
   const entry = listModels().find(item => item.id === variant)!;
-  expect(entry).toMatchObject({ evidence: 'source-audited', acquisition: 'external' });
+  expect(entry).toMatchObject({ evidence: 'source', acquisition: 'external' });
   expect(() => validateGenerateRequest({ model: variant, prompt: 'A ceramic cup', outputPath: '/out.png' }, entry.capabilities)).not.toThrow();
   expect(() => validateEditRequest({ model: variant, instruction: 'Blue', sourceImage: '/in.png', outputPath: '/out.png' }, entry.capabilities)).toThrow();
   expect(() => validateGenerateRequest({ model: variant, prompt: 'Blue', outputPath: '/out.png', parameters: { strength: 0.5 } }, entry.capabilities)).toThrow();

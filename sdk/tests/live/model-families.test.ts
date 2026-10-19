@@ -35,6 +35,6 @@ it.each(['qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1', 'flux1-kontext-
     await expect(editor.generate({ prompt: 'A bowl.', size: { width: 17, height: 32 }, outputPath: join(directory, 'generate.png') })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     expect(await readdir(directory)).toEqual(['fixture.bin']);
     // An implemented experimental adapter is not a tested/acquirable catalog bundle.
-    expect(listModels().find(entry => entry.id === adapter)).toMatchObject({ acquisition: 'external', evidence: 'api-tested' });
+    expect(listModels().find(entry => entry.id === adapter)).toMatchObject({ acquisition: 'external', evidence: expect.stringMatching(/^(api|tiny-runtime)$/) });
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
 }, 60_000);

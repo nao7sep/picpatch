@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createImageClient, type ImageClientOptions } from 'picpatchsdk';
 
-// npx tsx examples/outpaint.ts EDITOR_OPTIONS_JSON SOURCE OUTPUT WIDTH HEIGHT LEFT TOP
+// node examples/outpaint.ts EDITOR_OPTIONS_JSON SOURCE OUTPUT WIDTH HEIGHT LEFT TOP
 const [config, source, output, width, height, left, top] = process.argv.slice(2);
 if (!config || !source || !output || width === undefined || height === undefined || left === undefined || top === undefined) {
   throw new Error('Supply editor-options JSON, source, output, canvas width/height and source left/top offsets.');
