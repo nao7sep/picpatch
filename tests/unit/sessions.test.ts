@@ -90,3 +90,14 @@ it('opens a session whose result record a newer PicPatch wrote, keeping the reco
   await fresh.update(session.id, value => { value.name = 'Renamed'; });
   expect(JSON.parse(await readFile(filename, 'utf8')).runs[0].record).toEqual(record);
 });
+it('lists a collection from summaries without keeping every session loaded, and follows later saves', async () => {
+  const writer = new Sessions(root); const first = await writer.create('First'); const second = await writer.create('Second');
+  const sessions = new Sessions(root);
+  const listed = await sessions.list();
+  expect(listed.sessions.map(item => item.name).sort()).toEqual(['First', 'Second']);
+  expect(sessions['loaded'].size).toBe(0);
+  await sessions.update(first.id, session => { session.name = 'Renamed'; });
+  expect((await sessions.list()).sessions.find(item => item.id === first.id)?.name).toBe('Renamed');
+  await sessions.remove(second.id);
+  expect((await sessions.list()).sessions.map(item => item.id)).toEqual([first.id]);
+});

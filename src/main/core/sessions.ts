@@ -52,6 +52,12 @@ export function validateSession(value: unknown): Session {
   check(session.draft); session.runs.forEach(run => check(run.draft));
   return structuredClone(session);
 }
+/** cover is the latest completed result. */
+function summarize(session: Session): SessionSummary {
+  let results = 0, cover: string | undefined;
+  for (const run of session.runs) if (run.status === 'completed' && run.output) { results++; cover = run.id; }
+  return { id: session.id, name: session.name, updated: session.updated, results, ...(cover ? { cover } : {}) };
+}
 /** Only files the image decoder recognises join a session; the check reads the header of the private copy. */
 async function checkImage(path: string): Promise<void> {
   try { const { width, height } = await sharp(path, { limitInputPixels: false }).metadata(); if (!width || !height) throw new Error('No image size.'); }
@@ -61,7 +67,9 @@ async function checkImage(path: string): Promise<void> {
 export class Sessions {
   readonly root: string;
   private tail: Promise<unknown> = Promise.resolve();
+  /** Full sessions the user opened or work touched; the collection listing keeps only summaries. */
   private loaded = new Map<string, Session>();
+  private summaries = new Map<string, SessionSummary>();
   constructor(root: string, private saved: (path: string, bytes: Buffer) => void = () => {}, private existingCollection = false) {
     if (!isAbsolute(root)) throw new UiError('error.session_collection_must_be_absolute');
     this.root = root;
@@ -78,20 +86,32 @@ export class Sessions {
     for (const entry of entries) {
       if (entry.isDirectory() && removing.test(entry.name)) { void rm(join(this.root, entry.name), { recursive: true, force: true }).catch(() => {}); continue; }
       if (!uuid.test(entry.name) || !entry.isDirectory()) continue;
-      try { const s = await this.read(entry.name); let results = 0, cover: string | undefined; for (const r of s.runs) if (r.status === 'completed' && r.output) { results++; cover = r.id; } sessions.push({ id: s.id, name: s.name, updated: s.updated, results, ...(cover ? { cover } : {}) }); }
-      catch (error) { failures.push({ id: entry.name, message: error instanceof Error ? error.message : 'Could not read session.' }); }
+      try {
+        let summary = this.summaries.get(entry.name);
+        if (!summary) {
+          const read = summarize(this.loaded.get(entry.name) ?? await this.parse(entry.name));
+          // A save that finished during this read is newer than the file just read.
+          summary = this.summaries.get(entry.name) ?? read; this.summaries.set(entry.name, summary);
+        }
+        sessions.push(summary);
+      } catch (error) { failures.push({ id: entry.name, message: error instanceof Error ? error.message : 'Could not read session.' }); }
     }
     return { sessions: sessions.sort((a, b) => b.updated.localeCompare(a.updated)), failures };
   }
   async get(key: string): Promise<Session> { return structuredClone(await this.read(key)); }
-  /** The cached session itself; callers only read it. */
-  private async read(key: string): Promise<Session> {
-    id(key);
-    const cached = this.loaded.get(key); if (cached) return cached;
+  /** A session as saved, read and checked, without caching it. */
+  private async parse(key: string): Promise<Session> {
     const directory = this.directory(key);
     if ((await lstat(directory)).isSymbolicLink()) throw new UiError('error.linked_sessions_are_not_supported');
     const session = validateSession(JSON.parse(await readFile(join(directory, 'session.json'), 'utf8')));
     if (session.id !== key) throw new UiError('error.session_identity_does_not_match_its_directory');
+    return session;
+  }
+  /** The cached session itself; callers only read it. */
+  private async read(key: string): Promise<Session> {
+    id(key);
+    const cached = this.loaded.get(key); if (cached) return cached;
+    const session = await this.parse(key);
     // Reopening never schedules inference. Queued work requires an explicit resume.
     for (const run of session.runs) if (run.status === 'running') { run.status = 'interrupted'; run.issue = { code: 'INTERRUPTED', message: 'The app closed before this attempt settled.', effect: 'unknown' }; }
     session.draft = recoverCommand(session.draft, session.runs);
@@ -112,7 +132,7 @@ export class Sessions {
     const valid = validateSession(session);
     const path = join(this.directory(session.id), 'session.json');
     const bytes = await writeJson(path, valid);
-    this.loaded.set(session.id, valid);
+    this.loaded.set(session.id, valid); this.summaries.set(session.id, summarize(valid));
     try { this.saved(path, bytes); } catch { /* Backup history cannot fail a primary save. */ }
   }
   update(key: string, change: (session: Session) => void): Promise<Session> {
@@ -176,7 +196,7 @@ export class Sessions {
   async remove(key: string): Promise<void> {
     const hidden = await this.serial(async () => {
       await this.read(key); const hidden = join(this.root, `${key}.removing-${randomUUID()}`);
-      await rename(this.directory(key), hidden); this.loaded.delete(key); return hidden;
+      await rename(this.directory(key), hidden); this.loaded.delete(key); this.summaries.delete(key); return hidden;
     });
     await rm(hidden, { recursive: true, force: true }).catch(() => {});
   }
