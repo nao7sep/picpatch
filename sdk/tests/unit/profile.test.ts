@@ -31,7 +31,8 @@ it('uses explicit resource paths ahead of profiles and never discovers ambient s
   expect(await inspectEngine({ profile })).toMatchObject({ engineDirectory: profile.engineDirectory, status: python });
   expect(await inspectEngine({ profile, engineDirectory: join(directory, 'explicit-engine') })).toMatchObject({ engineDirectory: join(directory, 'explicit-engine'), status: python });
   const editor = createImageClient({ profile });
-  try { await expect(editor.generate({ model: 'test', prompt: 'A bowl.', outputDirectory: directory })).rejects.toMatchObject({ code: 'ENGINE_MISSING', subject: profile.engineDirectory }); }
+  const refusal = supportsRuntime('mflux') ? { code: 'ENGINE_MISSING', subject: profile.engineDirectory } : { code: 'UNSUPPORTED_CAPABILITY' };
+  try { await expect(editor.generate({ model: 'test', prompt: 'A bowl.', outputDirectory: directory })).rejects.toMatchObject(refusal); }
   finally { await editor.dispose(); }
   await expect(prepareModel(listModels()[0]!.id, { profile })).rejects.toMatchObject({ code: 'MODEL_IO' });
   expect(await readdir(directory)).toEqual([]);

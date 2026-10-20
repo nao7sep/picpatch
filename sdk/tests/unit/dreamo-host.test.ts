@@ -25,9 +25,11 @@ it('selects isolated engine identity and source entry without ambient path confi
   expect(runtimePaths('dreamo').projectDirectory).toMatch(/runtimes[\\/]dreamo[\\/]$/);
   expect(() => runtimePaths('unknown' as never)).toThrow();
   const launch = workerLaunch('/tmp/python', '/tmp/install', 'dreamo');
-  expect(launch.args?.join(' ')).toContain('picpatch_dreamo.__main__');
-  expect(launch.args?.join(' ')).toContain('runtimes/common/src');
-  expect(launch.args?.join(' ')).not.toContain('runtimes/mflux/src');
+  // Windows paths arrive JSON-escaped (\\); compare with one separator.
+  const args = launch.args?.join(' ').replace(/\\+/g, '/');
+  expect(args).toContain('picpatch_dreamo.__main__');
+  expect(args).toContain('runtimes/common/src');
+  expect(args).not.toContain('runtimes/mflux/src');
   expect(launch.env?.HF_HUB_OFFLINE).toBe('1');
 });
 it('requires preprocessing and fixed trained components, without accepting foreign quantization', () => {
