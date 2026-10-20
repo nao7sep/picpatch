@@ -1,4 +1,6 @@
 export const defaultFont = 'system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+/** A window's background before its page paints, matching `--bg` in the renderer's tokens.css. */
+export const windowBackground = (dark: boolean) => dark ? '#11181b' : '#f3f4f1';
 export const fixedFont = 'ui-monospace, "Menlo", "Consolas", monospace';
 export function normalizeZoom(value: unknown): number { return typeof value === 'number' && Number.isFinite(value) && value >= 0.5 && value <= 3 ? value : 1; }
 export function nextZoom(value: number, direction: 'in' | 'out' | 'reset'): number {

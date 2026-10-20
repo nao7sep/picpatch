@@ -4,11 +4,10 @@ import { incompatibilities } from '../../../shared/admission.ts';
 import type { Draft } from '../../../shared/session.ts';
 import type { CatalogModel, Readiness } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
-import { modelLabel, modelSummary } from '../models.ts';
+import { modelLabel, modelSummary, tierOrder } from '../models.ts';
 import { ChevronDownIcon, ShapeIcon } from './icons.tsx';
 import { Popover } from './Popover.tsx';
 
-const TIER = { recommended: 0, standard: 1, specialist: 2 } as const;
 
 /** Ready models first, then recommended ones to set up; the rest stay behind Show more unless selected. */
 export function ModelPicker({ draft, models, hidden = 0, readiness, onDraft, onSetup }: {
@@ -19,7 +18,7 @@ export function ModelPicker({ draft, models, hidden = 0, readiness, onDraft, onS
   const [more, setMore] = useState(false);
   const comparing = draft.modelIds.length > 1;
   const state = (id: string) => readiness?.[id] ?? 'missing';
-  const order = (a: CatalogModel, b: CatalogModel) => TIER[a.profile.tier] - TIER[b.profile.tier] || a.profile.name.localeCompare(b.profile.name) || a.id.localeCompare(b.id);
+  const order = (a: CatalogModel, b: CatalogModel) => tierOrder[a.profile.tier] - tierOrder[b.profile.tier] || a.profile.name.localeCompare(b.profile.name) || a.id.localeCompare(b.id);
   const ready = models.filter(model => state(model.id) === 'ready').sort(order);
   const recommended = models.filter(model => state(model.id) !== 'ready' && model.profile.tier === 'recommended').sort(order);
   const rest = models.filter(model => state(model.id) !== 'ready' && model.profile.tier !== 'recommended').sort(order);

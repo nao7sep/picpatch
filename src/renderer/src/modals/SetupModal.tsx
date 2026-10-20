@@ -2,7 +2,7 @@
 // files already on this computer). Opening or skipping changes nothing; every
 // acquisition is its own explicit step.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { modelLabel, modelOption, modelSummary } from '../models.ts';
+import { modelLabel, modelOption, modelSummary, tierOrder } from '../models.ts';
 import { api, type CatalogModel, type Engines, type Readiness } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { Modal } from './Modal.tsx';
@@ -41,8 +41,7 @@ export function SetupModal({ models, initial, onClose, onChanged, onUse, onManag
     void run(async () => { const result = await api.download(choice); await after(); return result; });
   };
   // Downloads first, recommended models first within each kind.
-  const tier = { recommended: 0, standard: 1, specialist: 2 } as const;
-  const sorted = [...models].sort((a, b) => Number(b.acquisition === 'pinned') - Number(a.acquisition === 'pinned') || tier[a.profile.tier] - tier[b.profile.tier] || modelLabel(a.id).localeCompare(modelLabel(b.id)));
+  const sorted = [...models].sort((a, b) => Number(b.acquisition === 'pinned') - Number(a.acquisition === 'pinned') || tierOrder[a.profile.tier] - tierOrder[b.profile.tier] || modelLabel(a.id).localeCompare(modelLabel(b.id)));
   const summary = model && modelSummary(model);
 
   return (

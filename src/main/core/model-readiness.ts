@@ -1,6 +1,6 @@
 import { listModels, openModel, inspectEngine, inspectNativeEngine, type CallOptions } from 'picpatchsdk';
 import type { Settings } from './settings.ts';
-export type ModelState = 'ready' | 'missing' | 'engineMissing';
+import type { ModelState } from '../../shared/readiness.ts';
 /** Cheap presence evidence only: no imports, weight loading, hashing or downloads. */
 export async function modelReadiness(settings: Settings, call: Pick<CallOptions, 'signal' | 'onEvent'> = {}): Promise<Record<string, ModelState>> {
   // Models without a build for this computer are neither listed nor inspected.

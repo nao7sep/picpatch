@@ -3,6 +3,7 @@
 // each with its own actions. Authored text is rendered literally.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Draft, QueueState, Run, Session } from '../../../shared/session.ts';
+import { hasImage } from '../../../shared/image-command.ts';
 import { modelLabel } from '../models.ts';
 import { imageUrl } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
@@ -86,7 +87,7 @@ function TurnView({ turn, session, queue, target, saved, onEditThis, onReuse, on
   const { t } = useI18n();
   const draft = turn.draft;
   const inputs = [draft.source, ...draft.references.flatMap(group => group.images)].filter((key): key is string => Boolean(key));
-  const viewable = inputs.filter(key => available(session, key)).map(key => ({ key, run: session.runs.some(run => run.id === key) ? key : undefined }));
+  const viewable = inputs.filter(key => hasImage(session, key)).map(key => ({ key, run: session.runs.some(run => run.id === key) ? key : undefined }));
   const waiting = turn.runs.filter(pending);
   return (
     <article className="turn">
@@ -128,12 +129,8 @@ function TurnView({ turn, session, queue, target, saved, onEditThis, onReuse, on
   );
 }
 
-function available(session: Session, key: string) {
-  return session.assets.some(asset => asset.id === key) || session.runs.some(run => run.id === key && run.output);
-}
-
 function InputThumb({ session, imageKey, label, onOpen }: { session: Session; imageKey: string; label: string; onOpen: () => void }) {
-  const ready = available(session, imageKey);
+  const ready = hasImage(session, imageKey);
   return (
     <button type="button" className="input-thumb" disabled={!ready} onClick={onOpen} title={label} aria-label={label}>
       {ready ? <img src={imageUrl(session.id, imageKey, true)} alt="" loading="lazy" draggable={false} /> : <span className="input-missing" aria-hidden="true" />}

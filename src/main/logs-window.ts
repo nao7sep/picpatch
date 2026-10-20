@@ -3,7 +3,7 @@ import { locations } from './locations.ts';
 import { recordsQuery, recordId } from '../shared/records.ts';
 import type { LogsAppearance } from '../shared/logs-bridge.ts';
 import type { RecordsReader } from './core/records-reader.ts';
-import { normalizeZoom, windowMinimum } from '../shared/appearance.ts';
+import { normalizeZoom, windowBackground, windowMinimum } from '../shared/appearance.ts';
 import { t } from '../shared/i18n/index.ts';
 import { trustedSender } from './trust.ts';
 /** The logs renderer has no workspace, file-picker, or model-management authority. */
@@ -38,13 +38,13 @@ export class LogsWindow {
   }
   private send(channel: string) { if (this.window && !this.window.isDestroyed() && !this.window.webContents.isDestroyed()) this.window.webContents.send(channel); }
   updateAppearance() {
-    if (this.window && !this.window.isDestroyed()) { this.window.setTitle(t('ui.logs')); this.window.webContents.setZoomFactor(normalizeZoom(this.appearance().uiZoom)); this.fitMinimum?.(); this.window.setBackgroundColor(this.appearance().dark ? '#11181b' : '#f3f4f1'); }
+    if (this.window && !this.window.isDestroyed()) { this.window.setTitle(t('ui.logs')); this.window.webContents.setZoomFactor(normalizeZoom(this.appearance().uiZoom)); this.fitMinimum?.(); this.window.setBackgroundColor(windowBackground(this.appearance().dark)); }
     this.send('picpatch:logsAppearance');
   }
   async open(visible = true): Promise<BrowserWindow> {
     if (this.opening) return this.opening;
     if (this.window && !this.window.isDestroyed()) { if (this.window.isMinimized()) this.window.restore(); if (visible) { this.window.show(); this.window.focus(); } return this.window; }
-    const window = this.window = new BrowserWindow({ name: 'picpatch-logs', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, title: t('ui.logs'), ...(process.platform === 'darwin' ? {} : { icon: locations.icon() }), width: 1100, height: 720, minWidth: 765, minHeight: 480, show: false, backgroundColor: this.appearance().dark ? '#11181b' : '#f3f4f1', webPreferences: { zoomFactor: normalizeZoom(this.appearance().uiZoom), preload: locations.preload('records'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+    const window = this.window = new BrowserWindow({ name: 'picpatch-logs', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, title: t('ui.logs'), ...(process.platform === 'darwin' ? {} : { icon: locations.icon() }), width: 1100, height: 720, minWidth: 765, minHeight: 480, show: false, backgroundColor: windowBackground(this.appearance().dark), webPreferences: { zoomFactor: normalizeZoom(this.appearance().uiZoom), preload: locations.preload('records'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
     const minimum = () => {
       if (window.isDestroyed()) return;
       const [width, height] = window.getSize(); const [cw, ch] = window.getContentSize();

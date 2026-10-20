@@ -2,7 +2,7 @@
 // command field; attach, model, size and options below it; Run on the right. It is
 // the window's one drop receiver. Enter runs, except while an input method is
 // composing; Shift+Enter starts a new line.
-import { canPaintMask } from '../../../shared/image-command.ts';
+import { canPaintMask, hasImage } from '../../../shared/image-command.ts';
 import { useLayoutEffect, useRef, useState, type MutableRefObject } from 'react';
 import type { Draft, Session } from '../../../shared/session.ts';
 import { modelLabel } from '../models.ts';
@@ -83,7 +83,7 @@ export function Composer(props: ComposerProps) {
           <ul className="chips" aria-label={t('composer.inputs')}>
             {draft.source && (
               <li className={`chip target${draft.mask ? ' masked' : ''}`}>
-                <span className="chip-thumb">{session.assets.some(a => a.id === draft.source) || session.runs.some(r => r.id === draft.source && r.output) ? <img src={imageUrl(session.id, draft.source, true)} alt="" draggable={false} /> : <span className="chip-pending" aria-hidden="true" />}</span>
+                <span className="chip-thumb">{hasImage(session, draft.source) ? <img src={imageUrl(session.id, draft.source, true)} alt="" draggable={false} /> : <span className="chip-pending" aria-hidden="true" />}</span>
                 <span className="chip-label">
                   <span className="chip-title">{t('conversation.editing')}</span>
                   <span className="chip-name">{imageLabel(session, draft.source, t)}</span>

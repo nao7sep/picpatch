@@ -10,6 +10,7 @@ export interface Settings {
   newerProfile?: unknown;
 }
 import { writeJson } from './files.ts';
+import { maxConcurrency } from '../../shared/session.ts';
 export async function readSettings(path: string): Promise<Settings> {
   let value: Settings;
   try { value = JSON.parse(await readFile(path, 'utf8')); }
@@ -42,6 +43,4 @@ export async function saveSettings(path: string, value: Settings): Promise<Buffe
   if (!Object.keys(value.registrations).length) delete stored.registrations;
   return writeJson(path, stored);
 }
-/** How many images may generate at once; 1 unless the user's machine has memory for several models. */
-export const maxConcurrency = 8;
 export const validConcurrency = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 1 && (value as number) <= maxConcurrency;

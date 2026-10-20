@@ -11,8 +11,8 @@ declare global { interface Window { picpatch: Bridge } }
 
 /** The SDK's catalog entry, as main sends it. */
 export type CatalogModel = ModelCatalogEntry;
-export type ModelState = 'ready' | 'missing' | 'engineMissing';
-export type Readiness = Record<string, ModelState>;
+import type { Readiness } from '../../shared/readiness.ts';
+export type { Readiness };
 export interface LocaleState { language: Language; format: string; systemLanguage?: string; uiFont?: string }
 export interface ResourcePaths { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }
 export interface AppSettings { profile: ResourcePaths; uiFont?: string; theme?: 'light' | 'dark'; language?: Language; concurrency?: number }

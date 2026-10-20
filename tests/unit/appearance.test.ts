@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { normalizeZoom, nextZoom, windowMinimum } from '../../src/shared/appearance.ts';
+import { readFileSync } from 'node:fs';
+import { normalizeZoom, nextZoom, windowBackground, windowMinimum } from '../../src/shared/appearance.ts';
 it('normalizes disposable zoom and steps without changing canvas dimensions', () => {
   for (const invalid of [undefined, null, '2', NaN, Infinity, 0, 4]) expect(normalizeZoom(invalid)).toBe(1);
   expect(normalizeZoom(1.44)).toBe(1.44); expect(nextZoom(1,'in')).toBe(1.2);
@@ -11,4 +12,8 @@ it('scales content floors with native decorations and caps only the native floor
   expect(windowMinimum(content,2,frame,{width:1280,height:800})).toEqual({width:1280,height:800});
   expect(content).toEqual({width:1000,height:700});
   expect(windowMinimum(content,2,frame,{width:2560,height:1600})).toEqual({width:2000,height:1428});
+});
+it('paints windows in the page background of each theme before the page loads', () => {
+  const tokens = readFileSync(new URL('../../src/renderer/src/styles/tokens.css', import.meta.url), 'utf8');
+  expect([...tokens.matchAll(/--bg:\s*(#[0-9a-f]{6})/gi)].map(match => match[1])).toEqual([windowBackground(false), windowBackground(true)]);
 });

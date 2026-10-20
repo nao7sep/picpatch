@@ -8,6 +8,9 @@ let names = new Map<string, string>();
 export function setCatalog(models: readonly CatalogModel[]): void { names = new Map(models.map(model => [model.id, model.profile.name])); }
 export function modelLabel(id: string): string { return names.get(id) ?? modelName(id); }
 
+/** Recommended models first, then standard, then specialist. */
+export const tierOrder = { recommended: 0, standard: 1, specialist: 2 } as const;
+
 /** A name that tells a download apart from a registration of the user's own files. */
 export function modelOption(model: CatalogModel): string { return `${model.profile.name} (${t(model.acquisition === 'pinned' ? 'model.download' : 'model.ownFiles')})`; }
 

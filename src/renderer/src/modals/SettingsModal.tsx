@@ -3,6 +3,7 @@
 import { useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { defaultFont } from '../../../shared/appearance.ts';
 import { languages, type Language } from '../../../shared/i18n/index.ts';
+import { maxConcurrency } from '../../../shared/session.ts';
 import { api, type Overview, type Preferences } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { Modal } from './Modal.tsx';
@@ -11,7 +12,6 @@ export interface SettingsGuard { approveQuit: () => Promise<boolean>; settleSave
 
 const PATHS = ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const;
 type Form = { theme: 'system' | 'light' | 'dark'; language: 'system' | Language; uiFont: string; concurrency: number } & Record<typeof PATHS[number], string>;
-const MAX_CONCURRENCY = 8;
 
 const absolute = (value: string) => !value || (/Win/.test(navigator.platform) ? /^(?:[a-z]:[\\/]|\\\\)/i.test(value) : value.startsWith('/'));
 
@@ -136,7 +136,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
             <label className="field">
               <span className="field-label">{t('settings.concurrency')}</span>
               <select value={form.concurrency} onChange={event => set('concurrency', Number(event.target.value))}>
-                {Array.from({ length: MAX_CONCURRENCY }, (_, index) => index + 1).map(count => <option key={count} value={count}>{number(count)}</option>)}
+                {Array.from({ length: maxConcurrency }, (_, index) => index + 1).map(count => <option key={count} value={count}>{number(count)}</option>)}
               </select>
               <span className="field-help">{t('settings.concurrencyHelp')}</span>
             </label>

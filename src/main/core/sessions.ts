@@ -6,7 +6,7 @@ import { mkdir, open, readdir, readFile, rename, rm, realpath, lstat, utimes } f
 import { join, basename, isAbsolute, relative, sep } from 'node:path';
 import { validateArtifactRecord } from 'picpatchsdk';
 import sharp from 'sharp';
-import { initialDraft } from '../../shared/session.ts';
+import { controlKinds, initialDraft } from '../../shared/session.ts';
 import type { Session, SessionSummary, Draft, Asset } from '../../shared/session.ts';
 import { writeJson } from './files.ts';
 
@@ -22,7 +22,7 @@ export function validateDraft(value: unknown): Draft {
     if (!group || typeof group.id !== 'string' || !Array.isArray(group.images)) throw new UiError('error.invalid_reference_group');
     group.images.forEach(id);
   }
-  if (draft.control && (!['canny', 'depth', 'pose'].includes(draft.control.kind) || (draft.control.strength !== undefined && !Number.isFinite(draft.control.strength)))) throw new UiError('error.invalid_structural_control');
+  if (draft.control && (!(controlKinds as readonly string[]).includes(draft.control.kind) || (draft.control.strength !== undefined && !Number.isFinite(draft.control.strength)))) throw new UiError('error.invalid_structural_control');
   return structuredClone(draft);
 }
 export function validateSession(value: unknown): Session {

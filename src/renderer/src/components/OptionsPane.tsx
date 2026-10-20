@@ -3,7 +3,7 @@
 // is being edited, and a structural control map. Only what the chosen model offers
 // is shown; a value the model cannot use stays visible so it can be cleared.
 import { canPaintMask, maskNote } from '../../../shared/image-command.ts';
-import type { Draft, Session } from '../../../shared/session.ts';
+import { controlKinds, type Draft, type Session } from '../../../shared/session.ts';
 import type { ModelCapabilities, SamplingParameters } from 'picpatchsdk/types';
 import type { CatalogModel } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
@@ -11,7 +11,6 @@ import { BrushIcon, CloseIcon } from './icons.tsx';
 
 const PARAMETERS = ['steps', 'guidance', 'strength', 'identityStyleStrength', 'appearanceStrength', 'sampler', 'scheduler', 'negativePrompt'] as const;
 type ParameterKey = typeof PARAMETERS[number];
-const CONTROL_KINDS = ['canny', 'depth', 'pose'] as const;
 
 export interface OptionsPaneProps {
   session: Session;
@@ -134,7 +133,7 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
                 const kind = event.target.value as NonNullable<Draft['control']>['kind'];
                 if (control) onDraft({ ...draft, control: { ...control, kind } }, 'now'); else onChooseControl(kind);
               }}>
-                {CONTROL_KINDS.map(kind => <option key={kind} value={kind} disabled={!caps?.controlKinds?.includes(kind) && control?.kind !== kind}>{t(`control.${kind}`)}</option>)}
+                {controlKinds.map(kind => <option key={kind} value={kind} disabled={!caps?.controlKinds?.includes(kind) && control?.kind !== kind}>{t(`control.${kind}`)}</option>)}
               </select>
             </label>
             {control ? (

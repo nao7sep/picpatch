@@ -2,6 +2,7 @@
 // registration of files already on this computer, and removal of managed revisions.
 // Inspection never acquires anything; each change is an explicit action.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { controlKinds } from '../../../shared/session.ts';
 import { modelLabel, modelOption } from '../models.ts';
 import { api, type CatalogModel, type Components, type Engines, type Inventory, type Readiness } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
@@ -10,7 +11,6 @@ import { Modal } from './Modal.tsx';
 import { acceptsLoras, componentFields, engineReady, native, type ComponentKey } from './resources.ts';
 import { useOperation } from './useOperation.ts';
 
-const CONTROL_KINDS = ['canny', 'depth', 'pose'] as const;
 type Registration = { directory: string; checkpoint: string; components: Partial<Record<ComponentKey, string>>; controlKind: string; loras: { path: string; scale?: number }[] };
 const emptyRegistration = (): Registration => ({ directory: '', checkpoint: '', components: {}, controlKind: 'canny', loras: [] });
 
@@ -114,7 +114,7 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
               onClear={() => setRegistration(value => { const components = { ...value.components }; delete components[key]; return { ...value, components }; })}
               extra={key === 'controlNet' ? (
                 <select aria-label={t('ui.control_kind')} value={registration.controlKind} onChange={event => setRegistration(value => ({ ...value, controlKind: event.target.value }))}>
-                  {CONTROL_KINDS.map(kind => <option key={kind} value={kind}>{t(`control.${kind}`)}</option>)}
+                  {controlKinds.map(kind => <option key={kind} value={kind}>{t(`control.${kind}`)}</option>)}
                 </select>
               ) : undefined}
             />
