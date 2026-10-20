@@ -1,7 +1,14 @@
-"""macOS process-tree physical footprint sampler for the local reference workload.
+"""macOS process-tree physical footprint sampler for the local benchmarks.
 
-Run with an existing Python: python benchmarks/measure.py. No packages or weights
-are acquired. Results and neutral images stay in the ignored benchmark directory.
+Run with an existing Python from sdk/:
+  python3 benchmarks/measure.py [--comparison-config /absolute/cases.json]
+    [--input-size 512] [--output-size 768] [--counts 4,6,4,6,4,6]
+With --comparison-config it runs benchmarks/compare-local.ts; join its run indices to
+the records' measurementIndex. Without it, it runs benchmarks/references.ts. It samples
+the process tree's footprint, memory pressure and swap. Samples are lower bounds and
+include other applications' pressure; records made without the sampler say
+memory: "not-measured". No packages or weights are acquired. Runs and samples stay in
+the live cache's benchmarks/ folder.
 """
 import argparse
 import ctypes

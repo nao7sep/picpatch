@@ -5,10 +5,10 @@ import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel } from 'picpatchsdk';
 import { loraWeights } from '../helpers/lora-weights.ts';
-import { liveCache } from '../helpers/live-cache.ts';
+import { nativeInferenceConfigPath } from '../helpers/live-cache.ts';
 
 it('runs Canny generation and source editing with local LoRA composition and path-free provenance', async () => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? liveCache('native-inference-config.json'), 'utf8'));
+  const config = JSON.parse(await readFile(nativeInferenceConfigPath(), 'utf8'));
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-control-inference-'));
   try {
     await symlink(join(config.directory, config.sd15Checkpoint), join(directory, 'base.safetensors'));

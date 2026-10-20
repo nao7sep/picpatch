@@ -7,7 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel, type ImageClientOptions } from 'picpatchsdk';
-import { liveCacheRoot, inferenceConfig } from '../helpers/live-cache.ts';
+import { liveCacheRoot, inferenceConfig, nativeInferenceConfigPath } from '../helpers/live-cache.ts';
 const assets: { family: string; filename: string; bytes: number; sha256: string; scale: number; steps: number }[] = JSON.parse(await readFile(new URL('../fixtures/trained-lora-assets.json', import.meta.url), 'utf8'));
 
 const cache = liveCacheRoot;
@@ -29,7 +29,7 @@ it.each(assets)('applies the pinned trained $family pixel-art adapter through th
       const prepared = await prepareModel(config.model!.manifest.model, { directory, loras: [{ path: asset.filename }] });
       options = { engineDirectory: testEngineDirectory, model: prepared.model };
     } else {
-      const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(cache, 'native-inference-config.json'), 'utf8'));
+      const config = JSON.parse(await readFile(nativeInferenceConfigPath(), 'utf8'));
       await symlink(join(config.directory, config.checkpoint), join(directory, 'base.safetensors'));
       await symlink(resolve(adapter), join(directory, asset.filename));
       const prepared = await prepareModel('sdxl', { directory, checkpoint: 'base.safetensors', loras: [{ path: asset.filename }] });

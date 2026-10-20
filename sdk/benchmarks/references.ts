@@ -1,3 +1,6 @@
+// Runs the synthetic grouped-reference workload (reference-workload.ts) with the managed-engine configuration the
+// live tests use (scripts/prepare-inference.ts), by hand on a prepared machine:
+//   node benchmarks/references.ts /absolute/output-directory [--input-size 512] [--output-size 768] [--counts 4,6,4,6,4,6]
 import { parseArgs } from 'node:util';
 import { referenceWorkload } from './reference-workload.ts';
 import type { ImageClientOptions } from 'picpatchsdk';

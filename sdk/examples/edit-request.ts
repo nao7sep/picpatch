@@ -1,3 +1,4 @@
+// Validates an edit request's shape and opens no files: node examples/edit-request.ts, or npm run example:request.
 import { resolve } from 'node:path';
 import { validateEditRequest, type EditRequest } from 'picpatchsdk';
 

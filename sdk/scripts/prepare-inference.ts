@@ -1,3 +1,9 @@
+// Writes the managed-engine inference configuration the MFLUX live tests, examples and benchmarks read. Run from sdk/
+// once the managed engine is installed:
+//   node scripts/prepare-inference.ts [--engine /absolute/engine-directory] [--model flux2-klein-4b-4bit]
+//     [--download] [--directory /absolute/model-bundle] [--output /absolute/config.json]
+// It verifies the pinned model, downloading it only with --download, and records the engine and model to use;
+// the configuration goes to inference-config.json in the live cache unless --output names another file.
 import { parseArgs } from 'node:util';
 import { isAbsolute, join } from 'node:path';
 import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';

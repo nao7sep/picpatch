@@ -5,9 +5,9 @@ import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel } from 'picpatchsdk';
 import { loraWeights } from '../helpers/lora-weights.ts';
-import { liveCache } from '../helpers/live-cache.ts';
+import { nativeInferenceConfigPath } from '../helpers/live-cache.ts';
 it.each(['sd15', 'sdxl'])('applies a local LoRA at distinct scales during real native inference with path-free provenance', async variant => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? liveCache('native-inference-config.json'), 'utf8'));
+  const config = JSON.parse(await readFile(nativeInferenceConfigPath(), 'utf8'));
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-lora-inference-'));
   try {
     await symlink(join(config.directory, variant === 'sdxl' ? config.checkpoint : config.sd15Checkpoint), join(directory, 'base.safetensors'));

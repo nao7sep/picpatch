@@ -2,6 +2,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createImageClient, type ImageClientOptions } from 'picpatchsdk';
 
+// node examples/klein-base.ts CONFIG_JSON OUTPUT_DIR
 // Supply the configuration written by scripts/prepare-inference.ts and a fresh output directory.
 const [configuration, destination] = process.argv.slice(2);
 if (!configuration || !destination) throw new Error('Supply a prepared configuration JSON and output directory.');

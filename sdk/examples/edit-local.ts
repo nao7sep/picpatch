@@ -1,4 +1,9 @@
-/** A first edit using catalog preparation, session defaults and existing local files. */
+/**
+ * A first edit using catalog preparation, session defaults and existing local files. Run from sdk/:
+ *   node examples/edit-local.ts --instruction TEXT --source IMAGE --output PNG [--mask MASK] [--steps N]
+ *     [--guidance G] [--directory MODEL_BUNDLE] [--engine ENGINE_DIR]
+ * It downloads nothing: the model must already be prepared, and the managed engine installed.
+ */
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { createImageClient, listModels, prepareModel } from 'picpatchsdk';

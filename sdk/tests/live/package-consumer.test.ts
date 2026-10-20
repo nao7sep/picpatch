@@ -10,7 +10,7 @@ import type { ImageClientOptions } from 'picpatchsdk';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import pkg from '../../package.json' with { type: 'json' };
-import { liveCache, inferenceConfig } from '../helpers/live-cache.ts';
+import { inferenceConfig, nativeInferenceConfigPath } from '../helpers/live-cache.ts';
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(import.meta.url);
@@ -66,7 +66,7 @@ console.log('consumer passed');\n`);
       await link(await realpath(join(model.directory, component.path)), destination);
     }
     const outputDirectory = join(directory, 'images'); await mkdir(outputDirectory);
-    const native = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? liveCache('native-inference-config.json'), 'utf8'));
+    const native = JSON.parse(await readFile(nativeInferenceConfigPath(), 'utf8'));
     const inputs = join(directory, 'inputs.json');
     await writeFile(inputs, JSON.stringify({ engineDirectory: testEngineDirectory, modelId: model.manifest.model, modelsDirectory, outputDirectory, native }));
     const journey = join(directory, 'journey.ts');

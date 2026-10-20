@@ -1,3 +1,6 @@
+// Installs or reuses the managed Python engine with a uv you supply. Run from sdk/:
+//   node examples/install-engine.ts UV [ENGINE_DIR] [TOOL_DIR...]
+// TOOL_DIR names folders holding CMake or a compiler when a dependency builds from source.
 import { installEngine } from 'picpatchsdk';
 import { resolve } from 'node:path';
 

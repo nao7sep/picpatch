@@ -5,11 +5,11 @@ import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel } from 'picpatchsdk';
 import assets from '../fixtures/native-sdxl-assets.json' with { type: 'json' };
-import { liveCache } from '../helpers/live-cache.ts';
+import { nativeInferenceConfigPath } from '../helpers/live-cache.ts';
 
 interface Configuration { directory: string; executable: string; checkpoint: string; photoMaker: string; ipAdapter: string; ipAdapterPlus: string; clipVision: string }
 async function configuration(): Promise<Configuration> {
-  const path = process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? liveCache('native-inference-config.json');
+  const path = nativeInferenceConfigPath();
   try { return JSON.parse(await readFile(path, 'utf8')) as Configuration; }
   catch (cause) { throw new Error('Prepare the documented native SDXL test assets and PICPATCH_NATIVE_INFERENCE_CONFIG. This test never downloads weights or builds the runtime.', { cause }); }
 }

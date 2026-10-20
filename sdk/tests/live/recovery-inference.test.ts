@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel, type ImageClientOptions, type SdkEvent } from 'picpatchsdk';
-import { liveCacheRoot, inferenceConfig } from '../helpers/live-cache.ts';
+import { inferenceConfig, nativeInferenceConfigPath } from '../helpers/live-cache.ts';
 
 const exec = promisify(execFile);
 async function children(): Promise<number[]> {
@@ -29,10 +29,9 @@ async function gone(pids: number[]) {
   for (const pid of pids) expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
   expect(await children()).toEqual([]);
 }
-const root = liveCacheRoot;
 
 it('recovers native sessions after real loading cancellation and protects prior artifacts through repeated 512px edits', async () => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? join(root, 'native-inference-config.json'), 'utf8'));
+  const config = JSON.parse(await readFile(nativeInferenceConfigPath(), 'utf8'));
   const prepared = await prepareModel('sd15', { directory: config.directory, checkpoint: config.sd15Checkpoint });
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-native-recovery-'));
   const editor = createImageClient({ model: prepared.model, nativeExecutable: config.executable,

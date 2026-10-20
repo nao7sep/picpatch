@@ -17,6 +17,14 @@ function resolveRoot(): string {
 }
 
 /**
+ * The configuration the native live tests read: PICPATCH_NATIVE_INFERENCE_CONFIG, or native-inference-config.json in
+ * the live cache. It names the model directory, the sd-cli executable and the asset files. Prepare the exact assets
+ * pinned in tests/fixtures/native-sdxl-assets.json and native-sd15-assets.json from their pinned Hugging Face
+ * revisions, outside tracked source; each keeps its upstream licence.
+ */
+export const nativeInferenceConfigPath = (): string => process.env.PICPATCH_NATIVE_INFERENCE_CONFIG ?? liveCache('native-inference-config.json');
+
+/**
  * The managed-engine inference configuration the MFLUX live tests read: PICPATCH_INFERENCE_CONFIG, or
  * inference-config.json in the live cache. The tests never download models, so a missing file names the
  * script that prepares it.
