@@ -121,9 +121,11 @@ it('asks before discarding changed settings and saves only chosen values', async
   await act(async () => fake.command('settingsButton'));
   fireEvent.change(screen.getByRole('textbox', { name: 'Interface font family' }), { target: { value: 'Avenir' } });
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-  const question = await screen.findByRole('dialog', { name: 'Discard unsaved settings?' });
-  fireEvent.click(within(question).getByRole('button', { name: 'Cancel' }));
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Discard unsaved settings?' })).toBeNull());
+  const question = await screen.findByRole('dialog', { name: 'Discard changes?' });
+  expect(within(question).getByText('You have unsaved changes. Discard them and close?')).toBeTruthy();
+  expect(within(question).getByRole('button', { name: 'Discard' })).toBeTruthy();
+  fireEvent.click(within(question).getByRole('button', { name: 'Keep editing' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).toBeNull());
   fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
   await waitFor(() => expect(fake.calls('preferences')).toEqual([{ uiFont: 'Avenir' }]));
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull());
@@ -216,4 +218,18 @@ it('moves the sessions rail with arrow keys and saves its width once, on key rel
   await waitFor(() => expect(fake.calls('savePane')).toEqual([{ railWidth: before + 24, optionsPane: false }]));
   fireEvent.blur(splitter);
   expect(fake.calls('savePane')).toHaveLength(1);
+});
+
+it('asks the fleet discard question when quitting with unsaved settings, keeping them by default', async () => {
+  const fake = await start();
+  await act(async () => fake.command('settingsButton'));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Interface font family' }), { target: { value: 'Avenir' } });
+  let answer: Promise<unknown>;
+  await act(async () => { answer = fake.request({ kind: 'closeDrafts' }); });
+  const question = await screen.findByRole('dialog', { name: 'Discard changes?' });
+  expect(within(question).getByText('You have unsaved changes. Discard them and quit?')).toBeTruthy();
+  expect(document.activeElement).toBe(within(question).getByRole('button', { name: 'Keep editing' }));
+  fireEvent.click(within(question).getByRole('button', { name: 'Keep editing' }));
+  await expect(answer!).resolves.toBe(false);
+  expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
 });

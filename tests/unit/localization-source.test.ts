@@ -31,7 +31,7 @@ function problemsIn(source: string, file: string, en: Record<string, unknown>): 
   const ast = parse(source, { sourceType: 'module', plugins: file.endsWith('.ts') ? ['typescript'] : ['typescript', 'jsx'] });
   walk(ast, (node, parent) => {
     const literal = (value: string) => /[a-z]/i.test(value) && !LITERALS.has(value.trim());
-    if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && ['t', 'message', 'confirm'].includes(node.callee.name) && node.arguments[0]?.type === 'StringLiteral' && !Object.hasOwn(en, node.arguments[0].value)) problems.push(`${file}: missing key ${node.arguments[0].value}`);
+    if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && ['t', 'message'].includes(node.callee.name) && node.arguments[0]?.type === 'StringLiteral' && !Object.hasOwn(en, node.arguments[0].value)) problems.push(`${file}: missing key ${node.arguments[0].value}`);
     if (node.type === 'NewExpression' && node.callee.name === 'UiError' && node.arguments[0]?.type === 'StringLiteral' && !Object.hasOwn(en, node.arguments[0].value)) problems.push(`${file}: missing key ${node.arguments[0].value}`);
     if (node.type === 'JSXText' && literal(node.value)) problems.push(`${file}: text "${node.value.trim()}"`);
     if (node.type === 'StringLiteral' && parent?.type === 'JSXExpressionContainer' && literal(node.value)) problems.push(`${file}: text "${node.value}"`);

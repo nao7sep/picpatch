@@ -102,7 +102,7 @@ const lifetime = quitFlow({
   drafts: async () => !editorAvailable() || await requests.request({ kind: 'closeDrafts' }) === true,
   saveFailure: async error => {
     records?.write('error', 'Pending editor saves did not complete.', { error: errorRecord(error) });
-    return (await ask({ duringClose: true, message: message('ui.pending_changes_could_not_be_saved'), buttons: [message('ui.keep_working'), message('ui.retry_save'), message('ui.quit_without_pending_changes')] })).response;
+    return (await ask({ duringClose: true, message: message('ui.pending_changes_could_not_be_saved'), buttons: [message('ui.cancel'), message('ui.retry'), message('quit.anyway')] })).response;
   },
   work: async () => {
     if (service.managing && (await ask({ duringClose: true, message: message('ui.cancel_the_installation_or_verification_and_quit'), buttons: [message('ui.keep_working'), message('ui.cancel_and_quit')] })).response !== 1) return false;

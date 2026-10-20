@@ -178,8 +178,10 @@ export function App() {
   const anyModal = modalCount > 0;
   useEffect(() => { if (phase === 'ready') void api.modalState(anyModal).catch(() => {}); }, [anyModal, phase]);
 
-  const confirm = useCallback(async (title: string) => await messages.ask({
-    title: message(title), actions: [{ label: message('ui.cancel') }, { label: message('ui.discard_changes'), destructive: true }],
+  // One discard question everywhere; quitting names the quit, and Keep editing is the safe default.
+  const confirm = useCallback(async (ending: 'close' | 'quit' = 'close') => await messages.ask({
+    title: message('discard.title'), detail: message(ending === 'quit' ? 'discard.quitBody' : 'discard.body'),
+    actions: [{ label: message('discard.keep') }, { label: message('discard.confirm'), destructive: true }],
   }) === 1, [messages]);
 
   // ---- Session commands ----
@@ -334,7 +336,7 @@ export function App() {
     if (request.kind === 'message') return messages.ask(request.message);
     if (request.kind === 'closeDrafts') {
       if (settingsGuard.current) return settingsGuard.current.approveQuit();
-      return !modalDraft.current || await confirm('quit.discardEdits');
+      return !modalDraft.current || await confirm('quit');
     }
     // Capture the draft first: an open picker or import in the command chain must not delay or block it.
     await writer.flush(); await settingsGuard.current?.settleSave();
@@ -422,7 +424,7 @@ export function App() {
   function renderModal(spec: ModalSpec) {
     const owner = session!, current = draft!, models = overview!.models;
     switch (spec.kind) {
-      case 'settings': return <SettingsModal overview={overview!} guard={settingsGuard} onClose={pop} confirmDiscard={() => confirm('ui.discard_unsaved_settings')} onSaved={next => { void applyOverview(next); void checkModels(); }} />;
+      case 'settings': return <SettingsModal overview={overview!} guard={settingsGuard} onClose={pop} confirmDiscard={confirm} onSaved={next => { void applyOverview(next); void checkModels(); }} />;
       case 'setup': return <SetupModal models={models} initial={spec.modelId} onClose={pop}
         onChanged={async () => { const next = await checkModels(); await refreshOverview(); return next; }}
         onUse={id => { updateDraft({ ...draftRef.current!, modelIds: [id] }); pop(); }}
@@ -431,7 +433,7 @@ export function App() {
         onChanged={async () => { const next = await checkModels(); await refreshOverview(); return next; }} />;
       case 'about': return <AboutModal onClose={pop} />;
       case 'shortcuts': return <ShortcutsModal onClose={pop} />;
-      case 'rename': return <RenameModal name={owner.name} onClose={pop} onDirty={markDraft} confirmDiscard={() => confirm('rename.discard')} onRename={async name => {
+      case 'rename': return <RenameModal name={owner.name} onClose={pop} onDirty={markDraft} confirmDiscard={() => confirm()} onRename={async name => {
         try { const renamed = await api.rename(owner.id, name); patchSession(value => ({ ...value, name: renamed.name })); pop(); await refreshOverview(); return undefined; }
         catch (error) { return describeError(error); }
       }} />;
@@ -454,7 +456,7 @@ export function App() {
         if (!current.source || !canPaintMask(owner, current, model?.capabilities.maskMode)) return null;
         return <MaskModal source={imageUrl(owner.id, current.source)} mask={current.mask ? imageUrl(owner.id, current.mask) : undefined}
           note={t(maskNote(model?.capabilities.maskMode))}
-          onClose={pop} confirmDiscard={() => confirm('mask.discard')} onDirty={markDraft}
+          onClose={pop} confirmDiscard={() => confirm()} onDirty={markDraft}
           onDone={async bytes => {
             try {
               if (!bytes) { const next = { ...draftRef.current! }; delete next.mask; updateDraft(next); pop(); return undefined; }

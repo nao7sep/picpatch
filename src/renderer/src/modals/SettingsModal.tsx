@@ -16,7 +16,7 @@ type Form = { theme: 'system' | 'light' | 'dark'; language: 'system' | Language;
 const absolute = (value: string) => !value || (/Win/.test(navigator.platform) ? /^(?:[a-z]:[\\/]|\\\\)/i.test(value) : value.startsWith('/'));
 
 export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscard }: {
-  overview: Overview; guard: Ref<SettingsGuard>; onClose: () => void; onSaved: (overview: Overview) => void; confirmDiscard: () => Promise<boolean>;
+  overview: Overview; guard: Ref<SettingsGuard>; onClose: () => void; onSaved: (overview: Overview) => void; confirmDiscard: (ending?: 'close' | 'quit') => Promise<boolean>;
 }) {
   const { t, errorText, number } = useI18n();
   const initial = useRef<Form>({
@@ -36,7 +36,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
   const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
 
   useImperativeHandle(guard, () => ({
-    approveQuit: async () => !dirtyRef.current || confirmDiscard(),
+    approveQuit: async () => !dirtyRef.current || confirmDiscard('quit'),
     // Retry only the values that were submitted, never a draft edited since.
     settleSave: async () => { if (failedSubmit.current) await failedSubmit.current(); else await pendingSave.current; },
   }), [confirmDiscard]);

@@ -11,11 +11,20 @@ export interface Settings {
 }
 import { writeJson } from './files.ts';
 import { maxConcurrency } from '../../shared/session.ts';
+/**
+ * Settings that cannot be used (unreadable, malformed or in a newer format) stop startup with the file's full path;
+ * the file is never rewritten or moved, so the user decides what happens to it.
+ */
 export async function readSettings(path: string): Promise<Settings> {
-  let value: Settings;
-  try { value = JSON.parse(await readFile(path, 'utf8')); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, profile: { version: 1 }, registrations: {} }; throw error; }
-  if (value.version !== 1 || (value.registrations !== undefined && (typeof value.registrations !== 'object' || value.registrations === null || Array.isArray(value.registrations)))) throw new UiError('error.settings_format_is_unsupported_the_file_was_preserved');
+  let text: string;
+  try { text = await readFile(path, 'utf8'); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, profile: { version: 1 }, registrations: {} }; throw unusable(path, error); }
+  try { return parseSettings(JSON.parse(text)); }
+  catch (error) { throw unusable(path, error); }
+}
+const unusable = (path: string, cause: unknown) => new UiError('startup.settingsFile', { path }, { cause });
+function parseSettings(value: Settings): Settings {
+  if (!value || typeof value !== 'object' || value.version !== 1 || (value.registrations !== undefined && (typeof value.registrations !== 'object' || value.registrations === null || Array.isArray(value.registrations)))) throw new Error('Unsupported settings format.');
   value.profile ??= { version: 1 }; value.registrations ??= {};
   if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) delete value.theme;
   value.language = preference(value.language);
@@ -25,7 +34,7 @@ export async function readSettings(path: string): Promise<Settings> {
   // registration stays as saved, where opening the model refuses it. Both are written back unchanged.
   if (validateProfile(value.profile).status === 'refused') { value.newerProfile = value.profile; value.profile = { version: 1 }; }
   for (const entry of Object.values(value.registrations)) validateModelRegistration(entry);
-  if (value.sessionsDirectory !== undefined && !isAbsolute(value.sessionsDirectory)) throw new UiError('error.stored_resource_paths_must_be_absolute');
+  if (value.sessionsDirectory !== undefined && !isAbsolute(value.sessionsDirectory)) throw new Error('Stored resource paths must be absolute.');
   return value;
 }
 /** The profile settings may hold; a newer one is preserved elsewhere, never written over. */

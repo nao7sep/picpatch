@@ -18,7 +18,10 @@ it('keeps defaults absent and preserves explicit resource choices when resetting
 });
 it('leaves unsupported settings untouched and rejects relative resource paths before publication', async () => {
   const config = join(root, 'config.json'); await writeFile(config, '{"version":99}');
-  await expect(readSettings(config)).rejects.toThrow('unsupported'); expect(await readFile(config, 'utf8')).toBe('{"version":99}');
+  // A newer format and malformed content both name the file and its full path, and leave it as it was.
+  await expect(readSettings(config)).rejects.toMatchObject({ notice: { key: 'startup.settingsFile', values: { path: config } } }); expect(await readFile(config, 'utf8')).toBe('{"version":99}');
+  await writeFile(config, '{"version":1,'); await expect(readSettings(config)).rejects.toThrow(config); expect(await readFile(config, 'utf8')).toBe('{"version":1,');
+  await writeFile(config, '{"version":1,"sessionsDirectory":"relative"}'); await expect(readSettings(config)).rejects.toThrow('config.json');
   await rm(config);
   const app = await Application.open({ root, config, sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
   await expect(app.preferences({ modelsDirectory: 'relative' })).rejects.toMatchObject({ kind: 'invalid' });

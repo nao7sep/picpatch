@@ -17,7 +17,7 @@ export function StartupFailure({ retrying, onRetry, onQuit, collection, onOpenCo
         <div className="startup-actions">
           <button type="button" className="button" onClick={onQuit}>{t('native.quit')}</button>
           {collection !== undefined && onOpenCollection && <button type="button" className="button" disabled={retrying} onClick={onOpenCollection}>{t('collection.open')}</button>}
-          <button type="button" className="button primary" disabled={retrying} onClick={onRetry}>{t('startup.retry')}</button>
+          <button type="button" className="button primary" disabled={retrying} onClick={onRetry}>{t('ui.retry')}</button>
         </div>
       </div>
     </main>

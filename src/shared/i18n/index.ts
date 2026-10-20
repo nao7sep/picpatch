@@ -52,7 +52,7 @@ export function t(key: string, values?: Message['values']): string { return rend
 export function term(namespace: string, value: string): string { const key = `${namespace}.${value}`; return Object.hasOwn(english, key) ? t(key) : value; }
 export class UiError extends Error {
   readonly notice: Message;
-  constructor(key: string, values?: Message['values']) { super(render(key, values, english, 'en')); this.notice = message(key, values); }
+  constructor(key: string, values?: Message['values'], options?: ErrorOptions) { super(render(key, values, english, 'en'), options); this.notice = message(key, values); }
 }
 /** Explicit app notices and structured runtime causes are the only presentation inputs. */
 export function errorNotice(value: unknown, fallback: Key = 'error.unknown'): Message {
