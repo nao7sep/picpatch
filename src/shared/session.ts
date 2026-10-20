@@ -19,7 +19,6 @@ export interface Run {
 export interface Session {
   version: 1; id: string; name: string; created: string; updated: string;
   draft: Draft; assets: Asset[]; runs: Run[];
-  /** Selected history results, independent of the command's explicit source image. */
 }
 /** cover is the latest completed result, shown as the session's picture. */
 export interface SessionSummary { id: string; name: string; updated: string; results: number; cover?: string }

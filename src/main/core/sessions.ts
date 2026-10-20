@@ -89,7 +89,6 @@ export class Sessions {
     if (session.id !== key) throw new UiError('error.session_identity_does_not_match_its_directory');
     // Reopening never schedules inference. Queued work requires an explicit resume.
     for (const run of session.runs) if (run.status === 'running') { run.status = 'interrupted'; run.issue = { code: 'INTERRUPTED', message: 'The app closed before this attempt settled.', effect: 'unknown' }; }
-    delete (session as { selection?: unknown }).selection;
     session.draft = recoverCommand(session.draft, session.runs);
     // A save that finished during this read is newer than the file just read.
     const newer = this.loaded.get(key); if (newer) return newer;

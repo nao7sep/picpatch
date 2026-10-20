@@ -24,7 +24,6 @@ export async function readSettings(path: string): Promise<Settings> {
   // registration stays as saved, where opening the model refuses it. Both are written back unchanged.
   if (validateProfile(value.profile).status === 'refused') { value.newerProfile = value.profile; value.profile = { version: 1 }; }
   for (const entry of Object.values(value.registrations)) validateModelRegistration(entry);
-  delete (value as { uvExecutable?: unknown }).uvExecutable; // Retired: the bundled uv is always used.
   if (value.sessionsDirectory !== undefined && !isAbsolute(value.sessionsDirectory)) throw new UiError('error.stored_resource_paths_must_be_absolute');
   return value;
 }
