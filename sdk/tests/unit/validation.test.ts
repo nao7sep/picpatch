@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { contractAjv, contractValidator } from '../../src/contracts.ts';
 import { validateEditRequest, validateGenerateRequest, listModels, PicPatchSdkError, type EditRequest, type ModelCapabilities } from '../../src/index.ts';
 const request = (): EditRequest => ({ model: 'test', instruction: 'Combine these subjects', outputPath: '/out.png', references: [
   { id: 'alice', role: 'subject', images: ['/alice-front.png', '/alice-side.png'] },
@@ -56,4 +57,14 @@ it('enforces the Ideogram 4 native dimension interval for generation', () => {
   for (const size of [{ width: 240, height: 256 }, { width: 256, height: 240 }, { width: 2064, height: 256 }, { width: 256, height: 2064 }, { width: 257, height: 256 }]) {
     expect(() => validateGenerateRequest({ ...input, size }, caps)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
   }
+});
+
+it('compiles each contract definition once, however often it is validated', () => {
+  const compile = contractAjv.compile.bind(contractAjv); let compiled = 0;
+  contractAjv.compile = ((schema: object) => { compiled++; return compile(schema); }) as typeof contractAjv.compile;
+  try {
+    const first = contractValidator('LocalLora');
+    for (let i = 0; i < 3; i++) expect(contractValidator('LocalLora')).toBe(first);
+    expect(compiled).toBeLessThanOrEqual(1);
+  } finally { contractAjv.compile = compile; }
 });
