@@ -1,4 +1,3 @@
-import { emitProgress } from '../operations.ts';
 import type { LocalModel } from '../contracts.generated.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { ProtocolSession, type WorkerRequest, type WorkerResponse } from './protocol.ts';

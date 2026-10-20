@@ -143,7 +143,7 @@ function InputThumb({ session, imageKey, label, onOpen }: { session: Session; im
 
 /** The settings that shaped the command, as quiet marks under it. */
 function CommandFacts({ draft, count }: { draft: Draft; count: number }) {
-  const { t, number } = useI18n();
+  const { t } = useI18n();
   const size = draft.outpaint ?? draft;
   const facts: { icon?: React.ReactNode; text: string }[] = [
     { text: draft.modelIds.map(modelLabel).join(', ') },

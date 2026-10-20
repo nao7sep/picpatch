@@ -4,7 +4,7 @@ import { checkProfile, type PicPatchProfile } from '../profile.ts';
 import { attachMfluxLoras, validateMfluxLoras } from '../backends/mflux/loras.ts';
 import { prepareNativeModel } from '../backends/stable-diffusion-cpp/preparation.ts';
 import { withDiagnostics } from '../diagnostics.ts';
-import { chmod, lstat, mkdir, mkdtemp, open, rename, rm } from '../storage.ts';
+import { chmod, lstat, mkdir, mkdtemp, rename, rm } from '../storage.ts';
 import { dirname, join } from 'node:path';
 import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline, withSettings } from '../operations.ts';

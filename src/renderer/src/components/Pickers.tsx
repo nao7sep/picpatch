@@ -92,7 +92,7 @@ const PRESETS = [
 ] as const;
 
 export function SizePicker({ draft, multiple, onDraft }: { draft: Draft; multiple: number; onDraft: (draft: Draft) => void }) {
-  const { t, number } = useI18n();
+  const { t } = useI18n();
   const set = (width: number, height: number) => onDraft({ ...draft, width, height });
   const snap = (value: number) => Math.max(multiple, Math.round(value / multiple) * multiple);
   const preset = PRESETS.find(item => item.width === draft.width && item.height === draft.height);

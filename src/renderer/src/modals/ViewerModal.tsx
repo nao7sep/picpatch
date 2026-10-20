@@ -19,7 +19,7 @@ export function ViewerModal({ session, items, index: initial, onClose, onEditThi
   session: Session; items: ViewItem[]; index: number; onClose: () => void;
   onEditThis: (runId: string) => void; onSave: (runId: string, index: number) => void; onReuse: (run: Run) => void;
 }) {
-  const { t, number } = useI18n();
+  const { t } = useI18n();
   const [index, setIndex] = useState(Math.max(0, initial));
   const [actual, setActual] = useState(false);
   const [second, setSecond] = useState<number>();

@@ -12,10 +12,9 @@ import { runCommand } from './command.ts';
 import type { EngineIdentity, EngineInspection, EngineInstallation, EngineSettings, EngineRecord, InstallEngineSettings, ReadyEngine, PythonRuntime } from './types.ts';
 import type { CallOptions } from '../../types.ts';
 type EngineOptions = EngineSettings & CallOptions;
-type InstallEngineOptions = InstallEngineSettings & CallOptions;
 const engineKeys = ['profile', 'runtime', 'engineDirectory'];
 const installKeys = [...engineKeys, 'uvExecutable', 'cacheDirectory', 'pythonDirectory', 'toolDirectories', 'offline'];
-import { supportsRuntime, syncDirectory, syncFile, toolEnvironment, venvPython } from '../../platform.ts';
+import { supportsRuntime, syncDirectory, toolEnvironment, venvPython } from '../../platform.ts';
 
 const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException)?.code ?? '');
 function validate(options: EngineOptions, install: boolean): string {

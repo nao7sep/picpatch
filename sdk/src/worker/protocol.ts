@@ -1,5 +1,4 @@
 import type { ProgressEvent } from '../contracts.generated.ts';
-import type { WorkerDiagnostic } from '../diagnostics.ts';
 import { contractAjv } from '../contracts.ts';
 import { PicPatchSdkError, isPicPatchSdkError, type PicPatchSdkErrorData } from '../errors.ts';
 import { validateEditRequest, validateGenerateRequest } from '../validation.ts';

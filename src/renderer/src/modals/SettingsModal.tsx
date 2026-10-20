@@ -1,6 +1,6 @@
 // Settings: General (appearance, language, interface font) and Resources (where the
 // SDK keeps engines and models). A draft until Save; closing a changed draft asks first.
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { defaultFont } from '../../../shared/appearance.ts';
 import { languages, type Language } from '../../../shared/i18n/index.ts';
 import { api, type Overview, type Preferences } from '../api.ts';

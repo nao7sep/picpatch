@@ -1,6 +1,4 @@
 import { expect, it, vi, afterEach } from 'vitest';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createImageClient } from '../../src/index.ts';
 import { resolveEditRequest, validateDefaults } from '../../src/defaults.ts';
 

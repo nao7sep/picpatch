@@ -13,7 +13,7 @@ export class LogsWindow {
   private notifyTimer?: ReturnType<typeof setTimeout>;
   private renderer: string;
   private fitMinimum?: () => void;
-  constructor(private reader: RecordsReader, private appearance: () => LogsAppearance, private failed: (error: unknown) => void, private resizeList: (width: number) => Promise<void> = async () => {}) {
+  constructor(reader: RecordsReader, private appearance: () => LogsAppearance, private failed: (error: unknown) => void, private resizeList: (width: number) => Promise<void> = async () => {}) {
     this.renderer = locations.page('records');
     ipcMain.handle('picpatch:logs', async (event, action: string, payload: unknown) => {
       if (!trustedSender(event, this.window, this.renderer)) throw new Error('Untrusted logs request.');

@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { chmod, mkdir } from 'node:fs/promises';
 
 export interface AppPaths { root: string; sessions: string; config: string; state: string; backups: string }
