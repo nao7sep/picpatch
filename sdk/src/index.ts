@@ -12,7 +12,7 @@ export type { ModelInspection, LocalModelFile, ModelIssue, ModelDiscovery, Model
 export { validateModelManifest, verifyModel } from './models/verification.ts';
 export type { ModelManifest, ModelComponent, ModelVerification, ModelVerificationOptions, VerifiedComponent } from './models/types.ts';
 export { inspectRuntime } from './runtime/inspection.ts';
-export type { RuntimeInspection, RuntimeOperationOptions } from './runtime/types.ts';
+export type { RuntimeInspection, RuntimeSettings } from './runtime/types.ts';
 
 export type { LocalModel } from './contracts.generated.ts';
 export { resolveStoragePaths } from './paths.ts';
@@ -22,9 +22,9 @@ export type { ModelVariant, ExternalModel } from './models/variants.ts';
 export type { CatalogModel, ModelCatalogEntry } from './models/catalog.ts';
 export type { Evidence, LicenceKind, MemoryClass, ModelProfile, Operation, Purpose, SpeedClass, Tier } from './models/profiles.ts';
 export { prepareModel } from './models/preparation.ts';
-export type { PrepareModelOptions, PreparedModel } from './models/preparation.ts';
+export type { PrepareModelSettings, PreparedModel } from './models/preparation.ts';
 export { inspectReadiness } from './runtime/readiness.ts';
-export type { ReadinessOptions, ModelReadiness } from './runtime/readiness.ts';
+export type { ReadinessSettings, ModelReadiness } from './runtime/readiness.ts';
 export type { RuntimeCheck } from './worker/protocol.ts';
 
 export type { GenerateInput, EditInput, ImageDefaults } from './defaults.ts';
@@ -40,7 +40,7 @@ export type { LocalLora, LoraProvenance } from './contracts.generated.ts';
 export type { LocalControlNet, StructuralControl, ControlProvenance } from './contracts.generated.ts';
 
 export { installEngine, inspectEngine } from './runtime/engine/engine.ts';
-export type { PythonRuntime, EngineOptions, NativeEngineOptions, NativeInspectionOptions, InstallEngineOptions, EngineIdentity, EngineRecord, ReadyEngine, EngineInspection, EngineInstallation } from './runtime/engine/types.ts';
+export type { PythonRuntime, EngineSettings, NativeEngineSettings, NativeInspectionSettings, InstallEngineSettings, EngineIdentity, EngineRecord, ReadyEngine, EngineInspection, EngineInstallation } from './runtime/engine/types.ts';
 
 export { readProfile, validateProfile } from './profile.ts';
 export type { PicPatchProfile, ProfileReadOptions, ProfileReadResult, ProfileRefusal } from './profile.ts';
@@ -51,13 +51,13 @@ export type { ImageFingerprint } from './images/fingerprint.ts';
 export type { PlannedDestination } from './images/output.ts';
 
 export { openModel, inspectModels, readModelRegistration, validateModelRegistration } from './models/opening.ts';
-export type { ModelRegistration, ModelRegistrationResult, ModelOpenOptions, OpenedModel, ModelOpenRefusal, ModelOpenResult, ManagedModelInventory, ModelInventoryFailure } from './models/opening.ts';
+export type { ModelRegistration, ModelRegistrationResult, ModelOpenSettings, ModelStoreSettings, OpenedModel, ModelOpenRefusal, ModelOpenResult, ManagedModelInventory, ModelInventoryFailure } from './models/opening.ts';
 
 export { readArtifactRecord, verifyArtifact, validateArtifactRecord } from './images/records.ts';
 export type { ArtifactReadOptions, ArtifactRefusal, ArtifactRecordResult, ArtifactVerification } from './images/records.ts';
 
 export { saveArtifact } from './images/saving.ts';
-export type { SaveArtifactOptions, SavedArtifact, SaveArtifactRefusal } from './images/saving.ts';
+export type { SaveArtifactSettings, SavedArtifact, SaveArtifactRefusal } from './images/saving.ts';
 
 export { removeModel } from './models/managed.ts';
 export type { ManagedModelEntry, RemoveModelResult } from './models/managed.ts';

@@ -12,7 +12,7 @@ import { inference } from './inference.ts';
 import { readSettings, saveSettings, usableProfile, validConcurrency } from './settings.ts';
 import type { Runner } from './queue.ts';
 import type { Draft } from '../../shared/session.ts';
-import type { PrepareModelOptions, SdkEvent } from 'picpatchsdk';
+import type { PrepareModelSettings, SdkEvent } from 'picpatchsdk';
 import type { Settings } from './settings.ts';
 export class Application {
   sessions: Sessions;
@@ -74,16 +74,16 @@ export class Application {
     const session = await this.sessions.get(sessionId); const run = session.runs.find(r => r.id === runId);
     if (!run?.record || !run.output) throw new UiError('error.select_a_completed_image');
     // The SDK leaves the inputs out of the saved copy when the user did not choose to share them.
-    const result = await saveArtifact(await this.sessions.imagePath(sessionId, runId), destination, run.record, { sidecar, includeInputs, onEvent: this.sdkEvents({ sessionId, runId, action: 'export' }) });
+    const result = await saveArtifact(await this.sessions.imagePath(sessionId, runId), destination, run.record, { sidecar, includeInputs }, { onEvent: this.sdkEvents({ sessionId, runId, action: 'export' }) });
     if (result.status === 'completed' && result.sidecar?.status === 'failed') this.diagnostic('warn', 'Image saved; its settings sidecar could not be saved.', { sessionId, runId, sidecar: result.sidecar });
     return result;
   }
   /** Presence checks are cheap; the signal bounds a probe that stops responding, such as an engine on a stalled volume. */
   async readiness() { return modelReadiness(this.settings, { signal: AbortSignal.timeout(120_000), onEvent: this.sdkEvents({ action: 'readiness' }) }); }
-  async models() { return inspectModels({ profile: this.settings.profile, onEvent: this.sdkEvents({ action: 'models' }) }); }
-  async prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelOptions, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}, signal?: AbortSignal) {
+  async models() { return inspectModels({ profile: this.settings.profile }, { onEvent: this.sdkEvents({ action: 'models' }) }); }
+  async prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelSettings, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}, signal?: AbortSignal) {
     this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_prepared_models');
-    const prepared = await prepareModel(modelId, { ...components, onEvent: this.sdkEvents({ action: 'prepare', modelId }), signal, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download });
+    const prepared = await prepareModel(modelId, { ...components, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download }, { signal, onEvent: this.sdkEvents({ action: 'prepare', modelId }) });
     await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
   }
   resourcesChanged(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }): boolean {
@@ -108,13 +108,13 @@ export class Application {
     this.queue.wake();
   }
   async verify(modelId: string, signal?: AbortSignal) {
-    const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile, signal, onEvent: this.sdkEvents({ modelId }) });
+    const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ modelId }) });
     if (opened.status === 'refused') return opened;
     return verifyModel(opened.model.directory, opened.model.manifest, { signal, onEvent: this.sdkEvents({ modelId }) });
   }
   async removeManaged(modelId: string, name: string, signal?: AbortSignal) {
     this.queue.requireIdle('error.finish_or_cancel_queued_work_before_removing_models');
-    return removeModel(modelId, name, { profile: this.settings.profile, signal, onEvent: this.sdkEvents({ modelId }) });
+    return removeModel(modelId, name, { profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ modelId }) });
   }
   private updateSettings(change: (value: Settings) => void): Promise<void> {
     const next = this.settingsTail.then(async () => {

@@ -30,7 +30,7 @@ it('ignores progress errors and preserves the original failure when an event sin
 it('does not await blocked caller logging and reports cancellation as cancellation', async () => {
   expect(await withDiagnostics('fixture', { onEvent: () => new Promise<void>(() => {}) }, async () => 1)).toBe(1);
   const events: SdkEvent[] = [];
-  await expect(prepareModel(listModels()[0]!.id, { signal: AbortSignal.abort(), onEvent: event => events.push(event) })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(prepareModel(listModels()[0]!.id, {}, { signal: AbortSignal.abort(), onEvent: event => events.push(event) })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(events.filter(e => e.name !== 'sdk.startup').map(e => e.stage)).toEqual(['started', 'cancelled']);
 });
 it('rejects malformed worker diagnostics instead of forwarding arbitrary private fields', () => {

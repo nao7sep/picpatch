@@ -5,11 +5,16 @@ import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from '../..
 import { join, dirname } from 'node:path';
 import { resolveStoragePaths } from '../../paths.ts';
 import { PicPatchSdkError } from '../../errors.ts';
-import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../../operations.ts';
+import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline, withSettings } from '../../operations.ts';
 import { operationStage, withDiagnostics } from '../../diagnostics.ts';
 import { engineDefinition, runtimePaths, validRecord } from './identity.ts';
 import { runCommand } from './command.ts';
-import type { EngineIdentity, EngineInspection, EngineInstallation, EngineOptions, EngineRecord, InstallEngineOptions, ReadyEngine, PythonRuntime } from './types.ts';
+import type { EngineIdentity, EngineInspection, EngineInstallation, EngineSettings, EngineRecord, InstallEngineSettings, ReadyEngine, PythonRuntime } from './types.ts';
+import type { CallOptions } from '../../types.ts';
+type EngineOptions = EngineSettings & CallOptions;
+type InstallEngineOptions = InstallEngineSettings & CallOptions;
+const engineKeys = ['profile', 'runtime', 'engineDirectory'];
+const installKeys = [...engineKeys, 'uvExecutable', 'cacheDirectory', 'pythonDirectory', 'toolDirectories', 'offline'];
 import { supportsRuntime, syncDirectory, syncFile, toolEnvironment, venvPython } from '../../platform.ts';
 
 const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException)?.code ?? '');
@@ -65,8 +70,9 @@ async function inspect(root: string, identity: EngineIdentity, signal: AbortSign
   return result;
 }
 /** Read-only: checks actual interpreter/dependency imports; never installs or loads weights. */
-export function inspectEngine(options: EngineOptions = {}): Promise<EngineInspection> {
-  return withDiagnostics('inspectEngine', options, async operation => {
+export function inspectEngine(settings: EngineSettings = {}, options: CallOptions = {}): Promise<EngineInspection> {
+  return withDiagnostics('inspectEngine', options, async call => {
+    const operation = withSettings(settings, engineKeys, call);
     const root = validate(operation, false);
     if (!supportsRuntime(operation.runtime ?? 'mflux')) return { status: 'unsupported', code: 'UNSUPPORTED_CAPABILITY', engineDirectory: root };
     return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Engine inspection timed out.', async signal => {
@@ -86,8 +92,9 @@ export async function resolveEngine(root: string, signal?: AbortSignal, runtime:
   return result;
 }
 /** Explicit install-or-reuse. Environments stay at stable paths; only complete readiness references are replaced. */
-export function installEngine(options: InstallEngineOptions): Promise<EngineInstallation> {
-  return withDiagnostics('installEngine', options, async operation => {
+export function installEngine(settings: InstallEngineSettings, options: CallOptions = {}): Promise<EngineInstallation> {
+  return withDiagnostics('installEngine', options, async call => {
+    const operation = withSettings(settings, installKeys, call);
     const root = validate(operation, true);
     absolutePath(operation.uvExecutable);
     for (const path of [operation.cacheDirectory, operation.pythonDirectory]) if (path !== undefined) absolutePath(path);

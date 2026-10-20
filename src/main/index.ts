@@ -293,16 +293,16 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       // Native bundles name their checkpoint through pickComponent before Register is enabled.
       const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return;
       return service.prepare(payload.modelId, paths[0], payload.checkpoint, false, payload.components, signal); }
-    case 'engines': return { python: await inspectEngine({ ...pythonEngine(payload.modelId), profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
+    case 'engines': return { python: await inspectEngine({ ...pythonEngine(payload.modelId), profile: service.settings.profile }, { onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile }, { onEvent: service.sdkEvents({ action }) }) };
     case 'installNative': {
-      try { return await installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal }); }
+      try { return await installNativeEngine({ profile: service.settings.profile }, { signal, onEvent: service.sdkEvents({ action }) }); }
       catch (error) {
         // Windows: the engine's DLLs need the Microsoft Visual C++ runtime, which not every PC has.
         if (isPicPatchSdkError(error) && error.code === 'DEPENDENCY_MISSING' && error.subject === 'msvc-runtime') throw new UiError('error.msvc_runtime');
         throw error;
       }
     }
-    case 'installPython': { const uvExecutable = locations.uv(); return installEngine({ ...pythonEngine(payload.modelId), onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
+    case 'installPython': { const uvExecutable = locations.uv(); return installEngine({ ...pythonEngine(payload.modelId), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])] }, { signal, onEvent: service.sdkEvents({ action }) }); }
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }

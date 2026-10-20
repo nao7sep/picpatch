@@ -29,7 +29,7 @@ it('rejects external selections, traversal, directory links and cancelled remova
   await expect(removeModel(id, revision, { modelsDirectory: directory })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   for (const name of ['../external', 'external', '/absolute']) await expect(removeModel(id, name, { modelsDirectory: directory })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   await expect(removeModel('sdxl', revision, { modelsDirectory: directory })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
-  await expect(removeModel(id, revision, { modelsDirectory: directory, signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(removeModel(id, revision, { modelsDirectory: directory }, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(await readFile(join(external, 'keep'), 'utf8')).toBe('keep');
   await rm(join(directory, id), { recursive: true }); await symlink(external, join(directory, id));
   await expect(removeModel(id, revision, { modelsDirectory: directory })).rejects.toMatchObject({ code: 'MODEL_LINK_REFUSED' });

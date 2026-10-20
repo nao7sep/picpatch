@@ -1,18 +1,19 @@
 import { join } from 'node:path';
 import { lstat, realpath, opendir, mkdtemp, rename, rm, storageRecovery } from '../storage.ts';
 import { withDiagnostics } from '../diagnostics.ts';
-import { checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
+import { checkSignal, timeBudget, withDeadline, withSettings } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { resolveStoragePaths } from '../paths.ts';
 import { checkProfile } from '../profile.ts';
 import { catalogModel } from './catalog.ts';
-import type { ModelOpenOptions } from './opening.ts';
+import type { ModelStoreSettings } from './opening.ts';
+import type { CallOptions } from '../types.ts';
 
 export type { ManagedModelEntry } from './types.ts';
 import type { ManagedModelEntry } from './types.ts';
 const entryKind = (name: string): ManagedModelEntry['kind'] | undefined => /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(name) ? 'revision' : /^\.(?:prepare|remove)-[A-Za-z0-9]+$/.test(name) ? 'incomplete' : undefined;
 const absent = (cause: unknown) => ['ENOENT', 'ENOTDIR'].includes((cause as NodeJS.ErrnoException).code ?? '');
-export function managedRoot(options: ModelOpenOptions): string {
+export function managedRoot(options: ModelStoreSettings): string {
   const profile = options.profile === undefined ? undefined : checkProfile(options.profile);
   const modelsDirectory = options.modelsDirectory ?? profile?.modelsDirectory;
   return resolveStoragePaths(modelsDirectory === undefined ? {} : { modelsDirectory }).modelsDirectory;
@@ -54,9 +55,9 @@ export type RemoveModelResult = { status: 'removed' | 'missing'; modelId: string
  * Other processes are not coordinated: a concurrent user may fail visibly, never gain partial ready weights.
  * Symlink targets and caller-owned external bundles are never traversed.
  */
-export function removeModel(modelId: string, name: string, options: ModelOpenOptions = {}): Promise<RemoveModelResult> {
-  return withDiagnostics('removeModel', options, async operation => {
-    validateOperation(operation, ['profile', 'modelsDirectory']);
+export function removeModel(modelId: string, name: string, settings: ModelStoreSettings = {}, options: CallOptions = {}): Promise<RemoveModelResult> {
+  return withDiagnostics('removeModel', options, async call => {
+    const operation = withSettings(settings, ['profile', 'modelsDirectory'], call);
     const model = catalogModel(modelId);
     if (model.acquisition !== 'pinned' || typeof name !== 'string' || !entryKind(name)) throw new PicPatchSdkError('INVALID_REQUEST', 'Select one managed revision or incomplete attempt from inventory.');
     const root = managedRoot(operation);

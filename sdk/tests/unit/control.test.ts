@@ -27,7 +27,7 @@ it.each(['sd15-inpaint', 'sd15-ip-adapter', 'wrong-context', 'missing-hint'])('r
   if (failure === 'missing-hint') delete shapes['control_model.input_hint_block.0.weight'];
   await tensorFile(join(directory, controlNet.path), shapes);
   const onProgress = vi.fn();
-  await expect(prepareModel(variant, { directory, checkpoint: 'base.safetensors', controlNet, onProgress })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(prepareModel(variant, { directory, checkpoint: 'base.safetensors', controlNet }, { onProgress })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   expect(onProgress).not.toHaveBeenCalled();
 });
 it('rejects unsupported maps and malformed capability metadata before input IO', async () => {

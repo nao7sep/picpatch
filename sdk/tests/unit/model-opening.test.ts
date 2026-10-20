@@ -29,7 +29,7 @@ it('inventories missing managed bundles without creating directories and honors 
   expect(result.models.length).toBeGreaterThan(0);
   expect(result.models.every(item => item.status === 'missing' && item.directory.startsWith(join(directory, 'explicit')))).toBe(true);
   await expect(inspectModels({ modelsDirectory: 'relative' })).rejects.toMatchObject({ kind: 'invalid' });
-  await expect(inspectModels({ signal: AbortSignal.abort() })).rejects.toMatchObject({ kind: 'cancelled' });
+  await expect(inspectModels({}, { signal: AbortSignal.abort() })).rejects.toMatchObject({ kind: 'cancelled' });
 });
 
 it('round-trips persisted native split encoder roles without dropping or redirecting a component', async () => {

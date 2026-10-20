@@ -44,7 +44,7 @@ it('refuses changed content, bad dimensions and aliases, preserving every source
 });
 it('keeps concurrent saves independent and honours cancellation before publication', async () => {
   const output = join(directory, 'out.png');
-  await expect(saveArtifact(source, output, record, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED', effect: 'none' });
+  await expect(saveArtifact(source, output, record, {}, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED', effect: 'none' });
   const results = await Promise.all([saveArtifact(source, output, record), saveArtifact(source, output, record)]);
   expect(results.filter(r => r.status === 'completed')).toHaveLength(1);
   expect(results.filter(r => r.status === 'refused')).toHaveLength(1);

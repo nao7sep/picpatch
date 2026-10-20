@@ -24,7 +24,7 @@ const engine = await installEngine({ uvExecutable: '/absolute/path/to/uv' });
 const prepared = await prepareModel('flux2-klein-4b-4bit', { download: true });
 ```
 
-`inspectEngine()` checks managed runtime readiness without installing. `installEngine` also accepts explicit engine, cache and Python directories, a time budget, cancellation, events and `offline: true`. Readiness is published only after the installed environment passes its checks. Engine identity includes platform, architecture, Python and dependency-lock identity. Engine storage is intended for local disks.
+`inspectEngine()` checks managed runtime readiness without installing. `installEngine` also takes explicit engine, cache and Python directories and `offline: true` in its arguments, and a time budget, cancellation and events in its call options. Readiness is published only after the installed environment passes its checks. Engine identity includes platform, architecture, Python and dependency-lock identity. Engine storage is intended for local disks.
 
 For an existing model, omit `download` to verify and reuse its managed bundle, or pass an absolute `directory` to use a compatible bundle in place. `prepareModel` verifies pinned components or fingerprints external files and returns a registration whose `model` is passed to the editor. It preserves invalid existing bundles rather than silently repairing them. Keep prepared files unchanged during use: inference does not re-hash them on every call. Use `verifyModel(directory, manifest)` for a fresh explicit check.
 
@@ -145,7 +145,7 @@ Each image client emits `sdk.startup` once, to its first call that passes `onEve
 
 The caller stores events wherever it keeps its own records. There is no `logPath`, log file writer or log result field. `debug: true` opts into diagnostic progress events; debug is off by default and never enabled from the environment. Info, warning and error events are not filtered by a configurable threshold.
 
-Every verb accepts the same call options: `signal`, `onEvent`, `onProgress`, `debug` and `timeoutMs`. A verb's own settings (a profile, resource folders, `sidecar`) sit beside them, and any other key is refused. Where counted work exists, `onProgress` receives `{ type: 'progress', stage, completed, total }`, throttled to at most ten updates a second with the final count retained. Stages alone are events, not fabricated progress; a verb with nothing to count, such as engine installation, accepts `onProgress` and never calls it. Both hooks are best effort: synchronous throws and rejected promises cannot change the operation outcome, asynchronous sinks are not awaited, and failed event hooks have no fallback. A progress-hook failure is reported once through the separate event hook.
+Every verb takes its arguments, which hold everything it works on (a profile, resource folders, `download`, `sidecar` and the like), and last the one call-options object: `signal`, `onEvent`, `onProgress`, `debug` and `timeoutMs`. The options mean the same on every verb, so one object can go to any call, as in `prepareModel(id, { download: true }, options)`. Each side refuses the other's keys and any unknown key. Where counted work exists, `onProgress` receives `{ type: 'progress', stage, completed, total }`, throttled to at most ten updates a second with the final count retained. Stages alone are events, not fabricated progress; a verb with nothing to count, such as engine installation, accepts `onProgress` and never calls it. Both hooks are best effort: synchronous throws and rejected promises cannot change the operation outcome, asynchronous sinks are not awaited, and failed event hooks have no fallback. A progress-hook failure is reported once through the separate event hook.
 
 ```ts
 import { createImageClient, prepareModel, isPicPatchSdkError, type OperationOptions } from 'picpatchsdk';
@@ -155,7 +155,7 @@ const options: OperationOptions = {
   onEvent: event => console.log(JSON.stringify(event)),
   onProgress: progress => console.log(progress.completed, progress.total),
 };
-const prepared = await prepareModel('flux2-klein-4b-4bit', options);
+const prepared = await prepareModel('flux2-klein-4b-4bit', {}, options);
 const editor = createImageClient({ model: prepared.model });
 try {
   const result = await editor.generate({ prompt: 'A ceramic bowl.', outputDirectory: '/absolute/outputs' }, options);

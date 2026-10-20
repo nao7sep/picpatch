@@ -4,18 +4,21 @@ import { dirname, join } from 'node:path';
 import { chmod, lstat, mkdir, mkdtemp, open, readdir, rename, rm, storageCleanup, storageRecovery, storageStalled } from '../../storage.ts';
 import { PicPatchSdkError } from '../../errors.ts';
 import { operationStage, withDiagnostics } from '../../diagnostics.ts';
-import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../../operations.ts';
+import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline, withSettings } from '../../operations.ts';
 import { resolveStoragePaths } from '../../paths.ts';
 import { checkProfile } from '../../profile.ts';
 import { downloadFile } from '../download.ts';
 import { runCommand } from './command.ts';
-import type { NativeEngineInspection, NativeEngineInstallation, NativeEngineOptions, NativeInspectionOptions } from './types.ts';
+import type { NativeEngineInspection, NativeEngineInstallation, NativeEngineSettings, NativeInspectionSettings } from './types.ts';
+import type { CallOptions } from '../../types.ts';
+type NativeEngineOptions = NativeEngineSettings & CallOptions;
+type NativeInspectionOptions = NativeInspectionSettings & CallOptions;
 
 import { nativeReleaseFor, nativeRevision, type NativeRelease } from './native-release.ts';
 import { archiveTool, currentHost, hostId, syncDirectory, syncFile, toolEnvironment } from '../../platform.ts';
 export type { NativeEngineInspection, NativeEngineInstallation, ReadyNativeEngine } from './types.ts';
 const missing = (cause: unknown) => ['ENOENT', 'ENOTDIR'].includes((cause as NodeJS.ErrnoException)?.code ?? '');
-function settings(options: NativeInspectionOptions, keys: string[]): { root: string; nativeExecutable?: string } {
+function nativeLocation(options: NativeInspectionOptions, keys: string[]): { root: string; nativeExecutable?: string } {
   validateOperation(options, ['profile', 'engineDirectory', ...keys]);
   const profile = options.profile === undefined ? undefined : checkProfile(options.profile);
   const engineDirectory = options.engineDirectory ?? profile?.engineDirectory;
@@ -23,7 +26,7 @@ function settings(options: NativeInspectionOptions, keys: string[]): { root: str
   if (nativeExecutable !== undefined) absolutePath(nativeExecutable);
   return { root: resolveStoragePaths(engineDirectory === undefined ? {} : { engineDirectory }).engineDirectory, ...(nativeExecutable === undefined ? {} : { nativeExecutable }) };
 }
-const root = (options: NativeEngineOptions) => settings(options, []).root;
+const root = (options: NativeEngineOptions) => nativeLocation(options, []).root;
 /** The pinned build for this computer; the macOS build needs macOS 26 (Darwin 25) or newer. */
 function hostRelease(): NativeRelease | undefined {
   if (process.platform === 'darwin' && Number(release().split('.')[0]) < 25) return undefined;
@@ -79,9 +82,10 @@ async function inspect(root: string, signal: AbortSignal): Promise<NativeEngineI
   return { ...base, status: 'ready', code: 'ENGINE_READY', message: 'The native engine is ready.', nativeExecutable };
 }
 /** Read-only runtime probe of the managed installation, or of a configured executable; does not acquire files or load models. */
-export function inspectNativeEngine(options: NativeInspectionOptions = {}): Promise<NativeEngineInspection> {
-  return withDiagnostics('inspectNativeEngine', options, operation => {
-    const { root: directory, nativeExecutable } = settings(operation, ['nativeExecutable']);
+export function inspectNativeEngine(settings: NativeInspectionSettings = {}, options: CallOptions = {}): Promise<NativeEngineInspection> {
+  return withDiagnostics('inspectNativeEngine', options, call => {
+    const operation = withSettings(settings, ['profile', 'engineDirectory', 'nativeExecutable'], call);
+    const { root: directory, nativeExecutable } = nativeLocation(operation, ['nativeExecutable']);
     return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Native engine inspection timed out.', async signal => {
       try { return await (nativeExecutable === undefined ? inspect(directory, signal) : inspectConfigured(directory, nativeExecutable, signal)); }
       catch (cause) { if (cause instanceof PicPatchSdkError) throw cause; throw new PicPatchSdkError('ENGINE_IO', 'Could not inspect the native engine.', { cause }); }
@@ -89,8 +93,8 @@ export function inspectNativeEngine(options: NativeInspectionOptions = {}): Prom
   });
 }
 /** Explicit acquisition. Pass the returned nativeExecutable to an editor or profile. No implicit install. */
-export function installNativeEngine(options: NativeEngineOptions = {}): Promise<NativeEngineInstallation> {
-  return withDiagnostics('installNativeEngine', options, operation => install(operation));
+export function installNativeEngine(settings: NativeEngineSettings = {}, options: CallOptions = {}): Promise<NativeEngineInstallation> {
+  return withDiagnostics('installNativeEngine', options, call => install(withSettings(settings, ['profile', 'engineDirectory'], call)));
 }
 async function install(options: NativeEngineOptions): Promise<NativeEngineInstallation> {
   const directory = root(options);

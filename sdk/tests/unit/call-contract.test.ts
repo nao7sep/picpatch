@@ -10,7 +10,7 @@ import { diagnosticLifetime, withDiagnostics } from '../../src/diagnostics.ts';
 import { publishFile } from '../../src/images/publication.ts';
 import { admissionIssues } from '../../src/admission.ts';
 import { admissionRequest, validateEditRequest } from '../../src/validation.ts';
-import { listModels, inspectEngine, inspectNativeEngine, prepareModel, readArtifactRecord, saveArtifact, validateModelRegistration, PicPatchSdkError, type ArtifactRecord, type ModelCapabilities, type SdkEvent } from '../../src/index.ts';
+import { listModels, inspectEngine, inspectModels, inspectNativeEngine, prepareModel, readArtifactRecord, saveArtifact, validateModelRegistration, PicPatchSdkError, type ArtifactRecord, type ModelCapabilities, type SdkEvent } from '../../src/index.ts';
 
 let directory: string;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-contract-')); });
@@ -25,16 +25,22 @@ it('delivers the startup record to the first call that listens, not the first ca
   expect(events.filter(event => event.name === 'sdk.startup').map(event => event.verb)).toEqual(['listening']);
 });
 
-it('accepts the same call options on every verb and refuses any other key', async () => {
+it('takes one call-options object on every verb, apart from each verb’s own arguments', async () => {
   const progress = vi.fn();
+  // One options object an app can hand to any call; no verb refuses another verb's setting.
   const call = { signal: new AbortController().signal, onEvent: () => {}, onProgress: progress, debug: false, timeoutMs: 60_000 };
+  expect((await inspectEngine({ engineDirectory: directory }, call)).status).toMatch(/missing|unsupported/);
+  expect((await inspectNativeEngine({ engineDirectory: directory }, call)).status).toMatch(/missing|unsupported/);
+  expect((await inspectModels({ modelsDirectory: directory }, call)).models.length).toBeGreaterThan(0);
+  await expect(readArtifactRecord(join(directory, 'absent.json'), call)).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
   // Engine verbs report stages, not counts: they accept onProgress and never call it.
-  expect((await inspectEngine({ engineDirectory: directory, ...call })).status).toMatch(/missing|unsupported/);
-  expect((await inspectNativeEngine({ engineDirectory: directory, ...call })).status).toMatch(/missing|unsupported/);
   expect(progress).not.toHaveBeenCalled();
-  // caller is record content now, an argument of the verbs that write records.
+  // Each side refuses the other's keys, and unknown keys, so a misplaced setting fails loudly.
+  await expect(inspectEngine({ engineDirectory: directory, signal: call.signal } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(inspectEngine({}, { engineDirectory: directory } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(inspectEngine({ unknown: true } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  // caller is record content, an argument of the verbs that write records, not a call option.
   await expect(readArtifactRecord(join(directory, 'record.json'), { caller: { name: 'App', version: '1' } } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
-  await expect(inspectEngine({ engineDirectory: directory, unknown: true } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });
 
 it('refuses newer formats in the validators exactly as the readers do', () => {

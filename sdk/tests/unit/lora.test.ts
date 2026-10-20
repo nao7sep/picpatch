@@ -24,7 +24,7 @@ it.each(['wrong-width', 'missing-up', 'unknown-target', 'text-encoder', 'rank-mi
   await tensorFile(join(directory, 'style.safetensors'), { [`${name}.lora_down.weight`]: [4, failure === 'wrong-width' ? 2048 : 768],
     ...(failure === 'missing-up' ? {} : { [`${name}.lora_up.weight`]: [320, failure === 'rank-mismatch' ? 8 : 4] }) });
   const onProgress = vi.fn();
-  await expect(prepareModel('sd15', { directory, checkpoint: 'base.safetensors', loras: [{ path: 'style.safetensors' }], onProgress })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(prepareModel('sd15', { directory, checkpoint: 'base.safetensors', loras: [{ path: 'style.safetensors' }] }, { onProgress })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   expect(onProgress).not.toHaveBeenCalled();
 });
 it.each([null, [], [{ path: '../outside.safetensors' }], [{ path: 'a.safetensors', scale: Infinity }], [{ path: 'a.gguf' }], [{ path: 'a.safetensors' }, { path: 'a.safetensors' }]])('rejects malformed selections without model IO', async loras => {

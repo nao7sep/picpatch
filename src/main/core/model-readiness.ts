@@ -10,8 +10,8 @@ export async function modelReadiness(settings: Settings, call: Pick<CallOptions,
     if (!pending) {
       // The catalog says which engine prepares each model; the SDK inspects a configured native executable itself.
       pending = model.runtime.engine === 'native'
-        ? inspectNativeEngine({ profile: settings.profile, ...call }).then(result => result.status === 'ready')
-        : inspectEngine({ profile: settings.profile, runtime: model.runtime.name, ...call }).then(result => result.status === 'ready');
+        ? inspectNativeEngine({ profile: settings.profile }, call).then(result => result.status === 'ready')
+        : inspectEngine({ profile: settings.profile, runtime: model.runtime.name }, call).then(result => result.status === 'ready');
       engines.set(model.runtime.name, pending);
     }
     return pending;
@@ -19,7 +19,7 @@ export async function modelReadiness(settings: Settings, call: Pick<CallOptions,
   const states: Record<string, ModelState> = {};
   for (const model of models) {
     if (model.acquisition !== 'pinned' && !settings.registrations[model.id]) { states[model.id] = 'missing'; continue; }
-    const opened = await openModel(settings.registrations[model.id] ?? model.id, { profile: settings.profile, ...call });
+    const opened = await openModel(settings.registrations[model.id] ?? model.id, { profile: settings.profile }, call);
     states[model.id] = opened.status !== 'completed' ? 'missing' : await engine(model) ? 'ready' : 'engineMissing';
   }
   return states;

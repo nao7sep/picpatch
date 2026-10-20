@@ -7,7 +7,7 @@ import { withDiagnostics } from '../diagnostics.ts';
 import { chmod, lstat, mkdir, mkdtemp, open, rename, rm } from '../storage.ts';
 import { dirname, join } from 'node:path';
 import { PicPatchSdkError } from '../errors.ts';
-import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
+import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline, withSettings } from '../operations.ts';
 import { resolveStoragePaths } from '../paths.ts';
 import type { LocalModel } from '../contracts.generated.ts';
 import { catalogModel, type CatalogModel } from './catalog.ts';
@@ -17,7 +17,8 @@ import { validateModelManifest, verifyModelOperation as verifyModel } from './ve
 import type { ModelOperationOptions } from './types.ts';
 import { syncDirectory, syncFile } from '../platform.ts';
 
-export interface PrepareModelOptions extends ModelOperationOptions {
+/** prepareModel's own arguments; call options are passed apart from them. */
+export interface PrepareModelSettings {
   profile?: PicPatchProfile;
   /** Use an external bundle in place, with no copying or acquisition. */
   directory?: string;
@@ -39,6 +40,9 @@ export interface PrepareModelOptions extends ModelOperationOptions {
   download?: boolean;
   modelsDirectory?: string;
 }
+/** The settings and call options read together inside preparation. */
+export type PrepareModelOptions = PrepareModelSettings & ModelOperationOptions;
+const settingKeys = ['profile', 'directory', 'download', 'modelsDirectory', 'checkpoint', 'vae', 'photoMaker', 'ipAdapter', 'clipVision', 'clipL', 'clipG', 't5', 'loras', 'controlNet'];
 export interface PreparedModel extends ModelRegistration {
   model: LocalModel;
   origin: 'external' | 'cache' | 'download';
@@ -170,6 +174,6 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
   }
 }
 
-export function prepareModel(id: string, options: PrepareModelOptions = {}): Promise<PreparedModel> {
-  return withDiagnostics('prepareModel', options, operation => prepareModelOperation(id, operation));
+export function prepareModel(id: string, settings: PrepareModelSettings = {}, options: ModelOperationOptions = {}): Promise<PreparedModel> {
+  return withDiagnostics('prepareModel', options, call => prepareModelOperation(id, withSettings(settings, settingKeys, call)));
 }

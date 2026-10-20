@@ -7,14 +7,15 @@ import { stat } from '../storage.ts';
 import { join } from 'node:path';
 import type { LocalModel, ModelCapabilities } from '../contracts.generated.ts';
 import { validateLocalModel, verifyModelOperation as verifyModel } from '../models/verification.ts';
-import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
+import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline, withSettings } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { WorkerProcess } from '../worker/process.ts';
 import type { RuntimeCheck } from '../worker/protocol.ts';
 import { workerLaunch } from '../backends/python/launch.ts';
 import { workerTimeouts } from '../worker/process.ts';
 
-export interface ReadinessOptions extends CallOptions {
+/** inspectReadiness's own arguments; call options are passed apart from them. */
+export interface ReadinessSettings {
   verify?: boolean;
   /** Loads existing weights without inference, then releases the process. May consume substantial memory. */
   load?: boolean;
@@ -27,6 +28,7 @@ export interface ModelReadiness {
 }
 
 /** Presence, integrity, imports and load evidence remain separate. Never downloads. */
+type ReadinessOptions = ReadinessSettings & CallOptions;
 async function inspectReadinessOperation(executable: string, input: LocalModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
   absolutePath(executable); validateOperation(options, ['timeoutMs', 'verify', 'load']);
   for (const value of [options.verify, options.load]) if (value !== undefined && typeof value !== 'boolean') throw new PicPatchSdkError('INVALID_REQUEST', 'Readiness switches must be booleans.');
@@ -80,6 +82,6 @@ async function inspectReadinessOperation(executable: string, input: LocalModel, 
   });
 }
 
-export function inspectReadiness(executable: string, input: LocalModel, options: ReadinessOptions = {}): Promise<ModelReadiness> {
-  return withDiagnostics('inspectReadiness', options, operation => inspectReadinessOperation(executable, input, operation));
+export function inspectReadiness(executable: string, input: LocalModel, settings: ReadinessSettings = {}, options: CallOptions = {}): Promise<ModelReadiness> {
+  return withDiagnostics('inspectReadiness', options, call => inspectReadinessOperation(executable, input, withSettings(settings, ['verify', 'load'], call)));
 }

@@ -2,13 +2,13 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { listModels, prepareModel, validateGenerateRequest, validateEditRequest, type PrepareModelOptions } from '../../src/index.ts';
+import { listModels, prepareModel, validateGenerateRequest, validateEditRequest, type PrepareModelSettings } from '../../src/index.ts';
 import { nativeWeightArguments } from '../../src/backends/stable-diffusion-cpp/flow.ts';
 import { tensorFile } from '../helpers/native-assets.ts';
 let directory: string;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-native-flow-')); });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
-async function fixture(variant: string): Promise<PrepareModelOptions & { checkpoint: string }> {
+async function fixture(variant: string): Promise<PrepareModelSettings & { checkpoint: string }> {
   await tensorFile(join(directory, 'model.safetensors'), variant === 'sd35-large' ? {
     'model.diffusion_model.joint_blocks.37.x_block.attn.qkv.weight': [1], 'model.diffusion_model.x_embedder.proj.weight': [1], 'first_stage_model.decoder.conv_out.weight': [1],
   } : { 'double_blocks.0.img_attn.qkv.weight': [1], [variant === 'chroma' ? 'distilled_guidance_layer.in_proj.weight' : 'nerf_final_layer_conv.weight']: [1] });

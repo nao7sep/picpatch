@@ -34,7 +34,7 @@ it.each([false, true])('acquires a tiny HTTP fixture through the production stre
   try {
     await expect(prepareModel(entry.id, { ...storage })).rejects.toMatchObject({ code: 'MODEL_IO' });
     expect(fetch).not.toHaveBeenCalled();
-    const preparation = prepareModel(entry.id, { ...storage, download: true, signal: controller.signal, onEvent: event => events.push(event) });
+    const preparation = prepareModel(entry.id, { ...storage, download: true }, { signal: controller.signal, onEvent: event => events.push(event) });
     if (cancel) await expect(preparation).rejects.toMatchObject({ code: 'CANCELLED' });
     else {
       const prepared = await preparation;

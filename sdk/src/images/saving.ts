@@ -1,7 +1,7 @@
 import { basename, join } from 'node:path';
 import { mkdtemp, rm, storageCleanup, storageRecovery, storageStalled } from '../storage.ts';
 import { withDiagnostics } from '../diagnostics.ts';
-import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
+import { absolutePath, checkSignal, timeBudget, withDeadline, withSettings } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import type { ArtifactRecord } from '../contracts.generated.ts';
 import { checkArtifactRecord, validateArtifactRecord } from './records.ts';
@@ -13,7 +13,8 @@ import { publishComplete } from './publication.ts';
 import { publishSidecar, sidecarPath } from './sidecar.ts';
 import { dirname } from 'node:path';
 
-export interface SaveArtifactOptions extends CallOptions {
+/** saveArtifact's own arguments; call options are passed apart from them. */
+export interface SaveArtifactSettings {
   /** Write the record beside the saved image. Defaults to false. */
   sidecar?: boolean;
   /** Keep the prompt, negative prompt and input descriptions the record holds. Defaults to true; false leaves them out of the saved record. */
@@ -22,9 +23,9 @@ export interface SaveArtifactOptions extends CallOptions {
 export type { SavedArtifact, SaveArtifactRefusal } from '../types.ts';
 import type { SavedArtifact, SaveArtifactRefusal } from '../types.ts';
 /** Save an existing PNG without inference, re-encoding, overwriting or modifying its source. */
-export function saveArtifact(imagePath: string, outputPath: string, input: ArtifactRecord, options: SaveArtifactOptions = {}): Promise<SavedArtifact | SaveArtifactRefusal> {
-  return withDiagnostics('saveArtifact', options, async operation => {
-    validateOperation(operation, ['sidecar', 'includeInputs']); absolutePath(imagePath); absolutePath(outputPath);
+export function saveArtifact(imagePath: string, outputPath: string, input: ArtifactRecord, settings: SaveArtifactSettings = {}, options: CallOptions = {}): Promise<SavedArtifact | SaveArtifactRefusal> {
+  return withDiagnostics('saveArtifact', options, async call => {
+    const operation = withSettings(settings, ['sidecar', 'includeInputs'], call); absolutePath(imagePath); absolutePath(outputPath);
     if (!outputPath.toLowerCase().endsWith('.png') || [operation.sidecar, operation.includeInputs].some(value => value !== undefined && typeof value !== 'boolean')) throw new PicPatchSdkError('INVALID_REQUEST', 'Save to a PNG path with optional boolean sidecar and includeInputs selections.');
     const valid = validateArtifactRecord(input);
     if (valid.status === 'refused') return valid;

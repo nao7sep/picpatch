@@ -26,12 +26,12 @@ export function inference(current: () => Sessions, settings: () => Settings, sdk
     const selected = sdk.listModels().find(model => model.id === run.modelId);
     if (!selected) throw new PicPatchSdkError('INVALID_REQUEST', 'Choose an available model.');
     // The SDK's refusal (an incomplete or newer registration) is the run's outcome, as its code says.
-    const opened = await sdk.openModel(config.registrations[run.modelId] ?? run.modelId, { profile: config.profile, signal: events.signal, onEvent: events.onEvent });
+    const opened = await sdk.openModel(config.registrations[run.modelId] ?? run.modelId, { profile: config.profile }, { signal: events.signal, onEvent: events.onEvent });
     if (opened.status === 'refused') return { outcome: opened };
     let nativeExecutable: string | undefined;
     if (selected.runtime.engine === 'native') {
       // The SDK inspects the configured executable, or the managed one when none is configured.
-      const native = await sdk.inspectNativeEngine({ profile: config.profile, signal: events.signal, onEvent: events.onEvent });
+      const native = await sdk.inspectNativeEngine({ profile: config.profile }, { signal: events.signal, onEvent: events.onEvent });
       if (native.status !== 'ready') throw new PicPatchSdkError(native.status === 'missing' ? 'ENGINE_MISSING' : native.status === 'unsupported' ? 'UNSUPPORTED_CAPABILITY' : 'ENGINE_INCOMPATIBLE', native.message);
       nativeExecutable = native.nativeExecutable;
     }

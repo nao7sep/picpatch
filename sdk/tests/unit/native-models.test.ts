@@ -52,7 +52,7 @@ it('rejects implicit acquisition, ambiguous files and bad registration before ex
 
 it('cancels preparation and rejects directory indirection without mutating external files', async () => {
   const controller = new AbortController();
-  await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors', signal: controller.signal, onEvent: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors' }, { signal: controller.signal, onEvent: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
   await mkdir(join(directory, 'actual'));
   await writeFile(join(directory, 'actual/weights.gguf'), 'test');
   await symlink(join(directory, 'actual'), join(directory, 'linked'));
@@ -89,7 +89,7 @@ it.each(['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint'])('rejects mismatched ar
   for (const actual of ['sd15', 'sdxl', 'sd15-inpaint', 'sdxl-inpaint'].filter(id => id !== variant)) {
     await nativeCheckpoint(join(directory, 'custom.safetensors'), actual);
     let hashing = false;
-    await expect(prepareModel(variant, { directory, checkpoint: 'custom.safetensors', onProgress: () => { hashing = true; } })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    await expect(prepareModel(variant, { directory, checkpoint: 'custom.safetensors' }, { onProgress: () => { hashing = true; } })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     expect(hashing).toBe(false);
   }
 });

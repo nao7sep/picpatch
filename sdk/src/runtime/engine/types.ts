@@ -1,24 +1,24 @@
-import type { CallOptions, PicPatchProfile } from '../../types.ts';
+import type { PicPatchProfile } from '../../types.ts';
 import type { RuntimeName } from '../../hosts.ts';
 
 /** The runtimes the managed Python engine installs; stable-diffusion.cpp has its own native engine verbs. */
 export type PythonRuntime = Exclude<RuntimeName, 'stable-diffusion.cpp'>;
-/** Engine storage is local-disk storage. No shared-network filesystem semantics are promised. */
-export interface EngineOptions extends CallOptions {
+/** The engine verbs' own arguments; call options are passed apart from them. Engine storage is local-disk storage. */
+export interface EngineSettings {
   /** Dependency set to prepare: a catalog entry's runtime.name where its runtime.engine is python. Defaults to mflux. */
   runtime?: PythonRuntime;
   profile?: PicPatchProfile;
   engineDirectory?: string;
 }
-export interface NativeEngineOptions extends CallOptions {
+export interface NativeEngineSettings {
   profile?: PicPatchProfile;
   engineDirectory?: string;
 }
-export interface NativeInspectionOptions extends NativeEngineOptions {
+export interface NativeInspectionSettings extends NativeEngineSettings {
   /** A configured sd-cli to check in place of the managed installation; defaults to the profile's nativeExecutable. */
   nativeExecutable?: string;
 }
-export interface InstallEngineOptions extends EngineOptions {
+export interface InstallEngineSettings extends EngineSettings {
   /** Absolute path to caller-provided uv. PicPatchSdk never installs uv or build tools. */
   uvExecutable: string;
   cacheDirectory?: string;

@@ -6,17 +6,21 @@ import { withDiagnostics } from '../diagnostics.ts';
 import type { CallOptions, ModelPresenceIssue } from '../types.ts';
 import { newerVersion, versionRefusal } from '../versions.ts';
 import { PicPatchSdkError, sdkError } from '../errors.ts';
-import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
+import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline, withSettings } from '../operations.ts';
 import type { PicPatchProfile } from '../profile.ts';
 import { catalogModel, listModels } from './catalog.ts';
 import { validateLocalModel } from './verification.ts';
 
-export interface ModelOpenOptions extends CallOptions {
+/** The managed model root: modelsDirectory, else the profile's, else the SDK's default. */
+export interface ModelStoreSettings {
   profile?: PicPatchProfile;
   modelsDirectory?: string;
+}
+export interface ModelOpenSettings extends ModelStoreSettings {
   /** Explicit complete catalog bundle. External selections use their saved registration. */
   directory?: string;
 }
+type ModelOpenOptions = ModelOpenSettings & CallOptions;
 export type { ManagedModelInventory, ModelInventoryFailure, ModelOpenRefusal, ModelOpenResult, ModelPresenceIssue, ModelRegistration, ModelRegistrationResult, OpenedModel } from './types.ts';
 import type { ManagedModelInventory, ModelOpenRefusal, ModelOpenResult, ModelRegistration, ModelRegistrationResult } from './types.ts';
 
@@ -73,15 +77,15 @@ function select(input: string | ModelRegistration, options: ModelOpenOptions): M
   return { version: 1, model: { variant: entry.variant, directory: options.directory ?? join(root(options), entry.id, entry.manifest.source.revision), manifest: entry.manifest } };
 }
 /** Cheap presence only: never reads model contents, installs packages or starts inference. */
-export function openModel(input: string | ModelRegistration, options: ModelOpenOptions = {}): Promise<ModelOpenResult> {
-  return withDiagnostics('openModel', options, operation => boundary(operation, async signal => {
+export function openModel(input: string | ModelRegistration, settings: ModelOpenSettings = {}, options: CallOptions = {}): Promise<ModelOpenResult> {
+  return withDiagnostics('openModel', options, call => { const operation = withSettings(settings, ['profile', 'modelsDirectory', 'directory'], call); return boundary(operation, async signal => {
     const registration = select(input, operation);
     return 'status' in registration ? registration : presence(registration, signal);
-  }));
+  }); });
 }
 /** Reads only the explicitly selected registration file. The caller owns its persistence. */
-export function readModelRegistration(path: string, options: ModelOpenOptions = {}): Promise<ModelRegistrationResult> {
-  return withDiagnostics('readModelRegistration', options, operation => boundary(operation, async signal => {
+export function readModelRegistration(path: string, options: CallOptions = {}): Promise<ModelRegistrationResult> {
+  return withDiagnostics('readModelRegistration', options, operation => boundary(withSettings({}, [], operation), async signal => {
     absolutePath(path); checkSignal(signal);
     const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
     try {
@@ -97,9 +101,8 @@ export function readModelRegistration(path: string, options: ModelOpenOptions = 
   }));
 }
 /** Catalog inventory in one selected SDK resource root; arbitrary folders use discoverModels. */
-export function inspectModels(options: ModelOpenOptions = {}): Promise<ManagedModelInventory> {
-  return withDiagnostics('inspectModels', options, operation => boundary(operation, async signal => {
-    if (operation.directory !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'Inventory takes a model root, not one bundle directory.');
+export function inspectModels(settings: ModelStoreSettings = {}, options: CallOptions = {}): Promise<ManagedModelInventory> {
+  return withDiagnostics('inspectModels', options, call => { const operation = withSettings(settings, ['profile', 'modelsDirectory'], call); return boundary(operation, async signal => {
     const models: ManagedModelInventory['models'] = [];
     const entries: ManagedModelEntry[] = [];
     for (const entry of listModels()) {
@@ -120,5 +123,5 @@ export function inspectModels(options: ModelOpenOptions = {}): Promise<ManagedMo
       models.push({ id: entry.id, directory: registration.model.directory, status: result.status === 'completed' ? 'present' : missing ? 'missing' : 'incomplete', result });
     }
     return { models, entries };
-  }));
+  }); });
 }

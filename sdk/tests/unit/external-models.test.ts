@@ -47,7 +47,7 @@ it('rejects invalid shard indexes instead of fingerprinting an incomplete bundle
 it('cancels fingerprinting at progress without writing into the bundle', async () => {
   const before = await readdir(directory, { recursive: true });
   const controller = new AbortController();
-  await expect(prepareModel('flux2-klein-4b', { directory, signal: controller.signal, onEvent: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(prepareModel('flux2-klein-4b', { directory }, { signal: controller.signal, onEvent: () => controller.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(await readdir(directory, { recursive: true })).toEqual(before);
 });
 it('rejects directory links and special paths, while accepting HF-style file links', async () => {

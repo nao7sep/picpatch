@@ -52,7 +52,7 @@ it('handles two independent installs without locks or partial readiness', async 
 });
 it('rejects relative paths and cancellation before creating files', async () => {
   await expect(installNativeEngine({ engineDirectory: 'relative' })).rejects.toMatchObject({ kind: 'invalid' });
-  await expect(installNativeEngine({ engineDirectory: directory, signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(installNativeEngine({ engineDirectory: directory }, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(await readdir(directory)).toEqual([]);
 });
 it('retains staging after uncertain publication instead of deleting possibly published files', async () => {
@@ -69,6 +69,6 @@ it('keeps a published engine ready and reports unsuccessful staging cleanup', as
 it('cancels preparation before publication and removes only its settled staging', async () => {
   const controller = new AbortController();
   fetcher.mockImplementation(async () => { controller.abort(); throw Object.assign(new Error('aborted'), { name: 'AbortError' }); });
-  await expect(installNativeEngine({ engineDirectory: directory, signal: controller.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(installNativeEngine({ engineDirectory: directory }, { signal: controller.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(await readdir(join(directory, 'native'))).toEqual([]);
 });

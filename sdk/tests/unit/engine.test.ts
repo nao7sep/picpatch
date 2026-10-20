@@ -30,7 +30,7 @@ it('inspects absence without creating anything and rejects relative settings bef
 it('publishes a versioned reference only after checks, reuses it and isolates child configuration', async () => {
   vi.stubEnv('UV_INDEX_URL', 'private-sentinel'); vi.stubEnv('HF_TOKEN', 'private-sentinel');
   const stages: string[] = [];
-  const result = await installEngine({ ...options(), onEvent: event => stages.push(event.stage) });
+  const result = await installEngine(options(), { onEvent: event => stages.push(event.stage) });
   expect(result.origin).toBe('installed');
   // The earlier calls had no listener, so this first listening call still receives the startup record.
   expect(stages).toEqual(['startup', 'started', 'checking', 'installing', 'checking', 'publishing', 'succeeded']);
@@ -82,7 +82,7 @@ it('preserves the previous reference when a replacement fails and cleans only it
 });
 it('cancels before publication even when an event hook throws, leaving no ready environment', async () => {
   const controller = new AbortController();
-  await expect(installEngine({ ...options(), signal: controller.signal, onEvent: event => {
+  await expect(installEngine(options(), { signal: controller.signal, onEvent: event => {
     if (event.stage === 'publishing') { controller.abort(); throw new Error('caller'); }
   } })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(await inspectEngine({ engineDirectory: options().engineDirectory })).toMatchObject({ status: 'missing' });

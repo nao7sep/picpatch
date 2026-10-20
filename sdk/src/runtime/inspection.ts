@@ -3,9 +3,10 @@ import { withDiagnostics } from '../diagnostics.ts';
 import { WorkerProcess } from '../worker/process.ts';
 import { workerLaunch } from '../backends/python/launch.ts';
 import { workerTimeouts } from '../worker/process.ts';
-import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation } from '../operations.ts';
+import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withSettings } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
-import type { RuntimeInspection, RuntimeOperationOptions } from './types.ts';
+import type { RuntimeInspection, RuntimeOperationOptions, RuntimeSettings } from './types.ts';
+import type { CallOptions } from '../types.ts';
 
 /** Starts only the bundled model-free handshake and confirms closure before returning. */
 async function inspectRuntimeOperation(pythonExecutable: string, options: RuntimeOperationOptions = {}): Promise<RuntimeInspection> {
@@ -31,6 +32,6 @@ async function inspectRuntimeOperation(pythonExecutable: string, options: Runtim
   return result;
 }
 
-export function inspectRuntime(pythonExecutable: string, options: RuntimeOperationOptions = {}): Promise<RuntimeInspection> {
-  return withDiagnostics('inspectRuntime', options, operation => inspectRuntimeOperation(pythonExecutable, operation));
+export function inspectRuntime(pythonExecutable: string, settings: RuntimeSettings = {}, options: CallOptions = {}): Promise<RuntimeInspection> {
+  return withDiagnostics('inspectRuntime', options, call => inspectRuntimeOperation(pythonExecutable, withSettings(settings, ['runtime'], call)));
 }

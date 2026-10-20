@@ -36,7 +36,7 @@ it('detects mutation of an earlier hashed file by a later preparation callback',
   // Synchronous filesystem mutation inside the progress callback is deliberate adversarial input.
   const { writeFileSync } = await import('node:fs');
   let changed = false;
-  await expect(prepareModel('sd15-ip-adapter', { ...options, onProgress: event => {
+  await expect(prepareModel('sd15-ip-adapter', options, { onProgress: event => {
     if (event.completed === event.total && !changed) { changed = true; writeFileSync(join(directory, options.checkpoint), 'changed'); }
   } })).rejects.toMatchObject({ code: 'MODEL_COMPONENT_INVALID' });
   expect(changed).toBe(true);
@@ -44,7 +44,7 @@ it('detects mutation of an earlier hashed file by a later preparation callback',
 it('cancels before loading or changing caller assets', async () => {
   const options = await nativeAssets(directory, 'sdxl-photomaker-v1');
   const before = await readFile(join(directory, options.photoMaker!));
-  await expect(prepareModel('sdxl-photomaker-v1', { ...options, signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
+  await expect(prepareModel('sdxl-photomaker-v1', options, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(await readFile(join(directory, options.photoMaker!))).toEqual(before);
 });
 it('keeps one pooled identity distinct from appearance and prompt groups', () => {

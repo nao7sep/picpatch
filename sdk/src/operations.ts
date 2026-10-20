@@ -17,6 +17,16 @@ export function validateOperation(options: unknown, extraKeys: string[] = []): v
   const value = options as { signal?: unknown; debug?: unknown; onProgress?: unknown; onEvent?: unknown };
   if ((value.debug !== undefined && typeof value.debug !== 'boolean') || (value.signal !== undefined && !(value.signal instanceof AbortSignal)) || (value.onProgress !== undefined && typeof value.onProgress !== 'function') || (value.onEvent !== undefined && typeof value.onEvent !== 'function')) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid cancellation signal or progress callback.');
 }
+/**
+ * A verb takes its own settings in its arguments and the one call-options set apart from them; each
+ * refuses keys that belong to the other. The verb then reads both together internally.
+ */
+export function withSettings<S extends object, O extends CallOptions>(settings: S | undefined, keys: readonly string[], options: O): S & O {
+  const value: unknown = settings ?? {};
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid arguments: check for unknown fields and call options passed as arguments.');
+  validateOperation(options);
+  return { ...(value as S), ...options };
+}
 export function emitProgress<T extends { stage: string; completed?: number; total?: number }>(options: CallOptions, event: T): void {
   checkSignal(options.signal);
   if (!diagnosticProgress(options, event)) { checkSignal(options.signal); return; }
