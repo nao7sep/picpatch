@@ -7,15 +7,17 @@ import { promisify } from 'node:util';
 import { parse } from '@babel/parser';
 import { expect, it } from 'vitest';
 const root = fileURLToPath(new URL('../../', import.meta.url));
-function imports(source: string): string[] {
-  const result: string[] = []; const ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] });
+// JSX only in .tsx, as TypeScript reads it: in a .ts file `<T>(x) => x` is a generic arrow function.
+const parseSource = (source: string, file: string) => parse(source, { sourceType: 'module', plugins: file.endsWith('.ts') ? ['typescript'] : ['typescript', 'jsx'] });
+function imports(source: string, file = 'source.tsx'): string[] {
+  const result: string[] = []; const ast = parseSource(source, file);
   function walk(value: any) { if (!value || typeof value !== 'object') return; if (['ImportDeclaration','ExportNamedDeclaration','ExportAllDeclaration','ImportExpression'].includes(value.type) && typeof value.source?.value === 'string') result.push(value.source.value); for (const child of Object.values(value)) if (Array.isArray(child)) child.forEach(walk); else if (child && typeof child === 'object') walk(child); }
   walk(ast); return result;
 }
 const forbidden = (file: string, specifier: string) => specifier.startsWith('picpatchsdk/') && specifier !== 'picpatchsdk/types' || specifier.startsWith('.') && relative(join(root, 'sdk'), resolve(dirname(file), specifier)).split(sep)[0] !== '..';
 /** Every string in a file that names a path into the SDK's folder, such as a hard-coded cache or helper path. */
-function sdkPaths(source: string): string[] {
-  const found: string[] = []; const ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] });
+function sdkPaths(source: string, file = 'source.tsx'): string[] {
+  const found: string[] = []; const ast = parseSource(source, file);
   function walk(value: any) {
     if (!value || typeof value !== 'object') return;
     const text = value.type === 'StringLiteral' ? value.value : value.type === 'TemplateElement' ? value.value.raw : undefined;
@@ -30,8 +32,8 @@ it('consumes only the SDK public package entries, in the app and its tests, with
   // The app's tests are consumers too: they use the SDK by name and never a path into its package, so it can move to a repository of its own unchanged.
   for (const file of [...await files(join(root, 'src')), ...await files(join(root, 'tests'))]) {
     const source = await readFile(file, 'utf8');
-    for (const specifier of imports(source)) if (forbidden(file, specifier)) violations.push(`${relative(root, file)}: ${specifier}`);
-    if (file !== fileURLToPath(import.meta.url)) for (const path of sdkPaths(source)) violations.push(`${relative(root, file)}: ${path}`);
+    for (const specifier of imports(source, file)) if (forbidden(file, specifier)) violations.push(`${relative(root, file)}: ${specifier}`);
+    if (file !== fileURLToPath(import.meta.url)) for (const path of sdkPaths(source, file)) violations.push(`${relative(root, file)}: ${path}`);
   }
   expect(violations).toEqual([]);
   expect(forbidden(join(root, 'tests', 'bad.ts'), '../sdk/tests/helpers/live-cache.ts')).toBe(true);
@@ -56,6 +58,6 @@ it('keeps Node and browser global types separated', async () => {
 it('keeps Electron in the shell and Node out of the renderer', async () => {
   const violations = [];
   for (const [directory, banned] of [['src/main/core', /^electron$/], ['src/shared', /^(electron|node:)/], ['src/renderer', /^(electron|node:)/]] as const)
-    for (const file of await files(join(root, directory))) for (const specifier of imports(await readFile(file, 'utf8'))) if (banned.test(specifier)) violations.push(`${relative(root, file)}: ${specifier}`);
+    for (const file of await files(join(root, directory))) for (const specifier of imports(await readFile(file, 'utf8'), file)) if (banned.test(specifier)) violations.push(`${relative(root, file)}: ${specifier}`);
   expect(violations).toEqual([]);
 });

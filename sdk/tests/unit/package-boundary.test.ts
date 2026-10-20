@@ -23,7 +23,7 @@ async function files(directory: string): Promise<string[]> {
 }
 function imports(file: string, text: string): string[] {
   const failures: string[] = [];
-  const source = parse(text, { sourceType: 'module', createImportExpressions: true, plugins: ['typescript', 'importAttributes'] });
+  const source = parse(text, { sourceType: 'module', createImportExpressions: true, plugins: ['typescript'] });
   function visit(node: unknown): void {
     if (!node || typeof node !== 'object') return;
     const value = node as Record<string, unknown>;
@@ -58,7 +58,7 @@ it('detects planted static imports, re-exports and dynamic imports across the bo
 });
 
 function ambientReads(text: string, file: string): string[] {
-  const source = parse(text, { sourceType: 'module', plugins: ['typescript', 'importAttributes'] });
+  const source = parse(text, { sourceType: 'module', plugins: ['typescript'] });
   const failures: string[] = [];
   const processes = new Set(['process']); const operatingSystems = new Set<string>();
   const prohibited = new Set(['env', 'cwd', 'stdout', 'stderr', 'stdin']);

@@ -53,7 +53,7 @@
     "stream-json": "^3.7.0"
   },
   "devDependencies": {
-    "@babel/parser": "^7.29.9",
+    "@babel/parser": "^8.0.7",
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^5.0.5",
     "json-schema-to-typescript": "^16.0.0",

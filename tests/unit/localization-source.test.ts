@@ -27,7 +27,8 @@ async function sources(directory: string): Promise<string[]> {
 /** Every catalogue and hard-coded-text problem in one source file. */
 function problemsIn(source: string, file: string, en: Record<string, unknown>): string[] {
   const problems: string[] = [];
-  const ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] });
+  // JSX only in .tsx, as TypeScript reads it: in a .ts file `<T>(x) => x` is a generic arrow function.
+  const ast = parse(source, { sourceType: 'module', plugins: file.endsWith('.ts') ? ['typescript'] : ['typescript', 'jsx'] });
   walk(ast, (node, parent) => {
     const literal = (value: string) => /[a-z]/i.test(value) && !LITERALS.has(value.trim());
     if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && ['t', 'message', 'confirm'].includes(node.callee.name) && node.arguments[0]?.type === 'StringLiteral' && !Object.hasOwn(en, node.arguments[0].value)) problems.push(`${file}: missing key ${node.arguments[0].value}`);
