@@ -2,7 +2,7 @@
 
 PicPatchSdk is a private TypeScript SDK for local AI image generation and editing. It prepares images and models, runs inference, and publishes PNGs with optional private JSON sidecars. Apps and scripts own their interfaces, output locations, saved sessions and logs.
 
-The SDK is in development. Inference targets Apple Silicon Macs through MFLUX or stable-diffusion.cpp; the managed native build requires macOS 26 or newer. Model support, memory needs and conditioning capabilities vary by selection. A catalog entry is not a promise of image quality or that its weights fit a particular machine.
+The SDK is in development. Inference targets Apple Silicon Macs through MFLUX or stable-diffusion.cpp (the managed native build requires macOS 26 or newer) and 64-bit Windows through stable-diffusion.cpp's Vulkan build, which needs the Microsoft Visual C++ Redistributable (x64) and falls back to the CPU. Each catalog entry lists the hosts its runtime supports and whether this computer is one; engine inspection reports `unsupported` elsewhere. Model support, memory needs and conditioning capabilities vary by selection. A catalog entry is not a promise of image quality or that its weights fit a particular machine.
 
 ## Use from source
 

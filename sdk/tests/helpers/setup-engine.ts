@@ -8,6 +8,8 @@ import { testEngineDirectory } from './engine.ts';
 
 /** Full-gate prerequisite, independent of test order. Never acquires model weights. */
 export default async function setupEngine() {
+  // The managed Python engine is Apple-only; Windows runs the native lane alone.
+  if (process.platform === 'win32') return;
   const toolDirectories = (process.env.PATH ?? '').split(delimiter).filter(path => path.startsWith('/'));
   let uvExecutable = process.env.PICPATCH_UV_EXECUTABLE;
   if (!uvExecutable) for (const directory of toolDirectories) {

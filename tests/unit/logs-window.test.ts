@@ -17,6 +17,7 @@ vi.mock('electron', async () => {
 });
 import { LogsWindow } from '../../src/main/logs-window.ts';
 import { insideBundle, trustedSender } from '../../src/main/trust.ts';
+import { win32 } from 'node:path';
 import { locations } from '../../src/main/locations.ts';
 import type { RecordsReader } from '../../src/main/core/records-reader.ts';
 beforeEach(() => { mocks.windows.length = 0; mocks.handlers.clear(); mocks.load = undefined; });
@@ -75,4 +76,8 @@ it('focuses the visible quit or settings owner over a secondary window without b
 it('accepts bundle components only inside the chosen bundle', () => {
   expect(insideBundle('/models/bundle', '/models/bundle/vae/model.safetensors')).toBe('vae/model.safetensors');
   for (const outside of ['/models/bundle', '/models/other/model.gguf', '/models/bundle-two/model.gguf', '/elsewhere']) expect(insideBundle('/models/bundle', outside)).toBeUndefined();
+});
+it('stores Windows bundle paths with forward slashes and refuses other drives', () => {
+  expect(insideBundle('C:\\models\\sd15', 'C:\\models\\sd15\\vae\\model.safetensors', win32)).toBe('vae/model.safetensors');
+  expect(insideBundle('C:\\models\\sd15', 'D:\\other\\model.safetensors', win32)).toBeUndefined();
 });

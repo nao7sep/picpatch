@@ -20,6 +20,8 @@ export interface ComposerProps {
   session: Session;
   draft: Draft;
   models: readonly CatalogModel[];
+  /** Catalog models this computer cannot run, left out of models. */
+  hiddenModels: number;
   readiness: Readiness | undefined;
   issues: readonly CommandIssue[];
   submitting: boolean;
@@ -117,7 +119,7 @@ export function Composer(props: ComposerProps) {
             entries={[{ id: 'target', label: t('composer.attachTarget') }, { id: 'reference', label: t('composer.attachReference') }]}
             onChoose={id => id === 'target' ? props.onAttachTarget() : props.onAddReference()}
           />
-          <ModelPicker draft={draft} models={props.models} readiness={props.readiness} onDraft={next => props.onDraft(next, 'now')} onSetup={props.onSetup} />
+          <ModelPicker draft={draft} models={props.models} hidden={props.hiddenModels} readiness={props.readiness} onDraft={next => props.onDraft(next, 'now')} onSetup={props.onSetup} />
           <SizePicker draft={draft} multiple={multiple} onDraft={next => props.onDraft(next, 'now')} />
           <button type="button" className="icon-button" aria-pressed={props.optionsPane} onClick={props.onToggleOptions} aria-label={t('conversation.options')} title={t('conversation.options')}><SlidersIcon /></button>
           {dropping && <span className="composer-hint">{dropHint}</span>}

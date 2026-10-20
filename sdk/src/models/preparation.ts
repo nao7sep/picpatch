@@ -15,6 +15,7 @@ import { prepareExternalModel } from './external.ts';
 import { downloadFile } from '../runtime/download.ts';
 import { validateModelManifest, verifyModelOperation as verifyModel } from './verification.ts';
 import type { ModelOperationOptions } from './types.ts';
+import { syncDirectory, syncFile } from '../platform.ts';
 
 export interface PrepareModelOptions extends ModelOperationOptions {
   profile?: PicPatchProfile;
@@ -51,10 +52,6 @@ async function exists(path: string): Promise<boolean> {
 async function privateDirectory(path: string): Promise<void> {
   await mkdir(path, { recursive: true, mode: 0o700 });
   if (process.platform !== 'win32') await chmod(path, 0o700);
-}
-async function syncDirectory(path: string): Promise<void> {
-  const handle = await open(path, 'r');
-  try { await handle.sync(); } finally { await handle.close(); }
 }
 
 /** Explicit preparation only. Reuses and verifies files; never repairs existing bundles. */
@@ -134,8 +131,7 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
           const source = entry.manifest.source;
           const url = `https://huggingface.co/${source.repository}/resolve/${source.revision}/${component.path.split('/').map(encodeURIComponent).join('/')}`;
           await downloadFile(url, path, component.bytes, signal, fetcher);
-          const file = await open(path, 'r');
-          try { await file.sync(); } finally { await file.close(); }
+          await syncFile(path);
         }
         await verified(staging);
         // Sync nested directories before making the complete bundle visible.

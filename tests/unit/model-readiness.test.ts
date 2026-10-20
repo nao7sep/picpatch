@@ -5,7 +5,7 @@ import { modelReadiness } from '../../src/main/core/model-readiness.ts';
 const settings = { version: 1 as const, profile: { version: 1 as const }, registrations: {} };
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(listModels).mockReturnValue([{ id: 'a', acquisition: 'pinned', runtime: { name: 'mflux' } }, { id: 'b', acquisition: 'pinned', runtime: { name: 'mflux' } }, { id: 'external', acquisition: 'local', runtime: { name: 'stable-diffusion.cpp' } }] as never);
+  vi.mocked(listModels).mockReturnValue([{ id: 'a', acquisition: 'pinned', runtime: { name: 'mflux' }, supported: true }, { id: 'b', acquisition: 'pinned', runtime: { name: 'mflux' }, supported: true }, { id: 'external', acquisition: 'local', runtime: { name: 'stable-diffusion.cpp' }, supported: true }] as never);
 });
 it('checks existing files and shares cheap engine inspection without loading models', async () => {
   vi.mocked(openModel).mockResolvedValue({ status: 'present' } as never);
@@ -17,4 +17,10 @@ it('distinguishes missing weights and missing engines', async () => {
   vi.mocked(openModel).mockResolvedValueOnce({ status: 'refused' } as never).mockResolvedValueOnce({ status: 'present' } as never);
   vi.mocked(inspectEngine).mockResolvedValue({ status: 'missing' } as never);
   expect(await modelReadiness(settings)).toEqual({ a: 'missing', b: 'engineMissing', external: 'missing' });
+});
+it('leaves models without a build for this computer out of readiness', async () => {
+  vi.mocked(listModels).mockReturnValue([{ id: 'mac-only', acquisition: 'pinned', runtime: { name: 'mflux' }, supported: false }, { id: 'native', acquisition: 'pinned', runtime: { name: 'stable-diffusion.cpp' }, supported: true }] as never);
+  vi.mocked(openModel).mockResolvedValue({ status: 'present' } as never);
+  vi.mocked(inspectNativeEngine).mockResolvedValue({ status: 'ready' } as never);
+  expect(await modelReadiness(settings)).toEqual({ native: 'ready' }); expect(inspectEngine).not.toHaveBeenCalled();
 });

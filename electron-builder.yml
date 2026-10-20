@@ -24,10 +24,6 @@ files:
 asar: false
 
 extraResources:
-  # Tahoe "Liquid Glass" icon: a pre-compiled asset catalog. CFBundleIconName points
-  # macOS 26 at it; older macOS reads CFBundleIconFile, the classic build/icon.icns.
-  - from: build/Assets.car
-    to: Assets.car
   - from: LICENSE
     to: LICENSE.txt
   - from: THIRD_PARTY_NOTICES
@@ -36,11 +32,6 @@ extraResources:
     to: electron/LICENSE
   - from: node_modules/electron/dist/LICENSES.chromium.html
     to: electron/LICENSES.chromium.html
-  # uv runs explicit engine setup; scripts/prepare-tools.mjs provides the pinned build.
-  - from: node_modules/.cache/picpatch-desktop/uv-0.13.1/uv
-    to: tools/uv
-  - from: node_modules/.cache/picpatch-desktop/uv-0.13.1/THIRD_PARTY_NOTICES
-    to: tools/THIRD_PARTY_NOTICES
   # The window icon Windows and Linux paint in the title bar and taskbar.
   - from: build/icon.png
     to: icon.png
@@ -48,6 +39,17 @@ extraResources:
 mac:
   category: public.app-category.graphics-design
   icon: build/icon.icns
+  extraResources:
+    # Tahoe "Liquid Glass" icon: a pre-compiled asset catalog. CFBundleIconName points
+    # macOS 26 at it; older macOS reads CFBundleIconFile, the classic build/icon.icns.
+    - from: build/Assets.car
+      to: Assets.car
+    # uv runs explicit Python engine setup; scripts/prepare-tools.mjs provides the pinned build.
+    # Windows runs only the native engine and bundles no uv.
+    - from: node_modules/.cache/picpatch-desktop/uv-0.13.1/uv
+      to: tools/uv
+    - from: node_modules/.cache/picpatch-desktop/uv-0.13.1/THIRD_PARTY_NOTICES
+      to: tools/THIRD_PARTY_NOTICES
   # Ad-hoc signed ("-"): no developer certificate, but a valid seal and a stable
   # bundle identity, which the dock name and per-app defaults rely on.
   # macOS still shows "unidentified developer" until a Developer ID cert + notarization.
@@ -66,7 +68,7 @@ mac:
     - ja
     - ko
     - zh_CN
-  # Apple Silicon only: local inference runs on Metal.
+  # Apple Silicon only on macOS: its inference runs on Metal.
   target:
     - target: dmg
       arch:

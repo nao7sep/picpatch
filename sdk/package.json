@@ -50,7 +50,8 @@
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
-    "test": "npm run contracts:check && npm run typecheck && vitest run && npm run test:python",
+    "test": "npm run test:node && npm run test:python",
+    "test:node": "npm run contracts:check && npm run typecheck && vitest run",
     "test:coverage": "npm run contracts:check && npm run typecheck && vitest run --coverage",
     "example:request": "node examples/edit-request.ts",
     "contracts:generate": "node scripts/generate-contracts.mjs",

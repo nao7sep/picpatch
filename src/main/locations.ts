@@ -9,6 +9,7 @@ const out = fileURLToPath(new URL('../../../', import.meta.url));
 /** Set by electron-vite only in development: the dev server's origin. */
 export const devServer = process.env.ELECTRON_RENDERER_URL;
 
+const uvName = process.platform === 'win32' ? 'uv.exe' : 'uv';
 export const locations = {
   /** A renderer page's address; the exact value main trusts as its sender. */
   page: (name: 'index' | 'records') => devServer ? `${devServer}/${name}.html` : pathToFileURL(join(out, 'renderer', `${name}.html`)).href,
@@ -16,5 +17,5 @@ export const locations = {
   worker: (name: 'backup-worker' | 'records-worker' | 'records-reader-worker') => join(out, 'main', `${name}.js`),
   /** The window icon Windows and Linux paint; macOS takes the bundle's. */
   icon: () => app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(out, '..', 'build', 'icon.png'),
-  uv: () => app.isPackaged ? join(process.resourcesPath, 'tools', 'uv') : join(out, '..', 'node_modules', '.cache', 'picpatch-desktop', 'uv-0.13.1', 'uv'),
+  uv: () => app.isPackaged ? join(process.resourcesPath, 'tools', uvName) : join(out, '..', 'node_modules', '.cache', 'picpatch-desktop', 'uv-0.13.1', uvName),
 };

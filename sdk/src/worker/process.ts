@@ -3,6 +3,7 @@ import type { LocalModel } from '../contracts.generated.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { ProtocolSession, type WorkerRequest, type WorkerResponse } from './protocol.ts';
 import { PicPatchSdkError } from '../errors.ts';
+import { ownedSpawn, signalOwned } from '../platform.ts';
 import type { ProgressEvent } from '../contracts.generated.ts';
 
 export interface WorkerLaunch {
@@ -24,7 +25,7 @@ export interface WorkerTimeouts {
 export const workerTimeouts: WorkerTimeouts = { startupMs: 30_000, editMs: 1_800_000, generateMs: 1_800_000, cancellationMs: 5_000, shutdownMs: 5_000, terminationMs: 2_000 };
 export type SpawnWorker = (launch: WorkerLaunch) => ChildProcessWithoutNullStreams;
 const spawnWorker: SpawnWorker = launch => spawn(launch.executable, launch.args, {
-  cwd: launch.cwd, env: launch.env ?? {}, stdio: 'pipe', detached: process.platform !== 'win32',
+  cwd: launch.cwd, env: launch.env ?? {}, stdio: 'pipe', ...ownedSpawn,
 });
 interface Pending {
   resolve: (response: WorkerResponse) => void;
@@ -220,7 +221,8 @@ export class WorkerProcess {
   private signal(signal: NodeJS.Signals): void {
     if (!this.child) return;
     try {
-      if (process.platform !== 'win32' && this.child.pid) process.kill(-this.child.pid, signal);
+      // A POSIX group may outlive the closed child; a Windows tree is ended while the child still runs.
+      if (this.child.pid && (process.platform !== 'win32' || !this.closed)) signalOwned(this.child.pid, signal);
       else if (!this.closed) this.child.kill(signal);
     } catch (cause) {
       if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw new PicPatchSdkError('TERMINATION_FAILED', 'Could not terminate the worker.', { cause });

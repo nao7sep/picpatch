@@ -46,7 +46,7 @@ export class Application {
   sdkEvents(context: Record<string, unknown> = {}): (event: SdkEvent) => void {
     return event => this.diagnostic(event.level, event.message, { ...context, event });
   }
-  async overview() { return { ...await this.sessions.list(), models: listModels(), queue: structuredClone(this.queue.state), historyIssue: typeof this.historyIssue === 'object' ? { message: this.historyIssue.message, notice: this.historyIssue.notice } : this.historyIssue, settings: structuredClone(this.settings), locations: { ...resolveStoragePaths(this.settings.profile.engineDirectory || this.settings.profile.modelsDirectory ? { engineDirectory: this.settings.profile.engineDirectory, modelsDirectory: this.settings.profile.modelsDirectory } : {}), sessionsDirectory: this.sessions.root } }; }
+  async overview() { return { ...await this.sessions.list(), models: listModels().filter(model => model.supported), unsupportedModels: listModels().filter(model => !model.supported).length, queue: structuredClone(this.queue.state), historyIssue: typeof this.historyIssue === 'object' ? { message: this.historyIssue.message, notice: this.historyIssue.notice } : this.historyIssue, settings: structuredClone(this.settings), locations: { ...resolveStoragePaths(this.settings.profile.engineDirectory || this.settings.profile.modelsDirectory ? { engineDirectory: this.settings.profile.engineDirectory, modelsDirectory: this.settings.profile.modelsDirectory } : {}), sessionsDirectory: this.sessions.root } }; }
   /** Autosave acknowledges only; the renderer already holds the draft it sent. */
   async draft(sessionId: string, draft: Draft): Promise<void> { const valid = validateDraft(draft); await this.sessions.update(sessionId, value => { value.draft = valid; }); }
   /**

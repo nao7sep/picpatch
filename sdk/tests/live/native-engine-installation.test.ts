@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { installNativeEngine, inspectNativeEngine } from 'picpatchsdk';
-import { nativeRelease } from '../../src/runtime/engine/native-release.ts';
+import { nativeReleaseFor, nativeRevision } from '../../src/runtime/engine/native-release.ts';
 import { liveCache } from '../helpers/live-cache.ts';
 
 it('installs and probes the authenticated official native archive without downloading it during tests', async () => {
+  const nativeRelease = nativeReleaseFor()!;
   const archive = process.env.PICPATCH_NATIVE_ARCHIVE ?? liveCache('native-runtime.zip');
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-native-installation-'));
   const transport = vi.fn(async (url: unknown) => {
@@ -19,7 +20,7 @@ it('installs and probes the authenticated official native archive without downlo
   try {
     expect(await inspectNativeEngine({ engineDirectory: directory })).toMatchObject({ status: 'missing' });
     const installed = await installNativeEngine({ engineDirectory: directory });
-    expect(installed).toMatchObject({ status: 'ready', origin: 'installed', revision: nativeRelease.revision });
+    expect(installed).toMatchObject({ status: 'ready', origin: 'installed', revision: nativeRevision });
     expect(await inspectNativeEngine({ engineDirectory: directory })).toMatchObject({ status: 'ready', nativeExecutable: installed.nativeExecutable });
     expect(await installNativeEngine({ engineDirectory: directory })).toMatchObject({ origin: 'reused' });
     expect(transport).toHaveBeenCalledTimes(1);

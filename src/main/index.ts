@@ -285,12 +285,19 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       if (answer.response === 1) return service.removeManaged(payload.modelId, payload.name, signal); return;
     }
     case 'models': return service.models();
-    case 'prepare': { if (payload.download) { const model = listModels().find(m => m.id === payload.modelId); if (!model || model.acquisition !== 'pinned') throw new UiError('ui.no_downloadable_bundle_for_this_selection'); const answer = await ask({ message: message('management.download', { model: model.profile.name }), detail: message('management.downloadScope', { size: number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 }) }), buttons: [message('ui.cancel'), message('ui.download')], destructive: false }); if (answer.response !== 1) return; return service.prepare(model.id, undefined, undefined, true, {}, signal); }
+    case 'prepare': { if (payload.download) { const model = listModels().find(m => m.id === payload.modelId); if (!model || model.acquisition !== 'pinned' || !model.supported) throw new UiError('ui.no_downloadable_bundle_for_this_selection'); const answer = await ask({ message: message('management.download', { model: model.profile.name }), detail: message('management.downloadScope', { size: number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 }) }), buttons: [message('ui.cancel'), message('ui.download')], destructive: false }); if (answer.response !== 1) return; return service.prepare(model.id, undefined, undefined, true, {}, signal); }
       // Native bundles name their checkpoint through pickComponent before Register is enabled.
       const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return;
       return service.prepare(payload.modelId, paths[0], payload.checkpoint, false, payload.components, signal); }
     case 'engines': return { python: await inspectEngine({ runtime: pythonRuntime(listModels(), payload.modelId), profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
-    case 'installNative': return installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal });
+    case 'installNative': {
+      try { return await installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal }); }
+      catch (error) {
+        // Windows: the engine's DLLs need the Microsoft Visual C++ runtime, which not every PC has.
+        if (isPicPatchSdkError(error) && error.code === 'DEPENDENCY_MISSING' && error.subject === 'msvc-runtime') throw new UiError('error.msvc_runtime');
+        throw error;
+      }
+    }
     case 'installPython': { const uvExecutable = locations.uv(); return installEngine({ runtime: pythonRuntime(listModels(), payload.modelId), onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');

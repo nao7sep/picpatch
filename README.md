@@ -2,26 +2,30 @@
 
 Generate and edit images with local AI models.
 
-PicPatch is a desktop app for local AI image generation and editing, with a standalone source package, PicPatchSdk, in the same repository. Both are in development. Inference runs on Apple Silicon Macs through Metal; engines and models are acquired separately from the JavaScript dependencies.
+PicPatch is a desktop app for local AI image generation and editing, with a standalone source package, PicPatchSdk, in the same repository. Both are in development. Every model runs on Apple Silicon Macs through Metal; 64-bit Windows runs the native engine's models (SD 1.5, SDXL and the other stable-diffusion.cpp families). Engines and models are acquired separately from the JavaScript dependencies.
 
 For scripts and app integrations, start with the [PicPatchSdk guide](sdk/README.md). It covers engine and model setup, generation/editing, events, errors, resource paths and private sidecars. Import the package as `picpatchsdk`.
 
 ## Requirements
 
-- An Apple Silicon Mac. Models need roughly 8 to 32 GB of memory; the model picker shows each model's class.
+- An Apple Silicon Mac with macOS 26 or newer, or a 64-bit Windows PC. Models need roughly 8 to 32 GB of memory; the model picker shows each model's class, measured on an Apple M4.
+- On Windows, the Microsoft Visual C++ Redistributable (x64), which the native engine needs. A Vulkan-capable graphics driver lets it use the GPU; without one it runs on the CPU, much more slowly.
 - Disk space for the engines and models you choose.
 
 ## First launch
 
-Release builds are unsigned, so macOS warns on first launch: right-click the app → **Open** (or run `xattr -dr com.apple.quarantine PicPatch.app`).
+Release builds are unsigned, so the OS warns on first launch:
+
+- **macOS:** right-click the app → **Open** (or run `xattr -dr com.apple.quarantine PicPatch.app`).
+- **Windows:** SmartScreen → **More info** → **Run anyway**.
 
 ## Engines and models
 
 Nothing is downloaded until you choose it in setup or in Managed tools.
 
-- **Python engine:** a uv-managed Python environment with the model's runtime packages, installed by the bundled uv from PyPI and the Python mirrors uv uses.
-- **Native engine:** the pinned [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) release for macOS (about 90 MB), for SD 1.5, SDXL and other native models.
-- **Downloadable models** (4-bit MLX bundles from Hugging Face, each pinned to a revision):
+- **Python engine (Mac only):** a uv-managed Python environment with the model's runtime packages, installed by the bundled uv from PyPI and the Python mirrors uv uses.
+- **Native engine:** the pinned [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) release, for SD 1.5, SDXL and other native models: the macOS build (about 90 MB) or the Windows Vulkan build (about 30 MB, with CPU fallback).
+- **Downloadable models** (Mac only; 4-bit MLX bundles from Hugging Face, each pinned to a revision):
 
 | Model | Download | Licence |
 |---|---|---|

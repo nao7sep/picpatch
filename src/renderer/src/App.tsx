@@ -388,7 +388,7 @@ export function App() {
                     history={JSON.stringify(overview.historyIssue ?? null) === historyDismissed ? undefined : overview.historyIssue} onDismissHistory={() => setHistoryDismissed(JSON.stringify(overview.historyIssue ?? null))}
                   />
                   <Composer
-                    session={session} draft={draft} models={overview.models} readiness={readiness} issues={issues} submitting={submitting}
+                    session={session} draft={draft} models={overview.models} hiddenModels={overview.unsupportedModels} readiness={readiness} issues={issues} submitting={submitting}
                     optionsPane={pane.optionsPane} focusRef={focusComposer} onDraft={updateDraft} onSend={() => void send()}
                     onAttachTarget={() => void attachTarget()} onAddReference={() => void addReference()} onDrop={files => void dropFiles(files)}
                     onClearTarget={() => updateDraft(withoutTarget(draftRef.current!))} onPaintMask={() => push({ kind: 'mask' })}

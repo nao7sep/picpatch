@@ -65,7 +65,8 @@ async function record(saved: EditResult): Promise<ArtifactRecord> {
   expect(data.effectiveParameters.steps).toBe(7);
   expect(data.seed).toBe(42);
   expect(json).not.toContain('.picpatch-');
-  expect((await fs.stat(join(directory, 'out-picpatchsdk.json'))).mode & 0o777).toBe(0o600);
+  // Windows has no POSIX mode bits.
+  if (process.platform !== 'win32') expect((await fs.stat(join(directory, 'out-picpatchsdk.json'))).mode & 0o777).toBe(0o600);
   expect((await fs.readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
   return data;
 }

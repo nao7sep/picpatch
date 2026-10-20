@@ -10,6 +10,7 @@ import { operationStage, withDiagnostics } from '../../diagnostics.ts';
 import { engineDefinition, runtimePaths, validRecord } from './identity.ts';
 import { runCommand } from './command.ts';
 import type { EngineIdentity, EngineInspection, EngineInstallation, EngineOptions, EngineRecord, InstallEngineOptions, ReadyEngine, EngineRuntime } from './types.ts';
+import { supportsRuntime, syncDirectory, syncFile, toolEnvironment, venvPython } from '../../platform.ts';
 
 const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException)?.code ?? '');
 function validate(options: EngineOptions, install: boolean): string {
@@ -22,8 +23,8 @@ function validate(options: EngineOptions, install: boolean): string {
 }
 /** Isolated environment for package managers/probes. No ambient credentials, config or cache selection. */
 function environment(installation: string): NodeJS.ProcessEnv {
-  return { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: join(installation, 'home'), TMPDIR: join(installation, 'tmp'),
-    LANG: 'en_US.UTF-8', HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1', HF_HOME: join(installation, 'home', 'huggingface') };
+  return { ...toolEnvironment(), HOME: join(installation, 'home'), TMPDIR: join(installation, 'tmp'),
+    HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1', HF_HOME: join(installation, 'home', 'huggingface') };
 }
 async function readReady(root: string, identity: EngineIdentity): Promise<EngineInspection> {
   const filename = join(root, 'ready', `${identity.id}.json`);
@@ -38,7 +39,7 @@ async function readReady(root: string, identity: EngineIdentity): Promise<Engine
     throw new PicPatchSdkError('ENGINE_IO', 'Could not read engine readiness.', { cause });
   }
   if (!validRecord(record, identity)) return { status: 'incompatible', code: 'ENGINE_RECORD_INVALID', identity, engineDirectory: root };
-  const pythonExecutable = join(root, 'installations', record.installation, 'venv', 'bin', 'python');
+  const pythonExecutable = venvPython(join(root, 'installations', record.installation, 'venv'));
   try { if (!(await stat(pythonExecutable)).isFile()) return { status: 'incompatible', code: 'ENGINE_CHECK_FAILED', identity, engineDirectory: root }; }
   catch (cause) {
     if (missing(cause)) return { status: 'incompatible', code: 'ENGINE_CHECK_FAILED', identity, engineDirectory: root };
@@ -68,6 +69,7 @@ async function inspect(root: string, identity: EngineIdentity, signal: AbortSign
 export function inspectEngine(options: EngineOptions = {}): Promise<EngineInspection> {
   return withDiagnostics('inspectEngine', options, async operation => {
     const root = validate(operation, false);
+    if (!supportsRuntime(operation.runtime ?? 'mflux')) return { status: 'unsupported', code: 'UNSUPPORTED_CAPABILITY', engineDirectory: root };
     return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Engine inspection timed out.', async signal => {
       const { identity } = await engineDefinition(operation.runtime);
       operationStage(operation, 'checking', 'Checking engine dependencies.');
@@ -83,10 +85,6 @@ export async function resolveEngine(root: string, signal?: AbortSignal, runtime:
   checkSignal(signal);
   if (result.status !== 'ready') throw new PicPatchSdkError(result.status === 'missing' ? 'ENGINE_MISSING' : 'ENGINE_INCOMPATIBLE', 'Install this SDK version’s engine before using the image client.', { subject: root });
   return result;
-}
-async function syncDirectory(path: string): Promise<void> {
-  const handle = await open(path, 'r');
-  try { await handle.sync(); } finally { await handle.close(); }
 }
 /** Explicit install-or-reuse. Environments stay at stable paths; only complete readiness references are replaced. */
 export function installEngine(options: InstallEngineOptions): Promise<EngineInstallation> {
@@ -122,13 +120,13 @@ export function installEngine(options: InstallEngineOptions): Promise<EngineInst
         for (const directory of [project, join(installation, 'home'), join(installation, 'tmp'), readyDirectory, cache, python]) await mkdir(directory, { recursive: true, mode: 0o700 });
         await writeFile(join(project, 'pyproject.toml'), definition.manifest, { flag: 'wx', mode: 0o600 });
         await writeFile(join(project, 'uv.lock'), definition.lock, { flag: 'wx', mode: 0o600 });
-        const env = { ...environment(installation), PATH: [...toolDirectories, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':'),
+        const env = { ...environment(installation), PATH: toolEnvironment(undefined, toolDirectories).PATH,
           UV_PROJECT_ENVIRONMENT: join(installation, 'venv'), UV_CACHE_DIR: cache, UV_PYTHON_INSTALL_DIR: python,
           UV_PYTHON_BIN_DIR: join(python, 'bin'), UV_PYTHON_DOWNLOADS: operation.offline ? 'never' : 'automatic', UV_NO_PROGRESS: '1', UV_HTTP_TIMEOUT: '60', UV_LINK_MODE: 'copy' };
         // Bytecode compiled once here spares every worker start from compiling imports (the worker runs with -B).
         operationStage(operation, 'installing', 'Installing locked Python dependencies.');
         await runCommand(operation.uvExecutable, ['sync', '--project', project, '--locked', '--no-default-groups', '--extra', 'inference', '--no-install-project', '--no-config', '--compile-bytecode', '--python', definition.identity.python, '--managed-python', ...(operation.offline ? ['--offline'] : [])], installation, env, signal, budget);
-        const result: ReadyEngine = { status: 'ready', code: 'ENGINE_READY', identity: definition.identity, engineDirectory: root, pythonExecutable: join(installation, 'venv', 'bin', 'python') };
+        const result: ReadyEngine = { status: 'ready', code: 'ENGINE_READY', identity: definition.identity, engineDirectory: root, pythonExecutable: venvPython(join(installation, 'venv')) };
         operationStage(operation, 'checking', 'Checking installed dependency compatibility.');
         await runCommand(operation.uvExecutable, ['pip', 'check', '--python', result.pythonExecutable, '--no-config', '--offline'], installation, env, signal, 60_000);
         await probe(result, signal);

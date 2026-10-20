@@ -195,3 +195,12 @@ it('describes each model and groups ready models before the ones to set up', asy
   fireEvent.click(screen.getByRole('button', { name: 'Show more models' }));
   expect(within(list).getByText('More models')).toBeTruthy(); expect(within(list).getByText('Your files')).toBeTruthy();
 });
+
+it('says when models this computer cannot run are hidden, and reports a session model it cannot run as unavailable', async () => {
+  const base = fakeBridge(session({ draft: { ...session().draft, modelIds: ['mac-only'], text: 'x' } }));
+  const overview = await base.bridge.call('overview');
+  await start(fakeBridge(session({ draft: { ...session().draft, modelIds: ['mac-only'], text: 'x' } }), { overview: () => ({ ...overview, unsupportedModels: 3 }) }));
+  expect(screen.getByText('Mac Only: model unavailable.')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: /Mac Only/ }));
+  expect(await screen.findByText('More models run on Apple Silicon Macs.')).toBeTruthy();
+});

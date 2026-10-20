@@ -34,7 +34,8 @@ describe('safe image publication', () => {
     expect(staged!.sourceImage).not.toBe(request.sourceImage); expect(staged!.outputPath).not.toBe(request.outputPath);
     expect((await sharp(saved.image.path).metadata()).format).toBe('png');
     expect(await readFile(request.sourceImage!)).toEqual(original); expect(await leftovers()).toEqual([]);
-    expect((await stat(saved.image.path)).mode & 0o777).toBe(0o600); await editor.dispose();
+    if (process.platform !== 'win32') expect((await stat(saved.image.path)).mode & 0o777).toBe(0o600);
+    await editor.dispose();
   });
   it.each(['file', 'symlink', 'dangling', 'hardlink'])('refuses existing output %s without modifying it', async kind => {
     if (kind === 'file') await writeFile(request.outputPath, 'original');

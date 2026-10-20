@@ -9,6 +9,7 @@ import { externalModels, modelCapabilities, modelDefinition, type ExternalModel 
 import { PicPatchSdkError } from '../errors.ts';
 import { modelEvidence, modelProfile, type Evidence, type ModelProfile, type Operation } from './profiles.ts';
 import { validateModelManifest } from './verification.ts';
+import { runtimeHosts, supportsRuntime, type HostId } from '../hosts.ts';
 
 export interface CatalogModel {
   id: string;
@@ -24,7 +25,10 @@ export interface CatalogModel {
   downloadBytes: number;
   sourceUrl: string;
   license: { id: string; url: string };
-  runtime: { name: 'mflux'; version: string; platform: 'darwin'; architecture: 'arm64' };
+  /** The hosts this runtime has a build for. */
+  runtime: { name: 'mflux'; version: string; hosts: readonly HostId[] };
+  /** Whether this computer is one of those hosts. */
+  supported: boolean;
 }
 /** Pinned community quantization, not an official upstream weight distribution. */
 export function listModels(): ModelCatalogEntry[] {
@@ -41,7 +45,7 @@ export function listModels(): ModelCatalogEntry[] {
       downloadBytes: pinned.components.reduce((total, component) => total + component.bytes, 0),
       sourceUrl: `https://huggingface.co/${pinned.source.repository}/tree/${pinned.source.revision}`,
       license: { id: configuration.license, url: configuration.licenseUrl },
-      runtime: { name: 'mflux', version: '0.22.0', platform: 'darwin', architecture: 'arm64' } };
+      runtime: { name: 'mflux', version: '0.22.0', hosts: runtimeHosts('mflux') }, supported: supportsRuntime('mflux') };
   });
   return [...pinned, ...externalModels(), ...nativeModels()];
 }

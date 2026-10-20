@@ -5,11 +5,11 @@ name: Release
 # the `dist` npm script. Nothing is published automatically; a draft is created
 # for the pushed tag, verified, then published by hand (gh release edit --draft=false).
 #
-# macOS (Apple Silicon) only: local inference runs on Metal, and the bundled uv
-# that scripts/prepare-tools.mjs pins exists for darwin-arm64 alone.
+# macOS (Apple Silicon) runs every engine; Windows (x64) runs the native engine only.
+# The SDK's Python tests need uv's macOS-only lockfiles, so Windows runs the Node suites.
 #
 # Two triggers:
-#   - push a tag `v*` -> build, attach the dmg and portable zip to a draft release.
+#   - push a tag `v*` -> build both platforms, attach installers and portables to one draft release.
 #   - manual dispatch -> build only (no release), for a smoke check.
 
 on:
@@ -24,7 +24,11 @@ permissions:
 jobs:
   # Gate: a failing test suite means no release is built.
   test:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -41,18 +45,26 @@ jobs:
       # The SDK's Python tests run through uv. The same pinned, checksum-verified
       # uv the app bundles is put on PATH, so CI needs no extra action.
       - name: Provide the pinned uv
+        if: runner.os == 'macOS'
         run: |
           npm run prepare:tools
           echo "$PWD/node_modules/.cache/picpatch-desktop/uv-0.13.1" >> "$GITHUB_PATH"
       # npm test is a fixed set, so it runs the same here as it does locally.
       # The live lane stays out of CI: npm run test:full is a local gate.
       - run: npm test
+        if: runner.os == 'macOS'
+      - run: npm run test:node
+        if: runner.os == 'Windows'
 
   build:
     needs: test
     permissions:
       contents: write
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false # a Windows failure never cancels the macOS build
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -83,9 +95,12 @@ jobs:
           prerelease: false
           fail_on_unmatched_files: true
           body: |
-            **PicPatch ${{ github.ref_name }}** for Apple Silicon Macs
+            **PicPatch ${{ github.ref_name }}** for Apple Silicon Macs and 64-bit Windows
 
-            This build is unsigned, so macOS warns on first launch: right-click the app → **Open** (or `xattr -dr com.apple.quarantine PicPatch.app`).
+            These builds are unsigned, so the OS warns on first launch:
+            - **macOS**: right-click the app → **Open** (or `xattr -dr com.apple.quarantine PicPatch.app`)
+            - **Windows**: SmartScreen → **More info** → **Run anyway**
           files: |
             dist/*.dmg
+            dist/*.exe
             dist/*.zip

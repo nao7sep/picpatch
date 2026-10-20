@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { PicPatchSdkError } from '../../errors.ts';
 import { checkSignal } from '../../operations.ts';
+import { ownedSpawn, signalOwned, toolEnvironment } from '../../platform.ts';
 import type { WorkerTimeouts } from '../../worker/process.ts';
 
 /** One short-lived native process, with ownership through pipe closure and termination. */
@@ -20,13 +21,13 @@ export class NativeProcess {
     this.active = Promise.resolve().then(() => {
       checkSignal(combined);
       return new Promise<string>((resolve, reject) => {
-        const child = spawn(this.executable, args, { cwd, env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'en_US.UTF-8' }, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+        const child = spawn(this.executable, args, { cwd, env: toolEnvironment(), stdio: ['ignore', 'pipe', 'pipe'], ...ownedSpawn });
         let failure: Error | undefined; let output = Buffer.alloc(0); let closed = false;
         let escalation: ReturnType<typeof setTimeout> | undefined;
         let termination: ReturnType<typeof setTimeout> | undefined;
         const kill = (signal: NodeJS.Signals) => {
           if (closed || child.pid === undefined) return;
-          try { if (process.platform === 'win32') child.kill(signal); else process.kill(-child.pid, signal); }
+          try { signalOwned(child.pid, signal); }
           catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') failure ??= new PicPatchSdkError('TERMINATION_FAILED', 'Could not signal the native runtime.', { cause }); }
         };
         const stop = (reason: Error) => {

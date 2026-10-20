@@ -2,7 +2,7 @@ import { isHiDream, hiDreamConditioning } from './hidream.ts';
 import { nativeWeightArguments } from './flow.ts';
 import { inspectNativeAssets } from './assets.ts';
 import { randomInt } from 'node:crypto';
-import { writeFile, mkdir, copyFile, symlink } from '../../storage.ts';
+import { writeFile, mkdir, copyFile } from '../../storage.ts';
 import { basename, dirname, join } from 'node:path';
 import type { EditBackend } from '../../execution/backend.ts';
 import type { LocalModel, ModelCapabilities } from '../../contracts.generated.ts';
@@ -15,6 +15,7 @@ import { PicPatchSdkError } from '../../errors.ts';
 import { nativeCapabilities, nativeRevision } from './models.ts';
 import { NativeProcess } from './process.ts';
 import type { WorkerTimeouts } from '../../worker/process.ts';
+import { aliasFile } from '../../platform.ts';
 
 export class NativeBackend implements EditBackend {
   private readonly process: NativeProcess;
@@ -62,7 +63,7 @@ export class NativeBackend implements EditBackend {
     try {
       for (const [index, lora] of (this.model.loras ?? []).entries()) {
         const alias = `adapter-${index}`;
-        await symlink(join(this.model.directory, lora.path), join(directory, `${alias}.safetensors`));
+        await aliasFile(join(this.model.directory, lora.path), join(directory, `${alias}.safetensors`));
         // Only generated aliases enter the CLI's prompt syntax; caller paths stay literal.
         prompt += ` <lora:${alias}:${lora.scale ?? 1}>`;
       }
@@ -98,7 +99,7 @@ export class NativeBackend implements EditBackend {
         }
         // Upstream selects V2 by substring in the passed path, even parent directories.
         // A fixed relative alias selects V1 without copying multi-GB weights.
-        await symlink(join(this.model.directory, this.model.photoMaker), join(directory, 'photomaker-v1.safetensors'));
+        await aliasFile(join(this.model.directory, this.model.photoMaker), join(directory, 'photomaker-v1.safetensors'));
         // Metal cannot perform the pinned runtime's in-place F16 LoRA merge.
         // Apply PhotoMaker's required LoRA during inference instead.
         args.push('--lora-apply-mode', 'at_runtime', '--photo-maker', 'photomaker-v1.safetensors', '--pm-id-images-dir', photos, '--pm-style-strength', String(effectiveParameters.identityStyleStrength));

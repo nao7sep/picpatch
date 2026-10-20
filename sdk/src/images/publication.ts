@@ -1,4 +1,5 @@
-import { chmod, link, open } from '../storage.ts';
+import { chmod, link } from '../storage.ts';
+import { syncFile } from '../platform.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { checkSignal } from '../operations.ts';
 
@@ -6,8 +7,7 @@ import { checkSignal } from '../operations.ts';
 export async function publishComplete(complete: string, destination: string, directory: string, signal?: AbortSignal): Promise<void> {
   try {
     await chmod(complete, 0o600);
-    const file = await open(complete, 'r');
-    try { await file.sync(); } finally { await file.close(); }
+    await syncFile(complete);
     checkSignal(signal);
     await link(complete, destination);
   } catch (cause) {

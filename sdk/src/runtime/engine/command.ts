@@ -1,18 +1,19 @@
 import { spawn } from 'node:child_process';
 import { PicPatchSdkError } from '../../errors.ts';
 import { checkSignal } from '../../operations.ts';
+import { ownedSpawn, signalOwned } from '../../platform.ts';
 
-/** Own the installer process group until closure. Never expose package-manager output to caller streams. */
+/** Own the installer process group (on Windows, its process tree) until closure. Never expose package-manager output to caller streams. */
 export function runCommand(executable: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, signal: AbortSignal, timeoutMs: number): Promise<string> {
   checkSignal(signal);
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    const child = spawn(executable, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], ...ownedSpawn });
     let output = ''; let diagnostic = ''; let failure: Error | undefined; let closed = false;
     let escalation: ReturnType<typeof setTimeout> | undefined;
     let termination: ReturnType<typeof setTimeout> | undefined;
     const kill = (value: NodeJS.Signals) => {
       if (!child.pid) return;
-      try { process.kill(-child.pid, value); }
+      try { signalOwned(child.pid, value); }
       catch (cause) { if (!['ESRCH', 'EPERM'].includes((cause as NodeJS.ErrnoException).code ?? '')) failure = new PicPatchSdkError('TERMINATION_FAILED', 'Could not signal the engine process.', { cause }); }
     };
     const stop = (reason: Error) => {
@@ -55,7 +56,8 @@ export function runCommand(executable: string, args: string[], cwd: string, env:
 }
 
 async function confirmGroupStopped(pid: number | undefined): Promise<void> {
-  if (!pid) return;
+  // Windows has no process groups to probe; the closed child's tree was ended with taskkill /T /F.
+  if (!pid || process.platform === 'win32') return;
   const deadline = performance.now() + 2_000;
   for (;;) {
     try { process.kill(-pid, 0); }

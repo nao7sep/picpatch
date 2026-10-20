@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 64-bit Windows runs the native stable-diffusion.cpp engine: installNativeEngine pins the official Vulkan build of the same revision (it falls back to the CPU), names a missing Microsoft Visual C++ runtime as `DEPENDENCY_MISSING` with subject `msvc-runtime`, and engine tools and workers start without console windows and end as a whole process tree. Catalog entries replace `runtime.platform` and `runtime.architecture` with `runtime.hosts` and add `supported` for this computer; inspectEngine and inspectNativeEngine report `unsupported` instead of throwing where a runtime has no build. `hostId`, `runtimeHosts` and `supportsRuntime` are exported. The Python runtimes remain Apple Silicon only.
 - Catalog entries replace `status` with `evidence` (`real-weights`, `tiny-runtime`, `api` or `source`, recorded per selection rather than per acquisition kind), `tested` (the operations that ran with real weights) and `profile` (display name, parameter count, memory and speed classes, licence kind, purposes and tier). `VERSION` is exported from the package entry.
 - Engine installation compiles Python bytecode, so worker starts skip recompiling imports.
 

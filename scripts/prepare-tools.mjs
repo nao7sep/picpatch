@@ -1,4 +1,4 @@
-// Provides the uv executable the packaged app bundles for explicit engine setup
+// Provides the uv executable the macOS app bundles for explicit Python engine setup
 // (node scripts/prepare-tools.mjs). The version and archive digest are pinned; the
 // archive, executable and notices are cached under node_modules/.cache, so a prepared
 // checkout needs no network. App startup never downloads tools.
@@ -24,8 +24,13 @@ async function download(url, timeout) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+// Windows runs only the native engine, which installs without uv, so nothing is bundled there.
+if (process.platform === "win32" && process.arch === "x64") {
+  console.log("No bundled tools on Windows.");
+  process.exit(0);
+}
 if (process.platform !== "darwin" || process.arch !== "arm64") {
-  throw new Error("The bundled uv is currently qualified for Apple Silicon macOS only.");
+  throw new Error("PicPatch packages for Apple Silicon macOS and 64-bit Windows only.");
 }
 if (!(await exists(executable)) || !(await exists(notices))) {
   await mkdir(UV_DIRECTORY, { recursive: true });

@@ -8,10 +8,11 @@ import * as storage from '../../src/storage.ts';
 const fixture = vi.hoisted(() => ({ files: { 'sd-cli': 4, 'libstable-diffusion.dylib': 4, 'ggml.txt': 4, 'stable-diffusion.cpp.txt': 4 } }));
 vi.mock('../../src/runtime/engine/native-release.ts', async () => {
   const { createHash } = await import('node:crypto');
-  return { nativeRelease: { revision: '95b3090664d019fcf8fa032a44d1d4793ba244b8', url: 'https://example.invalid/runtime.zip', bytes: 7, sha256: createHash('sha256').update('archive').digest('hex'), files: fixture.files } };
+  const release = { url: 'https://example.invalid/runtime.zip', bytes: 7, sha256: createHash('sha256').update('archive').digest('hex'), executable: 'sd-cli', files: fixture.files };
+  return { nativeRevision: '95b3090664d019fcf8fa032a44d1d4793ba244b8', nativeReleases: { 'darwin-arm64': release }, nativeReleaseFor: () => release };
 });
 vi.mock('../../src/runtime/engine/command.ts', () => ({ runCommand: vi.fn(async (executable: string, args: string[]) => {
-  if (executable === '/usr/bin/tar') for (const name of Object.keys(fixture.files)) await writeFile(join(args[3]!, name), 'data');
+  if (/[\\/]tar(\.exe)?$/.test(executable)) for (const name of Object.keys(fixture.files)) await writeFile(join(args[3]!, name), 'data');
   return `stable-diffusion.cpp version unknown, commit ${nativeRevision.slice(0, 7)}\n`;
 }) }));
 let directory: string;

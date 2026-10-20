@@ -63,13 +63,15 @@ function ambientReads(text: string, file: string): string[] {
   const processes = new Set(['process']); const operatingSystems = new Set<string>();
   const prohibited = new Set(['env', 'cwd', 'stdout', 'stderr', 'stdin']);
   const name = (node: any): string | undefined => node?.name ?? node?.value;
+  // Only platform.ts reads the environment, and only for Windows' own system and temporary folders.
+  const osLocation = (member: string) => member === 'env' && file === 'src/platform.ts';
   for (const entry of source.program.body) {
     if (entry.type !== 'ImportDeclaration') continue;
     if (['node:console', 'console'].includes(entry.source.value)) failures.push('console');
     for (const specifier of entry.specifiers) {
       const member = specifier.type === 'ImportSpecifier' ? name(specifier.imported) : undefined;
       if (['node:process', 'process'].includes(entry.source.value)) {
-        if (member && prohibited.has(member)) failures.push(member);
+        if (member && prohibited.has(member) && !osLocation(member)) failures.push(member);
         else if (!member) processes.add(specifier.local.name);
       }
       if (['node:os', 'os'].includes(entry.source.value)) {
@@ -81,7 +83,7 @@ function ambientReads(text: string, file: string): string[] {
   function visit(value: any): void {
     if (!value || typeof value !== 'object') return;
     if (value.type === 'MemberExpression' || value.type === 'OptionalMemberExpression') {
-      if (processes.has(name(value.object)!) && prohibited.has(name(value.property)!)) failures.push(name(value.property)!);
+      if (processes.has(name(value.object)!) && prohibited.has(name(value.property)!) && !osLocation(name(value.property)!)) failures.push(name(value.property)!);
       if (name(value.object) === 'console') failures.push('console');
       if (operatingSystems.has(name(value.object)!) && name(value.property) === 'homedir' && file !== 'src/paths.ts') failures.push('homedir');
     }
@@ -106,4 +108,5 @@ it('keeps ambient caller state and standard streams outside SDK source', async (
 it('detects planted ambient reads, import aliases and stream writes', () => {
   expect(ambientReads(`import p from 'node:process'; import {env as settings} from 'node:process'; import os from 'node:os'; p['env']; const {cwd} = process; process.stderr.write('x'); console.log('x'); os.homedir();`, 'src/client.ts')).toEqual(['env', 'env', 'cwd', 'stderr', 'console', 'homedir']);
   expect(ambientReads(`import {homedir} from 'node:os'; homedir();`, 'src/paths.ts')).toEqual([]);
+  expect(ambientReads(`process.env.SystemRoot;`, 'src/platform.ts')).toEqual([]); expect(ambientReads(`process.env.SystemRoot;`, 'src/client.ts')).toEqual(['env']);
 });

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { Transform } from 'node:stream';
 import type { ImageFingerprint } from './fingerprint.ts';
 import { constants, createReadStream, createWriteStream } from 'node:fs';
-import { chmod, open, unlink } from '../storage.ts';
+import { chmod, lstat, open, unlink } from '../storage.ts';
 import { pipeline } from 'node:stream/promises';
 import { isAbsolute } from 'node:path';
 import sharp, { type Metadata } from 'sharp';
@@ -28,7 +28,11 @@ export async function snapshotImage(source: string, target: string, signal?: Abo
   checkCancellation(signal);
   if (!isAbsolute(source) || source.includes('\0')) throw new PicPatchSdkError('INVALID_IMAGE', 'Image paths must be absolute.');
   let input;
-  try { input = await open(source, constants.O_RDONLY | constants.O_NONBLOCK | (noFollow ? constants.O_NOFOLLOW : 0)); }
+  try {
+    // Windows has no O_NOFOLLOW; there a link is refused by looking at the name first.
+    if (noFollow && constants.O_NOFOLLOW === undefined && (await lstat(source)).isSymbolicLink()) throw Object.assign(new Error('Symbolic link refused.'), { code: 'ELOOP' });
+    input = await open(source, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0) | (noFollow ? constants.O_NOFOLLOW ?? 0 : 0));
+  }
   catch (cause) {
     if (expected && ['ENOENT', 'ENOTDIR'].includes((cause as NodeJS.ErrnoException).code ?? '')) throw new PicPatchSdkError('INPUTS_CHANGED', 'Planned input is missing.', { subject: source });
     throw new PicPatchSdkError('IMAGE_IO', 'Image could not be opened.', { cause, subject: source });

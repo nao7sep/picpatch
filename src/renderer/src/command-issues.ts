@@ -17,7 +17,8 @@ export function commandIssues(session: Session, draft: Draft, models: readonly C
   if (!draft.modelIds.length) issues.push({ kind: 'noModel' });
   if (!readiness) issues.push({ kind: 'checking' });
   else {
-    const unready = draft.modelIds.filter(id => readiness[id] !== 'ready');
+    // A model this computer cannot run (for example a session from a Mac) is reported below as unavailable, not as one to set up.
+    const unready = draft.modelIds.filter(id => readiness[id] !== 'ready' && models.some(model => model.id === id));
     if (unready.length) issues.push({ kind: 'unready', models: unready });
   }
   if (!commandTargetReady(session, draft)) issues.push({ kind: 'waiting' });

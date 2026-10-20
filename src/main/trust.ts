@@ -1,4 +1,4 @@
-import { isAbsolute, relative, sep } from 'node:path';
+import * as nodePath from 'node:path';
 import type { BrowserWindow } from 'electron';
 
 /** A request is trusted only from the main frame of `window` while it shows its own page. */
@@ -6,8 +6,10 @@ export function trustedSender(event: { sender: unknown; senderFrame: unknown }, 
   return !!window && !window.isDestroyed() && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && window.webContents.mainFrame.url === page;
 }
 
-/** The path of `file` relative to `directory` when the file is inside it, otherwise undefined. */
-export function insideBundle(directory: string, file: string): string | undefined {
+/** The path of `file` relative to `directory`, with forward slashes, when the file is inside it; otherwise undefined. */
+export function insideBundle(directory: string, file: string, paths: typeof nodePath = nodePath): string | undefined {
+  const { isAbsolute, relative, sep } = paths;
   const path = relative(directory, file);
-  return path === '' || path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path) ? undefined : path;
+  // Bundle paths are stored with forward slashes on every platform.
+  return path === '' || path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path) ? undefined : path.split(sep).join('/');
 }

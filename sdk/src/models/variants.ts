@@ -12,6 +12,7 @@ export function modelRuntime(variant?: string): EngineRuntime {
 import type { LocalModel, ModelCapabilities } from '../contracts.generated.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { modelEvidence, modelProfile } from './profiles.ts';
+import { runtimeHosts, supportsRuntime } from '../hosts.ts';
 
 export type ModelVariant = LocalModel['variant'];
 export function modelDefinition(id: string) {
@@ -28,6 +29,7 @@ export function externalModels() {
   return definitions.map(item => ({ id: item.id, variant: item.id as ModelVariant,
     family: item.family, capabilities: modelCapabilities(item.id), acquisition: 'external' as const,
     ...modelEvidence(item.id, 'api'), profile: modelProfile(item.id),
-    runtime: { name: modelRuntime(item.id), version: { mflux: '0.22.0', dreamo: '1.1', diffusers: '0.41.0' }[modelRuntime(item.id)], platform: 'darwin' as const, architecture: 'arm64' as const } }));
+    runtime: { name: modelRuntime(item.id), version: { mflux: '0.22.0', dreamo: '1.1', diffusers: '0.41.0' }[modelRuntime(item.id)], hosts: runtimeHosts(modelRuntime(item.id)) },
+    supported: supportsRuntime(modelRuntime(item.id)) }));
 }
 export type ExternalModel = ReturnType<typeof externalModels>[number];

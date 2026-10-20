@@ -64,3 +64,5 @@ export type { ManagedModelEntry, RemoveModelResult } from './models/managed.ts';
 
 export { inspectNativeEngine, installNativeEngine } from './runtime/engine/native.ts';
 export type { ReadyNativeEngine, NativeEngineInspection, NativeEngineInstallation } from './runtime/engine/native.ts';
+export { hostId, runtimeHosts, supportsRuntime } from './platform.ts';
+export type { Host, HostId, RuntimeName } from './platform.ts';

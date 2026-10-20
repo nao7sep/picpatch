@@ -47,5 +47,10 @@ export type EngineInspection = ReadyEngine | {
   code: 'ENGINE_MISSING' | 'ENGINE_RECORD_INVALID' | 'ENGINE_CHECK_FAILED';
   identity: EngineIdentity;
   engineDirectory: string;
+} | {
+  /** This runtime has no build for this computer; nothing can be installed here. */
+  status: 'unsupported';
+  code: 'UNSUPPORTED_CAPABILITY';
+  engineDirectory: string;
 };
 export interface EngineInstallation extends ReadyEngine { origin: 'installed' | 'reused' }

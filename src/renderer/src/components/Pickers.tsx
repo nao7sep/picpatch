@@ -11,8 +11,8 @@ import { Popover } from './Popover.tsx';
 const TIER = { recommended: 0, standard: 1, specialist: 2 } as const;
 
 /** Ready models first, then recommended ones to set up; the rest stay behind Show more unless selected. */
-export function ModelPicker({ draft, models, readiness, onDraft, onSetup }: {
-  draft: Draft; models: readonly CatalogModel[]; readiness: Readiness | undefined;
+export function ModelPicker({ draft, models, hidden = 0, readiness, onDraft, onSetup }: {
+  draft: Draft; models: readonly CatalogModel[]; hidden?: number; readiness: Readiness | undefined;
   onDraft: (draft: Draft) => void; onSetup: () => void;
 }) {
   const { t } = useI18n();
@@ -72,6 +72,7 @@ export function ModelPicker({ draft, models, readiness, onDraft, onSetup }: {
             {group(t('model.groupRecommended'), recommended)}
             {showRest && group(t('model.groupMore'), rest)}
           </fieldset>
+          {hidden > 0 && <p className="field-help picker-note">{t('model.moreOnMac')}</p>}
           <div className="picker-foot">
             {rest.length > 0 && !rest.some(model => draft.modelIds.includes(model.id)) && (
               <button type="button" className="quiet-button" aria-expanded={showRest} onClick={() => setMore(value => !value)}>{t(showRest ? 'model.showFewer' : 'model.showMore')}</button>
