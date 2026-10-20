@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
-import { errorRecord } from '../../src/main/core/records.ts';
+import { errorRecord, Records } from '../../src/main/core/records.ts';
+import { fallbackLog } from '../../src/main/core/fallback-log.ts';
+import { once } from 'node:events';
 it('stores structured events and falls back to a session file when the database is unavailable', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-'));
   try {
@@ -15,12 +17,24 @@ it('stores structured events and falls back to a session file when the database 
       const event = { time: '2026-10-19T00:00:01Z', level: 'info', message: 'Attempt completed.', runId: 'fixture' };
       try {
         await new Promise<void>((resolve, reject) => { worker.on('error', reject); worker.on('message', message => { if (message.written) resolve(); }); worker.postMessage(event); });
-        if (fallback) { const files = await readdir(join(directory, 'logs')); expect(await readFile(join(directory, 'logs', files[0]!), 'utf8')).toContain(JSON.stringify(event)); }
+        if (fallback) { expect(await readdir(join(directory, 'logs'))).toEqual(['20261019-000000-utc.log']); expect(await readFile(join(directory, 'logs', '20261019-000000-utc.log'), 'utf8')).toContain(JSON.stringify(event)); }
         else { const db = new DatabaseSync(join(directory, 'records.sqlite3')); try { expect(JSON.parse(db.prepare('SELECT json FROM records').get()!.json as string)).toEqual(event); } finally { db.close(); } }
       } finally { await worker.terminate(); }
     }
   } finally { await rm(root, { recursive: true, force: true }); }
 }, 15_000);
+it('names the fallback log to the second and keeps records there once the writer thread has failed', async () => {
+  expect(fallbackLog('/root', '2026-10-19T03:15:42.123Z')).toBe(join('/root', 'logs', '20261019-031542-utc.log'));
+  const root = await mkdtemp(join(tmpdir(), 'picpatch-records-failed-'));
+  try {
+    const records = new Records(root, new URL('data:text/javascript,throw new Error("writer failed")'));
+    await once(records['worker'], 'error');
+    records.write('warn', 'Written without a writer.'); await records.close();
+    const [file] = await readdir(join(root, 'logs'));
+    expect(join(root, 'logs', file!)).toBe(fallbackLog(root, records.session));
+    expect(await readFile(join(root, 'logs', file!), 'utf8')).toContain('Written without a writer.');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 it('keeps the cause chain and stack for diagnostics', () => {
   const error = new Error('outer', { cause: new TypeError('inner') });
   expect(errorRecord(error)).toMatchObject({ name: 'Error', message: 'outer', stack: expect.any(String), cause: { name: 'TypeError', message: 'inner' } });
