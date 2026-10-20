@@ -40,7 +40,7 @@ function requireRelease(): NativeRelease {
 const installation = (root: string, pinned: NativeRelease) => join(root, 'native', `${hostId()}-${pinned.sha256}`);
 const env = toolEnvironment();
 /** 0xC0000135: Windows could not load a DLL the executable needs, here the Visual C++ runtime. */
-const missingDll = (cause: unknown) => cause instanceof PicPatchSdkError && [3221225781, -1073741515].includes(Number((cause.details.diagnostic as { exitCode?: number } | undefined)?.exitCode));
+export const missingDll = (cause: unknown) => cause instanceof PicPatchSdkError && [3221225781, -1073741515].includes(Number((cause.details.diagnostic as { exitCode?: number } | undefined)?.exitCode));
 /** The commit an sd-cli --help banner names; Windows ends its lines with CRLF. */
 export const probeCommit = (output: string) => output.match(/^stable-diffusion\.cpp version [^\r\n]+, commit ([a-f0-9]{7,40})\b/)?.[1];
 /** Probes a configured executable: it must run here and name the pinned revision. */
@@ -152,7 +152,7 @@ async function install(options: NativeEngineOptions): Promise<NativeEngineInstal
       await syncDirectory(extracted);
       operationStage(options, 'publishing', 'Publishing the verified native engine.');
       checkSignal(signal); publicationAttempted = true;
-      try { await publish(extracted, installation(directory, pinned)); }
+      try { await publishInstallation(extracted, installation(directory, pinned), process.platform, rename); }
       catch (cause) {
         if (!['EEXIST', 'ENOTEMPTY', 'EPERM'].includes((cause as NodeJS.ErrnoException).code ?? '')) throw cause;
         const winner = await inspect(directory, signal);
@@ -180,12 +180,12 @@ async function install(options: NativeEngineOptions): Promise<NativeEngineInstal
  * holds a fresh executable open, so a busy refusal is retried within a short bound; a destination
  * that already exists is left for the caller to inspect.
  */
-async function publish(from: string, to: string): Promise<void> {
+export async function publishInstallation(from: string, to: string, platform: NodeJS.Platform, move: (from: string, to: string) => Promise<void>): Promise<void> {
   for (let attempt = 0; ; attempt++) {
-    try { await rename(from, to); return; }
+    try { await move(from, to); return; }
     catch (cause) {
       const code = (cause as NodeJS.ErrnoException).code ?? '';
-      if (process.platform !== 'win32' || !['EPERM', 'EBUSY', 'EACCES'].includes(code) || attempt >= 9) throw cause;
+      if (platform !== 'win32' || !['EPERM', 'EBUSY', 'EACCES'].includes(code) || attempt >= 9) throw cause;
       try { await lstat(to); throw cause; } catch (probe) { if (probe === cause) throw cause; }
       await new Promise(resolve => setTimeout(resolve, 250));
     }

@@ -74,6 +74,9 @@ it('maps real SDK errors by cause and keeps hostile text out of operation fallba
     expect(errorNotice({ status: 'refused', code, message: 'SENTINEL', details: {} }).key).toBe(key);
   expect(errorNotice(new Error('Select a completed image.'), 'error.generate').key).toBe('error.generate');
   expect(errorNotice(new UiError('error.select_a_completed_image')).key).toBe('error.select_a_completed_image');
+  // A Windows PC without the Visual C++ runtime is told what to install; any other missing dependency stays general.
+  expect(errorNotice(new PicPatchSdkError('DEPENDENCY_MISSING', 'SENTINEL', { subject: 'msvc-runtime' })).key).toBe('error.msvc_runtime');
+  expect(errorNotice(new PicPatchSdkError('DEPENDENCY_MISSING', 'SENTINEL', { subject: 'cmake' })).key).toBe('error.engine');
 });
 it('names About the way each language names it in macOS menus', async () => {
   const expected = { en: 'About PicPatch', de: 'Über PicPatch', es: 'Acerca de PicPatch', fr: 'À propos de PicPatch', it: 'Informazioni su PicPatch', ja: 'PicPatch について', ko: 'PicPatch에 관하여', 'pt-BR': 'Sobre o PicPatch', ru: 'О программе PicPatch', 'zh-Hans': '关于 PicPatch' };

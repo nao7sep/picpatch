@@ -22,15 +22,21 @@ export const archiveTool = (host: Host = currentHost()): string => host.platform
 export const venvPython = (venv: string, host: Host = currentHost()): string => host.platform === 'win32' ? win32.join(venv, 'Scripts', 'python.exe') : posix.join(venv, 'bin', 'python');
 
 /** POSIX children lead their own process group so the whole group can be signalled; Windows children get no console window. */
-export const ownedSpawn = { detached: process.platform !== 'win32', windowsHide: true } as const;
+export const spawnOwnership = (platform: NodeJS.Platform = process.platform) => ({ detached: platform !== 'win32', windowsHide: true }) as const;
+export const ownedSpawn = spawnOwnership();
 /**
- * Signals an owned child and everything it started. POSIX signals the process group; Windows has no
- * groups or graceful signals for console tools, so the whole tree is ended with taskkill. Throws
- * only when the request itself could not be made; a process already gone is not an error.
+ * How an owned child and everything it started is ended. POSIX signals the process group; Windows has no
+ * groups or graceful signals for console tools, so the whole tree is ended with taskkill.
  */
+export function ownedTermination(pid: number, signal: NodeJS.Signals, platform: NodeJS.Platform = process.platform): { group: number; signal: NodeJS.Signals } | { command: string; args: string[] } {
+  if (platform !== 'win32') return { group: -pid, signal };
+  return { command: win32.join(windowsFolders().root, 'System32', 'taskkill.exe'), args: ['/PID', String(pid), '/T', '/F'] };
+}
+/** Throws only when the request itself could not be made; a process already gone is not an error. */
 export function signalOwned(pid: number, signal: NodeJS.Signals): void {
-  if (process.platform !== 'win32') { process.kill(-pid, signal); return; }
-  const killer = spawn(win32.join(windowsFolders().root, 'System32', 'taskkill.exe'), ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+  const termination = ownedTermination(pid, signal);
+  if ('group' in termination) { process.kill(termination.group, termination.signal); return; }
+  const killer = spawn(termination.command, termination.args, { stdio: 'ignore', windowsHide: true });
   killer.once('error', () => {});
 }
 

@@ -58,7 +58,9 @@ export class UiError extends Error {
 export function errorNotice(value: unknown, fallback: Key = 'error.unknown'): Message {
   if (value && typeof value === 'object' && 'notice' in value && value.notice && typeof value.notice === 'object' && 'key' in value.notice) return value.notice as Message;
   if (value && typeof value === 'object') {
-    const error = value as { code?: string; kind?: string };
+    const error = value as { code?: string; kind?: string; subject?: string };
+    // Windows: the native engine's DLLs need the Microsoft Visual C++ runtime, which not every PC has.
+    if (error.code === 'DEPENDENCY_MISSING' && error.subject === 'msvc-runtime') return message('error.msvc_runtime');
     const keys: Record<string, Key> = {
       MODEL_MISSING: 'error.prepare_this_model_in_managed_models_before_running_it', MODEL_INCOMPLETE: 'error.prepare_this_model_in_managed_models_before_running_it',
       MODEL_MISMATCH: 'error.model_files', MODEL_CHANGED: 'error.model_files', MODEL_LINK_REFUSED: 'error.model_files', MODEL_BUNDLE_INCOMPLETE: 'error.model_files', MODEL_COMPONENT_INVALID: 'error.model_files',
