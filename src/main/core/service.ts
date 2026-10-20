@@ -1,21 +1,49 @@
 import { modelReadiness } from './model-readiness.ts';
 import { preference, UiError } from '../../shared/i18n/index.ts';
 import { errorRecord } from './records.ts';
-import { listModels, inspectModels, prepareModel, saveArtifact, openModel, verifyModel, removeModel, resolveStoragePaths, isPicPatchSdkError } from 'picpatchsdk';
+import { listModels, inspectModels, prepareModel, saveArtifact, openModel, verifyModel, removeModel, resolveStoragePaths, isPicPatchSdkError, inspectEngine, inspectNativeEngine, installEngine, installNativeEngine } from 'picpatchsdk';
+import { isAbsolute, join } from 'node:path';
+import { exportName } from '../../shared/export-name.ts';
 import type { AppPaths } from './paths.ts';
 import { Sessions, validateDraft } from './sessions.ts';
 import { Queue } from './queue.ts';
 import { inference } from './inference.ts';
 import { readSettings, saveSettings, usableProfile, validConcurrency } from './settings.ts';
 import type { Runner } from './queue.ts';
-import type { Draft } from '../../shared/session.ts';
+import type { Draft, Session } from '../../shared/session.ts';
 import type { PrepareModelSettings, SdkEvent } from 'picpatchsdk';
 import type { Settings } from './settings.ts';
+/** The Python runtime the catalog names for a model; native models and no selection use the default Python engine. */
+function pythonEngine(modelId: unknown) {
+  const runtime = listModels().find(model => model.id === modelId)?.runtime;
+  return runtime?.engine === 'python' ? { runtime: runtime.name } : {};
+}
+/**
+ * Where a Python engine build looks for tools such as CMake: the absolute directories on PATH, then the usual
+ * Homebrew locations, which a GUI launch from Finder does not have on PATH.
+ */
+export function pythonToolDirectories(path: string | undefined, delimiter: string): string[] {
+  return [...new Set([...(path ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])];
+}
+/** A model the app may download: pinned in the catalog and runnable on this computer. */
+export function downloadableModel(modelId: unknown) {
+  const model = listModels().find(item => item.id === modelId);
+  if (!model || model.acquisition !== 'pinned' || !model.supported) throw new UiError('ui.no_downloadable_bundle_for_this_selection');
+  return model;
+}
+/** Save image suggests the image's number as shown in the conversation, in the folder the last save used. */
+export function exportDefaultPath(session: Session, runId: string, directory: string | undefined): string {
+  const index = session.runs.findIndex(run => run.id === runId && run.output);
+  if (index < 0) throw new UiError('ui.choose_completed_results');
+  const name = exportName(session.name, index + 1);
+  return directory ? join(directory, name) : name;
+}
 export class Application {
   sessions: Sessions;
   queue: Queue;
   historyIssue?: string | { message: string; notice?: import('../../shared/i18n/index.ts').Message };
   private settingsTail: Promise<unknown> = Promise.resolve();
+  private managed?: { controller: AbortController; task: Promise<unknown> };
   private runner(): Runner {
     const run = inference(() => this.sessions, () => this.settings);
     return async (sessionId, attempt, events) => {
@@ -47,7 +75,44 @@ export class Application {
   sdkEvents(context: Record<string, unknown> = {}): (event: SdkEvent) => void {
     return event => this.diagnostic(event.level, event.message, { ...context, event });
   }
-  async overview() { return { ...await this.sessions.list(), models: listModels().filter(model => model.supported), unsupportedModels: listModels().filter(model => !model.supported).length, queue: structuredClone(this.queue.state), historyIssue: typeof this.historyIssue === 'object' ? { message: this.historyIssue.message, notice: this.historyIssue.notice } : this.historyIssue, settings: structuredClone(this.settings), locations: { ...resolveStoragePaths(this.settings.profile.engineDirectory || this.settings.profile.modelsDirectory ? { engineDirectory: this.settings.profile.engineDirectory, modelsDirectory: this.settings.profile.modelsDirectory } : {}), sessionsDirectory: this.sessions.root } }; }
+  async overview() {
+    const { engineDirectory, modelsDirectory } = this.settings.profile;
+    const resources = resolveStoragePaths(engineDirectory || modelsDirectory ? { engineDirectory, modelsDirectory } : {});
+    const historyIssue = typeof this.historyIssue === 'object' ? { message: this.historyIssue.message, notice: this.historyIssue.notice } : this.historyIssue;
+    return {
+      ...await this.sessions.list(),
+      models: listModels().filter(model => model.supported), unsupportedModels: listModels().filter(model => !model.supported).length,
+      queue: structuredClone(this.queue.state), resourcesBusy: this.resourcesBusy(), historyIssue,
+      settings: structuredClone(this.settings), locations: { ...resources, sessionsDirectory: this.sessions.root },
+    };
+  }
+  /**
+   * Resource operations (preparing, verifying or removing models, installing engines) run one at a time and receive
+   * the operation's cancellation signal. Image work does not start while one runs, and the queue's own idle checks
+   * keep resources from changing under image work.
+   */
+  private manage<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    if (this.managed) return Promise.reject(new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it'));
+    const controller = new AbortController(); const task = work(controller.signal);
+    const managed = this.managed = { controller, task };
+    return task.finally(() => { if (this.managed === managed) this.managed = undefined; });
+  }
+  private requireNoResourceOperation() { if (this.managed) throw new UiError('ui.wait_for_the_current_resource_operation'); }
+  get managing(): boolean { return this.managed !== undefined; }
+  resourcesBusy(): boolean { return this.managing || this.queue.busy(); }
+  cancelManaged(): void { this.managed?.controller.abort(); }
+  /** Cancels the running resource operation and waits until it has settled. */
+  async stopManaged(): Promise<void> { const managed = this.managed; managed?.controller.abort(); await managed?.task.catch(() => {}); }
+  submit(sessionId: string, draft: Draft, samples: number) { this.requireNoResourceOperation(); return this.queue.submit(sessionId, draft, samples); }
+  resume(sessionId: string) { this.requireNoResourceOperation(); return this.queue.resume(sessionId); }
+  async engines(modelId: unknown) {
+    const events = { onEvent: this.sdkEvents({ action: 'engines' }) };
+    return { python: await inspectEngine({ ...pythonEngine(modelId), profile: this.settings.profile }, events), native: await inspectNativeEngine({ profile: this.settings.profile }, events) };
+  }
+  installNative() { return this.manage(signal => installNativeEngine({ profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ action: 'installNative' }) })); }
+  installPython(modelId: unknown, uvExecutable: string, toolDirectories: string[]) {
+    return this.manage(signal => installEngine({ ...pythonEngine(modelId), profile: this.settings.profile, uvExecutable, toolDirectories }, { signal, onEvent: this.sdkEvents({ action: 'installPython' }) }));
+  }
   /** Autosave acknowledges only; the renderer already holds the draft it sent. */
   async draft(sessionId: string, draft: Draft): Promise<void> { const valid = validateDraft(draft); await this.sessions.update(sessionId, value => { value.draft = valid; }); }
   /**
@@ -73,16 +138,18 @@ export class Application {
   /** Presence checks are cheap; the signal bounds a probe that stops responding, such as an engine on a stalled volume. */
   async readiness() { return modelReadiness(this.settings, { signal: AbortSignal.timeout(120_000), onEvent: this.sdkEvents({ action: 'readiness' }) }); }
   async models() { return inspectModels({ profile: this.settings.profile }, { onEvent: this.sdkEvents({ action: 'models' }) }); }
-  async prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelSettings, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}, signal?: AbortSignal) {
-    this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_prepared_models');
-    const prepared = await prepareModel(modelId, { ...components, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download }, { signal, onEvent: this.sdkEvents({ action: 'prepare', modelId }) });
-    await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
+  prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelSettings, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}) {
+    return this.manage(async signal => {
+      this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_prepared_models');
+      const prepared = await prepareModel(modelId, { ...components, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download }, { signal, onEvent: this.sdkEvents({ action: 'prepare', modelId }) });
+      await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
+    });
   }
   resourcesChanged(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }): boolean {
     return (['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const).some(key => (value[key] || undefined) !== this.settings.profile[key]);
   }
   async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string; uiFont?: string; concurrency?: number }) {
-    if (this.resourcesChanged(value)) this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_resource_settings');
+    if (this.resourcesChanged(value)) { this.requireNoResourceOperation(); this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_resource_settings'); }
     if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new UiError('error.invalid_theme');
     if (value.concurrency !== undefined && !validConcurrency(value.concurrency)) throw new UiError('error.invalid_concurrency');
     await this.updateSettings(next => {
@@ -99,14 +166,18 @@ export class Application {
     // A higher limit starts waiting work at once; a lower one lets running work finish.
     this.queue.wake();
   }
-  async verify(modelId: string, signal?: AbortSignal) {
-    const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ modelId }) });
-    if (opened.status === 'refused') return opened;
-    return verifyModel(opened.model.directory, opened.model.manifest, { signal, onEvent: this.sdkEvents({ modelId }) });
+  verify(modelId: string) {
+    return this.manage(async signal => {
+      const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ modelId }) });
+      if (opened.status === 'refused') return opened;
+      return verifyModel(opened.model.directory, opened.model.manifest, { signal, onEvent: this.sdkEvents({ modelId }) });
+    });
   }
-  async removeManaged(modelId: string, name: string, signal?: AbortSignal) {
-    this.queue.requireIdle('error.finish_or_cancel_queued_work_before_removing_models');
-    return removeModel(modelId, name, { profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ modelId }) });
+  removeManaged(modelId: string, name: string) {
+    return this.manage(async signal => {
+      this.queue.requireIdle('error.finish_or_cancel_queued_work_before_removing_models');
+      return removeModel(modelId, name, { profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ modelId }) });
+    });
   }
   private updateSettings(change: (value: Settings) => void): Promise<void> {
     const next = this.settingsTail.then(async () => {

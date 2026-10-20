@@ -29,7 +29,8 @@ export function fakeBridge(initial: Session = session(), overrides: Record<strin
   let request: ((request: RendererRequest) => Promise<unknown>) | undefined;
   const handlers: Record<string, (payload: any) => unknown> = {
     locale: () => ({ language: 'en', format: 'en', systemLanguage: 'en' }),
-    paneState: (payload: any) => payload?.railWidth === undefined ? { railWidth: 264, optionsPane: false } : undefined,
+    paneState: () => ({ railWidth: 264, optionsPane: false }),
+    savePane: () => undefined,
     modelReadiness: () => ({ 'flux2-klein-4b-4bit': 'ready', sd15: 'missing' }),
     overview: () => ({ sessions: [{ id: current.id, name: current.name, updated: current.updated, results: current.runs.filter(r => r.output).length }], failures: [], models, queue: { paused: false, active: [] }, settings: { version: 1, profile: { version: 1 }, registrations: {} }, locations: { engineDirectory: '/e', modelsDirectory: '/m', sessionsDirectory: '/s' }, resourcesBusy: false, locale: { language: 'en', format: 'en', systemLanguage: 'en' }, systemDark: false }),
     get: () => structuredClone(current),

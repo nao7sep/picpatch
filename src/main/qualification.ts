@@ -98,3 +98,22 @@ export async function qualifyLogs(window: import('electron').BrowserWindow, work
     }
   }
 }
+/**
+ * A smoke run, once the window is ready: the packaged renderer must enforce its content security policy, then the
+ * requested localization and inference qualifications run. Returns the process exit code.
+ */
+export async function runSmoke(options: {
+  window: import('electron').BrowserWindow; packaged: boolean;
+  localization?: { root: string; command: (id: string) => void; openLogs: () => Promise<import('electron').BrowserWindow>; closeLogs: () => void };
+  inference?: { service: Application; configuration: string; uv: string };
+}): Promise<number> {
+  const { window, localization, inference } = options;
+  if (options.packaged && !await window.webContents.executeJavaScript("(() => { try { new Function(''); return false; } catch { return true; } })()")) {
+    console.error('The packaged renderer runs without its content security policy.'); return 1;
+  }
+  try {
+    if (localization) { await qualifyLocalization(window, localization.root, localization.command); await qualifyLogs(await localization.openLogs(), window); localization.closeLogs(); }
+    if (inference) await qualifyInference(inference.service, inference.configuration, inference.uv);
+  } catch (error) { console.error(error); return 1; }
+  return 0;
+}

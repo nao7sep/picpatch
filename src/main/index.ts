@@ -1,5 +1,4 @@
 import { startupFailureWindow } from './startup-failure.ts';
-import { exportName } from '../shared/export-name.ts';
 import { menuTemplate } from './menu-template.ts';
 import { RecordsReader } from './core/records-reader.ts';
 import { focusWorkspaceForCommand } from './workspace-command.ts';
@@ -16,15 +15,15 @@ import { t, number, errorText, errorNotice, UiError, message } from '../shared/i
 import { Records, errorRecord } from './core/records.ts';
 import { checkPaneState, readPaneState, savePaneState } from './core/layout-state.ts';
 import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor, nativeTheme, systemPreferences, screen, session as browserSession, shell } from 'electron';
-import { Worker } from 'node:worker_threads';
 import { pathToFileURL } from 'node:url';
 import { dirname, join, isAbsolute, delimiter } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { qualifyInference, qualifyLocalization, qualifyLogs } from './qualification.ts';
-import { installEngine, installNativeEngine, inspectEngine, inspectNativeEngine, isPicPatchSdkError, listModels } from 'picpatchsdk';
+import { runSmoke } from './qualification.ts';
+import { isPicPatchSdkError } from 'picpatchsdk';
 import { insideBundle, trustedSender } from './trust.ts';
 import { appPaths, resolveAppPaths } from './core/paths.ts';
-import { Application } from './core/service.ts';
+import { Application, downloadableModel, exportDefaultPath, pythonToolDirectories } from './core/service.ts';
+import { Backup } from './core/backup.ts';
 import { minimum, thumbnailSize } from '../shared/layout.ts';
 import { Thumbnails } from './core/thumbnails.ts';
 import { locations } from './locations.ts';
@@ -34,11 +33,10 @@ let earlyFailure: unknown;
 try { prepareChromiumLanguage(resolveAppPaths().config); } catch (error) { earlyFailure = error; }
 protocol.registerSchemesAsPrivileged([{ scheme: 'picpatch-image', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 let window: BrowserWindow | undefined; let service: Application; let quitting = false;
-let backup: Worker | undefined;
+let backup: Backup | undefined;
 let records: Records | undefined;
 let logs: LogsWindow | undefined;
 let recordsReader: RecordsReader | undefined;
-let managed: { controller: AbortController; task: Promise<unknown> } | undefined;
 let paths: Awaited<ReturnType<typeof appPaths>>;
 try {
   paths = await appPaths();
@@ -107,18 +105,18 @@ const lifetime = quitFlow({
     return (await ask({ duringClose: true, message: message('ui.pending_changes_could_not_be_saved'), buttons: [message('ui.keep_working'), message('ui.retry_save'), message('ui.quit_without_pending_changes')] })).response;
   },
   work: async () => {
-    if (managed && (await ask({ duringClose: true, message: message('ui.cancel_the_installation_or_verification_and_quit'), buttons: [message('ui.keep_working'), message('ui.cancel_and_quit')] })).response !== 1) return false;
+    if (service.managing && (await ask({ duringClose: true, message: message('ui.cancel_the_installation_or_verification_and_quit'), buttons: [message('ui.keep_working'), message('ui.cancel_and_quit')] })).response !== 1) return false;
     if (service.queue.busy() && (await ask({ duringClose: true, message: message('ui.cancel_the_remaining_work_and_quit'), buttons: [message('ui.keep_working'), message('ui.cancel_work_and_quit')] })).response !== 1) return false;
     return true;
   },
   finish: async () => {
-    const pending = managed; pending?.controller.abort(); await pending?.task.catch(() => {});
+    await service.stopManaged();
     await service.queue.stop();
     if (quitting) return;
     // Saves already accepted (renames, masks, exports) settle before teardown, within a bound a stalled volume cannot extend.
     const late = await Promise.race([service.sessions.settled().then(() => 'settled' as const), delay(5000)]) === 'late';
     if (late) records?.write('warn', 'Session saves did not settle before quitting.');
-    if (backup) { await new Promise<void>(resolve => { const timer = setTimeout(resolve, 500); const done = (reply: any) => { if (reply.flushed === 'quit') { clearTimeout(timer); backup?.off('message', done); resolve(); } }; backup!.on('message', done); backup!.postMessage({ flush: 'quit' }); }); await backup.terminate(); }
+    await backup?.close();
     logs?.close(); await recordsReader?.close();
     records?.write('info', 'PicPatch closed normally.');
     const recordsLate = await Promise.race([records?.close().then(() => 'closed' as const), delay(2000)]) === 'late';
@@ -131,7 +129,7 @@ const lifetime = quitFlow({
     try { await ask({ duringClose: true, message: message('ui.picpatch_could_not_finish_closing'), buttons: [message('ui.keep_working')] }); }
     catch { /* No usable message surface: ordinary quit remains cancelled. */ }
   },
-  interrupt: () => { quitting = true; command('shutdown'); requests.cancelAll(); managed?.controller.abort(); void service?.queue.stop(); },
+  interrupt: () => { quitting = true; command('shutdown'); requests.cancelAll(); service?.cancelManaged(); void service?.queue.stop(); },
   shutdownSave: async () => { await requests.request({ kind: 'flush' }, 800); await service.sessions.settled(); },
   exit: () => app.exit(0),
   forceExit,
@@ -166,10 +164,14 @@ async function start() {
   recordsReader = new RecordsReader(paths.root, records.session, locations.worker('records-reader-worker'));
   records.write('info', 'PicPatch started.', { version: app.getVersion() });
   process.on('uncaughtExceptionMonitor', error => records?.write('error', 'Uncaught exception.', { error: errorRecord(error) }));
-  backup = new Worker(locations.worker('backup-worker'));
-  backup.on('error', () => { if (service) service.historyIssue = new UiError('ui.backup_history_is_unavailable_primary_session_saves_remain_active'); });
-  backup.on('message', message => { if (message.issue && service) { records?.write('warn', 'Backup capture failed.', { diagnostic: message.issue }); service.historyIssue = new UiError('ui.backup_history_could_not_capture_some_work_primary_session'); window?.webContents.send('picpatch:changed'); } });
-  service = await Application.open(paths, scope => scope === 'progress' ? window?.webContents.send('picpatch:queue', service?.queue.state) : window?.webContents.send('picpatch:changed'), (path, bytes) => backup?.postMessage({ database: paths.backups, path, bytes }), (level, message, details) => records?.write(level, message, details));
+  backup = new Backup(paths.backups, locations.worker('backup-worker'), issue => {
+    if (!service) return;
+    if (issue.kind === 'unavailable') { service.historyIssue = new UiError('ui.backup_history_is_unavailable_primary_session_saves_remain_active'); return; }
+    records?.write('warn', 'Backup capture failed.', { diagnostic: issue.diagnostic });
+    service.historyIssue = new UiError('ui.backup_history_could_not_capture_some_work_primary_session'); window?.webContents.send('picpatch:changed');
+  });
+  const changed = (scope?: 'progress') => scope === 'progress' ? window?.webContents.send('picpatch:queue', service?.queue.state) : window?.webContents.send('picpatch:changed');
+  service = await Application.open(paths, changed, (path, bytes) => backup?.capture(path, bytes), (level, message, details) => records?.write(level, message, details));
   protocol.handle('picpatch-image', async request => {
     try {
       const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1));
@@ -181,17 +183,13 @@ async function start() {
   });
   logs = new LogsWindow(recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }), width => storePane({ recordsListWidth: width }));
   const renderer = locations.page('index');
-  ipcMain.handle('picpatch:call', async (event, action: string, payload: any = {}) => {
+  ipcMain.handle('picpatch:call', async (event, action: string, payload: unknown) => {
     if (!trustedSender(event, window, renderer)) throw new Error('Untrusted request.');
     try {
-      if (!['ready', 'listening', 'renderer-error', 'overview', 'get', 'draft', 'layout', 'paneState', 'modalState', 'focus'].includes(action)) records?.write('info', 'Command requested.', { action });
-      if (['prepare', 'verify', 'removeManaged', 'installPython', 'installNative'].includes(action)) {
-        if (managed) throw new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it');
-        const controller = new AbortController(); const task = dispatch(action, payload, controller.signal);
-        managed = { controller, task };
-        try { return { ok: true, value: await task }; } finally { managed = undefined; }
-      }
-      return { ok: true, value: await dispatch(action, payload) };
+      if (!['ready', 'listening', 'renderer-error', 'overview', 'get', 'draft', 'layout', 'paneState', 'savePane', 'modalState', 'focus'].includes(action)) records?.write('info', 'Command requested.', { action });
+      // Every action reads named fields from one object; anything else is refused before it reaches one.
+      if (payload !== undefined && (payload === null || typeof payload !== 'object' || Array.isArray(payload))) throw new Error('Invalid request.');
+      return { ok: true, value: await dispatch(action, payload ?? {}) };
     }
     catch (error) { records?.write(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Command did not complete.', { action, error: errorRecord(error) }); return { ok: false, message: errorText(error), ...(isPicPatchSdkError(error) ? { code: error.code, kind: error.kind, effect: error.effect } : {}), notice: errorNotice(error) }; }
   });
@@ -227,12 +225,7 @@ async function start() {
 async function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections')[], title: string) {
   const result = await dialog.showOpenDialog(window!, { title, properties }); return result.canceled ? [] : result.filePaths;
 }
-/** The Python runtime the catalog names for a model; native models and no selection use the default Python engine. */
-function pythonEngine(modelId: unknown) {
-  const runtime = listModels().find(model => model.id === modelId)?.runtime;
-  return runtime?.engine === 'python' ? { runtime: runtime.name } : {};
-}
-async function dispatch(action: string, payload: any, signal?: AbortSignal) {
+async function dispatch(action: string, payload: any) {
   switch (action) {
     case 'modalState': modalOpen = payload.open === true; for (const id of ['picpatch-about','picpatch-settings']) { const item = Menu.getApplicationMenu()?.getMenuItemById(id); if (item) item.enabled = !modalOpen; } return;
     case 'closeWindow': void lifetime.close(); return;
@@ -240,8 +233,9 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'openLogs': try { await logs?.open(); } catch (error) { records?.write('error', 'Logs window could not open.', { error: errorRecord(error) }); throw new UiError('logs.openFailed'); } return;
     case 'listening': rendererReady = true; return;
     case 'renderer-error': records?.write('error', 'Renderer error.', { error: typeof payload.message === 'string' ? payload.message.slice(0, 2000) : 'unknown', stack: typeof payload.stack === 'string' ? payload.stack.slice(0, 8000) : undefined }); return;
-    case 'ready': rendererReady = true; if (smoke) { if (app.isPackaged && !await window!.webContents.executeJavaScript("(() => { try { new Function(''); return false; } catch { return true; } })()")) { console.error('The packaged renderer runs without its content security policy.'); app.exit(1); return; } if (localizationSmoke) { try { await qualifyLocalization(window!, paths.root, command); await qualifyLogs(await logs!.open(false), window!); logs!.close(); } catch (error) { console.error(error); app.exit(1); return; } } if (qualification) { try { await qualifyInference(service, qualification, locations.uv()); } catch (error) { console.error(error); app.exit(1); return; } } clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); app.exit(0); } return;
-    case 'paneState': if (payload.railWidth !== undefined) { await storePane({ railWidth: payload.railWidth, optionsPane: payload.optionsPane }); return; } return paneState;
+    case 'ready': rendererReady = true; if (smoke) await finishSmoke(); return;
+    case 'paneState': return paneState;
+    case 'savePane': await storePane({ railWidth: payload.railWidth, optionsPane: payload.optionsPane }); return;
     case 'layout': { const size = minimum(payload.optionsPane === true); contentFloor = { width: size.width, height: Number.isFinite(payload.height) ? Math.max(size.height, payload.height) : size.height }; fitMinimum(); return; }
     case 'uiZoom': {
       if (!['in', 'out', 'reset'].includes(payload.direction)) throw new Error('Invalid UI zoom command.');
@@ -251,7 +245,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     }
     case 'locale': return { ...localeState(), uiFont: service.settings.uiFont };
     case 'modelReadiness': return service.readiness();
-    case 'overview': return { ...await service.overview(), resourcesBusy: Boolean(managed) || service.queue.busy(), locale: localeState(), systemDark: systemDark() };
+    case 'overview': return { ...await service.overview(), locale: localeState(), systemDark: systemDark() };
     case 'create': return service.sessions.create(t('session.untitled'));
     case 'get': return service.sessions.get(payload.id);
     case 'focus': service.queue.focus(typeof payload.id === 'string' ? payload.id : undefined); return;
@@ -260,47 +254,60 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
     case 'delete': { if (service.queue.busy(payload.id)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); const answer = await ask({ message: message('ui.delete_this_session_and_its_retained_images'), detail: message('ui.exported_images_and_original_files_are_kept'), buttons: [message('ui.keep_session'), message('ui.delete_session')] }); if (answer.response !== 1) return false; await service.remove(payload.id); return true; }
     case 'import': { const files = payload.path ? [payload.path] : await pick(payload.multiple === false ? ['openFile'] : ['openFile', 'multiSelections'], t('ui.add_images')); const assets = []; for (const path of files) assets.push(await service.importImage(payload.id, path)); return assets; }
     case 'mask': return service.mask(payload.id, payload.bytes);
-    case 'submit': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.submit(payload.id, payload.draft, payload.samples);
+    case 'submit': return service.submit(payload.id, payload.draft, payload.samples);
     case 'cancel': return service.queue.cancel(payload.id, payload.runId);
-    case 'resume': if (managed) throw new UiError('ui.wait_for_the_current_resource_operation'); return service.queue.resume(payload.id);
+    case 'resume': return service.resume(payload.id);
     case 'export': {
-      const session = await service.sessions.get(payload.id);
-      // The default name uses the image's number as shown in the conversation.
-      const index = session.runs.findIndex(run => run.id === payload.runId && run.output);
-      if (index < 0) throw new UiError('ui.choose_completed_results');
-      const name = exportName(session.name, index + 1);
-      const result = await dialog.showSaveDialog(window!, { title: t('ui.save_image'), defaultPath: paneState.exportDirectory ? join(paneState.exportDirectory, name) : name, filters: [{ name: t('ui.png_image'), extensions: ['png'] }] });
+      const defaultPath = exportDefaultPath(await service.sessions.get(payload.id), payload.runId, paneState.exportDirectory);
+      const result = await dialog.showSaveDialog(window!, { title: t('ui.save_image'), defaultPath, filters: [{ name: t('ui.png_image'), extensions: ['png'] }] });
       if (result.canceled || !result.filePath) return;
       const saved = await service.export(payload.id, payload.runId, result.filePath, payload.sidecar === true, payload.includeInputs === true);
       if (saved.status === 'completed') await storePane({ exportDirectory: dirname(result.filePath) }).catch(error => records?.write('warn', 'Export destination could not be retained.', { error: errorRecord(error) }));
       return saved;
     }
-    case 'cancelManaged': managed?.controller.abort(); return;
-    case 'preferences': if (managed && service.resourcesChanged(payload)) throw new UiError('ui.wait_for_the_current_resource_operation'); await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
+    case 'cancelManaged': service.cancelManaged(); return;
+    case 'preferences': await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
     case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location')))[0];
     case 'pickComponent': {
       if (typeof payload.directory !== 'string' || !isAbsolute(payload.directory)) throw new UiError('ui.choose_the_model_bundle_first');
       const file = (await pick(['openFile'], t('ui.choose_a_file_inside_the_model_bundle')))[0]; if (!file) return;
       const path = insideBundle(payload.directory, file); if (!path) throw new UiError('ui.choose_a_file_inside_the_selected_bundle'); return path;
     }
-    case 'verify': return service.verify(payload.modelId, signal);
+    case 'verify': return service.verify(payload.modelId);
     case 'removeManaged': {
       const answer = await ask({ message: message('ui.remove_this_managed_model_revision'), detail: message('ui.other_apps_using_this_shared_model_may_fail_sessions'), buttons: [message('ui.keep_model'), message('ui.remove_revision')] });
-      if (answer.response === 1) return service.removeManaged(payload.modelId, payload.name, signal); return;
+      if (answer.response === 1) return service.removeManaged(payload.modelId, payload.name); return;
     }
     case 'models': return service.models();
-    case 'prepare': { if (payload.download) { const model = listModels().find(m => m.id === payload.modelId); if (!model || model.acquisition !== 'pinned' || !model.supported) throw new UiError('ui.no_downloadable_bundle_for_this_selection'); const answer = await ask({ message: message('management.download', { model: model.profile.name }), detail: message('management.downloadScope', { size: number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 }) }), buttons: [message('ui.cancel'), message('ui.download')], destructive: false }); if (answer.response !== 1) return; return service.prepare(model.id, undefined, undefined, true, {}, signal); }
+    case 'prepare': {
+      if (payload.download) {
+        const model = downloadableModel(payload.modelId);
+        const size = number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 });
+        const answer = await ask({ message: message('management.download', { model: model.profile.name }), detail: message('management.downloadScope', { size }), buttons: [message('ui.cancel'), message('ui.download')], destructive: false });
+        if (answer.response !== 1) return;
+        return service.prepare(model.id, undefined, undefined, true, {});
+      }
       // Native bundles name their checkpoint through pickComponent before Register is enabled.
       const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return;
-      return service.prepare(payload.modelId, paths[0], payload.checkpoint, false, payload.components, signal); }
-    case 'engines': return { python: await inspectEngine({ ...pythonEngine(payload.modelId), profile: service.settings.profile }, { onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile }, { onEvent: service.sdkEvents({ action }) }) };
-    case 'installNative': return installNativeEngine({ profile: service.settings.profile }, { signal, onEvent: service.sdkEvents({ action }) });
-    case 'installPython': { const uvExecutable = locations.uv(); return installEngine({ ...pythonEngine(payload.modelId), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])] }, { signal, onEvent: service.sdkEvents({ action }) }); }
+      return service.prepare(payload.modelId, paths[0], payload.checkpoint, false, payload.components);
+    }
+    case 'engines': return service.engines(payload.modelId);
+    case 'installNative': return service.installNative();
+    case 'installPython': return service.installPython(payload.modelId, locations.uv(), pythonToolDirectories(process.env.PATH, delimiter));
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }
 }
 
+async function finishSmoke() {
+  const code = await runSmoke({
+    window: window!, packaged: app.isPackaged,
+    ...(localizationSmoke ? { localization: { root: paths.root, command, openLogs: () => logs!.open(false), closeLogs: () => logs!.close() } } : {}),
+    ...(qualification ? { inference: { service, configuration: qualification, uv: locations.uv() } } : {}),
+  });
+  if (code === 0) { clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); }
+  app.exit(code);
+}
 let modalOpen = false;
 function menus() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform === 'darwin', app.isPackaged, modalOpen, command, () => {

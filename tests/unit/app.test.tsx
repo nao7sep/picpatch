@@ -211,9 +211,9 @@ it('moves the sessions rail with arrow keys and saves its width once, on key rel
   const before = Number(splitter.getAttribute('aria-valuenow'));
   for (let i = 0; i < 3; i++) fireEvent.keyDown(splitter, { key: 'ArrowRight' });
   expect(Number(splitter.getAttribute('aria-valuenow'))).toBe(before + 24);
-  expect(fake.calls('paneState').filter(Boolean)).toEqual([]);
+  expect(fake.calls('savePane')).toEqual([]);
   fireEvent.keyUp(splitter, { key: 'ArrowRight' });
-  await waitFor(() => expect(fake.calls('paneState').filter(Boolean)).toEqual([{ railWidth: before + 24, optionsPane: false }]));
+  await waitFor(() => expect(fake.calls('savePane')).toEqual([{ railWidth: before + 24, optionsPane: false }]));
   fireEvent.blur(splitter);
-  expect(fake.calls('paneState').filter(Boolean)).toHaveLength(1);
+  expect(fake.calls('savePane')).toHaveLength(1);
 });

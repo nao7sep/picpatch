@@ -1,10 +1,11 @@
 import { Worker } from 'node:worker_threads';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
+import { Backup, type BackupIssue } from '../../src/main/core/backup.ts';
 it('retains the exact latest bytes per path and launch, and skips unchanged content', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-backup-')); const database = join(root, 'backups.sqlite3');
   const worker = new Worker(new URL('../../src/main/core/backup-worker.ts', import.meta.url));
@@ -26,3 +27,17 @@ it('retains the exact latest bytes per path and launch, and skips unchanged cont
     } finally { db.close(); }
   } finally { await worker.terminate(); await rm(root, { recursive: true, force: true }); }
 }, 15_000);
+it('settles sent captures when closing, and reports a capture it could not keep', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'picpatch-backup-owner-'));
+  try {
+    const issues: BackupIssue[] = []; const script = new URL('../../src/main/core/backup-worker.ts', import.meta.url);
+    const backup = new Backup(join(root, 'backups.sqlite3'), script, issue => issues.push(issue));
+    backup.capture(join(root, 'config.json'), Buffer.from('{}')); await backup.close();
+    const db = new DatabaseSync(join(root, 'backups.sqlite3'));
+    try { expect(db.prepare('SELECT path FROM backups').all()).toEqual([{ path: join(root, 'config.json') }]); } finally { db.close(); }
+    await mkdir(join(root, 'blocked.sqlite3'));
+    const blocked = new Backup(join(root, 'blocked.sqlite3'), script, issue => issues.push(issue));
+    blocked.capture(join(root, 'config.json'), Buffer.from('{}')); await blocked.close();
+    expect(issues).toEqual([{ kind: 'capture', diagnostic: expect.any(String) }]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

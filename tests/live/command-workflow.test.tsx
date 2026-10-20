@@ -38,7 +38,8 @@ it('generates, edits with references, branches and reopens through the real rend
     const p = raw as any;
     switch (action) {
       case 'locale': return { language: 'en', format: 'en' };
-      case 'paneState': return p?.railWidth === undefined ? { railWidth: 264, optionsPane: false } : undefined;
+      case 'paneState': return { railWidth: 264, optionsPane: false };
+      case 'savePane': return;
       case 'layout': case 'modalState': return;
       case 'modelReadiness': return app.readiness();
       case 'overview': return { ...await app.overview(), resourcesBusy: false, locale: { language: 'en', format: 'en' }, systemDark: false };

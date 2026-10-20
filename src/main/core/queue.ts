@@ -112,7 +112,13 @@ export class Queue {
       await this.sessions.update(selected.sessionId, value => {
         const run = value.runs.find(r => r.id === selected.runId)!; run.ended = new Date().toISOString();
         if (outcome.status === 'refused') { run.status = 'refused'; run.issue = { code: outcome.code, message: outcome.message }; }
-        else { run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record; const notices = [outcome.sidecar?.status === 'failed' ? { notice: { key: 'ui.image_saved_its_settings_sidecar_could_not_be_saved' } } : undefined, outcome.cleanupWarning ? { code: 'CLEANUP_FAILED' } : undefined].filter(value => value !== undefined); if (notices.length) run.notices = notices; }
+        else {
+          run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record;
+          const notices: NonNullable<Run['notices']> = [];
+          if (outcome.sidecar?.status === 'failed') notices.push({ notice: { key: 'ui.image_saved_its_settings_sidecar_could_not_be_saved' } });
+          if (outcome.cleanupWarning) notices.push({ code: 'CLEANUP_FAILED' });
+          if (notices.length) run.notices = notices;
+        }
         value.draft = recoverCommand(value.draft, value.runs);
       });
     } catch (error) {
