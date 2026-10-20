@@ -204,3 +204,16 @@ it('says when models this computer cannot run are hidden, and reports a session 
   fireEvent.click(screen.getByRole('button', { name: /Mac Only/ }));
   expect(await screen.findByText('More models run on Apple Silicon Macs.')).toBeTruthy();
 });
+
+it('moves the sessions rail with arrow keys and saves its width once, on key release', async () => {
+  const fake = await start();
+  const splitter = screen.getByRole('separator', { name: 'Session list width' });
+  const before = Number(splitter.getAttribute('aria-valuenow'));
+  for (let i = 0; i < 3; i++) fireEvent.keyDown(splitter, { key: 'ArrowRight' });
+  expect(Number(splitter.getAttribute('aria-valuenow'))).toBe(before + 24);
+  expect(fake.calls('paneState').filter(Boolean)).toEqual([]);
+  fireEvent.keyUp(splitter, { key: 'ArrowRight' });
+  await waitFor(() => expect(fake.calls('paneState').filter(Boolean)).toEqual([{ railWidth: before + 24, optionsPane: false }]));
+  fireEvent.blur(splitter);
+  expect(fake.calls('paneState').filter(Boolean)).toHaveLength(1);
+});
