@@ -12,5 +12,5 @@ it('resizes the shortest edge for cropped previews, reuses results and evicts th
   const thumbnails = new Thumbnails(256, 1);
   const first = thumbnails.get(paths[0]!); expect(thumbnails.get(paths[0]!)).toBe(first);
   expect(await sharp(await first).metadata()).toMatchObject({ format: 'webp', width: 512, height: 256 });
-  await thumbnails.get(paths[1]!); expect(thumbnails.get(paths[0]!)).not.toBe(first);
+  await thumbnails.get(paths[1]!); const again = thumbnails.get(paths[0]!); expect(again).not.toBe(first); await again;
 });
