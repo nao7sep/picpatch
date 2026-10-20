@@ -169,7 +169,7 @@ async function start() {
   backup = new Worker(locations.worker('backup-worker'));
   backup.on('error', () => { if (service) service.historyIssue = new UiError('ui.backup_history_is_unavailable_primary_session_saves_remain_active'); });
   backup.on('message', message => { if (message.issue && service) { records?.write('warn', 'Backup capture failed.', { diagnostic: message.issue }); service.historyIssue = new UiError('ui.backup_history_could_not_capture_some_work_primary_session'); window?.webContents.send('picpatch:changed'); } });
-  service = await Application.open(paths, scope => scope === 'progress' ? window?.webContents.send('picpatch:queue', service?.queue.state) : window?.webContents.send('picpatch:changed'), (path, bytes, sha256) => backup?.postMessage({ database: paths.backups, path, bytes, sha256 }), (level, message, details) => records?.write(level, message, details));
+  service = await Application.open(paths, scope => scope === 'progress' ? window?.webContents.send('picpatch:queue', service?.queue.state) : window?.webContents.send('picpatch:changed'), (path, bytes) => backup?.postMessage({ database: paths.backups, path, bytes }), (level, message, details) => records?.write(level, message, details));
   protocol.handle('picpatch-image', async request => {
     try {
       const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1));

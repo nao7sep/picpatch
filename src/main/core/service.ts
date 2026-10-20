@@ -1,9 +1,6 @@
 import { modelReadiness } from './model-readiness.ts';
 import { preference, UiError } from '../../shared/i18n/index.ts';
 import { errorRecord } from './records.ts';
-import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
-import { writeFile, rm } from 'node:fs/promises';
 import { listModels, inspectModels, prepareModel, saveArtifact, openModel, verifyModel, removeModel, resolveStoragePaths, isPicPatchSdkError } from 'picpatchsdk';
 import type { AppPaths } from './paths.ts';
 import { Sessions, validateDraft } from './sessions.ts';
@@ -38,11 +35,11 @@ export class Application {
       return completion;
     };
   }
-  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: (scope?: 'progress') => void, private backup: (path: string, bytes?: Buffer, sha256?: string) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
+  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: (scope?: 'progress') => void, private backup: (path: string, bytes: Buffer) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
     this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined);
     this.queue = new Queue(this.sessions, this.runner(), changed, () => this.settings.concurrency ?? 1);
   }
-  static async open(paths: AppPaths, changed: (scope?: 'progress') => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> {
+  static async open(paths: AppPaths, changed: (scope?: 'progress') => void = () => {}, backup: (path: string, bytes: Buffer) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> {
     const settings = await readSettings(paths.config);
     if (settings.newerProfile !== undefined) diagnostic('warn', 'Resource settings were saved by a newer PicPatch; the defaults are used and the saved settings are kept.', {});
     return new Application(paths, settings, changed, backup, diagnostic);
@@ -61,13 +58,8 @@ export class Application {
   async mask(sessionId: string, bytes: Uint8Array) {
     // Authored mask pixels belong to the GUI; the SDK validates their image semantics on execution.
     if (!(bytes instanceof Uint8Array) || bytes.byteLength > 64 * 1024 * 1024) throw new UiError('error.invalid_mask_image');
-    const temporary = join(this.sessions.directory(sessionId), `mask-${randomUUID()}.tmp`);
-    try {
-      await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 });
-      const asset = await this.importImage(sessionId, temporary);
-      this.backup(await this.sessions.imagePath(sessionId, asset.id), undefined, asset.sha256); return asset;
-    }
-    finally { await rm(temporary, { force: true }); }
+    const asset = await this.sessions.addImage(sessionId, 'mask.png', bytes);
+    this.backup(await this.sessions.imagePath(sessionId, asset.id), Buffer.from(bytes)); return asset;
   }
   async remove(sessionId: string) { if (this.queue.busy(sessionId)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); await this.sessions.remove(sessionId); }
   async export(sessionId: string, runId: string, destination: string, sidecar: boolean, includeInputs: boolean) {

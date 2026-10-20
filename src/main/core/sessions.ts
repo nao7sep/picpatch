@@ -52,6 +52,11 @@ export function validateSession(value: unknown): Session {
   check(session.draft); session.runs.forEach(run => check(run.draft));
   return structuredClone(session);
 }
+/** Only files the image decoder recognises join a session; the check reads the header of the private copy. */
+async function checkImage(path: string): Promise<void> {
+  try { const { width, height } = await sharp(path, { limitInputPixels: false }).metadata(); if (!width || !height) throw new Error('No image size.'); }
+  catch { throw new UiError('error.select_a_regular_image_file'); }
+}
 /** Single GUI process owns this collection; outside concurrent editing is not supported. */
 export class Sessions {
   readonly root: string;
@@ -142,15 +147,28 @@ export class Sessions {
       } finally { await output.close(); }
       const after = await input.stat({ bigint: true });
       if (before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new UiError('error.source_image_changed_while_copying');
-      // Only files the image decoder recognises join the session; the check reads the header of the private copy.
-      try { const { width, height } = await sharp(temporary, { limitInputPixels: false }).metadata(); if (!width || !height) throw new Error('No image size.'); }
-      catch { throw new UiError('error.select_a_regular_image_file'); }
+      await checkImage(temporary);
       // A copy keeps the original's modified time.
       await utimes(temporary, Number(before.atimeNs) / 1e9, Number(before.mtimeNs) / 1e9);
       await rename(temporary, path);
       asset = { id: assetId, name: basename(source), file, bytes, sha256: hash.digest('hex') };
     } finally { await input.close(); await rm(temporary, { force: true }); }
     // A failed metadata save leaves the copied image intact for inspection.
+    await this.update(key, session => { session.assets.push(asset); });
+    return asset;
+  }
+  /** An image the app made, such as a painted mask, joins the session from memory, checked like an import. */
+  async addImage(key: string, name: string, bytes: Uint8Array): Promise<Asset> {
+    await this.read(key);
+    const assetId = randomUUID(); const file = `assets/${assetId}`; const path = join(this.directory(key), file); const temporary = `${path}.tmp`;
+    try {
+      const output = await open(temporary, 'wx', 0o600);
+      try { await output.writeFile(bytes); await output.sync(); } finally { await output.close(); }
+      await checkImage(temporary);
+      await rename(temporary, path);
+    } finally { await rm(temporary, { force: true }); }
+    const asset: Asset = { id: assetId, name, file, bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') };
+    // A failed metadata save leaves the image intact for inspection.
     await this.update(key, session => { session.assets.push(asset); });
     return asset;
   }
