@@ -48,7 +48,7 @@ export default defineConfig({
     plugins: [sdkResources()],
     build: {
       externalizeDeps: { exclude: ["picpatchsdk"] },
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           index: resolve("src/main/index.ts"),
           "backup-worker": resolve("src/main/core/backup-worker.ts"),
@@ -61,7 +61,7 @@ export default defineConfig({
   },
   preload: {
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         input: { index: resolve("src/preload/index.ts"), records: resolve("src/preload/records.ts") },
         // A sandboxed preload must be CommonJS.
         output: { format: "cjs", entryFileNames: "[name].cjs" },
@@ -73,7 +73,7 @@ export default defineConfig({
     plugins: [react(), contentSecurityPolicy()],
     server: { host: "127.0.0.1", port: DEV_PORT, strictPort: true },
     build: {
-      rollupOptions: { input: { index: resolve("src/renderer/index.html"), records: resolve("src/renderer/records.html") } },
+      rolldownOptions: { input: { index: resolve("src/renderer/index.html"), records: resolve("src/renderer/records.html") } },
     },
   },
 });
