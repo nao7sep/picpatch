@@ -90,9 +90,8 @@ it('cancels before publication even when an event hook throws, leaving no ready 
 });
 it('bounds a stalled subprocess, confirms its death and keeps errors off caller streams', async () => {
   const pidPath = join(directory, 'pid');
-  const script = join(directory, 'stall.mjs');
-  await writeFile(script, `import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(pidPath)}, String(process.pid)); setInterval(()=>{},1000);`);
-  await expect(runCommand(process.execPath, [script], directory, {}, new AbortController().signal, 500)).rejects.toMatchObject({ code: 'TIMEOUT' });
+  // A shell starts in milliseconds, so it has written its pid well inside the deadline even on a loaded machine.
+  await expect(runCommand('/bin/sh', ['-c', 'echo $$ > pid; exec sleep 60'], directory, {}, new AbortController().signal, 500)).rejects.toMatchObject({ code: 'TIMEOUT' });
   const pid = Number(await readFile(pidPath, 'utf8'));
   expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
 });
@@ -118,12 +117,10 @@ it('allows an explicit later call after installing a previously missing engine',
 });
 
 it('terminates compiler descendants even after the installer parent closes its pipes', async () => {
-  const script = join(directory, 'parent.mjs');
   const pidPath = join(directory, 'compiler-pid');
-  await writeFile(script, `import {spawn} from 'node:child_process'; import {writeFileSync} from 'node:fs';
-const child=spawn(process.execPath,['-e', "process.on('SIGTERM',()=>{}); setInterval(()=>{},1000)"],{stdio:'ignore'});
-writeFileSync(${JSON.stringify(pidPath)},String(child.pid)); setInterval(()=>{},1000);`);
-  await expect(runCommand(process.execPath, [script], directory, {}, new AbortController().signal, 500)).rejects.toMatchObject({ code: 'TIMEOUT' });
+  // The compiler ignores SIGTERM and holds none of the installer's pipes; shells start fast enough to set this up inside the deadline.
+  const parent = '(trap "" TERM; exec sleep 60) </dev/null >/dev/null 2>&1 & echo $! > compiler-pid; exec sleep 60';
+  await expect(runCommand('/bin/sh', ['-c', parent], directory, {}, new AbortController().signal, 500)).rejects.toMatchObject({ code: 'TIMEOUT' });
   const pid = Number(await readFile(pidPath, 'utf8'));
   expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
 });
