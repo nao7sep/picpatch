@@ -43,7 +43,10 @@ it('reads bounded historical pages, filters and full selected details without ch
     const db = new DatabaseSync(join(root, 'records.sqlite3'));
     db.exec('CREATE TABLE records(id INTEGER PRIMARY KEY,session TEXT,time TEXT,level TEXT,message TEXT,json TEXT)');
     const insert = db.prepare('INSERT INTO records VALUES(?,?,?,?,?,?)');
+    // One transaction: 205 separately synced commits take seconds on Windows.
+    db.exec('BEGIN');
     for (let id = 1; id <= 205; id++) insert.run(id, id > 200 ? 'current' : 'previous', '2026-10-19T00:00:00Z', id % 2 ? 'info' : 'warn', `Message ${id}`, JSON.stringify({ message: `Message ${id}`, nested: { literal: '%_needle' }, time: '2026-10-19T00:00:00Z' }));
+    db.exec('COMMIT');
     db.close();
     const first = await reader.query({ current: false, level: 'all', search: '' }); expect(first.records).toHaveLength(100); expect(first.more).toBe(true); expect(first.records[0]!.id).toBe(205);
     const second = await reader.query({ current: false, level: 'all', search: '', before: first.records.at(-1)!.id }); expect(second.records[0]!.id).toBe(105);
