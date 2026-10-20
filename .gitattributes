@@ -1,0 +1,2 @@
+# Every checkout keeps LF line endings, so generated files and byte-exact checks match on Windows.
+* text=auto eol=lf
