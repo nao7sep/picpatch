@@ -3,7 +3,7 @@
 // state; the panes receive what they show and report what the user did.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Asset, Draft, ReferenceDraft, Run, Session } from '../../shared/session.ts';
-import { afterCommand, hasImage, imageCommand, recoverCommand, targetImage, withoutTarget } from '../../shared/image-command.ts';
+import { afterCommand, canPaintMask, imageCommand, maskNote, recoverCommand, targetImage, withoutTarget } from '../../shared/image-command.ts';
 import { errorText as describeError, message, t, useLocale } from '../../shared/i18n/index.ts';
 import { layout, minimum } from '../../shared/layout.ts';
 import type { RendererRequest } from '../../shared/messages.ts';
@@ -260,6 +260,12 @@ export function App() {
     } finally { setSubmitting(false); focusComposer.current(); }
   }), [command, patchSession, readiness, samples, updateDraft, writer]);
 
+  // Only an image that exists opens the mask window; a pending result would leave it unseen, to open on its own later.
+  const paintMask = useCallback(() => {
+    const owner = sessionRef.current, current = draftRef.current;
+    const model = overviewRef.current?.models.find(item => item.id === current?.modelIds[0]);
+    if (owner && current && canPaintMask(owner, current, model?.capabilities.maskMode)) push({ kind: 'mask' });
+  }, [push]);
   const editThis = useCallback((runId: string) => {
     setModals(items => items.filter(item => item.kind !== 'viewer'));
     updateDraft(targetImage(draftRef.current!, runId));
@@ -391,7 +397,7 @@ export function App() {
                     session={session} draft={draft} models={overview.models} hiddenModels={overview.unsupportedModels} readiness={readiness} issues={issues} submitting={submitting}
                     optionsPane={pane.optionsPane} focusRef={focusComposer} onDraft={updateDraft} onSend={() => void send()}
                     onAttachTarget={() => void attachTarget()} onAddReference={() => void addReference()} onDrop={files => void dropFiles(files)}
-                    onClearTarget={() => updateDraft(withoutTarget(draftRef.current!))} onPaintMask={() => push({ kind: 'mask' })}
+                    onClearTarget={() => updateDraft(withoutTarget(draftRef.current!))} onPaintMask={paintMask}
                     onEditReference={index => push({ kind: 'reference', index })}
                     onRemoveReference={index => updateDraft({ ...draftRef.current!, references: draftRef.current!.references.filter((_, i) => i !== index) })}
                     onToggleOptions={toggleOptions} onSetup={() => push({ kind: 'setup', modelId: draft.modelIds.find(id => readiness?.[id] !== 'ready') })}
@@ -401,7 +407,7 @@ export function App() {
               {pane.optionsPane && (
                 <OptionsPane
                   session={session} draft={draft} models={overview.models} samples={samples} onSamples={setSamples} onDraft={updateDraft}
-                  onPaintMask={() => push({ kind: 'mask' })} onChooseControl={kind => void chooseControl(kind)} onClose={toggleOptions}
+                  onPaintMask={paintMask} onChooseControl={kind => void chooseControl(kind)} onClose={toggleOptions}
                 />
               )}
               {modals.length > 0 && renderModal(modals[modals.length - 1]!)}
@@ -445,9 +451,9 @@ export function App() {
         onSave={(runId, at) => setModals(items => [...items.slice(0, -1), { ...spec, index: at }, { kind: 'export', runId, sidecar: false }])} />;
       case 'mask': {
         const model = models.find(item => item.id === current.modelIds[0]);
-        if (!current.source || !hasImage(owner, current.source)) return null;
+        if (!current.source || !canPaintMask(owner, current, model?.capabilities.maskMode)) return null;
         return <MaskModal source={imageUrl(owner.id, current.source)} mask={current.mask ? imageUrl(owner.id, current.mask) : undefined}
-          note={t(model?.capabilities.maskMode === 'native' ? 'ui.native_inpainting_pixels_outside_the_mask_may_change' : 'ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region')}
+          note={t(maskNote(model?.capabilities.maskMode))}
           onClose={pop} confirmDiscard={() => confirm('mask.discard')} onDirty={markDraft}
           onDone={async bytes => {
             try {

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
-import { afterCommand, imageCommand, targetImage, recoverCommand } from '../../src/shared/image-command.ts';
-import type { Run } from '../../src/shared/session.ts';
+import { afterCommand, canPaintMask, imageCommand, maskNote, targetImage, recoverCommand } from '../../src/shared/image-command.ts';
+import type { Run, Session } from '../../src/shared/session.ts';
 import { initialDraft } from '../../src/shared/session.ts';
 it('selects operations from explicit inputs without interpreting command text', () => {
   const draft = { ...initialDraft(), text: 'Edit the image from yesterday' };
@@ -23,4 +23,18 @@ it('retains instructions and settings while changing targets and clears only sou
   const next = targetImage(draft, 'second'); expect(next.mask).toBeUndefined(); expect(next.outpaint).toBeUndefined(); expect(next.text).toBe(draft.text);
   expect(afterCommand(draft, 'result')).toMatchObject({ text: '', source: 'result', references: draft.references, mode: 'edit' });
   expect(draft.source).toBe('first'); expect(draft.mask).toBe('mask');
+});
+it('offers a mask only on an image that exists, for a model that takes masks', () => {
+  const pending: Run = { id: 'pending', modelId: 'model', seed: 1, draft: initialDraft(), status: 'running', created: new Date().toISOString() };
+  const session: Session = { version: 1, id: 'session', name: 'Session', created: '', updated: '', draft: initialDraft(), runs: [pending, { ...pending, id: 'done', status: 'completed', output: 'outputs/done.png' }], assets: [{ id: 'photo', name: 'photo.png', file: 'assets/photo', bytes: 1, sha256: '0'.repeat(64) }] };
+  const on = (source?: string) => ({ ...initialDraft(), ...(source ? { source } : {}) });
+  expect(canPaintMask(session, on('photo'), 'native')).toBe(true); expect(canPaintMask(session, on('done'), 'composite')).toBe(true);
+  // Every command targets its pending result next; that is not an image yet.
+  expect(canPaintMask(session, on('pending'), 'native')).toBe(false);
+  expect(canPaintMask(session, on(), 'native')).toBe(false);
+  expect(canPaintMask(session, on('photo'), 'none')).toBe(false); expect(canPaintMask(session, on('photo'), undefined)).toBe(false);
+  expect([maskNote('native'), maskNote('composite'), maskNote('latent-composite'), maskNote('none'), maskNote(undefined)]).toEqual([
+    'ui.native_inpainting_pixels_outside_the_mask_may_change', 'ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region',
+    'ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region', 'ui.this_model_does_not_support_masks', 'ui.this_model_does_not_support_masks',
+  ]);
 });

@@ -2,6 +2,7 @@
 // model's own sampling controls, the edit region and canvas expansion when an image
 // is being edited, and a structural control map. Only what the chosen model offers
 // is shown; a value the model cannot use stays visible so it can be cleared.
+import { canPaintMask, maskNote } from '../../../shared/image-command.ts';
 import type { Draft, Session } from '../../../shared/session.ts';
 import type { ModelCapabilities, SamplingParameters } from 'picpatchsdk/types';
 import type { CatalogModel } from '../api.ts';
@@ -38,8 +39,6 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
   const editing = Boolean(draft.source);
   const control = draft.control;
   const controlName = control ? session.assets.find(asset => asset.id === control.image)?.name ?? t('ui.control_image') : undefined;
-  const maskNote = caps?.maskMode === 'composite' || caps?.maskMode === 'latent-composite' ? t('ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region')
-    : caps?.maskMode === 'native' ? t('ui.native_inpainting_pixels_outside_the_mask_may_change') : t('ui.this_model_does_not_support_masks');
 
   return (
     <aside className="options-pane" aria-label={t('conversation.options')}>
@@ -101,9 +100,9 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
         {editing && (
           <section className="pane-section">
             <h3 className="group-label">{t('options.editRegion')}</h3>
-            <p className="field-help">{maskNote}</p>
+            <p className="field-help">{t(maskNote(caps?.maskMode))}</p>
             <div className="button-row">
-              <button type="button" className="button compact" disabled={caps?.maskMode === 'none'} onClick={onPaintMask}><BrushIcon /><span>{draft.mask ? t('options.editMask') : t('ui.paint_mask')}</span></button>
+              <button type="button" className="button compact" disabled={!canPaintMask(session, draft, caps?.maskMode)} onClick={onPaintMask}><BrushIcon /><span>{draft.mask ? t('options.editMask') : t('ui.paint_mask')}</span></button>
               {draft.mask && <button type="button" className="button compact" onClick={() => { const next = { ...draft }; delete next.mask; onDraft(next, 'now'); }}>{t('ui.clear_mask')}</button>}
             </div>
             <label className="check">

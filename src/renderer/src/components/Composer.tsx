@@ -2,6 +2,7 @@
 // command field; attach, model, size and options below it; Run on the right. It is
 // the window's one drop receiver. Enter runs, except while an input method is
 // composing; Shift+Enter starts a new line.
+import { canPaintMask } from '../../../shared/image-command.ts';
 import { useLayoutEffect, useRef, useState, type MutableRefObject } from 'react';
 import type { Draft, Session } from '../../../shared/session.ts';
 import { modelLabel } from '../models.ts';
@@ -48,7 +49,7 @@ export function Composer(props: ComposerProps) {
   props.focusRef.current = () => field.current?.focus();
   const primary = props.models.find(model => model.id === draft.modelIds[0]);
   const multiple = primary?.capabilities.size?.widthMultiple ?? 16;
-  const maskable = Boolean(draft.source) && primary?.capabilities.maskMode !== 'none' && session.runs.every(run => run.id !== draft.source || run.output);
+  const maskable = canPaintMask(session, draft, primary?.capabilities.maskMode);
 
   useLayoutEffect(() => {
     const element = field.current; if (!element) return;

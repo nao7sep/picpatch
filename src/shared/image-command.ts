@@ -1,3 +1,4 @@
+import type { ModelCapabilities } from 'picpatchsdk/types';
 import type { Draft, Run, Session } from './session.ts';
 
 /** The visible inputs choose the operation; command text is never interpreted or rewritten. */
@@ -20,6 +21,17 @@ export function withoutTarget(draft: Draft): Draft {
 
 export function hasImage(session: Session, key: string): boolean {
   return session.assets.some(asset => asset.id === key) || session.runs.some(run => run.id === key && Boolean(run.output));
+}
+
+/** A mask is painted on an image that exists, for a model that takes masks; a result still being made is not one yet. */
+export function canPaintMask(session: Session, draft: Draft, maskMode: ModelCapabilities['maskMode'] | undefined): boolean {
+  return draft.source !== undefined && hasImage(session, draft.source) && maskMode !== undefined && maskMode !== 'none';
+}
+
+/** What a painted mask keeps outside the edited region with this model. */
+export function maskNote(maskMode: ModelCapabilities['maskMode'] | undefined): 'ui.native_inpainting_pixels_outside_the_mask_may_change' | 'ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region' | 'ui.this_model_does_not_support_masks' {
+  if (maskMode === 'native') return 'ui.native_inpainting_pixels_outside_the_mask_may_change';
+  return maskMode === 'composite' || maskMode === 'latent-composite' ? 'ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region' : 'ui.this_model_does_not_support_masks';
 }
 
 export function commandTargetReady(session: Session, draft = session.draft): boolean {
