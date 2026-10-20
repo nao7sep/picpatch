@@ -22,7 +22,7 @@ it('admits separately named subjects and refuses pooling, missing bindings, raw 
 });
 it('selects isolated engine identity and source entry without ambient path configuration', () => {
   expect(identifyEngine('manifest', 'lock', 'dreamo').id).not.toBe(identifyEngine('manifest', 'lock').id);
-  expect(runtimePaths('dreamo').projectDirectory).toMatch(/runtimes[\\/]dreamo[\\/]$/);
+  expect(runtimePaths('dreamo').projectDirectory).toMatch(/runtimes[\\/]dreamo$/);
   expect(() => runtimePaths('unknown' as never)).toThrow();
   const launch = workerLaunch('/tmp/python', '/tmp/install', 'dreamo');
   // Windows paths arrive JSON-escaped (\\); compare with one separator.
@@ -50,6 +50,6 @@ it('fingerprints the complete DreamO base, adaptation and preprocessing bundle b
     const result = await prepareModel('flux1-dreamo-v1.1', { directory });
     expect(result.model.manifest.components.find(component => component.path === 'preprocessing/BEN2_Base.pth')?.role).toBe('weights');
     await rm(join(directory, 'base/text_encoder_2/model.safetensors'));
-    await expect(prepareModel('flux1-dreamo-v1.1', { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+    await expect(prepareModel('flux1-dreamo-v1.1', { directory })).rejects.toMatchObject({ code: 'MODEL_BUNDLE_INCOMPLETE' });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

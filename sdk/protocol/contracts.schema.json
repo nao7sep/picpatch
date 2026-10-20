@@ -120,8 +120,12 @@
         "parameters": {
           "$ref": "#/definitions/SamplingParameters"
         },
+        "record": {
+          "$ref": "#/definitions/RecordOptions"
+        },
         "sidecar": {
-          "$ref": "#/definitions/SidecarOptions"
+          "type": "boolean",
+          "description": "Write the record as a sidecar beside the image. False by default; the record is always in the result."
         },
         "outpaint": {
           "$ref": "#/definitions/OutpaintCanvas"
@@ -753,8 +757,12 @@
         "parameters": {
           "$ref": "#/definitions/SamplingParameters"
         },
+        "record": {
+          "$ref": "#/definitions/RecordOptions"
+        },
         "sidecar": {
-          "$ref": "#/definitions/SidecarOptions"
+          "type": "boolean",
+          "description": "Write the record as a sidecar beside the image. False by default; the record is always in the result."
         },
         "control": {
           "$ref": "#/definitions/StructuralControl"
@@ -992,12 +1000,31 @@
       },
       "additionalProperties": false
     },
-    "SidecarOptions": {
+    "RecordOptions": {
       "type": "object",
       "properties": {
         "includeInputs": {
           "type": "boolean",
-          "description": "Explicitly retain prompt/instruction, negative prompt and path-free input descriptions. False by default."
+          "description": "Retain the prompt or instruction, negative prompt and path-free input descriptions in the record. False by default."
+        },
+        "caller": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false,
+          "description": "The calling app's identity, recorded beside the SDK writer."
         }
       },
       "required": [],

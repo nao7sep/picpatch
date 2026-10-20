@@ -56,7 +56,7 @@ describe('command readiness', () => {
 });
 
 describe('native component fields', () => {
-  const native = (variant: string, controlKinds?: string[]) => ({ id: variant, variant, family: variant, acquisition: 'external', runtime: { name: 'stable-diffusion.cpp' }, capabilities: { controlKinds } }) as never;
+  const native = (variant: string, controlKinds?: string[]) => ({ id: variant, variant, family: variant, acquisition: 'external', runtime: { name: 'stable-diffusion.cpp', engine: 'native' }, capabilities: { controlKinds } }) as never;
   it('offers only the files an architecture accepts', () => {
     expect(componentFields(native('hidream-o1'))).toEqual([]);
     expect(componentFields(native('sd35-large'))).toEqual(['clipL', 'clipG', 't5', 'vae']);

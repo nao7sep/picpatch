@@ -62,7 +62,7 @@ it('keeps independent editors independent and continues after a failed operation
   try {
     await other; expect(a.seen).toEqual([]);
     a.release.resolve(); await pending;
-    await expect(a.editor.generate(request('a'))).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT', effect: 'none' });
+    await expect(a.editor.generate(request('a'))).resolves.toMatchObject({ status: 'refused', code: 'OUTPUT_CONFLICT', details: {} });
     await a.editor.generate(request('later')); expect(a.seen).toHaveLength(2);
   } finally { await a.editor.dispose(); await b.editor.dispose(); }
 });

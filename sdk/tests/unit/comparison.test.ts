@@ -10,7 +10,7 @@ const directories: string[] = [];
 afterEach(async () => { vi.resetAllMocks(); await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 async function reportPath() { const dir = await mkdtemp(join(tmpdir(), 'picpatch-comparison-')); directories.push(dir); return join(dir, 'report.jsonl'); }
 async function records(path: string): Promise<ComparisonRecord[]> { return (await readFile(path, 'utf8')).trim().split('\n').map(line => JSON.parse(line)); }
-const result: ImageResult = { record: artifactFixture as ImageResult['record'], model: 'test', modelRevision: 'revision', runtime: { name: 'mflux', version: 'test' }, seed: 1, effectiveParameters: { steps: 2, negativePrompt: 'private words' }, image: { path: '/private/output.png', mimeType: 'image/png', size: { width: 16, height: 16 } }, references: [], sidecar: { status: 'saved', path: '/private/output-picpatchsdk.json' } };
+const result: ImageResult = { status: 'completed', record: artifactFixture as ImageResult['record'], model: 'test', modelRevision: 'revision', runtime: { name: 'mflux', version: 'test' }, seed: 1, effectiveParameters: { steps: 2, negativePrompt: 'private words' }, image: { path: '/private/output.png', mimeType: 'image/png', size: { width: 16, height: 16 } }, references: [], sidecar: { status: 'saved', path: '/private/output-picpatchsdk.json' } };
 it('persists success, skips unsupported and dependent cases, and recreates a failed session', async () => {
   const path = await reportPath();
   const first = { plan: vi.fn(), generate: vi.fn().mockResolvedValue(result), edit: vi.fn().mockRejectedValue(new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'private details')), dispose: vi.fn().mockResolvedValue(undefined) };

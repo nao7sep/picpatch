@@ -4,30 +4,23 @@ import { withDiagnostics } from '../diagnostics.ts';
 import { checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { resolveStoragePaths } from '../paths.ts';
-import { validateProfile } from '../profile.ts';
+import { checkProfile } from '../profile.ts';
 import { catalogModel } from './catalog.ts';
 import type { ModelOpenOptions } from './opening.ts';
 
-export interface ManagedModelEntry {
-  modelId: string;
-  name: string;
-  directory: string;
-  kind: 'revision' | 'incomplete';
-  current: boolean;
-  /** Regular-file bytes in this directory; symlink targets are never counted or traversed. */
-  bytes: number;
-}
+export type { ManagedModelEntry } from './types.ts';
+import type { ManagedModelEntry } from './types.ts';
 const entryKind = (name: string): ManagedModelEntry['kind'] | undefined => /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(name) ? 'revision' : /^\.(?:prepare|remove)-[A-Za-z0-9]+$/.test(name) ? 'incomplete' : undefined;
 const absent = (cause: unknown) => ['ENOENT', 'ENOTDIR'].includes((cause as NodeJS.ErrnoException).code ?? '');
 export function managedRoot(options: ModelOpenOptions): string {
-  const profile = options.profile === undefined ? undefined : validateProfile(options.profile);
+  const profile = options.profile === undefined ? undefined : checkProfile(options.profile);
   const modelsDirectory = options.modelsDirectory ?? profile?.modelsDirectory;
   return resolveStoragePaths(modelsDirectory === undefined ? {} : { modelsDirectory }).modelsDirectory;
 }
 async function parentDirectory(root: string, id: string): Promise<string> {
   const resolved = await realpath(root);
   const parent = join(resolved, id);
-  if ((await lstat(parent)).isSymbolicLink() || await realpath(parent) !== parent) throw new PicPatchSdkError('MODEL_IO', 'Managed model directories cannot be links.', { subject: parent });
+  if ((await lstat(parent)).isSymbolicLink() || await realpath(parent) !== parent) throw new PicPatchSdkError('MODEL_LINK_REFUSED', 'Managed model directories cannot be links.', { subject: parent });
   return parent;
 }
 async function size(directory: string, signal?: AbortSignal): Promise<number> {
@@ -83,7 +76,7 @@ export function removeModel(modelId: string, name: string, options: ModelOpenOpt
           const detached = join(recovery, 'model');
           await rename(join(parent, name), detached);
           const actual = await lstat(detached, { bigint: true });
-          if (actual.dev !== before.dev || actual.ino !== before.ino) throw new PicPatchSdkError('MODEL_IO', 'Model directory changed before removal.');
+          if (actual.dev !== before.dev || actual.ino !== before.ino) throw new PicPatchSdkError('MODEL_CHANGED', 'Model directory changed before removal.', { subject: directory });
           checkSignal(signal);
           await rm(recovery, { recursive: true, force: true });
           removed = { status: 'removed', modelId, name, directory };
@@ -93,7 +86,7 @@ export function removeModel(modelId: string, name: string, options: ModelOpenOpt
             cause.effect = 'unknown'; cause.details.recoveryDirectory = recovery;
             throw cause;
           }
-          throw new PicPatchSdkError('MODEL_IO', 'Model removal was not completed; inspect retained files.', { cause, effect: 'unknown', subject: directory, details: { recoveryDirectory: recovery } });
+          throw new PicPatchSdkError('MODEL_REMOVAL_INCOMPLETE', 'Model removal was not completed; inspect retained files.', { cause, effect: 'unknown', subject: directory, details: { recoveryDirectory: recovery } });
         }
       });
     } catch (cause) {

@@ -45,7 +45,7 @@ it('runs native generation and masked editing through public preparation, pipes 
         await writeFile(join(directory, 'source.png'), png);
         await sharp({ create: { width: 16, height: 16, channels: 3, background: 'white' } }).toColourspace('b-w').png().toFile(join(directory, 'mask.png'));
         const result = variant === 'sdxl' ? await editor.generate({ prompt: 'Blue', parameters: { steps: 3 } }) : await editor.edit({ instruction: 'Blue', sourceImage: join(directory, 'source.png'), maskImage: join(directory, 'mask.png') });
-        if ('status' in result) throw new Error(result.code);
+        if (result.status === 'refused') throw new Error(result.code);
         expect(await readFile(result.image.path)).toEqual(png);
         expect(result.effectiveParameters).toMatchObject({ steps: variant === 'sdxl' ? 3 : 20, guidance: 7, sampler: 'euler_a', scheduler: 'discrete' });
         expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
@@ -92,12 +92,12 @@ it.each(['sd15', 'sdxl'])('runs repeated %s source variations with default/sessi
   const original = await readFile(sourceImage);
   try {
     const first = await editor.edit({ instruction: 'variation:0.75', sourceImage });
-    if ('status' in first) throw new Error(first.code);
+    if (first.status === 'refused') throw new Error(first.code);
     expect(first.effectiveParameters.strength).toBe(0.75);
     expect(first.inputGeometry?.[0]).toMatchObject({ path: sourceImage, preparedSize: { width: 29, height: 19 } });
     for (const strength of [0, 0.5, 1]) {
       const result = await editor.edit({ instruction: `variation:${strength}`, sourceImage: first.image.path, parameters: { strength } });
-      if ('status' in result) throw new Error(result.code);
+      if (result.status === 'refused') throw new Error(result.code);
       expect(result.effectiveParameters.strength).toBe(strength);
       expect(await readFile(result.image.path)).toEqual(png);
     }
@@ -107,7 +107,7 @@ it.each(['sd15', 'sdxl'])('runs repeated %s source variations with default/sessi
     } })).rejects.toMatchObject({ code: 'CANCELLED' });
     await editor.edit({ instruction: 'variation:0.75', sourceImage });
     const generated = await editor.generate({ prompt: 'Blue' });
-    if ('status' in generated) throw new Error(generated.code);
+    if (generated.status === 'refused') throw new Error(generated.code);
     expect(generated.effectiveParameters).not.toHaveProperty('strength');
     expect(await readFile(sourceImage)).toEqual(original);
     expect(await readFile(first.image.path)).toEqual(png);

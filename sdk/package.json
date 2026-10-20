@@ -49,7 +49,7 @@
     "THIRD_PARTY_NOTICES"
   ],
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.types.json && tsc -p tsconfig.test.json",
     "test": "npm run test:node && npm run test:python",
     "test:node": "npm run contracts:check && npm run typecheck && vitest run",
     "test:coverage": "npm run contracts:check && npm run typecheck && vitest run --coverage",

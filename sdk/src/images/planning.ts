@@ -16,7 +16,7 @@ export interface PlannedImageInput {
   geometry: Omit<InputGeometry, 'path'>;
 }
 interface PlanData {
-  status: 'planned';
+  status: 'completed';
   inputs: PlannedImageInput[];
   destination: PlannedDestination;
   capabilities: ModelCapabilities;
@@ -59,7 +59,7 @@ export async function planImage(input: ImageRequest, capabilities: ModelCapabili
     for (const group of request.references ?? []) for (const path of group.images) await inspect(path, 'reference');
   }
   if (!request.size && capabilities.defaultOutputSize) request.size = { ...capabilities.defaultOutputSize };
-  if (!request.size) throw new PicPatchSdkError('INVALID_CAPABILITIES', 'The model must advertise an output size for planning.');
+  if (!request.size) throw new PicPatchSdkError('INTERNAL', 'The model must advertise an output size for planning.');
   if (request.control) {
     const geometry = await inspect(request.control.image, 'control', true);
     if (!sameSize(geometry.preparedSize, request.size)) throw new PicPatchSdkError('INVALID_REQUEST', 'Control map dimensions must match output dimensions.');
@@ -69,7 +69,7 @@ export async function planImage(input: ImageRequest, capabilities: ModelCapabili
   request.parameters = resolveParameters(request.parameters, capabilities, generate ? 'generate' : 'edit');
   // Validate derived sizes too: source-sized masking must obey the model's multiples.
   if ('prompt' in request) validateGenerateRequest(request, capabilities); else validateEditRequest(request, capabilities);
-  const data = { status: 'planned' as const, inputs, destination, capabilities: structuredClone(capabilities) };
+  const data = { status: 'completed' as const, inputs, destination, capabilities: structuredClone(capabilities) };
   return deepFreeze('prompt' in request ? { ...data, operation: 'generate', request } : { ...data, operation: 'edit', request });
 }
 function sameSize(a: { width: number; height: number }, b: { width: number; height: number }): boolean { return a.width === b.width && a.height === b.height; }

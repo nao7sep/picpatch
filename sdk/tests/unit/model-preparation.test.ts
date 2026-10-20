@@ -45,7 +45,7 @@ it.each([
   expect(listModels().find(model => model.id === variant)).toMatchObject({ acquisition: 'external', evidence: 'api', tested: [] });
 });
 it('requires explicit acquisition and rejects unknown catalog IDs without creating storage', async () => {
-  await expect(prepareModel(listModels().find(model => model.acquisition === 'pinned')!.id)).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareModel(listModels().find(model => model.acquisition === 'pinned')!.id)).rejects.toMatchObject({ code: 'MODEL_MISSING' });
   await expect(prepareModel('unknown', { download: true })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   expect(await readdir(directory)).toEqual([]);
 });
@@ -64,7 +64,7 @@ it('publishes only verified bundles, tightens permissions and reuses without fet
   expect((await prepareCatalogModel(entry, {}, fetcher)).origin).toBe('cache');
   expect(fetcher).toHaveBeenCalledTimes(1);
   await writeFile(join(prepared.model.directory, 'weights.safetensors'), 'corrupt');
-  await expect(prepareCatalogModel(entry, { download: true }, fetcher)).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareCatalogModel(entry, { download: true }, fetcher)).rejects.toMatchObject({ code: 'MODEL_MISMATCH' });
   expect(fetcher).toHaveBeenCalledTimes(1);
   expect(await readFile(join(prepared.model.directory, 'weights.safetensors'), 'utf8')).toBe('corrupt');
 });
@@ -79,7 +79,8 @@ it('verifies an external bundle in place without creating managed storage', asyn
 it.each(['digest', 'short', 'oversized', 'unavailable', 'redirect'])('rejects %s acquisition and removes staging', async failure => {
   const fetcher: typeof fetch = async () => failure === 'redirect' ? new Response(null, { status: 302, headers: { location: 'http://unsafe/file' } }) :
     failure === 'unavailable' ? new Response(null, { status: 404 }) : new Response(failure === 'digest' ? 'x'.repeat(bytes.length) : failure === 'short' ? 'x' : 'x'.repeat(bytes.length + 1));
-  await expect(prepareCatalogModel(entry, { download: true }, fetcher)).rejects.toMatchObject({ code: 'MODEL_IO' });
+  // Bytes that arrive but do not match are a mismatch; a download that fails is an I/O failure.
+  await expect(prepareCatalogModel(entry, { download: true }, fetcher)).rejects.toMatchObject({ code: failure === 'digest' ? 'MODEL_MISMATCH' : 'MODEL_IO' });
   expect(await readdir(join(directory, 'models', 'fixture'))).toEqual([]);
 });
 it('cancels at a component boundary with no publication or leftover staging', async () => {

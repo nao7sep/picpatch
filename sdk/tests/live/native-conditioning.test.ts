@@ -42,10 +42,10 @@ fs.writeFileSync(value('--output'),Buffer.from('${png.toString('base64')}','base
       const request = { instruction: identity ? 'A portrait of {person}.' : 'Transfer the appearance.',
         references: identity ? [{ id: 'person', role: 'subject' as const, conditioning: 'identity' as const, className: 'man' as const, images: images as [string, ...string[]] }]
           : [{ id: 'style', role: 'style' as const, conditioning: 'appearance' as const, images: images as [string, ...string[]] }],
-        parameters: identity ? { identityStyleStrength: 15 } : { appearanceStrength: 0.7 }, sidecar: {},
+        parameters: identity ? { identityStyleStrength: 15 } : { appearanceStrength: 0.7 }, sidecar: true,
       };
       const result = await editor.edit({ ...request, references: request.references as [typeof request.references[number]] });
-      if ('status' in result) throw new Error(result.code);
+      if (result.status === 'refused') throw new Error(result.code);
       expect(result.references[0]?.images).toEqual(images);
       expect(result.conditioning?.method).toBe(identity ? 'photomaker-v1' : variant.endsWith('-plus') ? 'ip-adapter-plus' : 'ip-adapter');
       expect(result.conditioning?.assets).toHaveLength(identity ? 1 : 2);

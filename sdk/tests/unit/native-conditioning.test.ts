@@ -29,7 +29,7 @@ it('rejects V2, wrong vision dimensions, cross-family adapters, and malformed he
   await tensorFile(join(directory, ip.ipAdapter!), { 'image_proj.norm.weight': [2048], 'image_proj.proj.weight': [8192, 1024] });
   await expect(prepareModel('sd15-ip-adapter', ip)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   await writeFile(join(directory, ip.ipAdapter!), Buffer.alloc(8, 255));
-  await expect(prepareModel('sd15-ip-adapter', ip)).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareModel('sd15-ip-adapter', ip)).rejects.toMatchObject({ code: 'MODEL_COMPONENT_INVALID' });
 });
 it('detects mutation of an earlier hashed file by a later preparation callback', async () => {
   const options = await nativeAssets(directory, 'sd15-ip-adapter');
@@ -38,7 +38,7 @@ it('detects mutation of an earlier hashed file by a later preparation callback',
   let changed = false;
   await expect(prepareModel('sd15-ip-adapter', { ...options, onProgress: event => {
     if (event.completed === event.total && !changed) { changed = true; writeFileSync(join(directory, options.checkpoint), 'changed'); }
-  } })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  } })).rejects.toMatchObject({ code: 'MODEL_COMPONENT_INVALID' });
   expect(changed).toBe(true);
 });
 it('cancels before loading or changing caller assets', async () => {

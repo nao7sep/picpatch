@@ -43,6 +43,7 @@ export function validateSession(value: unknown): Session {
     if (runs.has(run.id) || !['queued', 'running', 'completed', 'refused', 'failed', 'cancelled', 'interrupted'].includes(run.status) || typeof run.modelId !== 'string' || !Number.isSafeInteger(run.seed) || run.seed < 0) throw new UiError('error.invalid_session_attempt');
     runs.add(run.id);
     if (run.output !== undefined && run.output !== `outputs/${run.id}.png`) throw new UiError('error.invalid_result_path');
+    // A record a newer PicPatch wrote is refused, not thrown: the session opens, and only that image's Save is refused.
     if (run.record) validateArtifactRecord(run.record);
     if (run.status === 'completed' && (!run.output || !run.record)) throw new UiError('error.incomplete_saved_result');
   }

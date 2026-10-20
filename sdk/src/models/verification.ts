@@ -109,6 +109,12 @@ async function validIndex(stream: AsyncIterable<Buffer>, component: ModelCompone
   }
   return valid && maps === 1 && count > 0;
 }
+/** Checks a shard index already fingerprinted elsewhere: valid JSON whose weight map names declared weights. */
+export async function shardIndexValid(path: string, component: ModelComponent, manifest: ModelManifest, signal?: AbortSignal): Promise<boolean> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  try { return await validIndex(readChunks(file, component.bytes, signal), component, manifest, signal); }
+  finally { await file.close(); }
+}
 const componentOutcomes = {
   verified: { code: 'MODEL_COMPONENT_VERIFIED', message: 'The component matches its declared size and digest.' },
   missing: { code: 'MODEL_COMPONENT_MISSING', message: 'The component is missing.' },

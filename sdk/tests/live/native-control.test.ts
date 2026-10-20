@@ -36,10 +36,10 @@ fs.writeFileSync(value('--output'), Buffer.from('${png.toString('base64')}', 'ba
     const editor = createImageClient({ model, nativeExecutable: executable, defaults: { size: { width: 16, height: 16 }, outputDirectory: directory } });
     try {
       const ordinary = await editor.generate({ prompt: 'A bowl.' });
-      if ('status' in ordinary) throw new Error(ordinary.code);
+      if (ordinary.status === 'refused') throw new Error(ordinary.code);
       expect(ordinary.control).toBeUndefined();
-      const controlled = await editor.generate({ prompt: 'A bowl.', control: { kind, image }, parameters: { sampler: 'dpm++2m', scheduler: 'karras' }, sidecar: {} });
-      if ('status' in controlled) throw new Error(controlled.code);
+      const controlled = await editor.generate({ prompt: 'A bowl.', control: { kind, image }, parameters: { sampler: 'dpm++2m', scheduler: 'karras' }, sidecar: true });
+      if (controlled.status === 'refused') throw new Error(controlled.code);
       expect(controlled.control).toMatchObject({ kind, strength: 0.9 });
       expect(controlled.record.effectiveParameters).toMatchObject({ sampler: 'dpm++2m', scheduler: 'karras' });
       expect(controlled.loras?.map(lora => lora.filename)).toEqual(['one odd name.safetensors', 'two.safetensors']);

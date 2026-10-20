@@ -18,17 +18,17 @@ afterEach(async () => { await rm(directory, { recursive: true, force: true }); }
 it('copies exact PNG bytes and saves a renamed private record without changing the original', async () => {
   const output = join(directory, 'chosen.png');
   const result = await saveArtifact(source, output, record, { sidecar: true });
-  expect(result.status).toBe('saved'); if (result.status !== 'saved') throw new Error(result.code);
+  expect(result.status).toBe('completed'); if (result.status === 'refused') throw new Error(result.code);
   expect(await readFile(output)).toEqual(bytes); expect(await readFile(source)).toEqual(bytes);
   expect(result.record.image.filename).toBe('chosen.png'); expect(record.image.filename).toBe('source.png');
   expect(JSON.parse(await readFile(join(directory, 'chosen-picpatchsdk.json'), 'utf8'))).toEqual(result.record);
-  expect(await verifyArtifact(output, result.record)).toMatchObject({ status: 'verified' });
+  expect(await verifyArtifact(output, result.record)).toMatchObject({ status: 'completed' });
   expect((await readdir(directory)).sort()).toEqual(['chosen-picpatchsdk.json', 'chosen.png', 'source.png']);
 });
 it('preserves a saved image when its sidecar conflicts and writes no metadata by default', async () => {
   const output = join(directory, 'chosen.png'); const sidecar = join(directory, 'chosen-picpatchsdk.json');
   await writeFile(sidecar, 'existing');
-  expect(await saveArtifact(source, output, record, { sidecar: true })).toMatchObject({ status: 'saved', sidecar: { status: 'failed', code: 'OUTPUT_CONFLICT' } });
+  expect(await saveArtifact(source, output, record, { sidecar: true })).toMatchObject({ status: 'completed', sidecar: { status: 'failed', code: 'OUTPUT_CONFLICT' } });
   expect(await readFile(sidecar, 'utf8')).toBe('existing');
   expect(await saveArtifact(source, join(directory, 'plain.png'), record)).not.toHaveProperty('sidecar');
   expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
@@ -46,7 +46,7 @@ it('keeps concurrent saves independent and honours cancellation before publicati
   const output = join(directory, 'out.png');
   await expect(saveArtifact(source, output, record, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED', effect: 'none' });
   const results = await Promise.all([saveArtifact(source, output, record), saveArtifact(source, output, record)]);
-  expect(results.filter(r => r.status === 'saved')).toHaveLength(1);
+  expect(results.filter(r => r.status === 'completed')).toHaveLength(1);
   expect(results.filter(r => r.status === 'refused')).toHaveLength(1);
   expect(await readFile(output)).toEqual(bytes);
 });

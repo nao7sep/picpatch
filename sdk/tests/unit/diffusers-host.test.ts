@@ -33,6 +33,6 @@ it.each(['glm-image', 'flux2-dev'])('fingerprints %s configuration and component
     expect(() => validateLocalModel({ ...result.model, quantize: 4 })).toThrow(/quantization/);
     await expect(prepareModel(variant, { directory, loras: [] })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
     await rm(join(directory, 'text_encoder/model.safetensors'));
-    await expect(prepareModel(variant, { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+    await expect(prepareModel(variant, { directory })).rejects.toMatchObject({ code: 'MODEL_BUNDLE_INCOMPLETE' });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

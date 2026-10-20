@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { liveCache } from '../../sdk/tests/helpers/live-cache.ts';
+import { liveCache } from '../helpers/live-cache.ts';
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
 it('packages and starts the real renderer from outside the checkout without models or system Node', async () => {

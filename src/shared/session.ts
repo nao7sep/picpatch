@@ -13,7 +13,8 @@ export interface Run {
   status: 'queued' | 'running' | 'completed' | 'refused' | 'failed' | 'cancelled' | 'interrupted';
   created: string; started?: string; ended?: string; output?: string; record?: ArtifactRecord;
   notices?: (string | { notice?: import('./i18n/index.ts').Message; code?: string })[];
-  issue?: { code: string; message: string; effect: 'none' | 'unknown' };
+  /** Why the SDK refused the run. effect is present only on runs recorded before refusals stopped carrying one. */
+  issue?: { code: string; message: string; effect?: 'none' | 'unknown' };
 }
 export interface Session {
   version: 1; id: string; name: string; created: string; updated: string;

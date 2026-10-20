@@ -38,11 +38,11 @@ it('rejects unavailable acquisition, missing selection and incomplete component 
   await expect(prepareModel('flux2-klein-9b')).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   await expect(prepareModel('flux3-klein', { directory })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   await rm(join(directory, 'vae/0.safetensors'));
-  await expect(prepareModel('flux2-klein-9b', { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareModel('flux2-klein-9b', { directory })).rejects.toMatchObject({ code: 'MODEL_BUNDLE_INCOMPLETE' });
 });
 it('rejects invalid shard indexes instead of fingerprinting an incomplete bundle', async () => {
   await writeFile(join(directory, 'transformer/model.safetensors.index.json'), JSON.stringify({ weight_map: { weight: 'missing.safetensors' } }));
-  await expect(prepareModel('flux2-klein-4b', { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareModel('flux2-klein-4b', { directory })).rejects.toMatchObject({ code: 'MODEL_MISMATCH' });
 });
 it('cancels fingerprinting at progress without writing into the bundle', async () => {
   const before = await readdir(directory, { recursive: true });
@@ -55,12 +55,12 @@ it('rejects directory links and special paths, while accepting HF-style file lin
   await symlink(join(directory, 'transformer/0.safetensors'), join(directory, 'vae/0.safetensors'));
   await expect(prepareModel('flux2-klein-4b', { directory })).resolves.toMatchObject({ integrity: 'locally-fingerprinted' });
   await symlink(join(directory, 'transformer'), join(directory, 'vae/nested'));
-  await expect(prepareModel('flux2-klein-4b', { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareModel('flux2-klein-4b', { directory })).rejects.toMatchObject({ code: 'MODEL_COMPONENT_INVALID' });
 });
 
 it.each(['processor/preprocessor_config.json', 'processor/tokenizer.json', 'text_encoder/config.json', 'vae/config.json', 'transformer/config.json'])('rejects incomplete Qwen 2.1 bundles missing %s', async path => {
   await rm(join(directory, path));
-  await expect(prepareModel('qwen-image-2.1', { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareModel('qwen-image-2.1', { directory })).rejects.toMatchObject({ code: 'MODEL_BUNDLE_INCOMPLETE' });
 });
 it('includes processor assets as tokenizer data without requiring processor weights', async () => {
   const prepared = await prepareModel('qwen-image-2.1', { directory });
@@ -85,5 +85,18 @@ it.each([
   ['ming-image-design', 'mlp/0.safetensors'],
 ])('rejects incomplete %s bundles missing %s', async (id, path) => {
   await rm(join(directory, path));
-  await expect(prepareModel(id, { directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareModel(id, { directory })).rejects.toMatchObject({ code: 'MODEL_BUNDLE_INCOMPLETE' });
+});
+
+it('reads each component once while fingerprinting, rather than hashing the bundle twice', async () => {
+  const storage = await import('../../src/storage.ts');
+  const { vi } = await import('vitest');
+  const open = vi.spyOn(storage, 'open');
+  try {
+    const id = listModels().find(model => model.acquisition === 'external' && model.runtime.name === 'mflux')!.id;
+    await prepareModel(id, { directory });
+    const weights = open.mock.calls.filter(([path]) => String(path).endsWith('.safetensors'));
+    expect(weights.length).toBeGreaterThan(0);
+    expect(new Set(weights.map(([path]) => String(path))).size).toBe(weights.length);
+  } finally { open.mockRestore(); }
 });

@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { readArtifactRecord, verifyArtifact, validateArtifactRecord } from '../../src/index.ts';
+import { readArtifactRecord, verifyArtifact, validateArtifactRecord, VERSION } from '../../src/index.ts';
+import { checkArtifactRecord } from '../../src/images/records.ts';
 import { createArtifactRecord, sidecarPath } from '../../src/images/sidecar.ts';
 let directory: string;
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/artifacts/${name}.json`, import.meta.url));
@@ -12,22 +13,26 @@ beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-reco
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
 it('reads pinned records, preserves newer ones and rejects malformed/path-bearing records', async () => {
   const read = await readArtifactRecord(fixture('current')); if (read.status === 'refused') throw new Error(read.code); const record = read.record;
-  expect(validateArtifactRecord(record)).toEqual(record);
+  expect(validateArtifactRecord(record)).toEqual({ status: 'completed', record });
   const path = fixture('newer'); const original = await readFile(path);
-  expect(await readArtifactRecord(path)).toMatchObject({ status: 'refused', code: 'ARTIFACT_VERSION_UNSUPPORTED' });
+  expect(await readArtifactRecord(path)).toMatchObject({ status: 'refused', code: 'ARTIFACT_VERSION_UNSUPPORTED', subject: path, details: { version: expect.any(Number) } });
+  // A caller validating a newer record it holds gets the same refusal, not an error.
+  expect(validateArtifactRecord(JSON.parse(original.toString('utf8')))).toMatchObject({ status: 'refused', code: 'ARTIFACT_VERSION_UNSUPPORTED' });
   expect(await readFile(path)).toEqual(original);
   for (const filename of ['/secret/a.png', '..\\secret.png', '../a.png']) expect(() => validateArtifactRecord({ ...record, image: { ...record.image, filename } })).toThrow();
+  expect(() => validateArtifactRecord({ ...record, version: 0 })).toThrow();
   await expect(readArtifactRecord('relative')).rejects.toMatchObject({ kind: 'invalid' });
 });
 it('checks final file bytes and full decoding without trusting names or touching originals', async () => {
   const image = join(directory, 'image.png');
   await sharp({ create: { width: 8, height: 8, channels: 3, background: 'blue' } }).png().toFile(image);
   const bytes = await readFile(image);
-  const record = await createArtifactRecord({ model: 'fixture', prompt: 'private', outputPath: image }, { image: { path: image, mimeType: 'image/png', size: { width: 8, height: 8 } }, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, effectiveParameters: { steps: 4 }, references: [] }, image, [], { name: 'ExampleApp', version: '1' });
-  expect(record).toMatchObject({ writer: { name: 'picpatchsdk', version: '0.0.0' }, caller: { name: 'ExampleApp', version: '1' }, fingerprints: [] });
+  const record = await createArtifactRecord({ model: 'fixture', prompt: 'private', outputPath: image, record: { caller: { name: 'ExampleApp', version: '1' } } }, { image: { path: image, mimeType: 'image/png', size: { width: 8, height: 8 } }, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, effectiveParameters: { steps: 4 }, references: [] }, image, []);
+  expect(record).toMatchObject({ writer: { name: 'picpatchsdk', version: VERSION }, caller: { name: 'ExampleApp', version: '1' }, fingerprints: [] });
   const read = await readArtifactRecord(fixture('current')); if (read.status === 'refused') throw new Error(read.code); const pinned = read.record;
-  expect({ ...record, caller: undefined, sha256: pinned.sha256, bytes: pinned.bytes, image: pinned.image }).toEqual({ ...pinned, caller: undefined });
-  expect(await verifyArtifact(image, record)).toMatchObject({ status: 'verified' });
+  // The fixture pins the format; the writer's version follows the package, so it is compared as VERSION.
+  expect({ ...record, caller: undefined, sha256: pinned.sha256, bytes: pinned.bytes, image: pinned.image }).toEqual({ ...pinned, writer: { ...pinned.writer, version: VERSION }, caller: undefined });
+  expect(await verifyArtifact(image, record)).toMatchObject({ status: 'completed' });
   expect(await verifyArtifact(image, { ...record, bytes: record.bytes + 1 })).toMatchObject({ status: 'refused', code: 'ARTIFACT_MISMATCH' });
   expect(await readFile(image)).toEqual(bytes);
   await writeFile(image, bytes.subarray(0, bytes.length - 10));
@@ -42,10 +47,10 @@ it('derives distinct sidecar names for generated literal basenames', () => {
 
 it('reads masked records while preserving legacy records with an unknown mask mechanism', async () => {
   const original = JSON.parse(await readFile(fixture('current'), 'utf8'));
-  expect(validateArtifactRecord(original)).not.toHaveProperty('maskMode');
+  expect(checkArtifactRecord(original)).not.toHaveProperty('maskMode');
   for (const maskMode of ['native', 'composite', 'latent-composite']) {
     const data = JSON.parse(await readFile(fixture(`masked-${maskMode}`), 'utf8'));
-    expect(validateArtifactRecord(data).maskMode).toBe(maskMode);
+    expect(checkArtifactRecord(data).maskMode).toBe(maskMode);
   }
   expect(() => validateArtifactRecord({ ...original, maskMode: 'guaranteed-identity' })).toThrow();
 });

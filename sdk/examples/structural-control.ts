@@ -18,8 +18,8 @@ try {
     prompt: 'A ceramic sculpture in soft studio lighting.',
     control: { kind: kind as 'canny' | 'depth' | 'pose', image: resolve(map), strength: 0.9 },
     outputPath: resolve(output), size: { width: 512, height: 512 }, seed: 42,
-    parameters: { sampler: 'dpm++2m', scheduler: 'karras', steps: 20 }, sidecar: {},
+    parameters: { sampler: 'dpm++2m', scheduler: 'karras', steps: 20 }, sidecar: true,
   });
-  if ('status' in result) throw new Error(result.code);
+  if (result.status === 'refused') throw new Error(result.code);
   console.log(JSON.stringify({ image: result.image, control: result.control, parameters: result.effectiveParameters }));
 } finally { await editor.dispose(); }

@@ -297,7 +297,7 @@
       "error": {
         "code": "RUNTIME_FAILURE",
         "message": "Editing failed.",
-        "kind": "internal",
+        "kind": "unavailable",
         "effect": "none",
         "details": {
           "diagnostic": {
@@ -324,7 +324,7 @@
       "error": {
         "code": "RUNTIME_FAILURE",
         "message": "Editing failed.",
-        "kind": "internal",
+        "kind": "unavailable",
         "effect": "none",
         "details": {
           "diagnostic": {

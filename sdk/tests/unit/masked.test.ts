@@ -78,7 +78,7 @@ it('keeps latent-composite masks aligned and rejects output resizing', async () 
 
 
 it.each(['native', 'composite', 'latent-composite'] as const)('records the effective %s mechanism without input paths or runtime overrides', async maskMode => {
-  const request = { ...await fixture(32, 48), sidecar: {} };
+  const request = { ...await fixture(32, 48), sidecar: true };
   const workspace = await ImageWorkspace.create(request);
   try {
     await workspace.prepare(undefined, undefined, maskMode);

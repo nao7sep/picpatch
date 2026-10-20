@@ -62,11 +62,16 @@ it('does not apply a stale asynchronous locale after a later choice', async () =
 
 it('maps real SDK errors by cause and keeps hostile text out of operation fallbacks', async () => {
   const { PicPatchSdkError } = await import('picpatchsdk');
-  for (const [code, key] of [['OUT_OF_MEMORY','error.memory'], ['ENGINE_MISSING','error.engine'], ['INVALID_IMAGE','error.input']] as const) {
+  for (const [code, key] of [['OUT_OF_MEMORY','error.memory'], ['ENGINE_MISSING','error.engine'], ['INVALID_IMAGE','error.input'],
+    ['MODEL_MISSING','error.prepare_this_model_in_managed_models_before_running_it'], ['MODEL_MISMATCH','error.model_files'], ['MODEL_CHANGED','error.model_files'],
+    ['MODEL_REMOVAL_INCOMPLETE','error.model_removal'], ['MODEL_IO','error.storage'], ['RECORD_IO','error.storage']] as const) {
     const error = new PicPatchSdkError(code, 'TypeError EACCES /private/SENTINEL');
     expect(errorNotice(error).key).toBe(key);
     expect(errorText(error)).not.toContain('SENTINEL');
   }
+  // Refusals carry the SDK's codes too: a newer saved format and an incomplete model each get their own copy.
+  for (const [code, key] of [['MODEL_INCOMPLETE','error.prepare_this_model_in_managed_models_before_running_it'], ['MODEL_REGISTRATION_VERSION_UNSUPPORTED','error.newer_format'], ['ARTIFACT_VERSION_UNSUPPORTED','error.newer_format']] as const)
+    expect(errorNotice({ status: 'refused', code, message: 'SENTINEL', details: {} }).key).toBe(key);
   expect(errorNotice(new Error('Select a completed image.'), 'error.generate').key).toBe('error.generate');
   expect(errorNotice(new UiError('error.select_a_completed_image')).key).toBe('error.select_a_completed_image');
 });

@@ -63,15 +63,15 @@ class Session:
                 self.adapter = self.adapter_factory(request['model'])
             self.ready = True
             models = [self.adapter.capabilities] if self.adapter else []
-            result = {**envelope, 'type': 'ready', 'workerVersion': '0.0.0', 'models': models}
+            result = {**envelope, 'type': 'ready', 'workerVersion': self.protocol.sdk_version, 'models': models}
             if 'runtimeCheck' in request:
                 result['runtimeCheck'] = self.adapter.inspect_runtime(request['runtimeCheck'])
             return result
         if not self.ready:
-            return error('NOT_READY', 'Complete the handshake first.')
+            return error('PROTOCOL_ERROR', 'Complete the handshake first.')
         if kind == 'shutdown':
             if self.active is not None:
-                return error('BUSY', 'Settle the active operation before shutdown.')
+                return error('PROTOCOL_ERROR', 'Settle the active operation before shutdown.')
             self.closed = True
             return {**envelope, 'type': 'shutdownAck'}
         if kind == 'cancel':
@@ -80,7 +80,7 @@ class Session:
                 self.cancel.set()
             return {**envelope, 'type': 'cancelAck', 'targetId': request['targetId'], 'accepted': accepted}
         if self.active is not None:
-            return error('BUSY', 'An operation is already active.')
+            return error('PROTOCOL_ERROR', 'An operation is already active.')
         if self.adapter is None or self.emit is None:
             return error('BACKEND_UNAVAILABLE', 'No image backend is installed in this worker.')
         self.active = request['id']

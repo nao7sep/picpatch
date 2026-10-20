@@ -37,11 +37,11 @@ export async function prepareNativeModel(variant: LocalModel['variant'], options
       for (const path of selected) {
         checkSignal(signal);
         const target = join(root, path);
-        if (await realpath(dirname(target)) !== dirname(target)) throw new PicPatchSdkError('MODEL_IO', 'Native component directories must not be symbolic links.');
+        if (await realpath(dirname(target)) !== dirname(target)) throw new PicPatchSdkError('MODEL_LINK_REFUSED', 'Native component directories must not be symbolic links.');
         const file = await open(target, constants.O_RDONLY | constants.O_NONBLOCK);
         try {
           const before = await file.stat({ bigint: true });
-          if (!before.isFile() || before.size <= 0n || before.size > BigInt(Number.MAX_SAFE_INTEGER)) throw new PicPatchSdkError('MODEL_IO', 'Select nonempty regular weight files.');
+          if (!before.isFile() || before.size <= 0n || before.size > BigInt(Number.MAX_SAFE_INTEGER)) throw new PicPatchSdkError('MODEL_COMPONENT_INVALID', 'Select nonempty regular weight files.');
           emitProgress({ ...options, signal }, { type: 'progress', verb: 'prepareModel', stage: 'verifying', completed: components.length, total: selected.length, message: 'Fingerprinting native model weights.', path });
           const hash = createHash('sha256'); const buffer = Buffer.allocUnsafe(64 * 1024);
           let position = 0;
@@ -52,7 +52,7 @@ export async function prepareNativeModel(variant: LocalModel['variant'], options
             hash.update(buffer.subarray(0, bytesRead)); position += bytesRead;
           }
           const after = await file.stat({ bigint: true }); const current = await stat(target, { bigint: true });
-          if (position !== Number(before.size) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.ino !== current.ino || before.dev !== current.dev) throw new PicPatchSdkError('MODEL_IO', 'Native weights changed during preparation.');
+          if (position !== Number(before.size) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.ino !== current.ino || before.dev !== current.dev) throw new PicPatchSdkError('MODEL_CHANGED', 'Native weights changed during preparation.');
           snapshots.set(path, after);
           components.push({ path, role: 'weights', bytes: position, sha256: hash.digest('hex') });
         } finally { await file.close(); }
@@ -64,13 +64,13 @@ export async function prepareNativeModel(variant: LocalModel['variant'], options
       await inspectNativeAssets({ ...model, directory: root }, signal);
       // The hashing read already checks file identity and mutation. Recheck every earlier file
       // after callbacks/header inspection, rather than reading all weights a second time.
-      if (await realpath(directory) !== root) throw new PicPatchSdkError('MODEL_IO', 'Model directory changed during preparation.');
+      if (await realpath(directory) !== root) throw new PicPatchSdkError('MODEL_CHANGED', 'Model directory changed during preparation.');
       for (const [path, before] of snapshots) {
         checkSignal(signal);
         const target = join(root, path);
-        if (await realpath(dirname(target)) !== dirname(target)) throw new PicPatchSdkError('MODEL_IO', 'Native component directories changed during preparation.');
+        if (await realpath(dirname(target)) !== dirname(target)) throw new PicPatchSdkError('MODEL_CHANGED', 'Native component directories changed during preparation.');
         const after = await stat(target, { bigint: true });
-        if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new PicPatchSdkError('MODEL_IO', 'Native weights changed during preparation.');
+        if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new PicPatchSdkError('MODEL_CHANGED', 'Native weights changed during preparation.');
       }
       return { version: 1, model, origin: 'external', integrity: 'locally-fingerprinted' };
     } catch (cause) {

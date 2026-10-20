@@ -26,7 +26,7 @@ it('fixes seed, parameters and output once, creates no files during planning and
   const { editor, render, backend } = setup();
   try {
     const plan = await editor.plan({ prompt: 'A bowl.' });
-    if (plan.status !== 'planned') throw new Error(plan.code);
+    if (plan.status !== 'completed') throw new Error(plan.code);
     expect(plan.request).toMatchObject({ size: { width: 32, height: 32 }, parameters: { steps: 4 }, seed: expect.any(Number) });
     expect(await readdir(directory)).toEqual([]); expect(backend.validate).not.toHaveBeenCalled(); expect(render).not.toHaveBeenCalled();
     expect(() => { plan.request.seed = 99; }).toThrow();
@@ -44,12 +44,12 @@ it.each(['source', 'mask', 'reference', 'control'] as const)('refuses changed %s
   const input: EditInput = { instruction: 'Edit bowl.', sourceImage: role === 'source' ? path : source,
     ...(role === 'mask' ? { maskImage: path } : {}), ...(role === 'reference' ? { references: [{ id: 'subject', role: 'subject' as const, images: [path] as [string] }] } : {}), ...(role === 'control' ? { control: { kind: 'canny' as const, image: path } } : {}) };
   try {
-    const plan = await editor.plan(input); if (plan.status !== 'planned') throw new Error(plan.code);
+    const plan = await editor.plan(input); if (plan.status !== 'completed') throw new Error(plan.code);
     const before = await readFile(path);
     expect(plan.inputs.find(input => input.path === path)!.fingerprint.sha256).toBe(createHash('sha256').update(before).digest('hex'));
     if (role === 'mask') await sharp({ create: { width: 32, height: 32, channels: 3, background: 'white' } }).toColourspace('b-w').png({ compressionLevel: 0 }).toFile(path); else await image(path, 'red');
     expect((await readFile(path)).length).toBe(before.length);
-    await expect(editor.edit(plan)).resolves.toMatchObject({ status: 'refused', code: 'INPUTS_CHANGED', effect: 'none', subject: path });
+    await expect(editor.edit(plan)).resolves.toMatchObject({ status: 'refused', code: 'INPUTS_CHANGED', subject: path, details: {} });
     expect(render).not.toHaveBeenCalled(); expect(await readdir(directory)).toEqual(['input.png', 'source.png']);
   } finally { await editor.dispose(); }
 });
@@ -57,11 +57,11 @@ it('refuses a removed input and a retargeted destination, and rejects plans from
   const a = setup(); const b = setup(); const source = join(directory, 'source.png'); await image(source);
   const first = join(directory, 'first'); const second = join(directory, 'second'); const alias = join(directory, 'alias'); await mkdir(first); await mkdir(second); await symlink(first, alias);
   try {
-    const plan = await a.editor.plan({ instruction: 'A bowl.', sourceImage: source, outputDirectory: alias }); if (plan.status !== 'planned') throw new Error(plan.code);
+    const plan = await a.editor.plan({ instruction: 'A bowl.', sourceImage: source, outputDirectory: alias }); if (plan.status !== 'completed') throw new Error(plan.code);
     await expect(b.editor.edit(plan)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     await unlink(alias); await symlink(second, alias);
     await expect(a.editor.edit(plan)).resolves.toMatchObject({ status: 'refused', code: 'DESTINATION_CHANGED' });
-    const next = await a.editor.plan({ instruction: 'A bowl.', sourceImage: source }); if (next.status !== 'planned') throw new Error(next.code);
+    const next = await a.editor.plan({ instruction: 'A bowl.', sourceImage: source }); if (next.status !== 'completed') throw new Error(next.code);
     await unlink(source);
     await expect(a.editor.edit(next)).resolves.toMatchObject({ status: 'refused', code: 'INPUTS_CHANGED' });
     expect(a.render).not.toHaveBeenCalled(); expect(b.render).not.toHaveBeenCalled();
@@ -72,7 +72,7 @@ it('plans real Klein geometry and profile defaults without an engine or model fi
   const source = join(directory, 'source.png'); await image(source, 'blue', 1050, 800);
   const editor = createImageClient({ profile: { version: 1, engineDirectory: join(directory, 'absent-engine'), defaults: { outputDirectory: directory, seed: 7, parameters: { steps: 2 } } }, defaults: { seed: 8 }, model: { variant: entry.variant, directory: join(directory, 'absent-model'), manifest: entry.manifest } });
   try {
-    const plan = await editor.plan({ instruction: 'A bowl.', sourceImage: source }); if (plan.status !== 'planned') throw new Error(plan.code);
+    const plan = await editor.plan({ instruction: 'A bowl.', sourceImage: source }); if (plan.status !== 'completed') throw new Error(plan.code);
     expect(plan.request.seed).toBe(8); expect(plan.request.parameters?.steps).toBe(2);
     expect(plan.inputs[0]!.geometry.preparedSize).toEqual({ width: 1040, height: 800 });
     expect(await readdir(directory)).toEqual(['source.png']);

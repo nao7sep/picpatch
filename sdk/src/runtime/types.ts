@@ -1,13 +1,8 @@
-import type { ProgressEvent } from '../types.ts';
-import type { EventOptions } from '../diagnostics.ts';
-import type { ModelCapabilities } from '../types.ts';
+import type { CallOptions, ModelCapabilities } from '../types.ts';
 
-export interface RuntimeOperationOptions extends EventOptions {
-  runtime?: import('./engine/types.ts').EngineRuntime;
-  signal?: AbortSignal;
-  onProgress?: (event: ProgressEvent) => void;
-  /** Inspection startup defaults to thirty seconds. Shutdown has its own bounded budget. */
-  timeoutMs?: number;
+/** timeoutMs bounds startup, thirty seconds by default; shutdown has its own bounded budget. */
+export interface RuntimeOperationOptions extends CallOptions {
+  runtime?: import('./engine/types.ts').PythonRuntime;
 }
 export interface RuntimeInspection {
   pythonExecutable: string;

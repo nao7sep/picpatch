@@ -12,7 +12,7 @@ it('returns plain results and rejects the retired log option without creating a 
   try {
     const path = join(directory, 'profile.json'); await writeFile(path, '{"version":1}');
     const events: SdkEvent[] = [];
-    expect(await readProfile(path, { onEvent: event => events.push(event) })).toEqual({ status: 'read', profile: { version: 1 } });
+    expect(await readProfile(path, { onEvent: event => events.push(event) })).toEqual({ status: 'completed', profile: { version: 1 } });
     // @ts-expect-error SDK logging is no longer a supported option.
     await expect(readProfile(path, { logPath: join(directory, 'operation.log') })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     expect(await readdir(directory)).toEqual(['profile.json']);
@@ -49,10 +49,10 @@ it('emits debug counts only when explicitly enabled and leaves counted progress 
 });
 it('names refused outcomes separately from success', async () => {
   const events: SdkEvent[] = [];
-  const result = { status: 'refused', code: 'OUTPUT_CONFLICT', effect: 'none' };
+  const result = { status: 'refused', code: 'OUTPUT_CONFLICT', details: {} };
   expect(await withDiagnostics('test', { onEvent: (event: SdkEvent) => events.push(event) }, async () => result, diagnosticLifetime())).toBe(result);
   expect(events.map(event => event.name)).toEqual(['sdk.startup', 'operation.started', 'operation.refused']);
-  expect(events.at(-1)?.refusal).toEqual({ code: 'OUTPUT_CONFLICT', effect: 'none' });
+  expect(events.at(-1)?.refusal).toEqual({ code: 'OUTPUT_CONFLICT' });
 });
 it('reports stages independently and throttles only real counts, preserving the final count', async () => {
   const events: SdkEvent[] = []; const progress: ProgressEvent[] = [];

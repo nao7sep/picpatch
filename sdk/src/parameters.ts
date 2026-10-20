@@ -1,34 +1,10 @@
 import type { ModelCapabilities, SamplingParameters } from './contracts.generated.ts';
+import { effectiveParameters } from './admission.ts';
 import { PicPatchSdkError } from './errors.ts';
 
 /** Resolve advertised defaults and validate combinations before image I/O or loading. */
 export function resolveParameters(parameters: SamplingParameters = {}, capabilities: ModelCapabilities, operation: 'edit' | 'generate' = 'edit'): SamplingParameters {
-  const supported = capabilities.parameters ?? {};
-  const effective: SamplingParameters = {};
-  const unsupported = (): never => { throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The requested sampling parameters are unsupported by this model.'); };
-  for (const key of Object.keys(parameters) as (keyof SamplingParameters)[]) if (!supported[key] || (['strength', 'identityStyleStrength', 'appearanceStrength'].includes(key) && operation !== 'edit')) unsupported();
-  for (const key of ['steps', 'guidance', 'strength', 'identityStyleStrength', 'appearanceStrength'] as const) {
-    const descriptor = supported[key];
-    if (['strength', 'identityStyleStrength', 'appearanceStrength'].includes(key) && operation !== 'edit') continue;
-    if (!descriptor) continue;
-    const value = parameters[key] ?? descriptor.default;
-    if (!Number.isFinite(value) || value < descriptor.minimum || (descriptor.maximum !== undefined && value > descriptor.maximum) || (descriptor.integer && !Number.isSafeInteger(value))) unsupported();
-    if (key === 'strength' && supported.strength?.minimumExclusive && value === descriptor.minimum) unsupported();
-    effective[key] = value;
-  }
-  for (const key of ['scheduler', 'sampler'] as const) {
-    const descriptor = supported[key];
-    if (!descriptor) continue;
-    effective[key] = parameters[key] ?? descriptor.default;
-    if (!descriptor.values.includes(effective[key])) unsupported();
-  }
-  const negative = supported.negativePrompt;
-  if (negative) {
-    const value = parameters.negativePrompt ?? negative.default;
-    if (value !== undefined) {
-      if (negative.requiresGuidanceAbove !== undefined && !(effective.guidance !== undefined && effective.guidance > negative.requiresGuidanceAbove)) unsupported();
-      effective.negativePrompt = value;
-    } else if (negative.requiredForGuidanceAbove !== undefined && effective.guidance !== undefined && effective.guidance > negative.requiredForGuidanceAbove) unsupported();
-  }
+  const { effective, issues } = effectiveParameters(parameters, capabilities, operation);
+  if (issues.length) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', issues[0]!.message);
   return effective;
 }

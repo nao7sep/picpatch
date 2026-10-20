@@ -9,7 +9,7 @@ import { heavyRunner } from '../helpers/heavy-runner.ts';
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'picpatch-queue-')); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
-const refusal = { status: 'refused' as const, code: 'OUTPUT_CONFLICT' as const, message: 'Already exists.', effect: 'none' as const, subject: '/output', details: {} };
+const refusal = { status: 'refused' as const, code: 'OUTPUT_CONFLICT' as const, message: 'Already exists.', subject: '/output', details: {} };
 it('captures submissions and processes selected models and seeds serially without changing newer drafts', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
@@ -42,7 +42,7 @@ it('reopens interrupted attempts without executing or overwriting their retained
 it('keeps a published result when worker cleanup cannot be confirmed', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
   const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
-  const runner = Object.assign(async () => ({ outcome: { model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record } }), {
+  const runner = Object.assign(async () => ({ outcome: { status: 'completed' as const, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record } }), {
     release: vi.fn(async () => { throw new PicPatchSdkError('TERMINATION_FAILED', 'Worker did not close.', { effect: 'unknown' }); }),
   });
   const queue = new Queue(sessions, runner);
@@ -64,7 +64,7 @@ it('retains the actual output and pauses after a result metadata write fails', a
   sessions.update = async (...args) => { if (++writes === 3) throw new Error('Disk unavailable'); return update(...args); };
   const queue = new Queue(sessions, async (_id, run) => {
     produced = join(root, session.id, 'outputs', `${run.id}.png`); await writeFile(produced, 'published');
-    return { outcome: { model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: produced, mimeType: 'image/png', size: { width: 1, height: 1 } }, record } };
+    return { outcome: { status: 'completed' as const, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: produced, mimeType: 'image/png', size: { width: 1, height: 1 } }, record } };
   });
   await queue.submit(session.id, session.draft, 2); await queue.settled();
   expect(queue.state.paused).toBe(true); expect(await readFile(produced, 'utf8')).toBe('published');
@@ -100,7 +100,7 @@ it('saves the accepted command and pending target atomically, refusing edits of 
 it('branches from the explicit source and restores the target without replaying commands', async () => {
   const sessions = new Sessions(root), session = await sessions.create();
   const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
-  const runner = async () => ({ outcome: { model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 1, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record } });
+  const runner = async () => ({ outcome: { status: 'completed' as const, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 1, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record } });
   const queue = new Queue(sessions, runner);
   const [first] = await queue.submit(session.id, { ...session.draft, text: 'A garden' }, 1); await queue.settled();
   const draft = { ...(await sessions.get(session.id)).draft, text: 'Add a bench' };

@@ -26,8 +26,8 @@ it('runs native SDXL generation, repeated variation and each dedicated condition
     let original: string;
     try {
       phase = 'base generation';
-      const generated = await editor.generate({ prompt: 'A studio photograph of an adult man with short brown hair wearing a blue shirt, neutral background.', parameters: { steps: 4 }, sidecar: {} });
-      if ('status' in generated) throw new Error(generated.code);
+      const generated = await editor.generate({ prompt: 'A studio photograph of an adult man with short brown hair wearing a blue shirt, neutral background.', parameters: { steps: 4 }, sidecar: true });
+      if (generated.status === 'refused') throw new Error(generated.code);
       original = generated.image.path;
       expect(await sharp(original).metadata()).toMatchObject({ width: 256, height: 256, format: 'png' });
       expect((await sharp(original).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
@@ -37,7 +37,7 @@ it('runs native SDXL generation, repeated variation and each dedicated condition
       for (const strength of [0, 0.5, 1]) {
         phase = `variation strength ${strength}`;
         const result = await editor.edit({ instruction: 'A watercolor portrait with blue tones.', sourceImage: source, parameters: { steps: 4, strength } });
-        if ('status' in result) throw new Error(result.code);
+        if (result.status === 'refused') throw new Error(result.code);
         expect(result.effectiveParameters.strength).toBe(strength);
         expect(await sharp(result.image.path).metadata()).toMatchObject({ width: 256, height: 256 });
         source = result.image.path;
@@ -67,9 +67,9 @@ it('runs native SDXL generation, repeated variation and each dedicated condition
         const result = await conditioned.edit({ instruction: identity ? 'A studio portrait of {person} wearing a green shirt.' : 'A watercolor portrait with green tones.',
           references: identity ? [{ id: 'person', role: 'subject', conditioning: 'identity', className: 'man', images: [original!, second] }]
             : [{ id: 'appearance', role: 'style', conditioning: 'appearance', images: [original!] }],
-          parameters: { steps: 4 }, sidecar: {},
+          parameters: { steps: 4 }, sidecar: true,
         });
-        if ('status' in result) throw new Error(result.code);
+        if (result.status === 'refused') throw new Error(result.code);
         expect(await sharp(result.image.path).metadata()).toMatchObject({ width: 256, height: 256 });
         expect((await sharp(result.image.path).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
         expect(result.conditioning?.method).toBe(identity ? 'photomaker-v1' : variant.endsWith('-plus') ? 'ip-adapter-plus' : 'ip-adapter');

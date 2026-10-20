@@ -2,34 +2,9 @@ import { withoutStorageScope } from './storage.ts';
 import packageInfo from '../package.json' with { type: 'json' };
 import { randomUUID } from 'node:crypto';
 import { PicPatchSdkError, sdkError } from './errors.ts';
+import type { EventOptions, RuntimeConfiguration, SdkEvent } from './types.ts';
 
-export interface WorkerDiagnostic {
-  phase: 'loading' | 'generating' | 'editing' | 'saving' | 'worker';
-  causes: { kind: 'BackendUnavailable' | 'ModuleNotFoundError' | 'FileNotFoundError' | 'PermissionError' | 'MemoryError' | 'ValueError' | 'OSError' | 'RuntimeError' | 'Exception' | 'ProcessExit'; errno?: number }[];
-  reason?: 'missing-package' | 'unsupported-version' | 'missing-directory';
-  exitCode?: number;
-  signal?: string;
-}
-export interface SdkEvent {
-  type: 'event';
-  name: 'sdk.startup' | 'operation.started' | 'operation.succeeded' | 'operation.refused' | 'operation.failed' | 'operation.cancelled' | 'operation.stage' | 'hook.failed' | 'operation.progress';
-  startup?: { sdk: string; version: string; runtime: { node: string; platform: string; architecture: string }; configuration: RuntimeConfiguration };
-  refusal?: { code: string; effect: import('./errors.ts').ErrorEffect };
-  progress?: { completed: number; total: number };
-  operationId: string;
-  verb: string;
-  time: string;
-  level: 'debug' | 'info' | 'warn' | 'error';
-  stage: string;
-  message: string;
-  error?: { code: string; kind: import('./errors.ts').ErrorKind; effect: import('./errors.ts').ErrorEffect; causes: { kind: string; code?: string }[]; worker?: WorkerDiagnostic };
-}
-export interface EventOptions {
-  /** Include diagnostic progress counts in onEvent. Off by default; no environment is read. */
-  debug?: boolean;
-  onEvent?: (event: SdkEvent) => void;
-}
-export interface RuntimeConfiguration { backend?: 'mflux' | 'dreamo' | 'diffusers' | 'stable-diffusion-cpp'; timeouts?: import('./worker/process.ts').WorkerTimeouts }
+export type { EventOptions, RuntimeConfiguration, SdkEvent, WorkerDiagnostic } from './types.ts';
 /** Stateless verbs share the module lifetime; editors supply their own lifetime. */
 export function diagnosticLifetime(configuration: RuntimeConfiguration = {}) { return { started: false, configuration }; }
 const moduleLifetime = diagnosticLifetime();
@@ -92,7 +67,8 @@ export async function withDiagnostics<O extends EventOptions, T>(verb: string, o
   if (options.onEvent !== undefined && typeof options.onEvent !== 'function') throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid diagnostic callback.');
   if (options.debug !== undefined && typeof options.debug !== 'boolean') throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid debug option.');
   const operation = { ...options, [scope]: { id: randomUUID(), verb } };
-  if (!lifetime.started) {
+  // The startup record goes to the first call that listens: once per image client, or once per process for module verbs.
+  if (!lifetime.started && options.onEvent) {
     lifetime.started = true;
     deliver(operation, { name: 'sdk.startup', level: 'info', stage: 'startup', message: 'PicPatchSdk started.', startup: {
       sdk: packageInfo.name, version: packageInfo.version,
@@ -104,7 +80,7 @@ export async function withDiagnostics<O extends EventOptions, T>(verb: string, o
   try {
     const result = await withoutStorageScope(() => action(operation));
     const refused = result !== null && typeof result === 'object' && 'status' in result && result.status === 'refused';
-    const refusal: SdkEvent['refusal'] = refused && 'code' in result && typeof result.code === 'string' && 'effect' in result && (result.effect === 'none' || result.effect === 'unknown') ? { code: result.code, effect: result.effect } : undefined;
+    const refusal: SdkEvent['refusal'] = refused && 'code' in result && typeof result.code === 'string' ? { code: result.code as NonNullable<SdkEvent['refusal']>['code'] } : undefined;
     deliver(operation, { ...(refusal ? { refusal } : {}), name: refused ? 'operation.refused' : 'operation.succeeded', level: 'info', stage: refused ? 'refused' : 'succeeded', message: refused ? 'Operation refused.' : 'Operation completed.' });
     return result;
   } catch (cause) {

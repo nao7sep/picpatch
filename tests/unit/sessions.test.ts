@@ -77,3 +77,16 @@ it('refuses a file that is not an image and keeps nothing of it', async () => {
   await expect(sessions.importImage(session.id, text)).rejects.toThrow('regular image file');
   expect((await sessions.get(session.id)).assets).toEqual([]); expect(await readdir(join(root, session.id, 'assets'))).toEqual([]);
 });
+it('opens a session whose result record a newer PicPatch wrote, keeping the record unchanged', async () => {
+  const sessions = new Sessions(root); const session = await sessions.create();
+  const filename = join(root, session.id, 'session.json');
+  const stored = JSON.parse(await readFile(filename, 'utf8'));
+  const record = { version: 2, futureField: true };
+  stored.runs = [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', modelId: 'm', seed: 1, draft: stored.draft, status: 'completed', created: stored.created, output: 'outputs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png', record }];
+  await writeFile(filename, JSON.stringify(stored));
+  const fresh = new Sessions(root);
+  expect((await fresh.list()).sessions.map(item => item.id)).toEqual([session.id]);
+  expect((await fresh.get(session.id)).runs[0]!.record).toEqual(record);
+  await fresh.update(session.id, value => { value.name = 'Renamed'; });
+  expect(JSON.parse(await readFile(filename, 'utf8')).runs[0].record).toEqual(record);
+});

@@ -33,10 +33,10 @@ For an existing model, omit `download` to verify and reuse its managed bundle, o
 This example assumes the MFLUX engine and selected model are already prepared, and the source image and output directory exist. It downloads nothing. Replace the absolute example paths with your own.
 
 ```ts
-import { createEditor, prepareModel } from 'picpatchsdk';
+import { createImageClient, prepareModel } from 'picpatchsdk';
 
 const prepared = await prepareModel('flux2-klein-4b-4bit');
-const editor = createEditor({
+const editor = createImageClient({
   model: prepared.model,
   defaults: { outputDirectory: '/absolute/outputs' },
 });
@@ -45,9 +45,9 @@ try {
     prompt: 'A blue ceramic bowl on a white table.',
     seed: 42,
     size: { width: 1024, height: 1024 },
-    sidecar: {},
+    sidecar: true,
   });
-  if ('status' in generated) {
+  if (generated.status === 'refused') {
     console.log(generated.code); // A refusal, such as OUTPUT_CONFLICT.
   } else {
     console.log(generated.image.path);
@@ -62,7 +62,7 @@ try {
       images: ['/absolute/reference-front.png', '/absolute/reference-side.png'],
     }],
   });
-  if ('status' in edited) console.log(edited.code);
+  if (edited.status === 'refused') console.log(edited.code);
   else console.log(edited.image.path);
 } finally {
   await editor.dispose();
@@ -86,16 +86,16 @@ References preserve group and image order. Prompt grouping, dedicated identity c
 For native inference, explicitly install the supported engine or inspect an existing installation, then pass its executable to the editor:
 
 ```ts
-import { installNativeEngine, prepareModel, createEditor } from 'picpatchsdk';
+import { installNativeEngine, prepareModel, createImageClient } from 'picpatchsdk';
 
 const engine = await installNativeEngine(); // May download the pinned native runtime.
 const prepared = await prepareModel('sdxl', {
   directory: '/absolute/models', checkpoint: 'model.safetensors',
 });
-const editor = createEditor({ model: prepared.model, nativeExecutable: engine.nativeExecutable });
+const editor = createImageClient({ model: prepared.model, nativeExecutable: engine.nativeExecutable });
 try {
   const result = await editor.generate({ prompt: 'A ceramic bowl.', outputDirectory: '/absolute/outputs' });
-  if ('status' in result) console.log(result.code);
+  if (result.status === 'refused') console.log(result.code);
   else console.log(result.image.path);
 } finally {
   await editor.dispose();
@@ -106,7 +106,7 @@ try {
 
 `inspectModel` inventories a file or directory; `discoverModels` searches explicit roots or the default model root and reports per-location failures alongside discovered models. These are metadata inspections, not integrity or compatibility guarantees. `inspectModels` inventories the managed store. `openModel` performs cheap presence checks without re-hashing; persisted registrations can be read with `readModelRegistration`. `removeModel` explicitly removes a named managed entry, without traversing external link targets.
 
-For MFLUX, `inspectReadiness(engine.pythonExecutable, prepared.model)` checks imports, file presence and capabilities. Its optional `verify: true` hashes files, and `load: true` loads weights without generating. These checks can consume substantial time or memory. `inspectRuntime` is a lower-level worker handshake check. A prepared interpreter is accepted by those probes, but `createEditor` uses `engineDirectory`, not a `pythonExecutable` option.
+For MFLUX, `inspectReadiness(engine.pythonExecutable, prepared.model)` checks imports, file presence and capabilities. Its optional `verify: true` hashes files, and `load: true` loads weights without generating. These checks can consume substantial time or memory. `inspectRuntime` is a lower-level worker handshake check. A prepared interpreter is accepted by those probes, but `createImageClient` uses `engineDirectory`, not a `pythonExecutable` option. `inspectNativeEngine({ nativeExecutable })` checks a configured `sd-cli` in place of the managed one, and each catalog entry's `runtime.engine` says whether the Python or the native engine verbs prepare it.
 
 ## Paths and profiles
 
@@ -122,17 +122,17 @@ Only SDK-owned resources have defaults:
 
 Filesystem path arguments are absolute literals. The SDK does not expand `~`, `$VAR` or `%VAR%`, resolve relative paths, read process environment variables, or use the working directory. The `~` notation in the table describes the derived home default, not an accepted argument. Bundle component names and manifest paths are explicitly relative to their declared bundle root. Consumers resolve any environment-based configuration before calling the SDK.
 
-Profiles are versioned, caller-owned JSON argument bundles. `readProfile(absolutePath)` returns `{ status: 'read', profile }` or an unsupported-version refusal. Pass the returned profile explicitly to operations that accept it; there is no profile search or automatic save. Explicit values override profile values, which override SDK defaults. Profiles can carry resource locations, a native executable, editor defaults and worker timeouts; they do not store secrets or name environment variables in the current API.
+Profiles are versioned, caller-owned JSON argument bundles. `readProfile(absolutePath)` returns `{ status: 'completed', profile }` or an unsupported-version refusal, and `validateProfile(value)` returns the same for a profile the caller holds. Pass the returned profile explicitly to operations that accept it; there is no profile search or automatic save. Explicit values override profile values, which override SDK defaults. Profiles can carry resource locations, a native executable, editor defaults and worker timeouts; they do not store secrets or name environment variables in the current API.
 
 ```ts
-import { readProfile, prepareModel, createEditor } from 'picpatchsdk';
+import { readProfile, prepareModel, createImageClient } from 'picpatchsdk';
 
 const loaded = await readProfile('/absolute/settings/profile.json');
 if (loaded.status === 'refused') {
   console.log(loaded.code);
 } else {
   const prepared = await prepareModel('flux2-klein-4b-4bit', { profile: loaded.profile });
-  const editor = createEditor({ profile: loaded.profile, model: prepared.model });
+  const editor = createImageClient({ profile: loaded.profile, model: prepared.model });
   await editor.dispose();
 }
 ```
@@ -141,14 +141,14 @@ if (loaded.status === 'refused') {
 
 Operation options expose `onEvent` for structured records. Events carry `type`, `name`, `operationId`, `verb`, UTC ISO time, level, stage and a short English message, plus typed startup, progress, refusal or error fields where applicable. Outcome names distinguish `operation.started`, `operation.succeeded`, `operation.refused`, `operation.failed` and `operation.cancelled`. Stage transitions use `operation.stage`.
 
-Each editor emits `sdk.startup` on its first operation; standalone operations share one startup event per loaded SDK module. It includes the SDK name/version, Node version, platform and architecture, plus the editor's backend and worker timeouts when configured. Startup is delivered to that operation's hook, so attach your hook from the first call. There is no event replay. Events omit raw input and exception text; failure records carry safe structured causes. The original local error remains available to the caller.
+Each image client emits `sdk.startup` once, to its first call that passes `onEvent`; module-level verbs share one startup event per process, delivered to the first call that listens. It includes the SDK name/version, Node version, platform and architecture, plus the client's backend and worker timeouts when configured. Events omit raw input and exception text; failure records carry safe structured causes. The original local error remains available to the caller.
 
 The caller stores events wherever it keeps its own records. There is no `logPath`, log file writer or log result field. `debug: true` opts into diagnostic progress events; debug is off by default and never enabled from the environment. Info, warning and error events are not filtered by a configurable threshold.
 
-Where counted work exists, `onProgress` receives `{ type: 'progress', stage, completed, total }`, throttled to at most ten updates a second with the final count retained. Stages alone are events, not fabricated progress. Engine installation reports stages through `onEvent` and does not accept `onProgress`. Both hooks are best effort: synchronous throws and rejected promises cannot change the operation outcome, asynchronous sinks are not awaited, and failed event hooks have no fallback. A progress-hook failure is reported once through the separate event hook.
+Every verb accepts the same call options: `signal`, `onEvent`, `onProgress`, `debug` and `timeoutMs`. A verb's own settings (a profile, resource folders, `sidecar`) sit beside them, and any other key is refused. Where counted work exists, `onProgress` receives `{ type: 'progress', stage, completed, total }`, throttled to at most ten updates a second with the final count retained. Stages alone are events, not fabricated progress; a verb with nothing to count, such as engine installation, accepts `onProgress` and never calls it. Both hooks are best effort: synchronous throws and rejected promises cannot change the operation outcome, asynchronous sinks are not awaited, and failed event hooks have no fallback. A progress-hook failure is reported once through the separate event hook.
 
 ```ts
-import { createEditor, prepareModel, isPicPatchSdkError, type OperationOptions } from 'picpatchsdk';
+import { createImageClient, prepareModel, isPicPatchSdkError, type OperationOptions } from 'picpatchsdk';
 
 const options: OperationOptions = {
   timeoutMs: 1_800_000,
@@ -156,10 +156,10 @@ const options: OperationOptions = {
   onProgress: progress => console.log(progress.completed, progress.total),
 };
 const prepared = await prepareModel('flux2-klein-4b-4bit', options);
-const editor = createEditor({ model: prepared.model });
+const editor = createImageClient({ model: prepared.model });
 try {
   const result = await editor.generate({ prompt: 'A ceramic bowl.', outputDirectory: '/absolute/outputs' }, options);
-  if ('status' in result) console.log(result.code, result.effect);
+  if (result.status === 'refused') console.log(result.code, result.subject);
   else console.log(result.image.path);
 } catch (error) {
   if (!isPicPatchSdkError(error)) throw error;
@@ -172,7 +172,11 @@ try {
 
 `PicPatchSdkError` is the single error type. `isPicPatchSdkError` also recognizes its serialized data shape; `errorCodes` exports the code-to-kind mapping. Kinds are `invalid`, `unavailable`, `cancelled` and `internal`. `effect` is `none` or `unknown`, based on evidence of effects, not a promise that retrying is safe. Errors may include `subject`, typed `details` and a local `cause`; retained workspaces are identified by `details.recoveryDirectory`. English error messages are diagnostic, not localized presentation copy. Serialization preserves safe structured cause information rather than raw exception text.
 
-Refusals are results, not exceptions: image operations return an `ImageResult` or `{ status: 'refused', code, ... }`. Check the union before accessing `image`. Native engine readiness includes a stable code and message. Model inspection findings and component verification outcomes also carry a code, message and `effect`. Sidecar failures and inventory item failures have their own outcomes; a successful parent call is not proof that every optional file or item succeeded. Consult the public types for each verb's result rather than assuming every result has the same `status` field.
+Refusals are results, not exceptions, and every refusal has one shape: `{ status: 'refused', code, message, subject?, details }`, with codes listed in `refusalCodes`. A verb that can refuse returns `status: 'completed'` on success, so check `status` before using the result. A newer persisted format (a record, profile or registration) is refused by the validators exactly as by the readers, with `details.version`, and the file is left unchanged. Engine inspections report states (`ready`, `missing`, `incompatible`, `unsupported`) with a stable code and message. Model inspection findings and component verification outcomes also carry a code, message and `effect`. Sidecar failures and inventory item failures have their own outcomes; a successful parent call is not proof that every optional file or item succeeded.
+
+Codes name the cause that was observed. Model preparation reports `MODEL_MISSING`, `MODEL_MISMATCH`, `MODEL_CHANGED`, `MODEL_LINK_REFUSED`, `MODEL_BUNDLE_INCOMPLETE`, `MODEL_COMPONENT_INVALID` or `MODEL_REMOVAL_INCOMPLETE`; a worker or native executable that is not there is `ENGINE_MISSING`. When cleanup also fails, the error keeps the primary failure's code and names the files left behind in `details.recoveryDirectory`.
+
+The browser entry, `picpatchsdk/types`, carries the public types, code tables and `admissionIssues(request, capabilities)`, which lists every reason a model refuses a request's shape before the window calls. Execution applies the same rules and stays the authority.
 
 ## Planning, lifecycle and cancellation
 
@@ -186,13 +190,17 @@ Pass an `AbortSignal` in operation options for cancellation. Worker startup, inf
 
 The SDK decodes single-frame PNG, JPEG and WebP inputs, applies orientation and sRGB normalization, and works on private PNG copies. Model capabilities determine reference geometry, output constraints and mask semantics. Masks are opaque grayscale PNGs: black preserves and white edits, with intermediate-value behavior determined by the adapter. Composite masking is different from a model trained to condition on masks. Outpainting builds a supported source/mask canvas; see [the outpainting example](examples/outpaint.ts).
 
-A completed PNG is decoded and checked before exclusive publication. Existing destinations are never overwritten. Output publication requires filesystem hard-link support; there is no non-atomic fallback. Temporary writers must settle before cleanup. A saved image with failed cleanup remains a success with `cleanupWarning`; uncertain failures may retain a recovery directory.
+A completed PNG is decoded and checked before exclusive publication, then its folder is flushed. Existing destinations are never overwritten. A hard link claims the name atomically; on a volume without hard links (such as exFAT) the file is renamed into place once the name is confirmed free, so a reader still never sees a partial file, and the only gap is another writer taking the same name in that instant. Nothing is ever copied into place. Published images and sidecars take the ordinary mode a new file gets; private working copies are owner-only.
+
+A generated image carries no metadata. An edit keeps all of its source image's metadata unchanged (EXIF, colour profile, XMP and, for a PNG source, its text and other copyable chunks), with the result turned back to the source's stored orientation and converted to its colour profile so those tags stay true. Only an EXIF preview thumbnail, which would show the image before the edit, is dropped; PNG has no place for IPTC records or JPEG comments. Deciding what to strip is the consumer's. How an image was made is never written into it. Temporary writers must settle before cleanup. A saved image with failed cleanup remains a success with `cleanupWarning`; uncertain failures may retain a recovery directory.
 
 Every successful image result includes a versioned `record`. It identifies the SDK writer, optional calling app, model/revision, runtime, effective parameters, seed and content fingerprints. Input descriptions and their geometry are retained only when requested. Records use basenames and hashes of file contents, not hashes of full paths or absolute paths. Reproducibility is not a guarantee of identical pixels across runtimes or hardware.
 
-Metadata stays separate from the image. `sidecar: {}` requests an adjacent `-picpatchsdk.json` file. Prompt/instruction retention requires `sidecar: { includeInputs: true }`; it is off by default. The image remains published if its sidecar fails, and `result.sidecar` reports that file's outcome independently. The result still contains the record. Do not treat a sidecar as safe to share merely because it omits prompts: model choices, seeds and other provenance can also be private.
+How an image was made stays out of the image. `record: { includeInputs: true }` keeps the prompt or instruction and input descriptions in the record, off by default, and `record: { caller }` names the calling app. `sidecar: true` writes the record beside the image as `-picpatchsdk.json`; whether a sidecar is written is separate from what the record holds. The image remains published if its sidecar fails, and `result.sidecar` reports that file's outcome independently. The result still contains the record. Do not treat a sidecar as safe to share merely because it omits prompts: model choices, seeds and other provenance can also be private.
 
-`readArtifactRecord` reads and validates a sidecar, while `verifyArtifact(imagePath, record)` verifies correspondence with image bytes and dimensions. `saveArtifact(imagePath, outputPath, record, { sidecar: true })` saves a verified PNG without inference or re-encoding and optionally publishes its record alongside it. It refuses mismatches and existing destinations.
+`readArtifactRecord` reads and validates a sidecar, while `verifyArtifact(imagePath, record)` verifies correspondence with image bytes and dimensions. `saveArtifact(imagePath, outputPath, record, { sidecar: true })` saves a verified PNG without inference or re-encoding and optionally publishes its record alongside it; `includeInputs: false` leaves the record's inputs out of the saved copy. It refuses mismatches, newer record versions and existing destinations.
+
+Loading the SDK sets `sharp.cache({ files: 0 })` process-wide, so libvips never holds recently read files open; on Windows an open file cannot be deleted or renamed. This also applies to the consumer's own use of sharp in the same process. Decoded-operation caching is unaffected.
 
 ## Development
 

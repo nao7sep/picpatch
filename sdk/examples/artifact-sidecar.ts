@@ -11,9 +11,9 @@ const editor = createImageClient(options);
 try {
   const result = await editor.generate({
     prompt: 'A blue ceramic bowl on a plain white table.', outputPath: resolve(destination),
-    sidecar: {}, // Use { includeInputs: true } only when prompt/input retention is wanted.
+    sidecar: true, // Use { includeInputs: true } only when prompt/input retention is wanted.
   });
-  if ('status' in result) throw new Error(result.code);
+  if (result.status === 'refused') throw new Error(result.code);
   console.log(JSON.stringify({ image: result.image.path, sidecar: result.sidecar }));
   if (result.sidecar?.status === 'failed') process.exitCode = 1; // The PNG remains saved.
 } finally { await editor.dispose(); }

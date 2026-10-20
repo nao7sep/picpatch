@@ -60,14 +60,17 @@ export function errorNotice(value: unknown, fallback: Key = 'error.unknown'): Me
   if (value && typeof value === 'object') {
     const error = value as { code?: string; kind?: string };
     const keys: Record<string, Key> = {
-      MODEL_IO: 'error.prepare_this_model_in_managed_models_before_running_it',
+      MODEL_MISSING: 'error.prepare_this_model_in_managed_models_before_running_it', MODEL_INCOMPLETE: 'error.prepare_this_model_in_managed_models_before_running_it',
+      MODEL_MISMATCH: 'error.model_files', MODEL_CHANGED: 'error.model_files', MODEL_LINK_REFUSED: 'error.model_files', MODEL_BUNDLE_INCOMPLETE: 'error.model_files', MODEL_COMPONENT_INVALID: 'error.model_files',
+      MODEL_REMOVAL_INCOMPLETE: 'error.model_removal',
+      ARTIFACT_VERSION_UNSUPPORTED: 'error.newer_format', PROFILE_VERSION_UNSUPPORTED: 'error.newer_format', MODEL_REGISTRATION_VERSION_UNSUPPORTED: 'error.newer_format',
       ENGINE_IO: 'error.engine', ENGINE_MISSING: 'error.engine', ENGINE_UNAVAILABLE: 'error.engine', ENGINE_INCOMPATIBLE: 'error.engine',
       DEPENDENCY_MISSING: 'error.engine', DEPENDENCY_INCOMPATIBLE: 'error.engine', BACKEND_UNAVAILABLE: 'error.engine', WORKER_UNAVAILABLE: 'error.engine',
       OUT_OF_MEMORY: 'error.memory', TIMEOUT: 'error.timeout',
       TERMINATION_FAILED: 'error.worker_termination_is_unconfirmed_restart_picpatch_before_starting_more_work',
       INTERRUPTED: 'error.interrupted', CANCELLED: 'status.cancelled',
       OUTPUT_CONFLICT: 'error.conflict', DESTINATION_CHANGED: 'error.conflict',
-      FILE_NOT_FOUND: 'error.storage', PERMISSION_DENIED: 'error.storage', DISK_FULL: 'error.storage', IO_ERROR: 'error.storage', IMAGE_IO: 'error.storage', OUTPUT_IO: 'error.storage',
+      FILE_NOT_FOUND: 'error.storage', PERMISSION_DENIED: 'error.storage', DISK_FULL: 'error.storage', IO_ERROR: 'error.storage', IMAGE_IO: 'error.storage', OUTPUT_IO: 'error.storage', MODEL_IO: 'error.storage', RECORD_IO: 'error.storage',
       CLEANUP_FAILED: 'error.cleanup',
       INVALID_REQUEST: 'error.input', INVALID_IMAGE: 'error.input', INVALID_MASK: 'error.input', INPUTS_CHANGED: 'error.input', UNSUPPORTED_CAPABILITY: 'error.input',
     };

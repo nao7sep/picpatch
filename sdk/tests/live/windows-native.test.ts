@@ -23,7 +23,7 @@ it.skipIf(process.platform !== 'win32')('installs the native engine and generate
   try {
     const started = performance.now();
     const result = await editor.generate({ prompt: 'A red apple on a wooden table.', outputPath: join(output, 'apple.png'), size: { width: 256, height: 256 }, seed: 1, parameters: { steps: 4 } });
-    if ('status' in result) throw new Error(result.code);
+    if (result.status === 'refused') throw new Error(result.code);
     expect((await stat(result.image.path)).size).toBeGreaterThan(0);
     console.info(`Generated 256x256 at 4 steps in ${Math.round((performance.now() - started) / 1000)} s.`);
   } finally { await editor.dispose(); await rm(output, { recursive: true, force: true }); }

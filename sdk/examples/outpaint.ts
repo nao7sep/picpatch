@@ -13,8 +13,8 @@ try {
   const result = await editor.edit({ instruction: 'Extend the scene naturally into the added canvas.',
     sourceImage: resolve(source), outputPath: resolve(output),
     outpaint: { size: { width: Number(width), height: Number(height) }, left: Number(left), top: Number(top) },
-    sidecar: {},
+    sidecar: true,
   });
-  if ('status' in result) throw new Error(result.code);
+  if (result.status === 'refused') throw new Error(result.code);
   console.log(JSON.stringify({ image: result.image.path, outpaint: result.outpaint, sidecar: result.sidecar }));
 } finally { await editor.dispose(); }

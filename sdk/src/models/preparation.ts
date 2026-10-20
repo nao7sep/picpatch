@@ -1,6 +1,6 @@
 import { storageCleanup, storageRecovery, storageStalled } from '../storage.ts';
 import type { ModelRegistration } from './opening.ts';
-import { validateProfile, type PicPatchProfile } from '../profile.ts';
+import { checkProfile, type PicPatchProfile } from '../profile.ts';
 import { attachMfluxLoras, validateMfluxLoras } from '../backends/mflux/loras.ts';
 import { prepareNativeModel } from '../backends/stable-diffusion-cpp/preparation.ts';
 import { withDiagnostics } from '../diagnostics.ts';
@@ -61,7 +61,7 @@ async function prepareModelOperation(id: string, options: PrepareModelOptions = 
   const entry = catalogModel(id);
   if (options.profile !== undefined) {
     const { profile: input, ...explicit } = options;
-    const profile = validateProfile(input);
+    const profile = checkProfile(input);
     const modelsDirectory = explicit.modelsDirectory ?? profile.modelsDirectory;
     options = entry.acquisition === 'pinned'
       ? { ...explicit, ...(modelsDirectory === undefined ? {} : { modelsDirectory }) }
@@ -109,15 +109,15 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
       const operation = { ...options, signal };
       const verified = async (path: string) => {
         const result = await verifyModel(path, entry.manifest, { signal, timeoutMs: budget, onProgress: event => emitProgress(operation, event) });
-        if (result.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_IO', 'Model files do not match the catalog. Existing files were preserved; choose a complete bundle or a new cache location.');
+        if (result.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_MISMATCH', 'Model files do not match the catalog. Existing files were preserved; choose a complete bundle or a new cache location.');
       };
       const result = (origin: PreparedModel['origin']): PreparedModel => ({ version: 1, model: { variant: entry.variant, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });
       if (await exists(directory)) { await verified(directory); return result(options.directory ? 'external' : 'cache'); }
       checkSignal(signal);
-      if (options.directory || !options.download) throw new PicPatchSdkError('MODEL_IO', 'Model bundle is missing. Supply a local directory or explicitly enable download.');
+      if (options.directory || !options.download) throw new PicPatchSdkError('MODEL_MISSING', 'Model bundle is missing. Supply a local directory or explicitly enable download.');
       await privateDirectory(paths.modelsDirectory);
       const parent = dirname(directory);
-      if (await exists(parent) && (await lstat(parent)).isSymbolicLink()) throw new PicPatchSdkError('MODEL_IO', 'A managed model directory cannot be a symbolic link.');
+      if (await exists(parent) && (await lstat(parent)).isSymbolicLink()) throw new PicPatchSdkError('MODEL_LINK_REFUSED', 'A managed model directory cannot be a symbolic link.', { subject: parent });
       await privateDirectory(parent);
       checkSignal(signal);
       const staging = await mkdtemp(join(parent, '.prepare-'));
@@ -145,7 +145,8 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
           const conflict = ['EEXIST', 'ENOTEMPTY'].includes((cause as NodeJS.ErrnoException).code ?? '') || (process.platform === 'win32' && (cause as NodeJS.ErrnoException).code === 'EPERM' && await exists(directory));
           if (!conflict) throw new PicPatchSdkError('MODEL_IO', 'Model publication could not be confirmed.', { cause, effect: 'unknown', subject: directory });
           await verified(directory); // A concurrent complete winner is reusable, never replaced.
-          return result('cache');
+          committed = result('cache');
+          return committed;
         }
         committed = result('download');
         try { await syncDirectory(parent); }
@@ -156,7 +157,9 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
         try { if (!storageStalled()) await storageCleanup(() => rm(staging, { recursive: true, force: true })); }
         catch (cause) {
           if (committed) committed.cleanupWarning = { directory: staging, message: 'Model is prepared; staging cleanup failed.' };
-          else { const error = new PicPatchSdkError('CLEANUP_FAILED', 'Model preparation staging could not be removed.', { cause: failure ?? cause }); error.details.recoveryDirectory = staging; error.effect = 'unknown'; throw error; }
+          // The primary failure keeps its code; staging that remains is named in details.
+          else if (failure instanceof PicPatchSdkError) failure.details.recoveryDirectory = staging;
+          else throw new PicPatchSdkError('MODEL_IO', 'Could not prepare the model bundle.', { cause: failure ?? cause, details: { recoveryDirectory: staging } });
         }
       }
     });

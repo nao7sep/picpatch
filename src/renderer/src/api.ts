@@ -5,15 +5,12 @@ import { thumbnailSize } from '../../shared/layout.ts';
 import type { Asset, Draft, QueueState, Run, Session, SessionSummary } from '../../shared/session.ts';
 import type { RendererRequest } from '../../shared/messages.ts';
 import type { Language, Message } from '../../shared/i18n/index.ts';
-import type { Evidence, ModelCapabilities, ModelProfile, Operation } from 'picpatchsdk/types';
+import type { EngineInspection, ManagedModelInventory, ModelCatalogEntry, NativeEngineInspection, SavedArtifact, SaveArtifactRefusal } from 'picpatchsdk/types';
 
 declare global { interface Window { picpatch: Bridge } }
 
-export interface CatalogModel {
-  id: string; variant: string; family: string; acquisition: 'pinned' | 'external';
-  capabilities: ModelCapabilities; runtime: { name: string }; downloadBytes?: number;
-  evidence: Evidence; tested: Operation[]; profile: ModelProfile;
-}
+/** The SDK's catalog entry, as main sends it. */
+export type CatalogModel = ModelCatalogEntry;
 export type ModelState = 'ready' | 'missing' | 'engineMissing';
 export type Readiness = Record<string, ModelState>;
 export interface LocaleState { language: Language; format: string; systemLanguage?: string; uiFont?: string }
@@ -28,11 +25,10 @@ export interface Overview {
   resourcesBusy: boolean; locale: LocaleState; systemDark: boolean;
 }
 export interface PaneState { railWidth: number; optionsPane: boolean }
-export interface ExportResult { status: 'saved' | 'refused'; code?: string; message?: string; effect?: string; sidecar?: { status: string } }
-export interface EngineStatus { status: string }
-export interface Engines { python: EngineStatus; native: EngineStatus }
-export interface ManagedEntry { modelId: string; name: string; bytes: number }
-export interface Inventory { entries: ManagedEntry[] }
+export type ExportResult = SavedArtifact | SaveArtifactRefusal;
+export interface Engines { python: EngineInspection; native: NativeEngineInspection }
+export type Inventory = ManagedModelInventory;
+export type ManagedEntry = Inventory['entries'][number];
 export interface Components { vae?: string; clipL?: string; clipG?: string; t5?: string; photoMaker?: string; ipAdapter?: string; clipVision?: string; controlNet?: { path: string; kind: string }; loras?: { path: string; scale?: number }[] }
 export type Preferences = ResourcePaths & { theme?: 'light' | 'dark'; language?: Language; uiFont?: string; concurrency?: number };
 

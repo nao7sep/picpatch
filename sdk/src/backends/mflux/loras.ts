@@ -28,7 +28,7 @@ export async function attachMfluxLoras(prepared: PreparedModel, loras: [LocalLor
     const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
     try {
       const before = await file.stat({ bigint: true });
-      if (!before.isFile() || before.size <= 0n || before.size > BigInt(Number.MAX_SAFE_INTEGER)) throw new PicPatchSdkError('MODEL_IO', 'Select regular LoRA weights.');
+      if (!before.isFile() || before.size <= 0n || before.size > BigInt(Number.MAX_SAFE_INTEGER)) throw new PicPatchSdkError('MODEL_COMPONENT_INVALID', 'Select regular LoRA weights.');
       const hash = createHash('sha256'); const buffer = Buffer.allocUnsafe(65536); let bytes = 0;
       while (bytes <= Number(before.size)) {
         checkSignal(options.signal);
@@ -37,10 +37,10 @@ export async function attachMfluxLoras(prepared: PreparedModel, loras: [LocalLor
         hash.update(buffer.subarray(0, read.bytesRead)); bytes += read.bytesRead;
       }
       const after = await file.stat({ bigint: true });
-      if (bytes !== Number(before.size) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new PicPatchSdkError('MODEL_IO', 'LoRA changed during preparation.');
+      if (bytes !== Number(before.size) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new PicPatchSdkError('MODEL_CHANGED', 'LoRA changed during preparation.');
       const component = { path: lora.path, role: 'weights' as const, bytes, sha256: hash.digest('hex') };
       const existing = components.find(item => item.path === lora.path);
-      if (existing && (existing.sha256 !== component.sha256 || existing.role !== 'weights')) throw new PicPatchSdkError('MODEL_IO', 'LoRA conflicts with the prepared bundle.');
+      if (existing && (existing.sha256 !== component.sha256 || existing.role !== 'weights')) throw new PicPatchSdkError('MODEL_MISMATCH', 'LoRA conflicts with the prepared bundle.');
       if (!existing) components.push(component);
     } finally { await file.close(); }
     validateLoraHeader(await safetensorsHeader(path, options.signal));
@@ -50,7 +50,7 @@ export async function attachMfluxLoras(prepared: PreparedModel, loras: [LocalLor
   // The base was just verified by its preparation owner; verify only auxiliary files here.
   const auxiliary = validateModelManifest({ ...manifest, components: components.filter(component => loras.some(lora => lora.path === component.path)) });
   const verification = await verifyModel(model.directory, auxiliary, { ...(options.signal ? { signal: options.signal } : {}), ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}), onProgress: event => emitProgress(options, event) });
-  if (verification.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_IO', 'Prepared model or LoRA files changed.');
+  if (verification.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_CHANGED', 'Prepared model or LoRA files changed.');
   return { ...prepared, integrity: 'locally-fingerprinted', model: { ...model, manifest, loras: structuredClone(loras) } };
 }
 

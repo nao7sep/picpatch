@@ -30,11 +30,12 @@ describe('safe image publication', () => {
     const original = await readFile(request.sourceImage!); let staged: EditRequest | undefined;
     const editor = new ImageClientImpl(backend(async r => { staged = r; expect(await readdir(directory)).not.toContain('out.png'); return render(r); }));
     const saved = await editor.edit(request);
-    if ('status' in saved) throw new Error(saved.code); expect(saved.image.path).toBe(request.outputPath);
+    if (saved.status === 'refused') throw new Error(saved.code); expect(saved.image.path).toBe(request.outputPath);
     expect(staged!.sourceImage).not.toBe(request.sourceImage); expect(staged!.outputPath).not.toBe(request.outputPath);
     expect((await sharp(saved.image.path).metadata()).format).toBe('png');
     expect(await readFile(request.sourceImage!)).toEqual(original); expect(await leftovers()).toEqual([]);
-    if (process.platform !== 'win32') expect((await stat(saved.image.path)).mode & 0o777).toBe(0o600);
+    // Published images take the ordinary mode a new file gets, not an owner-only one.
+    if (process.platform !== 'win32') { const plain = join(directory, 'plain.txt'); await writeFile(plain, ''); expect((await stat(saved.image.path)).mode & 0o777).toBe((await stat(plain)).mode & 0o777); }
     await editor.dispose();
   });
   it.each(['file', 'symlink', 'dangling', 'hardlink'])('refuses existing output %s without modifying it', async kind => {
@@ -118,7 +119,7 @@ describe('cleanup reporting', () => {
     const editor = new ImageClientImpl(backend());
     try {
       const saved = await editor.edit(request);
-      if ('status' in saved) throw new Error(saved.code);
+      if (saved.status === 'refused') throw new Error(saved.code);
       expect(saved.cleanupWarning).toMatchObject({ directory: expect.any(String) });
       expect((await sharp(saved.image.path).metadata()).width).toBe(4);
     } finally { cleanup.mockRestore(); await editor.dispose(); }
@@ -126,7 +127,7 @@ describe('cleanup reporting', () => {
   it('reports both the original failure and failed cleanup', async () => {
     const cleanup = vi.spyOn(ImageWorkspace.prototype, 'cleanup').mockRejectedValue(new Error('cleanup failed'));
     const editor = new ImageClientImpl(backend(async () => { throw new Error('worker failure'); }));
-    try { await expect(editor.edit(request)).rejects.toMatchObject({ code: 'CLEANUP_FAILED', details: { recoveryDirectory: expect.any(String) }, cause: expect.any(AggregateError) }); }
+    try { await expect(editor.edit(request)).rejects.toMatchObject({ code: 'INTERNAL', details: { recoveryDirectory: expect.any(String) } }); }
     finally { cleanup.mockRestore(); await editor.dispose(); }
   });
 });

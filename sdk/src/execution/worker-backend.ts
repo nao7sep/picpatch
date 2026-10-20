@@ -34,7 +34,7 @@ export class ProcessEditor implements EditBackend {
 
   private async execute(request: ImageRequest, options: OperationOptions): Promise<EditResult> {
     if (this.disposed) throw new PicPatchSdkError('DISPOSED', 'Image client has been disposed.');
-    if (this.busy) throw new PicPatchSdkError('BUSY', 'An operation is already active on this editor.');
+    if (this.busy) throw new PicPatchSdkError('INTERNAL', 'An operation is already active on this image client.');
     validateOperation(options);
     const { signal, ...progressOptions } = options;
     if (signal?.aborted) throw new PicPatchSdkError('CANCELLED', 'The operation was cancelled.');

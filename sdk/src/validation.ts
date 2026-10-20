@@ -1,10 +1,10 @@
 import { inputGeometry } from './images/geometry.ts';
-import { resolveParameters } from './parameters.ts';
+import { admissionIssues, type AdmissionRequest } from './admission.ts';
 import { extname, isAbsolute, resolve } from 'node:path';
 import { contractValidator } from './contracts.ts';
 import { PicPatchSdkError } from './errors.ts';
 import type { ImageRequest } from './types.ts';
-import type { GenerateRequest, EditRequest, ImageSize, ModelCapabilities } from './types.ts';
+import type { GenerateRequest, EditRequest, ModelCapabilities } from './types.ts';
 
 const requestValid = contractValidator<EditRequest>('EditRequest');
 const generationValid = contractValidator<GenerateRequest>('GenerateRequest');
@@ -18,8 +18,8 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
     if (request.maskImage) throw new PicPatchSdkError('INVALID_REQUEST', 'Outpainting creates its own mask; omit maskImage.');
     if (request.size && (request.size.width !== request.outpaint.size.width || request.size.height !== request.outpaint.size.height)) throw new PicPatchSdkError('INVALID_REQUEST', 'Output size must match the outpaint canvas.');
   }
-  if (capabilities && !capabilitiesValid(capabilities)) throw new PicPatchSdkError('INVALID_CAPABILITIES', 'Worker returned invalid model capabilities.');
-  validateControl(request, capabilities);
+  if (capabilities && !capabilitiesValid(capabilities)) throw new PicPatchSdkError('PROTOCOL_ERROR', 'Worker returned invalid model capabilities.');
+  validateControl(request);
   const groups = request.references ?? [];
   if (new Set(groups.map(group => group.id)).size !== groups.length) {
     throw new PicPatchSdkError('INVALID_REQUEST', 'Reference group IDs must be unique.');
@@ -37,51 +37,27 @@ export function validateEditRequest(input: unknown, capabilities?: ModelCapabili
     throw new PicPatchSdkError('INVALID_REQUEST', 'Reference image paths must be unique across groups.');
   }
   if (capabilities) {
-    const unsupported = (message: string): never => { throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', message); };
-    if (capabilities.model !== request.model) unsupported('Capabilities do not describe the requested model.');
-    if (capabilities.sourceImageRequired && !request.sourceImage) unsupported('This model requires a source image.');
-    if (capabilities.maskRequired && !request.maskImage && !request.outpaint) unsupported('This model requires a mask image.');
-    if (!capabilities.instructionEditing) unsupported('This model does not support instruction editing.');
-    if (request.maskImage && capabilities.maskMode === 'none') unsupported('This model does not support masks.');
-    if (groups.some(group => !capabilities.referenceRoles.includes(group.role))) unsupported('This model does not support a requested reference role.');
-    if (capabilities.maxReferenceImages !== undefined && references.length > capabilities.maxReferenceImages) unsupported('The reference count exceeds this model’s supported limit.');
-    if (capabilities.maxConditioningImages !== undefined && references.length + (request.sourceImage ? 1 : 0) > capabilities.maxConditioningImages) unsupported('The total source and reference count exceeds this model’s supported limit.');
+    if (capabilities.model !== request.model) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'Capabilities do not describe the requested model.');
+    refuseIssues(request, capabilities);
     if (request.outpaint) {
-      if (!capabilities.outpainting || capabilities.maskMode === 'none') unsupported('This model does not support outpainting.');
-      validateSize(request.outpaint.size, capabilities);
       const canvas = request.outpaint.size;
       const geometry = inputGeometry(canvas.width, canvas.height, 1, capabilities.inputGeometry);
-      if (geometry.preparedSize.width !== canvas.width || geometry.preparedSize.height !== canvas.height) unsupported('Outpaint canvas must not require model cropping or downscaling.');
+      if (geometry.preparedSize.width !== canvas.width || geometry.preparedSize.height !== canvas.height) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'Outpaint canvas must not require model cropping or downscaling.');
     }
-    const conditioning = capabilities.referenceConditioning;
-    if (conditioning === 'independent-subject') {
-      if (request.sourceImage || request.maskImage || request.outpaint || groups.length < 1 || groups.length > 2) unsupported('Independent subject binding requires one or two reference groups without a source or mask.');
-      if (groups.some(group => /[{}]/.test(group.id) || group.images.length !== 1 || group.conditioning !== 'identity' || group.className !== undefined)) unsupported('Supply one image per identity group without className.');
-      for (const group of groups) if (!request.instruction.includes(`{${group.id}}`)) unsupported('Mention each subject using its group placeholder.');
-      if (/\[ref#[0-9]+\]/i.test(request.instruction)) unsupported('Use group placeholders; the SDK supplies learned reference indices.');
-    } else if (conditioning === 'pooled-identity' || conditioning === 'appearance-embedding') {
-      if (request.sourceImage || request.maskImage || request.outpaint || groups.length !== 1) unsupported('Dedicated reference conditioning requires exactly one group and no source or mask.');
-      const group = groups[0]!;
-      if (conditioning === 'pooled-identity') {
-        if (group.conditioning !== 'identity' || !group.className) unsupported('Identity conditioning requires an identity group and className.');
-        const placeholder = `{${group.id}}`;
-        if (request.instruction.split(placeholder).length !== 2 || /\bimg\b/i.test(request.instruction.replace(placeholder, ''))) unsupported('Use the identity group placeholder exactly once; the SDK supplies the native trigger word.');
-      } else if (group.conditioning !== 'appearance' || group.className) unsupported('Appearance conditioning requires an appearance group without an identity class.');
-    } else if (groups.some(group => (group.conditioning !== undefined && group.conditioning !== 'prompt') || group.className !== undefined)) unsupported('This model supports prompt grouping, not dedicated identity or appearance conditioning.');
-    const effective = resolveParameters(request.parameters, capabilities);
-    if (effective.strength !== undefined && effective.strength < 1 && !request.sourceImage) unsupported('Source-strength control requires a source image.');
-    validateSize(request.size, capabilities);
   }
   return request;
 }
 
-function validateSize(size: ImageSize | undefined, capabilities: ModelCapabilities): void {
-  const limits = capabilities.size;
-  if (size && limits && (size.width % limits.widthMultiple !== 0 || size.height % limits.heightMultiple !== 0 ||
-    (limits.minWidth !== undefined && size.width < limits.minWidth) || (limits.minHeight !== undefined && size.height < limits.minHeight) ||
-    (limits.maxWidth !== undefined && size.width > limits.maxWidth) || (limits.maxHeight !== undefined && size.height > limits.maxHeight))) {
-    throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'The requested dimensions are unsupported by this model.');
-  }
+/** The shape the admission rules read: which inputs a request has, not the images themselves. */
+export function admissionRequest(request: ImageRequest): AdmissionRequest {
+  if ('prompt' in request) return { operation: 'generate', text: request.prompt, ...(request.parameters ? { parameters: request.parameters } : {}), ...(request.size ? { size: request.size } : {}), ...(request.control ? { control: request.control } : {}) };
+  return { operation: 'edit', text: request.instruction, sourceImage: request.sourceImage !== undefined, maskImage: request.maskImage !== undefined,
+    ...(request.outpaint ? { outpaint: request.outpaint } : {}), ...(request.parameters ? { parameters: request.parameters } : {}), ...(request.size ? { size: request.size } : {}), ...(request.control ? { control: request.control } : {}),
+    references: (request.references ?? []).map(group => ({ id: group.id, role: group.role, ...(group.conditioning ? { conditioning: group.conditioning } : {}), ...(group.className !== undefined ? { className: group.className } : {}), images: group.images.length })) };
+}
+function refuseIssues(request: ImageRequest, capabilities: ModelCapabilities): void {
+  const [first] = admissionIssues(admissionRequest(request), capabilities);
+  if (first) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', first.message);
 }
 
 export function validateGenerateRequest(input: unknown, capabilities?: ModelCapabilities): GenerateRequest {
@@ -90,21 +66,17 @@ export function validateGenerateRequest(input: unknown, capabilities?: ModelCapa
   if (!isAbsolute(request.outputPath) || extname(request.outputPath).toLowerCase() !== '.png') {
     throw new PicPatchSdkError('INVALID_REQUEST', 'Output must be an absolute path with a .png extension.');
   }
-  if (capabilities && !capabilitiesValid(capabilities)) throw new PicPatchSdkError('INVALID_CAPABILITIES', 'Worker returned invalid model capabilities.');
-  validateControl(request, capabilities);
+  if (capabilities && !capabilitiesValid(capabilities)) throw new PicPatchSdkError('PROTOCOL_ERROR', 'Worker returned invalid model capabilities.');
+  validateControl(request);
   if (capabilities) {
-    if (capabilities.model !== request.model || capabilities.textToImage !== true) {
-      throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This model does not advertise text-to-image generation.');
-    }
-    resolveParameters(request.parameters, capabilities, 'generate');
-    validateSize(request.size, capabilities);
+    if (capabilities.model !== request.model) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This model does not advertise text-to-image generation.');
+    refuseIssues(request, capabilities);
   }
   return request;
 }
 
-function validateControl(request: ImageRequest, capabilities?: ModelCapabilities): void {
+function validateControl(request: ImageRequest): void {
   if (!request.control) return;
   if (!isAbsolute(request.control.image)) throw new PicPatchSdkError('INVALID_REQUEST', 'Control image paths must be absolute.');
   if (resolve(request.control.image) === resolve(request.outputPath)) throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output must not replace the control image.', { subject: request.outputPath });
-  if (capabilities && !capabilities.controlKinds?.includes(request.control.kind)) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This model does not support the requested structural control.');
 }

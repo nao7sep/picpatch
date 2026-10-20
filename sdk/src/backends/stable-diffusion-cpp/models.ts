@@ -4,6 +4,7 @@ import { nativeRevision as pinnedRevision } from '../../runtime/engine/native-re
 import type { ModelCapabilities } from '../../contracts.generated.ts';
 import { modelEvidence, modelProfile } from '../../models/profiles.ts';
 import { runtimeHosts, supportsRuntime } from '../../hosts.ts';
+import type { ExternalModel } from '../../models/types.ts';
 
 /** Source-audited CLI contract; native inference evidence remains separate. */
 export { nativeRevision };
@@ -27,9 +28,9 @@ export function nativeCapabilities(variant: string, model: string = variant): Mo
       scheduler: { default: 'discrete', values: ['discrete', 'karras', 'exponential'] }, sampler: { default: identity ? 'euler' : 'euler_a', values: ['euler', 'euler_a', 'heun', 'dpm2', 'dpm++2s_a', 'dpm++2m'] },
       ...(identity ? { identityStyleStrength: { default: 20, minimum: 0, maximum: 100 } } : appearance ? { appearanceStrength: { default: 1, minimum: 0, maximum: 3.4028234663852886e38 } } : { strength: { default: masked ? 1 : 0.75, minimum: masked ? 1 : 0, maximum: 1 } }) } };
 }
-export function nativeModels() {
+export function nativeModels(): ExternalModel[] {
   return nativeVariants.map(variant => ({ id: variant, variant, family: variant.startsWith('sdxl') ? 'sdxl' : variant.startsWith('sd15') ? 'sd15' : variant === 'sd35-large' ? 'sd3' : isHiDream(variant) ? 'hidream-o1' : 'chroma',
     acquisition: 'external' as const, ...modelEvidence(variant, 'source'), profile: modelProfile(variant),
-    capabilities: nativeCapabilities(variant), runtime: { name: 'stable-diffusion.cpp' as const, version: nativeRevision,
+    capabilities: nativeCapabilities(variant), runtime: { name: 'stable-diffusion.cpp' as const, engine: 'native' as const, version: nativeRevision,
       hosts: runtimeHosts('stable-diffusion.cpp') }, supported: supportsRuntime('stable-diffusion.cpp') }));
 }

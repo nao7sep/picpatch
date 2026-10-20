@@ -16,7 +16,7 @@ export class NativeProcess {
   run(args: string[], cwd: string, timeout: number, signal?: AbortSignal, capture = false): Promise<string> {
     if (this.lifetime.signal.aborted) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Native runtime is disposed.'));
     if (this.poisoned) return Promise.reject(this.poisoned);
-    if (this.active) return Promise.reject(new PicPatchSdkError('BUSY', 'Native runtime is busy.'));
+    if (this.active) return Promise.reject(new PicPatchSdkError('INTERNAL', 'Native runtime is busy.'));
     const combined = AbortSignal.any([this.lifetime.signal, ...(signal ? [signal] : [])]);
     this.active = Promise.resolve().then(() => {
       checkSignal(combined);

@@ -2,7 +2,8 @@
 // local files its architecture takes. The SDK remains the authority at preparation.
 import type { CatalogModel, Engines } from '../api.ts';
 
-export const native = (model: CatalogModel | undefined) => model?.runtime.name === 'stable-diffusion.cpp';
+/** The catalog says which engine prepares each model. */
+export const native = (model: CatalogModel | undefined) => model?.runtime.engine === 'native';
 export const engineReady = (model: CatalogModel | undefined, engines: Engines | undefined) => Boolean(engines && (native(model) ? engines.native : engines.python).status === 'ready');
 
 export type ComponentKey = 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet';

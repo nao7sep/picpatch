@@ -21,6 +21,8 @@ function sdkResources(): Plugin {
     async writeBundle(options) {
       const sdk = resolve(options.dir!, "sdk");
       await cp(resolve("sdk/protocol"), resolve(sdk, "protocol"), { recursive: true });
+      // The worker reports the SDK's version from the manifest beside its protocol folder.
+      await cp(resolve("sdk/package.json"), resolve(sdk, "package.json"));
       await copyRuntimeResources(resolve("sdk/runtimes"), resolve(sdk, "runtimes"));
     },
   };

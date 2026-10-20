@@ -15,6 +15,8 @@ class Protocol:
         if not directory.is_absolute():
             raise ValueError('Protocol directory must be absolute.')
         self.error_codes = json.loads((directory / 'error-codes.json').read_text())
+        # The worker is part of the SDK, so it reports the SDK's version from the SDK's manifest.
+        self.sdk_version = json.loads((directory.parent / 'package.json').read_text())['version']
         contracts = json.loads((directory / 'contracts.schema.json').read_text())
         worker = json.loads((directory / 'worker.schema.json').read_text())
         registry = Registry().with_resources([

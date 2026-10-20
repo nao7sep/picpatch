@@ -32,7 +32,7 @@ it('rejects external selections, traversal, directory links and cancelled remova
   await expect(removeModel(id, revision, { modelsDirectory: directory, signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(await readFile(join(external, 'keep'), 'utf8')).toBe('keep');
   await rm(join(directory, id), { recursive: true }); await symlink(external, join(directory, id));
-  await expect(removeModel(id, revision, { modelsDirectory: directory })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(removeModel(id, revision, { modelsDirectory: directory })).rejects.toMatchObject({ code: 'MODEL_LINK_REFUSED' });
 });
 it('reports an inaccessible search root without discarding independently discovered models', async () => {
   await writeFile(join(directory, 'model.safetensors'), 'data');
@@ -57,7 +57,7 @@ it('reports retained recovery files when deletion fails after detaching a revisi
   vi.spyOn(storage, 'rm').mockRejectedValue(Object.assign(new Error('denied'), { code: 'EACCES' }));
   let failure: any;
   try { await removeModel(id, revision, { modelsDirectory: directory }); } catch (error) { failure = error; }
-  expect(failure).toMatchObject({ code: 'PERMISSION_DENIED', effect: 'unknown' });
+  expect(failure).toMatchObject({ code: 'MODEL_REMOVAL_INCOMPLETE', effect: 'unknown' });
   expect(await readFile(join(failure.details.recoveryDirectory, 'model', 'weights'), 'utf8')).toBe('keep');
   vi.restoreAllMocks();
   expect((await inspectModels({ modelsDirectory: directory })).entries).toMatchObject([{ kind: 'incomplete', bytes: 4 }]);

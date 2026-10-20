@@ -6,6 +6,7 @@ import type { ImagePlan } from './planning.ts';
 import { prepareControl } from './control.ts';
 import { prepareOutpaint } from './outpaint.ts';
 import { createArtifactRecord, publishSidecar, sidecarPath } from './sidecar.ts';
+import { finishImage, sourceMetadata } from './metadata.ts';
 import { basename, dirname, join } from 'node:path';
 import { lstat, mkdtemp, realpath, rm, stat } from '../storage.ts';
 import { PicPatchSdkError } from '../errors.ts';
@@ -24,13 +25,16 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   private readonly geometry: InputGeometry[] = [];
   private readonly fingerprints: ArtifactRecord['fingerprints'] = [];
   private outpaint: EditResult['outpaint'];
+  /** The private snapshot of an edit's source image, whose metadata its output carries. */
+  private source: string | undefined;
   private maskMode: EditResult['maskMode'];
   private constructor(directory: string, destination: string, request: T) {
     storageRecovery(directory);
     this.directory = directory; this.destination = destination; this.request = request;
     this.workerRequest = { ...structuredClone(request), outputPath: join(directory, 'worker.png') };
-    // Artifact retention belongs to this process, never to an inference runtime.
+    // Record content and sidecar publication belong to this process, never to an inference runtime.
     delete this.workerRequest.sidecar;
+    delete this.workerRequest.record;
   }
 
   static async create<T extends ImageRequest>(request: T, signal?: AbortSignal, plan?: ImagePlan): Promise<ImageWorkspace<T>> {
@@ -63,7 +67,8 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     let index = 0;
     const prepare = async (path: string, role: ArtifactRecord['fingerprints'][number]['role'], mask = false, preserveSize = false) => {
       const stem = join(this.directory, `input-${index++}`);
-      const image = await prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal, mask || preserveSize ? undefined : policy, expected(path), fingerprint => this.fingerprints.push({ role, ...fingerprint }));
+      const image = await prepareImage(path, `${stem}.tmp`, `${stem}.png`, mask, signal, mask || preserveSize ? undefined : policy, expected(path), fingerprint => this.fingerprints.push({ role, ...fingerprint }), role === 'source');
+      if (role === 'source') this.source = `${stem}.tmp`;
       this.geometry.push({ path, ...image.geometry });
       return image;
     };
@@ -104,9 +109,10 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     checkCancellation(signal);
   }
 
-  async publish(result: EditResult, signal?: AbortSignal, caller?: ArtifactRecord['caller']): Promise<ImageResult> {
+  async publish(result: EditResult, signal?: AbortSignal): Promise<ImageResult> {
     checkCancellation(signal);
     const snapshot = join(this.directory, 'result.tmp');
+    const upright = join(this.directory, 'upright.png');
     const complete = join(this.directory, 'complete.png');
     try {
       if (result.image.path !== this.workerRequest.outputPath || result.model !== this.request.model) {
@@ -114,7 +120,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       }
       // Reject symlinks and decode an independent copy of the worker's finished file.
       await snapshotImage(this.workerRequest.outputPath, snapshot, signal, true);
-      const image = await normalizeImage(snapshot, complete, false, signal, true);
+      const image = await normalizeImage(snapshot, upright, false, signal, true);
       if (image.width !== result.image.size.width || image.height !== result.image.size.height ||
           (this.workerRequest.size && (image.width !== this.workerRequest.size.width || image.height !== this.workerRequest.size.height))) {
         throw new Error('Output dimensions do not match the result or requested size.');
@@ -124,19 +130,26 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       throw new PicPatchSdkError('INVALID_OUTPUT', 'Worker output is missing, malformed, or inconsistent with its metadata.', { cause });
     }
     checkCancellation(signal);
+    try { await finishImage(upright, complete, this.directory, this.source === undefined ? undefined : await sourceMetadata(this.source)); }
+    catch (cause) {
+      checkCancellation(signal);
+      if (cause instanceof PicPatchSdkError) throw cause;
+      throw new PicPatchSdkError('IMAGE_IO', 'Could not write the finished image.', { cause });
+    }
+    checkCancellation(signal);
     const { sidecar: _runtimeSidecar, outpaint: _runtimeCanvas, maskMode: _runtimeMaskMode, ...response } = result;
     const saved: EditResult = { ...response, image: { ...result.image, path: this.request.outputPath }, references: structuredClone('instruction' in this.request ? this.request.references ?? [] : []), inputGeometry: structuredClone(this.geometry) };
     if (this.maskMode) saved.maskMode = this.maskMode;
     if (this.outpaint) saved.outpaint = structuredClone(this.outpaint);
-    const record = await createArtifactRecord(this.request, saved, complete, this.fingerprints, caller);
-    const published: ImageResult = { ...saved, record };
+    const record = await createArtifactRecord(this.request, saved, complete, this.fingerprints);
+    const published: ImageResult = { ...saved, status: 'completed', record };
     try { await publishComplete(complete, this.destination, this.directory, signal); }
     catch (cause) {
       if (cause instanceof PicPatchSdkError && cause.details.recoveryDirectory) this.retain = true;
       throw cause;
     }
     // Publication wins later cancellation. Sidecar failure cannot undo the image.
-    if (this.request.sidecar) published.sidecar = await publishSidecar(record, sidecarPath(this.request.outputPath), sidecarPath(this.destination), this.directory);
+    if (this.request.sidecar === true) published.sidecar = await publishSidecar(record, sidecarPath(this.request.outputPath), sidecarPath(this.destination), this.directory);
     return published;
   }
 

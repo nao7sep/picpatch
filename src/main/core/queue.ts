@@ -1,14 +1,14 @@
 import { UiError } from '../../shared/i18n/index.ts';
 import type { Key, Message } from '../../shared/i18n/index.ts';
 import { randomInt, randomUUID } from 'node:crypto';
-import type { ImageOutcome, ProgressEvent, SdkEvent } from 'picpatchsdk';
+import type { ImageOutcome, ModelOpenRefusal, ProgressEvent, SdkEvent } from 'picpatchsdk';
 import type { Draft, Run, QueueState } from '../../shared/session.ts';
 export type { QueueState } from '../../shared/session.ts';
 import { Sessions, validateDraft } from './sessions.ts';
 import { afterCommand, commandTargetReady, imageCommand, recoverCommand } from '../../shared/image-command.ts';
 
 export type RunEvents = { signal: AbortSignal; onProgress: (event: ProgressEvent) => void; onEvent: (event: SdkEvent) => void };
-export interface RunCompletion { outcome: ImageOutcome }
+export interface RunCompletion { outcome: ImageOutcome | ModelOpenRefusal }
 /** `release` closes any worker kept warm between runs; the queue calls it whenever it goes idle. */
 export type Runner = ((sessionId: string, run: Run, events: RunEvents) => Promise<RunCompletion>) & { release?: () => Promise<void> };
 /**
@@ -111,7 +111,7 @@ export class Queue {
       const outcome = completion.outcome;
       await this.sessions.update(selected.sessionId, value => {
         const run = value.runs.find(r => r.id === selected.runId)!; run.ended = new Date().toISOString();
-        if ('status' in outcome) { run.status = 'refused'; run.issue = { code: outcome.code, message: outcome.message, effect: outcome.effect }; }
+        if (outcome.status === 'refused') { run.status = 'refused'; run.issue = { code: outcome.code, message: outcome.message }; }
         else { run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record; const notices = [outcome.sidecar?.status === 'failed' ? { notice: { key: 'ui.image_saved_its_settings_sidecar_could_not_be_saved' } } : undefined, outcome.cleanupWarning ? { code: 'CLEANUP_FAILED' } : undefined].filter(value => value !== undefined); if (notices.length) run.notices = notices; }
         value.draft = recoverCommand(value.draft, value.runs);
       });

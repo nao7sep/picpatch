@@ -7,12 +7,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 let directory: string;
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-consumer-'));
-  vi.stubEnv('PICPATCH_DATA_DIR', join(directory, 'data'));
-  vi.stubEnv('PICPATCH_MODELS_DIR', join(directory, 'models'));
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Read-only operations must not fetch.'); }));
 });
 afterEach(async () => {
-  vi.unstubAllEnvs(); vi.unstubAllGlobals();
+  vi.unstubAllGlobals();
   await rm(directory, { recursive: true, force: true });
 });
 
@@ -23,7 +21,7 @@ it('imports and uses the public read-only journey without creating owned storage
   expect(sdk.resolveStoragePaths({ modelsDirectory: join(directory, 'models'), engineDirectory: join(directory, 'engine') })).toEqual({ engineDirectory: join(directory, 'engine'), modelsDirectory: join(directory, 'models') });
   await mkdir(join(directory, 'models'));
   expect(await sdk.discoverModels([join(directory, 'models')])).toEqual({ models: [] });
-  await expect(sdk.prepareModel(selected.id, { download: false, modelsDirectory: join(directory, 'models') })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(sdk.prepareModel(selected.id, { download: false, modelsDirectory: join(directory, 'models') })).rejects.toMatchObject({ code: 'MODEL_MISSING' });
   const editor = sdk.createImageClient({ engineDirectory: join(directory, 'absent-python') });
   await editor.dispose();
   expect(await readdir(directory)).toEqual(['models']);

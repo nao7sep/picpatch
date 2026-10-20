@@ -39,8 +39,8 @@ it.each(assets)('applies the pinned trained $family pixel-art adapter through th
     for (const scale of [0, asset.scale]) {
       const editor = createImageClient({ ...options, model: { ...options.model!, loras: [{ path: asset.filename, scale }] }, defaults: { size: { width: 512, height: 512 }, seed: 42, outputDirectory: directory } });
       try {
-        const result = await editor.generate({ prompt: 'pixel art sprite, a small friendly blue robot with glowing eyes, game asset, plain white background', parameters: { steps: asset.steps }, sidecar: {} });
-        if ('status' in result) throw new Error(result.code);
+        const result = await editor.generate({ prompt: 'pixel art sprite, a small friendly blue robot with glowing eyes, game asset, plain white background', parameters: { steps: asset.steps }, sidecar: true });
+        if (result.status === 'refused') throw new Error(result.code);
         expect(result.loras).toEqual([{ filename: asset.filename, sha256: asset.sha256, scale }]);
         const sidecar = await readFile(result.sidecar!.path, 'utf8');
         expect(sidecar).not.toContain(directory);

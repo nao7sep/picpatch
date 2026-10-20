@@ -53,7 +53,7 @@ export class ImageClientImpl implements ImageClient {
         return result;
       } catch (error) { const refused = refusal(error); if (refused) return refused; throw error; }
     }), this.diagnostics));
-    const accepted = pending.then(result => { if (result.status === 'planned') { Object.freeze(result); this.plans.add(result); } return result; });
+    const accepted = pending.then(result => { if (result.status === 'completed') { Object.freeze(result); this.plans.add(result); } return result; });
     this.tail = Promise.allSettled([this.tail, accepted]).then(() => {});
     return accepted;
   }
@@ -85,7 +85,7 @@ export class ImageClientImpl implements ImageClient {
     const callerSignal = options.signal;
     const deadline = new AbortController();
     const signal = AbortSignal.any([this.lifetime.signal, deadline.signal, ...(options.signal ? [options.signal] : [])]);
-    const captured = { ...options, signal, ...(options.caller ? { caller: structuredClone(options.caller) } : {}) };
+    const captured = { ...options, signal };
     const timer = setTimeout(() => deadline.abort(), budget);
     const previous = this.tail;
     const operation = Promise.resolve().then(() => withDiagnostics(verb, captured, async scoped => {
@@ -120,7 +120,7 @@ export class ImageClientImpl implements ImageClient {
       const response = 'prompt' in workspace.workerRequest
         ? await this.backend.generate(workspace.workerRequest, options)
         : await this.backend.edit(workspace.workerRequest, options);
-      result = await workspace.publish(response, signal, options.caller);
+      result = await workspace.publish(response, signal);
     } catch (error) {
       failure = error;
       if (error instanceof PicPatchSdkError && error.code === 'TERMINATION_FAILED' && workspace) {
@@ -133,18 +133,16 @@ export class ImageClientImpl implements ImageClient {
       workspace.preserve();
       if (result) result.cleanupWarning = { directory: workspace.directory, message: 'Image was saved; private files were retained because storage work may still settle.' };
     }
+    let leftover = false;
     try { await workspace?.cleanup(); }
-    catch (cause) {
+    catch {
       if (result) result.cleanupWarning = { directory: workspace!.directory, message: 'Output was saved, but private temporary files could not be removed.' };
-      else {
-        const error = new PicPatchSdkError('CLEANUP_FAILED', 'Operation failed and private temporary files could not be removed.', { cause: new AggregateError([failure, cause]) });
-        error.details.recoveryDirectory = workspace!.directory;
-        error.effect = 'unknown';
-        failure = error;
-      }
+      else leftover = true;
     }
     if (result) return result;
+    // The primary failure keeps its code; private files that remain are named in details.
     const error = sdkError(failure ?? new PicPatchSdkError('CANCELLED', 'The operation was cancelled.'));
+    if (leftover) error.details.recoveryDirectory = workspace!.directory;
     const refused = refusal(error, request.outputPath);
     if (refused) return refused;
     throw error;
@@ -171,7 +169,9 @@ function waitForTurn(previous: Promise<void>, signal: AbortSignal): Promise<void
   });
 }
 
-function refusal(value: unknown, subject = ''): OperationRefusal | undefined {
+function refusal(value: unknown, fallback?: string): OperationRefusal | undefined {
   if (!(value instanceof PicPatchSdkError) || !['OUTPUT_CONFLICT', 'INPUTS_CHANGED', 'DESTINATION_CHANGED'].includes(value.code)) return undefined;
-  return { status: 'refused', code: value.code as OperationRefusal['code'], message: value.message, effect: value.effect, subject: value.subject ?? subject, details: value.details };
+  const subject = value.subject ?? fallback;
+  return { status: 'refused', code: value.code as OperationRefusal['code'], message: value.message, ...(subject === undefined ? {} : { subject }),
+    details: value.details.recoveryDirectory === undefined ? {} : { recoveryDirectory: value.details.recoveryDirectory } };
 }

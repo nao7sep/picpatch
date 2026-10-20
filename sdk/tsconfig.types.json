@@ -1,0 +1,10 @@
+{
+  // The picpatchsdk/types entry type-checked as a window sees it: browser libraries, no Node types.
+  // A Node-only import reaching it fails here.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM"],
+    "types": []
+  },
+  "include": ["src/browser-types.ts"]
+}

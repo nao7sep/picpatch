@@ -43,10 +43,10 @@ it('installs independent locked environments, shares only complete readiness, an
     const config = JSON.parse(await readFile(configPath, 'utf8'));
     const editor = createImageClient({ engineDirectory: options.engineDirectory, model: config.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42, parameters: { steps: 2 } } });
     try {
-      const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a white table.', sidecar: {} });
-      if ('status' in generated) throw new Error(generated.code);
-      const edited = await editor.edit({ sourceImage: generated.image.path, instruction: 'Make the bowl green.', sidecar: {} });
-      if ('status' in edited) throw new Error(edited.code);
+      const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a white table.', sidecar: true });
+      if (generated.status === 'refused') throw new Error(generated.code);
+      const edited = await editor.edit({ sourceImage: generated.image.path, instruction: 'Make the bowl green.', sidecar: true });
+      if (edited.status === 'refused') throw new Error(edited.code);
       for (const result of [generated, edited]) {
         expect(await sharp(result.image.path).metadata()).toMatchObject({ width: 256, height: 256 });
         expect(await readFile(result.sidecar!.path, 'utf8')).not.toContain(directory);

@@ -12,8 +12,8 @@ try {
   const result = await editor.edit({
     instruction: 'A studio portrait of {person}, wearing a blue jacket.',
     references: [{ id: 'person', role: 'subject', conditioning: 'identity', className: 'man', images: photos.map(photo => resolve(photo)) as [string, ...string[]] }],
-    outputPath: resolve(output), sidecar: {},
+    outputPath: resolve(output), sidecar: true,
   });
-  if ('status' in result) throw new Error(result.code);
+  if (result.status === 'refused') throw new Error(result.code);
   console.log(JSON.stringify({ image: result.image, conditioning: result.conditioning }));
 } finally { await editor.dispose(); }

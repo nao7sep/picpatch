@@ -1,14 +1,22 @@
-import type { EventOptions } from '../../diagnostics.ts';
+import type { CallOptions, PicPatchProfile } from '../../types.ts';
+import type { RuntimeName } from '../../hosts.ts';
 
+/** The runtimes the managed Python engine installs; stable-diffusion.cpp has its own native engine verbs. */
+export type PythonRuntime = Exclude<RuntimeName, 'stable-diffusion.cpp'>;
 /** Engine storage is local-disk storage. No shared-network filesystem semantics are promised. */
-export type EngineRuntime = 'mflux' | 'dreamo' | 'diffusers';
-export interface EngineOptions extends EventOptions {
-  /** Dependency set to prepare; inference selects this from the model. Defaults to mflux. */
-  runtime?: EngineRuntime;
-  profile?: import('../../profile.ts').PicPatchProfile;
+export interface EngineOptions extends CallOptions {
+  /** Dependency set to prepare: a catalog entry's runtime.name where its runtime.engine is python. Defaults to mflux. */
+  runtime?: PythonRuntime;
+  profile?: PicPatchProfile;
   engineDirectory?: string;
-  signal?: AbortSignal;
-  timeoutMs?: number;
+}
+export interface NativeEngineOptions extends CallOptions {
+  profile?: PicPatchProfile;
+  engineDirectory?: string;
+}
+export interface NativeInspectionOptions extends NativeEngineOptions {
+  /** A configured sd-cli to check in place of the managed installation; defaults to the profile's nativeExecutable. */
+  nativeExecutable?: string;
 }
 export interface InstallEngineOptions extends EngineOptions {
   /** Absolute path to caller-provided uv. PicPatchSdk never installs uv or build tools. */
@@ -54,3 +62,10 @@ export type EngineInspection = ReadyEngine | {
   engineDirectory: string;
 };
 export interface EngineInstallation extends ReadyEngine { origin: 'installed' | 'reused' }
+
+export interface ReadyNativeEngine { status: 'ready'; code: 'ENGINE_READY'; message: string; engineDirectory: string; nativeExecutable: string; revision: string }
+export type NativeEngineInspection = ReadyNativeEngine
+  | { status: 'missing' | 'incompatible'; code: 'ENGINE_MISSING' | 'ENGINE_CHECK_FAILED'; message: string; engineDirectory: string; revision: string }
+  /** No pinned build exists for this computer; nothing can be installed here. */
+  | { status: 'unsupported'; code: 'UNSUPPORTED_CAPABILITY'; message: string; engineDirectory: string; revision: string };
+export interface NativeEngineInstallation extends ReadyNativeEngine { origin: 'installed' | 'reused'; cleanupWarning?: { directory: string; message: string } }

@@ -74,7 +74,7 @@ describe('owned worker lifecycle', () => {
   it('rejects overlapping work before startup completes', async () => {
     const { child, editor } = setup();
     const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'CANCELLED' });
-    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'BUSY' });
+    await expect(editor.edit(request)).rejects.toMatchObject({ code: 'INTERNAL' });
     await editor.dispose(); await caught; expect(child.closed).toBe(true);
   });
   it('does not start for invalid or already cancelled work, or dispose before use', async () => {
@@ -183,7 +183,7 @@ describe('transport boundaries', () => {
     await tick(); child.stdout.write(Buffer.from([0xff])); await caught; expect(child.closed).toBe(true); await editor.dispose();
   });
   it('closes on a rejected handshake', async () => {
-    const { editor, child } = setup(); child.onRequest = message => child.reply(message.id, 'error', { error: { code: 'RUNTIME_FAILURE', kind: 'internal', effect: 'none', details: {}, message: 'Unavailable' } });
+    const { editor, child } = setup(); child.onRequest = message => child.reply(message.id, 'error', { error: { code: 'RUNTIME_FAILURE', kind: 'unavailable', effect: 'none', details: {}, message: 'Unavailable' } });
     await expect(editor.edit(request)).rejects.toMatchObject({ code: 'PROTOCOL_ERROR' }); expect(child.closed).toBe(true); await editor.dispose();
   });
   it('contains a synchronous spawn exception', async () => {

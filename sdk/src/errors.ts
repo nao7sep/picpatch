@@ -1,25 +1,20 @@
 import { isAbsolute } from 'node:path';
 import workerSchema from '../protocol/worker.schema.json' with { type: 'json' };
 import codes from '../protocol/error-codes.json' with { type: 'json' };
-import type { WorkerDiagnostic } from './diagnostics.ts';
+import type { ErrorCode, ErrorDetails, ErrorEffect, ErrorKind, PicPatchSdkErrorData, WorkerDiagnostic } from './types.ts';
+export type { ErrorCode, ErrorDetails, ErrorEffect, ErrorKind, PicPatchSdkErrorData } from './types.ts';
 
-export type ErrorKind = 'invalid' | 'unavailable' | 'cancelled' | 'internal';
-export type ErrorEffect = 'none' | 'unknown';
-export type ErrorCode = keyof typeof codes;
 /** Shared with the worker; kind is never inferred from exception prose. */
 export const errorCodes = Object.freeze(codes) as Readonly<Record<ErrorCode, ErrorKind>>;
-export interface ErrorDetails { diagnostic?: WorkerDiagnostic; recoveryDirectory?: string }
-export interface PicPatchSdkErrorData {
-  code: ErrorCode;
-  kind: ErrorKind;
-  effect: ErrorEffect;
-  message: string;
-  subject?: string;
-  details: ErrorDetails;
-  cause?: unknown;
-}
 export interface SdkErrorOptions extends ErrorOptions { effect?: ErrorEffect; subject?: string; details?: ErrorDetails }
 const filesystemCodes: Record<string, ErrorCode> = { ENOENT: 'FILE_NOT_FOUND', ENOTDIR: 'FILE_NOT_FOUND', EACCES: 'PERMISSION_DENIED', EPERM: 'PERMISSION_DENIED', ENOSPC: 'DISK_FULL', EIO: 'IO_ERROR', ETIMEDOUT: 'TIMEOUT' };
+/** A step's code becomes the observed cause; an interpreter or executable that is not there means the engine is missing. */
+function observedCode(code: ErrorCode, cause: unknown): ErrorCode {
+  const observed = (cause as NodeJS.ErrnoException | undefined)?.code;
+  if (!observed) return code;
+  if (code === 'WORKER_UNAVAILABLE' && (observed === 'ENOENT' || observed === 'ENOTDIR')) return 'ENGINE_MISSING';
+  return (code.endsWith('_IO') || code === 'WORKER_UNAVAILABLE') && filesystemCodes[observed] || code;
+}
 
 export class PicPatchSdkError extends Error implements PicPatchSdkErrorData {
   readonly code: ErrorCode;
@@ -30,9 +25,7 @@ export class PicPatchSdkError extends Error implements PicPatchSdkErrorData {
   constructor(code: ErrorCode, message: string, options: SdkErrorOptions = {}) {
     super(message, options);
     this.name = 'PicPatchSdkError';
-    // Preserve a concrete observed filesystem cause instead of naming only the failed step.
-    const observed = (options.cause as NodeJS.ErrnoException | undefined)?.code;
-    this.code = (code.endsWith('_IO') || code === 'WORKER_UNAVAILABLE') && observed && filesystemCodes[observed] || code;
+    this.code = observedCode(code, options.cause);
     this.kind = errorCodes[this.code];
     this.effect = options.effect ?? 'none';
     const path = (options.cause as NodeJS.ErrnoException | undefined)?.path;

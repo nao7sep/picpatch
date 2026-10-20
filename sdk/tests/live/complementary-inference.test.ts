@@ -19,8 +19,8 @@ it('generates with Z-Image Turbo then performs native masked editing with FLUX F
     const maskImage = join(directory, 'mask.png');
     const generated = createImageClient({ engineDirectory: testEngineDirectory, model: generation.model });
     try {
-      const result = await generated.generate({ prompt: 'A small blue ceramic vase on a pale wooden table, product photography.', seed: 42, size: { width: 256, height: 256 }, parameters: { steps: 9 }, outputPath: sourceImage, sidecar: {} });
-      if ('status' in result) throw new Error(result.code);
+      const result = await generated.generate({ prompt: 'A small blue ceramic vase on a pale wooden table, product photography.', seed: 42, size: { width: 256, height: 256 }, parameters: { steps: 9 }, outputPath: sourceImage, sidecar: true });
+      if (result.status === 'refused') throw new Error(result.code);
       expect(result.maskMode).toBeUndefined();
       expect((await sharp(sourceImage).stats()).channels.some(channel => channel.stdev > 1)).toBe(true);
       expect(result.effectiveParameters.steps).toBe(9);
@@ -39,8 +39,8 @@ it('generates with Z-Image Turbo then performs native masked editing with FLUX F
       })).rejects.toMatchObject({ code: 'CANCELLED' });
       expect(cancellation.signal.aborted).toBe(true);
       await expect(readFile(cancelledPath)).rejects.toMatchObject({ code: 'ENOENT' });
-      const result = await editor.edit({ sourceImage, maskImage, instruction: 'A red ceramic vase on a pale wooden table, product photography.', seed: 42, parameters: { steps: 4 }, outputPath: join(directory, 'filled.png'), sidecar: {} });
-      if ('status' in result) throw new Error(result.code);
+      const result = await editor.edit({ sourceImage, maskImage, instruction: 'A red ceramic vase on a pale wooden table, product photography.', seed: 42, parameters: { steps: 4 }, outputPath: join(directory, 'filled.png'), sidecar: true });
+      if (result.status === 'refused') throw new Error(result.code);
       expect(result.maskMode).toBe('native');
       expect(result.record.maskMode).toBe('native');
       expect(result.effectiveParameters).toMatchObject({ steps: 4, guidance: 30 });

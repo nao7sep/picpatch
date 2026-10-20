@@ -2,22 +2,18 @@ import { constants } from 'node:fs';
 import { open } from './storage.ts';
 import { validateDefaults, type ImageDefaults } from './defaults.ts';
 import { PicPatchSdkError } from './errors.ts';
-import { withDiagnostics, type EventOptions } from './diagnostics.ts';
+import { withDiagnostics } from './diagnostics.ts';
+import { newerVersion, versionRefusal } from './versions.ts';
+import type { CallOptions, Refusal } from './types.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from './operations.ts';
-import { workerTimeouts, type WorkerTimeouts } from './worker/process.ts';
+import { workerTimeouts } from './worker/process.ts';
+import type { WorkerTimeouts } from './types.ts';
 
-/** Caller-owned argument bundle. Paths are absolute literals; never discovered or written by the SDK. */
-export interface PicPatchProfile {
-  version: 1;
-  engineDirectory?: string;
-  modelsDirectory?: string;
-  nativeExecutable?: string;
-  defaults?: ImageDefaults;
-  timeouts?: Partial<WorkerTimeouts>;
-}
-export interface ProfileReadOptions extends EventOptions { signal?: AbortSignal; timeoutMs?: number }
-export interface ProfileRefusal { status: 'refused'; code: 'PROFILE_VERSION_UNSUPPORTED'; message: string; effect: 'none'; subject: string; version: number }
-export type ProfileReadResult = { status: 'read'; profile: PicPatchProfile } | ProfileRefusal;
+export type { PicPatchProfile } from './types.ts';
+import type { PicPatchProfile } from './types.ts';
+export type ProfileReadOptions = CallOptions;
+export type ProfileRefusal = Refusal<'PROFILE_VERSION_UNSUPPORTED'>;
+export type ProfileReadResult = { status: 'completed'; profile: PicPatchProfile } | ProfileRefusal;
 
 export function validateTimeouts(value: unknown): Partial<WorkerTimeouts> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid worker timeouts.');
@@ -27,7 +23,14 @@ export function validateTimeouts(value: unknown): Partial<WorkerTimeouts> {
   }
   return Object.fromEntries(Object.entries(value).filter(([, duration]) => duration !== undefined));
 }
-export function validateProfile(value: unknown): PicPatchProfile {
+/** Validates a profile the caller holds; a newer format version is refused, as readProfile refuses it. */
+export function validateProfile(value: unknown): ProfileReadResult {
+  const version = newerVersion(value);
+  if (version !== undefined) return versionRefusal('PROFILE_VERSION_UNSUPPORTED', 'This profile version is unsupported.', version);
+  return { status: 'completed', profile: checkProfile(value) };
+}
+/** Throws for an invalid or newer profile; a verb cannot run with one. */
+export function checkProfile(value: unknown): PicPatchProfile {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['version', 'engineDirectory', 'modelsDirectory', 'nativeExecutable', 'defaults', 'timeouts'].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid profile fields.');
   const profile = value as PicPatchProfile;
   if (profile.version !== 1) throw new PicPatchSdkError('INVALID_REQUEST', 'Unsupported profile version.');
@@ -39,7 +42,7 @@ export function validateProfile(value: unknown): PicPatchProfile {
 
 /** Undefined explicit values inherit; nested sampling and timeout overrides merge by field. */
 export function profileDefaults(profile: PicPatchProfile | undefined, explicit: ImageDefaults | undefined): ImageDefaults {
-  const base = profile === undefined ? {} : validateProfile(profile).defaults ?? {};
+  const base = profile === undefined ? {} : checkProfile(profile).defaults ?? {};
   const overrides = explicit === undefined ? {} : validateDefaults(explicit);
   const defined = Object.fromEntries(Object.entries(overrides).filter(([, value]) => value !== undefined));
   return validateDefaults({ ...base, ...defined, ...(base.parameters || overrides.parameters ? { parameters: { ...base.parameters, ...Object.fromEntries(Object.entries(overrides.parameters ?? {}).filter(([, value]) => value !== undefined)) } } : {}) });
@@ -60,9 +63,8 @@ export function readProfile(path: string, options: ProfileReadOptions = {}): Pro
         let value: unknown;
         try { value = JSON.parse(bytes); }
         catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Profile contains invalid JSON.', { cause, subject: path }); }
-        const version = (value as { version?: unknown } | null)?.version;
-        if (typeof version === 'number' && Number.isInteger(version) && version !== 1) return { status: 'refused', code: 'PROFILE_VERSION_UNSUPPORTED', message: 'This profile version is unsupported.', effect: 'none', subject: path, version };
-        return { status: 'read' as const, profile: validateProfile(value) };
+        const result = validateProfile(value);
+        return result.status === 'refused' ? { ...result, subject: path } : result;
       } catch (cause) {
         checkSignal(signal);
         if (cause instanceof PicPatchSdkError) throw cause;

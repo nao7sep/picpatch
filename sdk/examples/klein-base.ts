@@ -17,15 +17,15 @@ const onProgress = (event: { stage: string; completed?: number; total?: number }
 try {
   const generated = await editor.generate({
     prompt: 'A professional product photograph of a single forest-green enamel camping mug with a cream rim and a curved handle, resting on a pale oak table beside a folded linen napkin. Soft morning window light, realistic enamel reflections, subtle wear along the rim, shallow depth of field, clean thoughtful composition, no text or logos.',
-    seed: 42, size: { width: 1024, height: 1024 }, outputPath: join(output, 'mug-original.png'), sidecar: {},
+    seed: 42, size: { width: 1024, height: 1024 }, outputPath: join(output, 'mug-original.png'), sidecar: true,
   }, { onProgress });
-  if ('status' in generated) throw new Error(generated.code);
+  if (generated.status === 'refused') throw new Error(generated.code);
   console.log('Saved', generated.image.path);
   const edited = await editor.edit({
     sourceImage: generated.image.path,
     instruction: 'Keep the exact same forest-green enamel mug, cream rim, handle shape and camera angle. Replace the indoor setting with a weathered wooden picnic table beside a calm mountain lake at sunrise. Remove the napkin. Use realistic warm sunrise lighting and distant mountains softly out of focus. Professional outdoor product photography.',
-    seed: 42, outputPath: join(output, 'mug-lakeside.png'), sidecar: {},
+    seed: 42, outputPath: join(output, 'mug-lakeside.png'), sidecar: true,
   }, { onProgress });
-  if ('status' in edited) throw new Error(edited.code);
+  if (edited.status === 'refused') throw new Error(edited.code);
   console.log('Saved', edited.image.path);
 } finally { await editor.dispose(); }

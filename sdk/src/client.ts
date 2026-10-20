@@ -1,6 +1,6 @@
 import { modelRuntime } from './models/variants.ts';
 import type { ImagePlan, GenerateImagePlan, EditImagePlan } from './images/planning.ts';
-import { validateProfile, validateTimeouts, profileDefaults, type PicPatchProfile } from './profile.ts';
+import { checkProfile, validateTimeouts, profileDefaults, type PicPatchProfile } from './profile.ts';
 import { NativeBackend } from './backends/stable-diffusion-cpp/backend.ts';
 import { isNativeVariant } from './backends/stable-diffusion-cpp/models.ts';
 import type { ImageDefaults, GenerateInput, EditInput } from './defaults.ts';
@@ -42,7 +42,7 @@ export function createImageClient(options: ImageClientOptions = {}): ImageClient
       (options.timeouts !== undefined && (typeof options.timeouts !== 'object' || options.timeouts === null || Array.isArray(options.timeouts)))) {
     throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid image client options.');
   }
-  const profile = options.profile === undefined ? undefined : validateProfile(options.profile);
+  const profile = options.profile === undefined ? undefined : checkProfile(options.profile);
   const timeouts = { ...defaults, ...profile?.timeouts, ...validateTimeouts(options.timeouts ?? {}) };
   const settings = profileDefaults(profile, options.defaults);
   let model: LocalModel | undefined;
@@ -52,7 +52,7 @@ export function createImageClient(options: ImageClientOptions = {}): ImageClient
   if (model && isNativeVariant(model.variant)) {
     const executable = options.nativeExecutable ?? profile?.nativeExecutable;
     if (options.engineDirectory !== undefined || typeof executable !== 'string' || !isAbsolute(executable) || executable.includes('\0')) throw new PicPatchSdkError('INVALID_REQUEST', 'Native models require an absolute nativeExecutable, without engineDirectory.');
-    return new ImageClientImpl(new NativeBackend(executable, model, timeouts), settings, model.manifest.model, { backend: 'stable-diffusion-cpp', timeouts });
+    return new ImageClientImpl(new NativeBackend(executable, model, timeouts), settings, model.manifest.model, { backend: 'stable-diffusion.cpp', timeouts });
   }
   if (options.nativeExecutable !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'nativeExecutable requires a native model.');
   const engineDirectory = options.engineDirectory ?? profile?.engineDirectory;

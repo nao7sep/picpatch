@@ -144,7 +144,7 @@ it('answers main questions in order, treats dismissal as no, and settles pending
 });
 
 it('asks about prompt disclosure for each settings file and exports nothing on dismissal', async () => {
-  const fake = await start(fakeBridge(session({ runs: [run('a1')] }), { export: () => ({ status: 'saved' }) }));
+  const fake = await start(fakeBridge(session({ runs: [run('a1')] }), { export: () => ({ status: 'completed' }) }));
   fireEvent.click(screen.getByRole('button', { name: 'Save image' }));
   let dialog = await screen.findByRole('dialog', { name: 'Save image' });
   const prompts = within(dialog).getByRole('checkbox', { name: 'Include prompts' }) as HTMLInputElement;

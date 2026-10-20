@@ -1,5 +1,5 @@
 import { storageCleanup, storageStalled } from '../../storage.ts';
-import { validateProfile } from '../../profile.ts';
+import { checkProfile } from '../../profile.ts';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from '../../storage.ts';
 import { join, dirname } from 'node:path';
@@ -9,15 +9,14 @@ import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline 
 import { operationStage, withDiagnostics } from '../../diagnostics.ts';
 import { engineDefinition, runtimePaths, validRecord } from './identity.ts';
 import { runCommand } from './command.ts';
-import type { EngineIdentity, EngineInspection, EngineInstallation, EngineOptions, EngineRecord, InstallEngineOptions, ReadyEngine, EngineRuntime } from './types.ts';
+import type { EngineIdentity, EngineInspection, EngineInstallation, EngineOptions, EngineRecord, InstallEngineOptions, ReadyEngine, PythonRuntime } from './types.ts';
 import { supportsRuntime, syncDirectory, syncFile, toolEnvironment, venvPython } from '../../platform.ts';
 
 const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException)?.code ?? '');
 function validate(options: EngineOptions, install: boolean): string {
   validateOperation(options, ['profile', 'runtime', 'engineDirectory', 'timeoutMs', ...(install ? ['uvExecutable', 'cacheDirectory', 'pythonDirectory', 'toolDirectories', 'offline'] : [])]);
-  if ('onProgress' in options) throw new PicPatchSdkError('INVALID_REQUEST', 'Engine operations report stages through onEvent, not invented progress counts.');
   runtimePaths(options.runtime);
-  const profile = options.profile === undefined ? undefined : validateProfile(options.profile);
+  const profile = options.profile === undefined ? undefined : checkProfile(options.profile);
   const engineDirectory = options.engineDirectory ?? profile?.engineDirectory;
   return resolveStoragePaths(engineDirectory === undefined ? {} : { engineDirectory }).engineDirectory;
 }
@@ -78,7 +77,7 @@ export function inspectEngine(options: EngineOptions = {}): Promise<EngineInspec
   });
 }
 /** Internal admission check: ordinary inference trusts preparation, without re-importing every dependency. */
-export async function resolveEngine(root: string, signal?: AbortSignal, runtime: EngineRuntime = 'mflux'): Promise<ReadyEngine> {
+export async function resolveEngine(root: string, signal?: AbortSignal, runtime: PythonRuntime = 'mflux'): Promise<ReadyEngine> {
   absolutePath(root); checkSignal(signal);
   const { identity } = await engineDefinition(runtime);
   const result = await readReady(root, identity);
@@ -142,18 +141,16 @@ export function installEngine(options: InstallEngineOptions): Promise<EngineInst
         return completed;
       } catch (cause) {
         // Unconfirmed termination/publication must never trigger deletion of an environment still in use.
+        let leftover = false;
         if (!storageStalled() && !publicationAttempted && !(cause instanceof PicPatchSdkError && cause.code === 'TERMINATION_FAILED')) {
           try {
             await storageCleanup(async () => { await rm(temporary, { force: true });
               if (owned) await rm(installation, { recursive: true, force: true }); });
-          } catch (cleanup) {
-            const error = new PicPatchSdkError('CLEANUP_FAILED', 'Engine installation failed and its private files could not be removed.', { cause: new AggregateError([cause, cleanup]) });
-            error.details.recoveryDirectory = installation;
-            error.effect = 'unknown';
-            throw error;
-          }
+          } catch { leftover = true; }
         }
+        // The primary failure keeps its code; private files that remain are named in details.
         const error = cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('ENGINE_IO', 'Could not prepare or publish the engine.', { cause });
+        if (leftover) error.details.recoveryDirectory = installation;
         if (storageStalled() || publicationAttempted || error.code === 'TERMINATION_FAILED') { error.details.recoveryDirectory = installation; error.effect = 'unknown'; }
         throw error;
       }

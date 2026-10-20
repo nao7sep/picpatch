@@ -1,32 +1,29 @@
 import { createHash } from 'node:crypto';
 import { release } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { chmod, lstat, mkdir, mkdtemp, open, readdir, rename, rm, storageCleanup, storageRecovery, storageStalled } from '../../storage.ts';
 import { PicPatchSdkError } from '../../errors.ts';
 import { operationStage, withDiagnostics } from '../../diagnostics.ts';
-import { checkSignal, timeBudget, validateOperation, withDeadline } from '../../operations.ts';
+import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../../operations.ts';
 import { resolveStoragePaths } from '../../paths.ts';
-import { validateProfile } from '../../profile.ts';
+import { checkProfile } from '../../profile.ts';
 import { downloadFile } from '../download.ts';
 import { runCommand } from './command.ts';
-import type { EngineOptions } from './types.ts';
+import type { NativeEngineInspection, NativeEngineInstallation, NativeEngineOptions, NativeInspectionOptions } from './types.ts';
 
 import { nativeReleaseFor, nativeRevision, type NativeRelease } from './native-release.ts';
 import { archiveTool, currentHost, hostId, syncDirectory, syncFile, toolEnvironment } from '../../platform.ts';
-export interface ReadyNativeEngine { status: 'ready'; code: 'ENGINE_READY'; message: string; engineDirectory: string; nativeExecutable: string; revision: string }
-export type NativeEngineInspection = ReadyNativeEngine
-  | { status: 'missing' | 'incompatible'; code: 'ENGINE_MISSING' | 'ENGINE_CHECK_FAILED'; message: string; engineDirectory: string; revision: string }
-  /** No pinned build exists for this computer; nothing can be installed here. */
-  | { status: 'unsupported'; code: 'UNSUPPORTED_CAPABILITY'; message: string; engineDirectory: string; revision: string };
-export interface NativeEngineInstallation extends ReadyNativeEngine { origin: 'installed' | 'reused'; cleanupWarning?: { directory: string; message: string } }
+export type { NativeEngineInspection, NativeEngineInstallation, ReadyNativeEngine } from './types.ts';
 const missing = (cause: unknown) => ['ENOENT', 'ENOTDIR'].includes((cause as NodeJS.ErrnoException)?.code ?? '');
-function root(options: EngineOptions): string {
-  validateOperation(options, ['profile', 'engineDirectory']);
-  if ('onProgress' in options) throw new PicPatchSdkError('INVALID_REQUEST', 'Engine operations report stages through onEvent.');
-  const profile = options.profile === undefined ? undefined : validateProfile(options.profile);
+function settings(options: NativeInspectionOptions, keys: string[]): { root: string; nativeExecutable?: string } {
+  validateOperation(options, ['profile', 'engineDirectory', ...keys]);
+  const profile = options.profile === undefined ? undefined : checkProfile(options.profile);
   const engineDirectory = options.engineDirectory ?? profile?.engineDirectory;
-  return resolveStoragePaths(engineDirectory === undefined ? {} : { engineDirectory }).engineDirectory;
+  const nativeExecutable = options.nativeExecutable ?? profile?.nativeExecutable;
+  if (nativeExecutable !== undefined) absolutePath(nativeExecutable);
+  return { root: resolveStoragePaths(engineDirectory === undefined ? {} : { engineDirectory }).engineDirectory, ...(nativeExecutable === undefined ? {} : { nativeExecutable }) };
 }
+const root = (options: NativeEngineOptions) => settings(options, []).root;
 /** The pinned build for this computer; the macOS build needs macOS 26 (Darwin 25) or newer. */
 function hostRelease(): NativeRelease | undefined {
   if (process.platform === 'darwin' && Number(release().split('.')[0]) < 25) return undefined;
@@ -43,6 +40,19 @@ const env = toolEnvironment();
 const missingDll = (cause: unknown) => cause instanceof PicPatchSdkError && [3221225781, -1073741515].includes(Number((cause.details.diagnostic as { exitCode?: number } | undefined)?.exitCode));
 /** The commit an sd-cli --help banner names; Windows ends its lines with CRLF. */
 export const probeCommit = (output: string) => output.match(/^stable-diffusion\.cpp version [^\r\n]+, commit ([a-f0-9]{7,40})\b/)?.[1];
+/** Probes a configured executable: it must run here and name the pinned revision. */
+async function inspectConfigured(root: string, nativeExecutable: string, signal: AbortSignal): Promise<NativeEngineInspection> {
+  const base = { engineDirectory: root, revision: nativeRevision };
+  try {
+    const commit = probeCommit(await runCommand(nativeExecutable, ['--help'], dirname(nativeExecutable), env, signal, 15_000));
+    if (!commit || !nativeRevision.startsWith(commit)) return { ...base, status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: 'The configured native executable is not the supported revision.' };
+  } catch (cause) {
+    if (cause instanceof PicPatchSdkError && cause.code === 'ENGINE_UNAVAILABLE' && missing(cause.cause)) return { ...base, status: 'missing', code: 'ENGINE_MISSING', message: 'The configured native executable was not found.' };
+    if (cause instanceof PicPatchSdkError && ['INSTALL_FAILED', 'ENGINE_UNAVAILABLE'].includes(cause.code)) return { ...base, status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: 'The configured native executable did not pass its readiness checks.' };
+    throw cause;
+  }
+  return { ...base, status: 'ready', code: 'ENGINE_READY', message: 'The configured native executable is ready.', nativeExecutable };
+}
 async function inspect(root: string, signal: AbortSignal): Promise<NativeEngineInspection> {
   const base = { engineDirectory: root, revision: nativeRevision };
   const pinned = hostRelease();
@@ -68,21 +78,21 @@ async function inspect(root: string, signal: AbortSignal): Promise<NativeEngineI
   }
   return { ...base, status: 'ready', code: 'ENGINE_READY', message: 'The native engine is ready.', nativeExecutable };
 }
-/** Read-only runtime probe; does not acquire files or load models. */
-export function inspectNativeEngine(options: EngineOptions = {}) {
+/** Read-only runtime probe of the managed installation, or of a configured executable; does not acquire files or load models. */
+export function inspectNativeEngine(options: NativeInspectionOptions = {}): Promise<NativeEngineInspection> {
   return withDiagnostics('inspectNativeEngine', options, operation => {
-    const directory = root(operation);
+    const { root: directory, nativeExecutable } = settings(operation, ['nativeExecutable']);
     return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Native engine inspection timed out.', async signal => {
-      try { return await inspect(directory, signal); }
+      try { return await (nativeExecutable === undefined ? inspect(directory, signal) : inspectConfigured(directory, nativeExecutable, signal)); }
       catch (cause) { if (cause instanceof PicPatchSdkError) throw cause; throw new PicPatchSdkError('ENGINE_IO', 'Could not inspect the native engine.', { cause }); }
     });
   });
 }
 /** Explicit acquisition. Pass the returned nativeExecutable to an editor or profile. No implicit install. */
-export function installNativeEngine(options: EngineOptions = {}) {
+export function installNativeEngine(options: NativeEngineOptions = {}): Promise<NativeEngineInstallation> {
   return withDiagnostics('installNativeEngine', options, operation => install(operation));
 }
-async function install(options: EngineOptions): Promise<NativeEngineInstallation> {
+async function install(options: NativeEngineOptions): Promise<NativeEngineInstallation> {
   const directory = root(options);
   const pinned = requireRelease();
   let completed: NativeEngineInstallation | undefined;
@@ -153,8 +163,9 @@ async function install(options: EngineOptions): Promise<NativeEngineInstallation
       const error = cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('ENGINE_IO', 'Native engine installation failed.', { cause });
       if (storageStalled() || publicationAttempted || error.code === 'TERMINATION_FAILED') { error.effect = 'unknown'; error.details.recoveryDirectory = staging; }
       else {
+        // The primary failure keeps its code; staging that remains is named in details.
         try { await storageCleanup(() => rm(staging, { recursive: true, force: true })); }
-        catch (cleanup) { throw new PicPatchSdkError('CLEANUP_FAILED', 'Native installation failed and staging could not be removed.', { cause: new AggregateError([cause, cleanup]), effect: 'unknown', details: { recoveryDirectory: staging } }); }
+        catch { error.details.recoveryDirectory = staging; }
       }
       throw error;
     }

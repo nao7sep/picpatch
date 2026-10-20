@@ -23,8 +23,8 @@ export function checkCancellation(signal?: AbortSignal): void {
   checkSignal(signal);
 }
 
-/** Copy through an open descriptor, rejecting special files before reading. */
-export async function snapshotImage(source: string, target: string, signal?: AbortSignal, noFollow = false, expected?: ImageFingerprint, measured?: (fingerprint: ImageFingerprint) => void): Promise<string> {
+/** Copy through an open descriptor, rejecting special files before reading. A private copy is owner-only; a copy to publish takes the ordinary mode (0o666 under the umask). */
+export async function snapshotImage(source: string, target: string, signal?: AbortSignal, noFollow = false, expected?: ImageFingerprint, measured?: (fingerprint: ImageFingerprint) => void, mode = 0o600): Promise<string> {
   checkCancellation(signal);
   if (!isAbsolute(source) || source.includes('\0')) throw new PicPatchSdkError('INVALID_IMAGE', 'Image paths must be absolute.');
   let input;
@@ -40,7 +40,7 @@ export async function snapshotImage(source: string, target: string, signal?: Abo
   try {
     const before = await input.stat({ bigint: true });
     if (!before.isFile()) throw new PicPatchSdkError(expected ? 'INPUTS_CHANGED' : 'INVALID_IMAGE', 'Images must be regular files.', { subject: source });
-    const output = await open(target, 'wx', 0o600);
+    const output = await open(target, 'wx', mode);
     try {
       const hash = expected || measured ? createHash('sha256') : undefined;
       let bytes = 0;
@@ -97,9 +97,11 @@ export async function normalizeImage(snapshot: string, target: string, mask = fa
   }
 }
 
-export async function prepareImage(source: string, snapshot: string, target: string, mask = false, signal?: AbortSignal, policy?: GeometryPolicy, expected?: ImageFingerprint, measured?: (fingerprint: ImageFingerprint) => void): Promise<PreparedImage> {
+/** keep retains the private snapshot, whose metadata an edit's output carries from its source. */
+export async function prepareImage(source: string, snapshot: string, target: string, mask = false, signal?: AbortSignal, policy?: GeometryPolicy, expected?: ImageFingerprint, measured?: (fingerprint: ImageFingerprint) => void, keep = false): Promise<PreparedImage> {
   const identity = await snapshotImage(source, snapshot, signal, false, expected, measured);
   const image = await normalizeImage(snapshot, target, mask, signal, false, policy);
+  if (keep) return { ...image, identity };
   try { await unlink(snapshot); }
   catch (cause) { throw new PicPatchSdkError('IMAGE_IO', 'Could not remove the input snapshot.', { cause }); }
   return { ...image, identity };

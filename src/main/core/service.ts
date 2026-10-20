@@ -4,12 +4,12 @@ import { errorRecord } from './records.ts';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { writeFile, rm } from 'node:fs/promises';
-import { listModels, inspectModels, prepareModel, saveArtifact, validateProfile, openModel, verifyModel, removeModel, resolveStoragePaths, isPicPatchSdkError } from 'picpatchsdk';
+import { listModels, inspectModels, prepareModel, saveArtifact, openModel, verifyModel, removeModel, resolveStoragePaths, isPicPatchSdkError } from 'picpatchsdk';
 import type { AppPaths } from './paths.ts';
 import { Sessions, validateDraft } from './sessions.ts';
 import { Queue } from './queue.ts';
 import { inference } from './inference.ts';
-import { readSettings, saveSettings, validConcurrency } from './settings.ts';
+import { readSettings, saveSettings, usableProfile, validConcurrency } from './settings.ts';
 import type { Runner } from './queue.ts';
 import type { Draft } from '../../shared/session.ts';
 import type { PrepareModelOptions, SdkEvent } from 'picpatchsdk';
@@ -31,7 +31,7 @@ export class Application {
         throw error;
       }
       const result = completion.outcome;
-      if (!('status' in result)) {
+      if (result.status === 'completed') {
         if (result.sidecar?.status === 'failed') this.diagnostic('warn', 'Image saved; its settings sidecar could not be saved.', { ...context, sidecar: result.sidecar });
         if (result.cleanupWarning) this.diagnostic('warn', 'Image saved with a cleanup warning.', { ...context, warning: result.cleanupWarning });
       }
@@ -42,7 +42,11 @@ export class Application {
     this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined);
     this.queue = new Queue(this.sessions, this.runner(), changed, () => this.settings.concurrency ?? 1);
   }
-  static async open(paths: AppPaths, changed: (scope?: 'progress') => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> { return new Application(paths, await readSettings(paths.config), changed, backup, diagnostic); }
+  static async open(paths: AppPaths, changed: (scope?: 'progress') => void = () => {}, backup: (path: string, bytes?: Buffer, sha256?: string) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> {
+    const settings = await readSettings(paths.config);
+    if (settings.newerProfile !== undefined) diagnostic('warn', 'Resource settings were saved by a newer PicPatch; the defaults are used and the saved settings are kept.', {});
+    return new Application(paths, settings, changed, backup, diagnostic);
+  }
   sdkEvents(context: Record<string, unknown> = {}): (event: SdkEvent) => void {
     return event => this.diagnostic(event.level, event.message, { ...context, event });
   }
@@ -69,13 +73,13 @@ export class Application {
   async export(sessionId: string, runId: string, destination: string, sidecar: boolean, includeInputs: boolean) {
     const session = await this.sessions.get(sessionId); const run = session.runs.find(r => r.id === runId);
     if (!run?.record || !run.output) throw new UiError('error.select_a_completed_image');
-    const record = structuredClone(run.record);
-    if (!includeInputs) { delete record.inputs; delete record.effectiveParameters.negativePrompt; record.inputsIncluded = false; }
-    const result = await saveArtifact(await this.sessions.imagePath(sessionId, runId), destination, record, { sidecar, onEvent: this.sdkEvents({ sessionId, runId, action: 'export' }) });
-    if (result.status === 'saved' && result.sidecar?.status === 'failed') this.diagnostic('warn', 'Image saved; its settings sidecar could not be saved.', { sessionId, runId, sidecar: result.sidecar });
+    // The SDK leaves the inputs out of the saved copy when the user did not choose to share them.
+    const result = await saveArtifact(await this.sessions.imagePath(sessionId, runId), destination, run.record, { sidecar, includeInputs, onEvent: this.sdkEvents({ sessionId, runId, action: 'export' }) });
+    if (result.status === 'completed' && result.sidecar?.status === 'failed') this.diagnostic('warn', 'Image saved; its settings sidecar could not be saved.', { sessionId, runId, sidecar: result.sidecar });
     return result;
   }
-  async readiness() { return modelReadiness(this.settings); }
+  /** Presence checks are cheap; the signal bounds a probe that stops responding, such as an engine on a stalled volume. */
+  async readiness() { return modelReadiness(this.settings, { signal: AbortSignal.timeout(120_000), onEvent: this.sdkEvents({ action: 'readiness' }) }); }
   async models() { return inspectModels({ profile: this.settings.profile, onEvent: this.sdkEvents({ action: 'models' }) }); }
   async prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelOptions, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}, signal?: AbortSignal) {
     this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_prepared_models');
@@ -93,6 +97,8 @@ export class Application {
       for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) {
         if (value[key]) next.profile[key] = value[key]; else delete next.profile[key];
       }
+      // Choosing resources here replaces a profile a newer PicPatch saved.
+      if (this.resourcesChanged(value)) delete next.newerProfile;
       const language = preference(value.language); if (language) next.language = language; else delete next.language;
       if (value.theme) next.theme = value.theme; else delete next.theme;
       if (typeof value.uiFont === 'string' && value.uiFont.trim()) next.uiFont = value.uiFont; else delete next.uiFont;
@@ -103,7 +109,7 @@ export class Application {
   }
   async verify(modelId: string, signal?: AbortSignal) {
     const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile, signal, onEvent: this.sdkEvents({ modelId }) });
-    if (opened.status !== 'present') return opened;
+    if (opened.status === 'refused') return opened;
     return verifyModel(opened.model.directory, opened.model.manifest, { signal, onEvent: this.sdkEvents({ modelId }) });
   }
   async removeManaged(modelId: string, name: string, signal?: AbortSignal) {
@@ -112,7 +118,7 @@ export class Application {
   }
   private updateSettings(change: (value: Settings) => void): Promise<void> {
     const next = this.settingsTail.then(async () => {
-      const value = structuredClone(this.settings); change(value); validateProfile(value.profile);
+      const value = structuredClone(this.settings); change(value); usableProfile(value.profile);
       const bytes = await saveSettings(this.paths.config, value);
       this.settings = value; this.backup(this.paths.config, bytes); this.changed();
     });

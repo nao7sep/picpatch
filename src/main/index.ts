@@ -1,7 +1,6 @@
 import { startupFailureWindow } from './startup-failure.ts';
 import { exportName } from '../shared/export-name.ts';
 import { menuTemplate } from './menu-template.ts';
-import { pythonRuntime } from './core/engines.ts';
 import { RecordsReader } from './core/records-reader.ts';
 import { focusWorkspaceForCommand } from './workspace-command.ts';
 import { LogsWindow } from './logs-window.ts';
@@ -228,6 +227,11 @@ async function start() {
 async function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections')[], title: string) {
   const result = await dialog.showOpenDialog(window!, { title, properties }); return result.canceled ? [] : result.filePaths;
 }
+/** The Python runtime the catalog names for a model; native models and no selection use the default Python engine. */
+function pythonEngine(modelId: unknown) {
+  const runtime = listModels().find(model => model.id === modelId)?.runtime;
+  return runtime?.engine === 'python' ? { runtime: runtime.name } : {};
+}
 async function dispatch(action: string, payload: any, signal?: AbortSignal) {
   switch (action) {
     case 'modalState': modalOpen = payload.open === true; for (const id of ['picpatch-about','picpatch-settings']) { const item = Menu.getApplicationMenu()?.getMenuItemById(id); if (item) item.enabled = !modalOpen; } return;
@@ -268,7 +272,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       const result = await dialog.showSaveDialog(window!, { title: t('ui.save_image'), defaultPath: paneState.exportDirectory ? join(paneState.exportDirectory, name) : name, filters: [{ name: t('ui.png_image'), extensions: ['png'] }] });
       if (result.canceled || !result.filePath) return;
       const saved = await service.export(payload.id, payload.runId, result.filePath, payload.sidecar === true, payload.includeInputs === true);
-      if (saved.status === 'saved') await storePane({ exportDirectory: dirname(result.filePath) }).catch(error => records?.write('warn', 'Export destination could not be retained.', { error: errorRecord(error) }));
+      if (saved.status === 'completed') await storePane({ exportDirectory: dirname(result.filePath) }).catch(error => records?.write('warn', 'Export destination could not be retained.', { error: errorRecord(error) }));
       return saved;
     }
     case 'cancelManaged': managed?.controller.abort(); return;
@@ -289,7 +293,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
       // Native bundles name their checkpoint through pickComponent before Register is enabled.
       const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return;
       return service.prepare(payload.modelId, paths[0], payload.checkpoint, false, payload.components, signal); }
-    case 'engines': return { python: await inspectEngine({ runtime: pythonRuntime(listModels(), payload.modelId), profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
+    case 'engines': return { python: await inspectEngine({ ...pythonEngine(payload.modelId), profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }), native: await inspectNativeEngine({ profile: service.settings.profile, onEvent: service.sdkEvents({ action }) }) };
     case 'installNative': {
       try { return await installNativeEngine({ onEvent: service.sdkEvents({ action }), profile: service.settings.profile, signal }); }
       catch (error) {
@@ -298,7 +302,7 @@ async function dispatch(action: string, payload: any, signal?: AbortSignal) {
         throw error;
       }
     }
-    case 'installPython': { const uvExecutable = locations.uv(); return installEngine({ runtime: pythonRuntime(listModels(), payload.modelId), onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
+    case 'installPython': { const uvExecutable = locations.uv(); return installEngine({ ...pythonEngine(payload.modelId), onEvent: service.sdkEvents({ action }), profile: service.settings.profile, uvExecutable, toolDirectories: [...new Set([...(process.env.PATH ?? '').split(delimiter).filter(isAbsolute), '/opt/homebrew/bin', '/usr/local/bin'])], signal }); }
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }

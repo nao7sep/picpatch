@@ -32,8 +32,8 @@ def test_cancel_ack_keeps_active_until_producer_settles(verb):
         assert entered.wait(2)
         assert session.handle({'version': 1, 'id': 3, 'type': 'cancel', 'targetId': 2})['accepted']
         assert replies == []
-        assert session.handle({**edit, 'id': 4})['error']['code'] == 'BUSY'
-        assert session.handle({'version': 1, 'id': 5, 'type': 'shutdown'})['error']['code'] == 'BUSY'
+        assert session.handle({**edit, 'id': 4})['error']['code'] == 'PROTOCOL_ERROR'
+        assert session.handle({'version': 1, 'id': 5, 'type': 'shutdown'})['error']['code'] == 'PROTOCOL_ERROR'
     finally:
         release.set(); session.close()
     assert replies[0]['error']['code'] == 'CANCELLED'

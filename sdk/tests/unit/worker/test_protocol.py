@@ -26,9 +26,13 @@ def test_handshake_edit_cancel_shutdown(protocol):
     with pytest.raises(ProtocolError):
         session.handle(message('hello', 5))
 
+def test_handshake_reports_the_sdk_version(protocol):
+    version = json.loads((ROOT / 'package.json').read_text())['version']
+    assert Session(protocol).handle(message('hello'))['workerVersion'] == version
+
 def test_handshake_required_and_ids_not_reused(protocol):
     session = Session(protocol)
-    assert session.handle(message('shutdown'))['error']['code'] == 'NOT_READY'
+    assert session.handle(message('shutdown'))['error']['code'] == 'PROTOCOL_ERROR'
     session.handle(message('hello', 2))
     with pytest.raises(ProtocolError):
         session.handle(message('hello', 3))

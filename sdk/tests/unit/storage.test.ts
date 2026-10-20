@@ -31,7 +31,7 @@ it('bounds a stalled publication, retains owned files, and never resumes sidecar
   try {
     // Expire at the publication boundary, not while image encoding happens to be slow.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const outcome = expect(editor.generate({ prompt: 'Bowl', outputPath: path, sidecar: {} }, { timeoutMs: 100 })).rejects.toMatchObject({ code: 'TIMEOUT', effect: 'unknown', details: { recoveryDirectory: expect.any(String) } });
+    const outcome = expect(editor.generate({ prompt: 'Bowl', outputPath: path, sidecar: true }, { timeoutMs: 100 })).rejects.toMatchObject({ code: 'TIMEOUT', effect: 'unknown', details: { recoveryDirectory: expect.any(String) } });
     await publicationStarted.promise;
     await vi.advanceTimersByTimeAsync(100); await outcome; vi.useRealTimers();
     expect(publish).toBeDefined(); expect((await fs.readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(true);

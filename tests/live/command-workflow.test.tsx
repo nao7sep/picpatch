@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { mkdtemp, mkdir, readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
+import { appLiveCache, liveCacheRoot } from '../helpers/live-cache.ts';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { Application } from '../../src/main/core/service.ts';
@@ -14,10 +15,10 @@ import { App } from '../../src/renderer/src/App.tsx';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 it('generates, edits with references, branches and reopens through the real renderer and local worker', async () => {
-  const cache = resolve('sdk/node_modules/.cache/picpatch-live');
+  const cache = liveCacheRoot;
   const config = JSON.parse(await readFile(join(cache, 'inference-config.json'), 'utf8'));
   const modelId = config.model.manifest.model;
-  const artifacts = resolve('node_modules/.cache/picpatch-live/command-workflow');
+  const artifacts = appLiveCache('command-workflow');
   await mkdir(artifacts, { recursive: true });
   const root = await mkdtemp(join(artifacts, 'session-'));
   const paths: AppPaths = { root, sessions: join(root, 'sessions'), config: join(root, 'config.json'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') };
@@ -65,7 +66,9 @@ it('generates, edits with references, branches and reopens through the real rend
     expect(app.queue.busy()).toBe(false);
     const output = await app.sessions.imagePath(saved.id, run.id);
     expect(await sharp(output).metadata()).toMatchObject({ format: 'png', width: 384, height: 384 });
-    expect(JSON.parse(await readFile(output.replace(/\.png$/, '-picpatchsdk.json'), 'utf8'))).toHaveProperty('seed', 42);
+    // The session keeps the full record; no sidecar is written beside session outputs.
+    expect(run.record).toMatchObject({ seed: 42, inputsIncluded: true, caller: { name: 'picpatch' } });
+    await expect(readFile(output.replace(/\.png$/, '-picpatchsdk.json'))).rejects.toMatchObject({ code: 'ENOENT' });
     await act(async () => change());
     await waitFor(() => expect(screen.queryByText('The target image is not ready. Wait, select another image, or choose New image.')).toBeNull(), { timeout: 5000 });
     console.log(JSON.stringify({ stage: count + 1, output }));
@@ -74,7 +77,7 @@ it('generates, edits with references, branches and reopens through the real rend
   try {
     render(<App />);
     await waitFor(() => expect(ready).toBe(true), { timeout: 10_000 });
-    fireEvent.click(await screen.findByText('Offline command acceptance'));
+    fireEvent.click(within(await screen.findByRole('navigation', { name: 'Sessions' })).getByText('Offline command acceptance'));
     const original = await command('A studio photograph of a plain white ceramic teapot on a wooden table, soft daylight, neutral background.');
     fireEvent.click(screen.getByRole('button', { name: 'Add images' }));
     fireEvent.click(await screen.findByText('Reference photos'));
@@ -93,7 +96,7 @@ it('generates, edits with references, branches and reopens through the real rend
     ready = false;
     render(<App />);
     await waitFor(() => expect(ready).toBe(true), { timeout: 10_000 });
-    fireEvent.click(await screen.findByText('Offline command acceptance'));
+    fireEvent.click(within(await screen.findByRole('navigation', { name: 'Sessions' })).getByText('Offline command acceptance'));
     await waitFor(() => expect(field().value).toBe(before.draft.text));
     const reopened: Session = await app.sessions.get(created.id);
     expect(reopened.runs).toEqual(before.runs);

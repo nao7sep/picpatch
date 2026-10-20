@@ -36,7 +36,7 @@ it('rejects unsupported maps and malformed capability metadata before input IO',
   expect(() => validateGenerateRequest(request, caps)).not.toThrow();
   for (const control of [{ kind: 'unknown', image: '/map.png' }, { kind: 'canny', image: 'relative.png' }, { kind: 'canny', image: '/map.png', strength: -1 }, { kind: 'canny', image: '/map.png', strength: Infinity }]) expect(() => validateGenerateRequest({ ...request, control }, caps)).toThrow();
   expect(() => validateGenerateRequest({ ...request, outputPath: '/map.png' }, caps)).toThrow(expect.objectContaining({ code: 'OUTPUT_CONFLICT' }));
-  expect(() => validateGenerateRequest(request, { ...caps, controlKinds: {} } as never)).toThrow(expect.objectContaining({ code: 'INVALID_CAPABILITIES' }));
+  expect(() => validateGenerateRequest(request, { ...caps, controlKinds: {} } as never)).toThrow(expect.objectContaining({ code: 'PROTOCOL_ERROR' }));
   for (const model of ['sdxl-inpaint', 'flux2-klein-4b']) expect(() => validateGenerateRequest({ ...request, model }, listModels().find(item => item.id === model)!.capabilities)).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CAPABILITY' }));
   await nativeCheckpoint(join(directory, 'base.safetensors'), 'sd15');
   const prepared = await prepareModel('sd15', { directory, checkpoint: 'base.safetensors' });

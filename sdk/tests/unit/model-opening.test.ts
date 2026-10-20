@@ -12,11 +12,11 @@ it('opens a persisted registration using presence alone while explicit verificat
   const read = await readModelRegistration(fixture('current')); if (read.status === 'refused') throw new Error(read.code); const registration = read.registration;
   registration.model.directory = directory;
   await writeFile(join(directory, 'weights.safetensors'), 'test');
-  expect(await openModel(registration)).toMatchObject({ status: 'present', integrity: 'presence-only', compatibility: 'unknown', version: 1 });
+  expect(await openModel(registration)).toMatchObject({ status: 'completed', integrity: 'presence-only', compatibility: 'unknown', version: 1 });
   expect(await verifyModel(directory, registration.model.manifest)).toMatchObject({ status: 'invalid', components: [{ status: 'digest-mismatch', code: 'MODEL_COMPONENT_DIGEST_MISMATCH', effect: 'none', message: expect.any(String) }] });
   await writeFile(join(directory, 'weights.safetensors'), 'wrong length');
-  expect(await openModel(registration)).toMatchObject({ status: 'refused', code: 'MODEL_INCOMPLETE', issues: [{ code: 'MODEL_FILE_SIZE_MISMATCH', effect: 'none' }] });
-  expect(validateModelRegistration(JSON.parse(JSON.stringify(registration)))).toEqual(registration);
+  expect(await openModel(registration)).toMatchObject({ status: 'refused', code: 'MODEL_INCOMPLETE', details: { issues: [{ code: 'MODEL_FILE_SIZE_MISMATCH', effect: 'none' }] } });
+  expect(validateModelRegistration(JSON.parse(JSON.stringify(registration)))).toEqual({ status: 'completed', registration });
 });
 it('preserves unsupported registrations and refuses them before looking at model files', async () => {
   const path = fixture('newer'); const original = await readFile(path);
@@ -41,7 +41,7 @@ it('round-trips persisted native split encoder roles without dropping or redirec
   expect(result.registration).toEqual(expected);
   expect(result.registration.model).toMatchObject({ checkpoint: 'sd35-large.safetensors', clipL: 'clip-l.safetensors', clipG: 'clip-g.safetensors', t5: 't5.gguf', vae: 'vae.safetensors' });
   const saved = join(directory, 'registration.json');
-  await writeFile(saved, JSON.stringify(validateModelRegistration(result.registration)));
+  await writeFile(saved, JSON.stringify(result.registration));
   const reread = await readModelRegistration(saved);
   expect(reread).toEqual(result);
   expect(await readFile(path)).toEqual(bytes);

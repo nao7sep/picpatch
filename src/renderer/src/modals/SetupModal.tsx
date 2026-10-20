@@ -18,17 +18,18 @@ export function SetupModal({ models, initial, onClose, onChanged, onUse, onManag
   const { t, number, errorText } = useI18n();
   const [readiness, setReadiness] = useState<Readiness>();
   const [choice, setChoice] = useState(initial ?? (models.some(model => model.id === RECOMMENDED) ? RECOMMENDED : models[0]?.id ?? ''));
-  const [engines, setEngines] = useState<Engines>();
+  // 'failed' means the check could not run: the engine counts as not ready and Install stays available.
+  const [engines, setEngines] = useState<Engines | 'failed'>();
   const inspection = useRef(0);
   const { busy, failure, setFailure, run, cancel } = useOperation();
   const model = models.find(item => item.id === choice);
   const ready = readiness?.[choice] === 'ready';
-  const hasEngine = engineReady(model, engines);
+  const hasEngine = engineReady(model, engines === 'failed' ? undefined : engines);
 
   const inspect = useCallback(async (modelId: string) => {
     const revision = ++inspection.current; setEngines(undefined);
     try { const result = await api.engines(modelId); if (revision === inspection.current) setEngines(result); }
-    catch (error) { if (revision === inspection.current) { setEngines({ python: { status: 'unavailable' }, native: { status: 'unavailable' } }); setFailure(errorText(error)); } }
+    catch (error) { if (revision === inspection.current) { setEngines('failed'); setFailure(errorText(error)); } }
   }, [setFailure, errorText]);
   useEffect(() => { void api.readiness().then(setReadiness, () => setReadiness({})); }, []);
   useEffect(() => { if (choice) void inspect(choice); }, [choice, inspect]);
@@ -59,7 +60,7 @@ export function SetupModal({ models, initial, onClose, onChanged, onUse, onManag
           {sorted.map(item => <option key={item.id} value={item.id}>{modelOption(item)}</option>)}
         </select>
         {summary && <span className="field-help">{[summary.purposes, summary.facts].filter(Boolean).join(' — ')}</span>}
-        <span className="field-help">{model?.downloadBytes ? t('setup.size', { size: `${number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 })} GB` }) : t('setup.local')}</span>
+        <span className="field-help">{model?.acquisition === 'pinned' ? t('setup.size', { size: `${number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 })} GB` }) : t('setup.local')}</span>
       </label>
       <ol className="steps">
         <li className={hasEngine ? 'done' : undefined}>

@@ -50,7 +50,7 @@ it('publishes generation through shared safe storage without fabricated inputs o
   const editor = new ImageClientImpl(backend(generate));
   try {
     const result = await editor.generate(request(), { onEvent: event => events.push(event) });
-    if ('status' in result) throw new Error(result.code);
+    if (result.status === 'refused') throw new Error(result.code);
     expect(result).toMatchObject({ image: { path: request().outputPath }, references: [], inputGeometry: [], seed: 0 });
     expect(await readdir(directory)).toEqual(['out.png']);
     expect((await sharp(result.image.path).metadata()).width).toBe(32);

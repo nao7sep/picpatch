@@ -58,9 +58,9 @@ export async function compare(cases: ComparisonCase[], report: string, signal?: 
                 }
               } };
               const result = operation.operation === 'generate'
-                ? await editor.generate({ ...operation.request, sidecar: {} }, operationOptions)
-                : await editor.edit({ ...operation.request, ...(operation.sourceFromPrevious ? { sourceImage: previous!.image.path } : {}), sidecar: {} }, operationOptions);
-                if ('status' in result) { previous = undefined; record.outcome = 'refused'; record.errorCode = result.code; continue; }
+                ? await editor.generate({ ...operation.request, sidecar: true }, operationOptions)
+                : await editor.edit({ ...operation.request, ...(operation.sourceFromPrevious ? { sourceImage: previous!.image.path } : {}), sidecar: true }, operationOptions);
+                if (result.status === 'refused') { previous = undefined; record.outcome = 'refused'; record.errorCode = result.code; continue; }
               previous = result;
               const { negativePrompt: _private, ...parameters } = result.effectiveParameters;
               Object.assign(record, { outcome: 'completed', model: result.model, modelRevision: result.modelRevision, runtime: result.runtime, seed: result.seed, parameters,

@@ -35,10 +35,10 @@ fs.writeFileSync(value('--output'), Buffer.from('${png.toString('base64')}', 'ba
     const client = createImageClient({ model, nativeExecutable: executable, defaults: { size: { width: 32, height: 32 }, outputDirectory: directory } });
     try {
       const generated = await client.generate({ prompt: 'A bowl.', seed: 42 });
-      if ('status' in generated) throw new Error(generated.code);
+      if (generated.status === 'refused') throw new Error(generated.code);
       expect(generated.seed).toBe(42);
-      const edited = await client.edit({ instruction: 'Arrange these objects.', sourceImage, references: [{ id: 'subject', role: 'subject', images: [first, second] }], seed: 42, sidecar: {} });
-      if ('status' in edited) throw new Error(edited.code);
+      const edited = await client.edit({ instruction: 'Arrange these objects.', sourceImage, references: [{ id: 'subject', role: 'subject', images: [first, second] }], seed: 42, sidecar: true });
+      if (edited.status === 'refused') throw new Error(edited.code);
       expect(edited.references[0]!.images).toEqual([first, second]);
       expect(edited.record.effectiveParameters).toMatchObject({ steps: 28, guidance: 1, sampler: 'euler', scheduler: 'discrete' });
       const sidecar = await readFile(edited.sidecar!.path, 'utf8');

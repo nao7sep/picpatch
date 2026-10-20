@@ -39,21 +39,21 @@ const loadedProfile = await readProfile(profilePath);
 if (loadedProfile.status === 'refused') throw new Error(loadedProfile.code);
 const profile = loadedProfile.profile;
 const opened = await openModel(prepared);
-if (opened.status !== 'present') throw new Error(opened.code);
+if (opened.status === 'refused') throw new Error(opened.code);
 const editor = createImageClient({ profile, model: opened.model });
 let source: string;
 try {
-  const generation = await editor.plan({ prompt: 'A blue ceramic bowl on a white table.', parameters: { steps: 2 }, sidecar: {} });
-  if (generation.status !== 'planned') throw new Error(generation.code);
+  const generation = await editor.plan({ prompt: 'A blue ceramic bowl on a white table.', parameters: { steps: 2 }, sidecar: true });
+  if (generation.status !== 'completed') throw new Error(generation.code);
   const generated = await editor.generate(generation);
-  if ('status' in generated) throw new Error(generated.code);
+  if (generated.status === 'refused') throw new Error(generated.code);
   const record = await artifact(generated);
   assert.equal(record.effectiveParameters.steps, 2); assert.equal(record.inputs, undefined);
   source = generated.image.path;
-  const edit = await editor.plan({ instruction: 'Make the bowl green.', sourceImage: source, parameters: { steps: 2 }, sidecar: { includeInputs: true } });
-  if (edit.status !== 'planned') throw new Error(edit.code);
+  const edit = await editor.plan({ instruction: 'Make the bowl green.', sourceImage: source, parameters: { steps: 2 }, record: { includeInputs: true }, sidecar: true });
+  if (edit.status !== 'completed') throw new Error(edit.code);
   const edited = await editor.edit(edit);
-  if ('status' in edited) throw new Error(edited.code);
+  if (edited.status === 'refused') throw new Error(edited.code);
   assert.equal((await artifact(edited)).inputs.sourceImage, basename(source));
 } finally { await editor.dispose(); }
 const original = await readFile(source!);
@@ -64,10 +64,10 @@ assert.equal(masked.origin, 'external');
 assert.equal(masked.integrity, 'locally-fingerprinted');
 const inpaint = createImageClient({ profile, model: masked.model });
 try {
-  const plan = await inpaint.plan({ instruction: 'A red ceramic bowl on a white table.', sourceImage: source!, maskImage, parameters: { steps: 4 }, sidecar: { includeInputs: true } });
-  if (plan.status !== 'planned') throw new Error(plan.code);
+  const plan = await inpaint.plan({ instruction: 'A red ceramic bowl on a white table.', sourceImage: source!, maskImage, parameters: { steps: 4 }, record: { includeInputs: true }, sidecar: true });
+  if (plan.status !== 'completed') throw new Error(plan.code);
   const result = await inpaint.edit(plan);
-  if ('status' in result) throw new Error(result.code);
+  if (result.status === 'refused') throw new Error(result.code);
   const record = await artifact(result);
   assert.equal(record.inputs.maskImage, basename(maskImage));
   assert.equal(record.effectiveParameters.strength, 1);
@@ -78,8 +78,8 @@ try {
   // A neutral generated fixture proves API/asset transport, not portrait identity quality.
   const result = await conditioned.edit({ instruction: 'A watercolor portrait of {person}.', references: [
     { id: 'person', role: 'subject', conditioning: 'identity', className: 'man', images: [source!] },
-  ], parameters: { steps: 4, identityStyleStrength: 25 }, sidecar: {} });
-  if ('status' in result) throw new Error(result.code);
+  ], parameters: { steps: 4, identityStyleStrength: 25 }, sidecar: true });
+  if (result.status === 'refused') throw new Error(result.code);
   const record = await artifact(result);
   assert.equal(record.conditioning.method, 'photomaker-v1');
   assert.equal(record.conditioning.assets[0].filename, basename(config.native.photoMaker));

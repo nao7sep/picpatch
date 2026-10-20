@@ -31,7 +31,11 @@ export interface EditRequestContract {
   seed?: number;
   size?: ImageSize;
   parameters?: SamplingParameters;
-  sidecar?: SidecarOptions;
+  record?: RecordOptions;
+  /**
+   * Write the record as a sidecar beside the image. False by default; the record is always in the result.
+   */
+  sidecar?: boolean;
   outpaint?: OutpaintCanvas;
   control?: StructuralControl;
 }
@@ -88,13 +92,20 @@ export interface SamplingParameters {
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
- * via the `definition` "SidecarOptions".
+ * via the `definition` "RecordOptions".
  */
-export interface SidecarOptions {
+export interface RecordOptions {
   /**
-   * Explicitly retain prompt/instruction, negative prompt and path-free input descriptions. False by default.
+   * Retain the prompt or instruction, negative prompt and path-free input descriptions in the record. False by default.
    */
   includeInputs?: boolean;
+  /**
+   * The calling app's identity, recorded beside the SDK writer.
+   */
+  caller?: {
+    name: string;
+    version: string;
+  };
 }
 /**
  * This interface was referenced by `EditRequestContract`'s JSON-Schema
@@ -134,7 +145,11 @@ export interface EditRequest {
   seed?: number;
   size?: ImageSize;
   parameters?: SamplingParameters;
-  sidecar?: SidecarOptions;
+  record?: RecordOptions;
+  /**
+   * Write the record as a sidecar beside the image. False by default; the record is always in the result.
+   */
+  sidecar?: boolean;
   outpaint?: OutpaintCanvas;
   control?: StructuralControl;
 }
@@ -516,7 +531,11 @@ export interface GenerateRequest {
   size?: ImageSize;
   prompt: string;
   parameters?: SamplingParameters;
-  sidecar?: SidecarOptions;
+  record?: RecordOptions;
+  /**
+   * Write the record as a sidecar beside the image. False by default; the record is always in the result.
+   */
+  sidecar?: boolean;
   control?: StructuralControl;
 }
 /**

@@ -18,11 +18,11 @@ it.each([['base', 'flux2-klein-base-9b', 4, 'PICPATCH_KLEIN_BASE_CONFIG'], ['dis
   // Small-canvas regression checks exercise weights; the separate example uses quality settings.
   const editor = createImageClient({ ...options, model: prepared.model, defaults: { size: { width: 256, height: 256 }, seed: 42, outputDirectory: directory, parameters: { steps } } });
   try {
-    const generated = await editor.generate({ prompt: 'A green ceramic mug on a wooden table.', sidecar: {} });
-    if ('status' in generated) throw new Error(generated.code);
+    const generated = await editor.generate({ prompt: 'A green ceramic mug on a wooden table.', sidecar: true });
+    if (generated.status === 'refused') throw new Error(generated.code);
     const original = await readFile(generated.image.path);
-    const edited = await editor.edit({ sourceImage: generated.image.path, instruction: 'Change the mug to blue.', sidecar: {} });
-    if ('status' in edited) throw new Error(edited.code);
+    const edited = await editor.edit({ sourceImage: generated.image.path, instruction: 'Change the mug to blue.', sidecar: true });
+    if (edited.status === 'refused') throw new Error(edited.code);
     for (const result of [generated, edited]) {
       expect(result.effectiveParameters).toEqual({ steps, guidance, scheduler: 'flow_match_euler_discrete' });
       expect(result.modelRevision).toBe(prepared.model.manifest.source.revision);

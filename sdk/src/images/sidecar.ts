@@ -4,17 +4,19 @@ import { contractValidator } from '../contracts.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { link, open } from '../storage.ts';
+import { open } from '../storage.ts';
+import { publishFile } from './publication.ts';
 import { basename, join } from 'node:path';
 import type { ArtifactRecord, EditResult, SidecarOutcome } from '../contracts.generated.ts';
 import type { ImageRequest } from '../types.ts';
 
 /** Reproducibility metadata never enters the image. Hashes identify encoded file bytes. */
-export async function createArtifactRecord(request: ImageRequest, result: EditResult, complete: string, fingerprints: ArtifactRecord['fingerprints'], caller?: ArtifactRecord['caller']): Promise<ArtifactRecord> {
+export async function createArtifactRecord(request: ImageRequest, result: EditResult, complete: string, fingerprints: ArtifactRecord['fingerprints']): Promise<ArtifactRecord> {
     const hash = createHash('sha256');
     let bytes = 0;
     await storageWait(async () => { for await (const chunk of createReadStream(complete, { signal: storageSignal() })) { hash.update(chunk); bytes += chunk.length; } }, complete);
-    const inputsIncluded = request.sidecar?.includeInputs === true;
+    const inputsIncluded = request.record?.includeInputs === true;
+    const caller = request.record?.caller;
     const { negativePrompt, ...parameters } = result.effectiveParameters;
     const record: ArtifactRecord = {
       version: 1, writer: { name: 'picpatchsdk', version: packageInfo.version }, fingerprints, ...(caller ? { caller } : {}), operation: 'prompt' in request ? 'generate' : 'edit', inputsIncluded,
@@ -49,12 +51,12 @@ export async function publishSidecar(record: ArtifactRecord, path: string, desti
   let publishing = false;
   try {
     const staging = join(directory, 'sidecar.json');
-    const file = await open(staging, 'wx', 0o600);
+    const file = await open(staging, 'wx');
     try { await file.writeFile(`${JSON.stringify(record, null, 2)}\n`, 'utf8'); await file.sync(); }
     finally { await file.close(); }
     // Each file publishes exclusively. The pair is deliberately not called atomic.
     publishing = true;
-    await link(staging, destination);
+    await publishFile(staging, destination);
     return { status: 'saved', path };
   } catch (cause) {
     // OUTPUT_IO classification can only select these filesystem causes.

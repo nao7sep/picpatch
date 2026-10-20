@@ -2,7 +2,7 @@ import { modelRuntime } from '../models/variants.ts';
 import { NativeBackend } from '../backends/stable-diffusion-cpp/backend.ts';
 import { isNativeVariant, nativeCapabilities, nativeRevision } from '../backends/stable-diffusion-cpp/models.ts';
 import { withDiagnostics } from '../diagnostics.ts';
-import type { EventOptions } from '../diagnostics.ts';
+import type { CallOptions } from '../types.ts';
 import { stat } from '../storage.ts';
 import { join } from 'node:path';
 import type { LocalModel, ModelCapabilities } from '../contracts.generated.ts';
@@ -14,13 +14,10 @@ import type { RuntimeCheck } from '../worker/protocol.ts';
 import { workerLaunch } from '../backends/python/launch.ts';
 import { workerTimeouts } from '../worker/process.ts';
 
-export interface ReadinessOptions extends EventOptions {
-  signal?: AbortSignal;
-  timeoutMs?: number;
+export interface ReadinessOptions extends CallOptions {
   verify?: boolean;
   /** Loads existing weights without inference, then releases the process. May consume substantial memory. */
   load?: boolean;
-  onProgress?: (event: import('../types.ts').ProgressEvent) => void;
 }
 export interface ModelReadiness {
   files: 'present' | 'incomplete';

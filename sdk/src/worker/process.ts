@@ -14,14 +14,8 @@ export interface WorkerLaunch {
   model?: LocalModel;
   runtimeCheck?: 'imports' | 'load';
 }
-export interface WorkerTimeouts {
-  startupMs: number;
-  editMs: number;
-  generateMs?: number;
-  cancellationMs: number;
-  shutdownMs: number;
-  terminationMs: number;
-}
+export type { WorkerTimeouts } from '../types.ts';
+import type { WorkerTimeouts } from '../types.ts';
 export const workerTimeouts: WorkerTimeouts = { startupMs: 30_000, editMs: 1_800_000, generateMs: 1_800_000, cancellationMs: 5_000, shutdownMs: 5_000, terminationMs: 2_000 };
 export type SpawnWorker = (launch: WorkerLaunch) => ChildProcessWithoutNullStreams;
 const spawnWorker: SpawnWorker = launch => spawn(launch.executable, launch.args, {

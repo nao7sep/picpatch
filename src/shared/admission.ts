@@ -1,30 +1,38 @@
 import { t, term } from './i18n/index.ts';
-import type { ModelCapabilities } from 'picpatchsdk/types';
+import { admissionIssues, type AdmissionIssue, type ModelCapabilities } from 'picpatchsdk/types';
 import type { Draft } from './session.ts';
-/** Early GUI explanations; the SDK remains authoritative at execution. Never rewrite a draft. */
+/** The SDK's own admission rules, presented in the window's copy. The SDK remains authoritative at execution; a draft is never rewritten. */
 export function incompatibilities(draft: Draft, capabilities: ModelCapabilities): string[] {
-  const issues: string[] = [];
-  if (draft.mode === 'generate') {
-    if (!capabilities.textToImage) issues.push(t('ui.textonly_generation_is_unavailable'));
-    if (draft.source || draft.mask || draft.references.length || draft.outpaint) issues.push(t('error.input'));
-  } else {
-    if (!capabilities.instructionEditing) issues.push(t('ui.editing_is_unavailable'));
-    if (capabilities.sourceImageRequired && !draft.source) issues.push(t('ui.add_a_source_image'));
-    if (capabilities.maskRequired && !draft.mask && !draft.outpaint) issues.push(t('ui.paint_a_mask_or_expand_the_canvas'));
-    if (draft.mask && capabilities.maskMode === 'none') issues.push(t('ui.masks_are_unavailable'));
-    if (draft.outpaint && !capabilities.outpainting) issues.push(t('ui.canvas_expansion_is_unavailable'));
-    for (const group of draft.references) {
-      if (!capabilities.referenceRoles.includes(group.role)) issues.push(t('admission.role', { name: group.id, role: term('role', group.role) }));
-      const method = group.conditioning ?? 'prompt';
-      const required = { prompt: 'ordered-images-with-role-prompt', identity: 'pooled-identity', appearance: 'appearance-embedding' }[method];
-      if (capabilities.referenceConditioning !== required && !(method === 'identity' && capabilities.referenceConditioning === 'independent-subject')) issues.push(t('admission.conditioning', { name: group.id, method: term('conditioning', method) }));
-      if (!group.images.length) issues.push(t('admission.photo', { name: group.id }));
-      if (method === 'identity' && capabilities.referenceConditioning !== 'independent-subject' && !group.className) issues.push(t('admission.class', { name: group.id }));
-    }
+  const issues = admissionIssues({
+    operation: draft.mode,
+    sourceImage: draft.source !== undefined, maskImage: draft.mask !== undefined,
+    ...(draft.outpaint ? { outpaint: { size: { width: draft.outpaint.width, height: draft.outpaint.height }, left: draft.outpaint.left, top: draft.outpaint.top } } : {}),
+    references: draft.references.map(group => ({ id: group.id, role: group.role, ...(group.conditioning ? { conditioning: group.conditioning } : {}), ...(group.className !== undefined ? { className: group.className } : {}), images: group.images.length })),
+    parameters: draft.parameters, size: { width: draft.width, height: draft.height },
+    ...(draft.control ? { control: { kind: draft.control.kind } } : {}),
+  }, capabilities);
+  return [...new Set(issues.map(issue => copy(issue, draft)))];
+}
+function copy(issue: AdmissionIssue, draft: Draft): string {
+  const group = draft.references.find(item => item.id === issue.subject);
+  switch (issue.code) {
+    case 'GENERATION_UNSUPPORTED': return t('ui.textonly_generation_is_unavailable');
+    case 'EDITING_UNSUPPORTED': return t('ui.editing_is_unavailable');
+    case 'SOURCE_REQUIRED': return t('ui.add_a_source_image');
+    case 'MASK_REQUIRED': return t('ui.paint_a_mask_or_expand_the_canvas');
+    case 'MASK_UNSUPPORTED': return t('ui.masks_are_unavailable');
+    case 'OUTPAINT_UNSUPPORTED': return t('ui.canvas_expansion_is_unavailable');
+    case 'CONTROL_UNSUPPORTED': return t('ui.a_matching_control_model_is_required');
+    case 'REFERENCE_ROLE_UNSUPPORTED': return group ? t('admission.role', { name: group.id, role: term('role', group.role) }) : t('error.input');
+    case 'REFERENCE_CONDITIONING_UNSUPPORTED': return group ? t('admission.conditioning', { name: group.id, method: term('conditioning', group.conditioning ?? 'prompt') }) : t('error.input');
+    case 'REFERENCE_IMAGES_REQUIRED': return t('admission.photo', { name: issue.subject ?? '' });
+    case 'REFERENCE_CLASS_REQUIRED': return t('admission.class', { name: issue.subject ?? '' });
+    case 'REFERENCE_PLACEHOLDER': return t('admission.independent', { reference: issue.subject ?? '' });
+    case 'REFERENCE_LIMIT': return t('admission.limit');
+    case 'PARAMETER_UNSUPPORTED': return t('admission.parameter', { name: term('parameter', issue.subject ?? '') });
+    case 'PARAMETER_OUT_OF_RANGE': return t('admission.value', { name: term('parameter', issue.subject ?? '') });
+    case 'STRENGTH_REQUIRES_SOURCE': return t('admission.strength', { name: term('parameter', 'strength') });
+    case 'SIZE_UNSUPPORTED': return t('admission.size');
+    case 'GENERATION_INPUTS': return t('error.input');
   }
-  for (const key of Object.keys(draft.parameters)) {
-    if (!Object.hasOwn(capabilities.parameters ?? {}, key)) issues.push(t('admission.parameter', { name: term('parameter', key) }));
-  }
-  if (draft.control && !capabilities.controlKinds?.includes(draft.control.kind)) issues.push(t('ui.a_matching_control_model_is_required'));
-  return issues;
 }

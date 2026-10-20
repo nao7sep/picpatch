@@ -89,7 +89,7 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
       <dl className="facts">
         <div><dt>{t('management.state')}</dt><dd>{t(`model.${state ?? 'checking'}`)}</dd></div>
         <div><dt>{engineName}</dt><dd>{engineStatus}</dd></div>
-        {model?.downloadBytes ? <div><dt>{t('management.downloadSize')}</dt><dd>{`${number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 })} GB`}</dd></div> : null}
+        {model?.acquisition === 'pinned' ? <div><dt>{t('management.downloadSize')}</dt><dd>{`${number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 })} GB`}</dd></div> : null}
       </dl>
       <div className="button-row">
         <button type="button" className="button" disabled={busy || !engines || engineReady(model, engines) || (native(model) && Boolean(nativeExecutable))}

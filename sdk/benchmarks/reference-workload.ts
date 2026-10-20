@@ -42,7 +42,7 @@ export async function referenceWorkload(options: ImageClientOptions, directory: 
           previousStage = event.stage;
           record({ kind: 'phase', index, stage: event.stage, elapsedSeconds: (performance.now() - started) / 1000 });
         } });
-        if ('status' in result) throw new Error(result.code);
+        if (result.status === 'refused') throw new Error(result.code);
       const metadata = await sharp(result.image.path).metadata();
       assert.equal(metadata.format, 'png');
       assert.equal(metadata.width, outputSize);

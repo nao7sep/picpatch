@@ -1,6 +1,6 @@
 import { storageScope, storageCancellation } from './storage.ts';
-import type { ProgressEvent } from './types.ts';
-import { diagnosticProgress, progressHookFailed, type EventOptions } from './diagnostics.ts';
+import type { CallOptions } from './types.ts';
+import { diagnosticProgress, progressHookFailed } from './diagnostics.ts';
 import { isAbsolute } from 'node:path';
 import { PicPatchSdkError } from './errors.ts';
 
@@ -10,15 +10,14 @@ export function absolutePath(path: unknown): asserts path is string {
 export function checkSignal(signal?: AbortSignal): void {
   if (signal?.aborted) throw storageCancellation() ?? new PicPatchSdkError('CANCELLED', 'The operation was cancelled.');
 }
+/** Every verb accepts the same call options; a verb's own settings are named beside them, and any other key is refused. */
 export function validateOperation(options: unknown, extraKeys: string[] = []): void {
-  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['signal', 'debug', 'caller', 'onProgress', 'onEvent', 'timeoutMs', ...extraKeys].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid operation options.');
-  const caller = (options as { caller?: unknown }).caller;
-  if (caller !== undefined && (!caller || typeof caller !== 'object' || Array.isArray(caller) || Object.keys(caller).some(key => !['name', 'version'].includes(key)) || ['name', 'version'].some(key => typeof (caller as Record<string, unknown>)[key] !== 'string' || !(caller as Record<string, string>)[key]?.trim()))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid caller identity.');
+  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['signal', 'debug', 'onProgress', 'onEvent', 'timeoutMs', ...extraKeys].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid operation options.');
   timeBudget((options as { timeoutMs?: unknown }).timeoutMs, 1_800_000);
   const value = options as { signal?: unknown; debug?: unknown; onProgress?: unknown; onEvent?: unknown };
   if ((value.debug !== undefined && typeof value.debug !== 'boolean') || (value.signal !== undefined && !(value.signal instanceof AbortSignal)) || (value.onProgress !== undefined && typeof value.onProgress !== 'function') || (value.onEvent !== undefined && typeof value.onEvent !== 'function')) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid cancellation signal or progress callback.');
 }
-export function emitProgress<T extends { stage: string; completed?: number; total?: number }>(options: EventOptions & { signal?: AbortSignal; onProgress?: (event: ProgressEvent) => void }, event: T): void {
+export function emitProgress<T extends { stage: string; completed?: number; total?: number }>(options: CallOptions, event: T): void {
   checkSignal(options.signal);
   if (!diagnosticProgress(options, event)) { checkSignal(options.signal); return; }
   try {

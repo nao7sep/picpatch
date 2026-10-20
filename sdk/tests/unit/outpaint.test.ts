@@ -90,8 +90,8 @@ it('publishes geometry and path-free sidecar through the session, and cleans can
   const backend: EditBackend = { validate: async r => { validateEditRequest(r, caps); return caps; }, edit: execute, generate: async () => { throw new Error('Unexpected generation'); }, dispose: async () => {} };
   const editor = new ImageClientImpl(backend);
   try {
-    const saved = await editor.edit({ ...request, sidecar: { includeInputs: true } });
-    if ('status' in saved) throw new Error(saved.code);
+    const saved = await editor.edit({ ...request, record: { includeInputs: true }, sidecar: true });
+    if (saved.status === 'refused') throw new Error(saved.code);
     expect(saved.outpaint).toEqual({ ...request.outpaint, sourceSize: { width: 13, height: 9 } });
     expect(saved.inputGeometry?.[0]?.preparedSize).toEqual({ width: 13, height: 9 });
     const json = await readFile(saved.sidecar!.path, 'utf8');

@@ -56,7 +56,7 @@ it('cancels preparation and rejects directory indirection without mutating exter
   await mkdir(join(directory, 'actual'));
   await writeFile(join(directory, 'actual/weights.gguf'), 'test');
   await symlink(join(directory, 'actual'), join(directory, 'linked'));
-  await expect(prepareModel('sdxl', { directory, checkpoint: 'linked/weights.gguf' })).rejects.toMatchObject({ code: 'MODEL_IO' });
+  await expect(prepareModel('sdxl', { directory, checkpoint: 'linked/weights.gguf' })).rejects.toMatchObject({ code: 'MODEL_LINK_REFUSED' });
 });
 
 it('distinguishes base variation from dedicated inpaint before image I/O', () => {
@@ -99,6 +99,6 @@ it('rejects incomplete component exports and malformed native safetensors header
   await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors' })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   for (const bytes of [Buffer.from('short'), Buffer.alloc(8, 255), Buffer.from('12345678{}')]) {
     await writeFile(join(directory, 'custom.safetensors'), bytes);
-    await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors' })).rejects.toMatchObject({ code: 'MODEL_IO' });
+    await expect(prepareModel('sdxl', { directory, checkpoint: 'custom.safetensors' })).rejects.toMatchObject({ code: 'MODEL_COMPONENT_INVALID' });
   }
 });

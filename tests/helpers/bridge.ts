@@ -12,8 +12,8 @@ export const capabilities = {
   parameters: { steps: { default: 4, minimum: 1, integer: true } },
 };
 export const models = [
-  { id: 'flux2-klein-4b-4bit', variant: 'flux2-klein-4b', family: 'flux2-klein', acquisition: 'pinned', capabilities, runtime: { name: 'mflux' }, downloadBytes: 4.6e9, evidence: 'real-weights', tested: ['generate', 'edit'], profile: { name: 'FLUX.2 Klein 4B', parameters: 4, memory: 'light', speed: 'fast', licence: 'commercial', purposes: ['drafts', 'editing'], tier: 'recommended' } },
-  { id: 'sd15', variant: 'sd15', family: 'sd15', acquisition: 'external', capabilities: { ...capabilities, model: 'sd15', referenceRoles: [], instructionEditing: false }, runtime: { name: 'stable-diffusion.cpp' }, evidence: 'real-weights', tested: ['generate'], profile: { name: 'Stable Diffusion 1.5', parameters: 0.9, memory: 'light', speed: 'fast', licence: 'commercial', purposes: ['drafts'], tier: 'standard' } },
+  { id: 'flux2-klein-4b-4bit', variant: 'flux2-klein-4b', family: 'flux2-klein', acquisition: 'pinned', capabilities, runtime: { name: 'mflux', engine: 'python' }, downloadBytes: 4.6e9, evidence: 'real-weights', tested: ['generate', 'edit'], profile: { name: 'FLUX.2 Klein 4B', parameters: 4, memory: 'light', speed: 'fast', licence: 'commercial', purposes: ['drafts', 'editing'], tier: 'recommended' } },
+  { id: 'sd15', variant: 'sd15', family: 'sd15', acquisition: 'external', capabilities: { ...capabilities, model: 'sd15', referenceRoles: [], instructionEditing: false }, runtime: { name: 'stable-diffusion.cpp', engine: 'native' }, evidence: 'real-weights', tested: ['generate'], profile: { name: 'Stable Diffusion 1.5', parameters: 0.9, memory: 'light', speed: 'fast', licence: 'commercial', purposes: ['drafts'], tier: 'standard' } },
 ];
 
 export function session(patch: Partial<Session> = {}): Session {

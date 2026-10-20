@@ -4,4 +4,4 @@
 import sharp from 'sharp';
 sharp.cache({ files: 0 });
 export default sharp;
-export type { Metadata } from 'sharp';
+export type { Metadata, Sharp } from 'sharp';

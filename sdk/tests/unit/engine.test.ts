@@ -32,7 +32,8 @@ it('publishes a versioned reference only after checks, reuses it and isolates ch
   const stages: string[] = [];
   const result = await installEngine({ ...options(), onEvent: event => stages.push(event.stage) });
   expect(result.origin).toBe('installed');
-  expect(stages).toEqual(['started', 'checking', 'installing', 'checking', 'publishing', 'succeeded']);
+  // The earlier calls had no listener, so this first listening call still receives the startup record.
+  expect(stages).toEqual(['startup', 'started', 'checking', 'installing', 'checking', 'publishing', 'succeeded']);
   expect(await inspectEngine({ engineDirectory: result.engineDirectory })).toMatchObject({ status: 'ready', pythonExecutable: result.pythonExecutable });
   const installation = dirname(dirname(dirname(result.pythonExecutable)));
   const observed = JSON.parse(await readFile(join(installation, 'observed.json'), 'utf8'));

@@ -17,9 +17,9 @@ const generator = createImageClient({ engineDirectory, model, timeouts: { genera
 try {
   const result = await generator.generate({
     prompt: 'A professional product photograph of a small blue ceramic vase on a pale oak table, centered with empty space around it. Soft window light, realistic ceramic glaze, no text or logos.',
-    size: { width: 512, height: 512 }, seed: 42, parameters: { steps: 9 }, outputPath: sourceImage, sidecar: {},
+    size: { width: 512, height: 512 }, seed: 42, parameters: { steps: 9 }, outputPath: sourceImage, sidecar: true,
   });
-  if ('status' in result) throw new Error(result.code);
+  if (result.status === 'refused') throw new Error(result.code);
 } finally { await generator.dispose(); }
 // Caller-owned mask: opaque grayscale, white edits, with a softened rectangular edge.
 const mask = Buffer.alloc(512 * 512);
@@ -33,9 +33,9 @@ const editor = createImageClient({ engineDirectory, model: fill, timeouts: { edi
 try {
   const result = await editor.edit({
     sourceImage, maskImage, instruction: 'A small terracotta vase holding three white daisies on a pale oak table. Professional product photography, soft window light, realistic shadows.',
-    size: { width: 512, height: 512 }, seed: 42, parameters: { steps: 25 }, outputPath: join(output, 'filled.png'), sidecar: {},
+    size: { width: 512, height: 512 }, seed: 42, parameters: { steps: 25 }, outputPath: join(output, 'filled.png'), sidecar: true,
   });
-  if ('status' in result) throw new Error(result.code);
+  if (result.status === 'refused') throw new Error(result.code);
   console.log(JSON.stringify({ image: result.image.path, maskMode: result.maskMode, sidecar: result.sidecar }));
   // Native Fill may change pixels outside the mask; it does not final-composite the source.
 } finally { await editor.dispose(); }

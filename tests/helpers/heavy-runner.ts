@@ -1,7 +1,7 @@
 // A stand-in for a slow image engine: every run stays open until the test finishes it, so
 // scheduling, concurrency and cancellation can be checked without models or memory.
 import type { Runner } from '../../src/main/core/queue.ts';
-const refusal = { status: 'refused' as const, code: 'OUTPUT_CONFLICT' as const, message: 'Dummy result.', effect: 'none' as const, subject: '/output', details: {} };
+const refusal = { status: 'refused' as const, code: 'OUTPUT_CONFLICT' as const, message: 'Dummy result.', subject: '/output', details: {} };
 export function heavyRunner() {
   const open = new Map<string, () => void>();
   const started: string[] = []; let active = 0, peak = 0;

@@ -13,11 +13,32 @@ function imports(source: string): string[] {
   walk(ast); return result;
 }
 const forbidden = (file: string, specifier: string) => specifier.startsWith('picpatchsdk/') && specifier !== 'picpatchsdk/types' || specifier.startsWith('.') && relative(join(root, 'sdk'), resolve(dirname(file), specifier)).split(sep)[0] !== '..';
+/** Every string in a file that names a path into the SDK's folder, such as a hard-coded cache or helper path. */
+function sdkPaths(source: string): string[] {
+  const found: string[] = []; const ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] });
+  function walk(value: any) {
+    if (!value || typeof value !== 'object') return;
+    const text = value.type === 'StringLiteral' ? value.value : value.type === 'TemplateElement' ? value.value.raw : undefined;
+    if (typeof text === 'string' && /(^|[\\/])sdk[\\/]/.test(text)) found.push(text);
+    for (const child of Object.values(value)) if (Array.isArray(child)) child.forEach(walk); else if (child && typeof child === 'object') walk(child);
+  }
+  walk(ast); return found;
+}
 async function files(directory: string): Promise<string[]> { const found = []; for (const entry of await readdir(directory, { withFileTypes: true })) { const path = join(directory, entry.name); if (entry.isDirectory()) found.push(...await files(path)); else if (/\.tsx?$/.test(path)) found.push(path); } return found; }
-it('consumes only the SDK public package entries, with a planted violation proving the guard', async () => {
+it('consumes only the SDK public package entries, in the app and its tests, with planted violations proving the guard', async () => {
   const violations = [];
-  for (const file of await files(join(root, 'src'))) for (const specifier of imports(await readFile(file, 'utf8'))) if (forbidden(file, specifier)) violations.push(`${file}: ${specifier}`);
-  expect(violations).toEqual([]); expect(forbidden(join(root, 'src', 'bad.ts'), '../sdk/src/client.ts')).toBe(true); expect(imports("import x from 'picpatchsdk/src/client.ts'").some(s => forbidden('', s))).toBe(true);
+  // The app's tests are consumers too: they use the SDK by name and never a path into its package (sdk-conventions).
+  for (const file of [...await files(join(root, 'src')), ...await files(join(root, 'tests'))]) {
+    const source = await readFile(file, 'utf8');
+    for (const specifier of imports(source)) if (forbidden(file, specifier)) violations.push(`${relative(root, file)}: ${specifier}`);
+    if (file !== fileURLToPath(import.meta.url)) for (const path of sdkPaths(source)) violations.push(`${relative(root, file)}: ${path}`);
+  }
+  expect(violations).toEqual([]);
+  expect(forbidden(join(root, 'tests', 'bad.ts'), '../sdk/tests/helpers/live-cache.ts')).toBe(true);
+  expect(imports("import x from 'picpatchsdk/src/client.ts'").some(s => forbidden('', s))).toBe(true);
+  expect(sdkPaths("const cache = resolve('sdk/node_modules/.cache/picpatch-live');")).toHaveLength(1);
+  expect(sdkPaths('const helper = `${root}/sdk/tests/helpers`;')).toHaveLength(1);
+  expect(sdkPaths("import.meta.resolve('picpatchsdk/package.json');")).toEqual([]);
 });
 it('keeps Node and browser global types separated', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-type-boundary-'));

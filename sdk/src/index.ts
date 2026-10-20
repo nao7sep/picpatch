@@ -1,7 +1,8 @@
 export { VERSION } from './version.ts';
 export { createImageClient } from './client.ts';
 export type { ImageClient, ImageClientOptions } from './client.ts';
-export type { ImageResult, ImageOutcome, OperationRefusal, GenerateRequest, GenerateResult, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, OperationOptions, ProgressEvent, ReferenceGroup } from './types.ts';
+export type { ImageResult, ImageOutcome, OperationRefusal, GenerateRequest, GenerateResult, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, CallOptions, OperationOptions, ProgressEvent, ReferenceGroup, Refusal, RefusalCode, RefusalDetails, ModelPresenceIssue } from './types.ts';
+export { refusalCodes } from './types.ts';
 export { validateEditRequest, validateGenerateRequest } from './validation.ts';
 export { PicPatchSdkError, isPicPatchSdkError, errorCodes } from './errors.ts';
 export type { PicPatchSdkErrorData, SdkErrorOptions, ErrorCode, ErrorKind, ErrorEffect, ErrorDetails } from './errors.ts';
@@ -31,7 +32,7 @@ export type { SdkEvent, EventOptions, WorkerDiagnostic, RuntimeConfiguration } f
 
 export type { SamplingParameters, ParameterCapabilities } from './contracts.generated.ts';
 
-export type { ArtifactRecord, SidecarOptions, SidecarOutcome, ConditioningProvenance } from './contracts.generated.ts';
+export type { ArtifactRecord, RecordOptions, SidecarOutcome, ConditioningProvenance } from './contracts.generated.ts';
 
 export type { OutpaintCanvas, OutpaintGeometry } from './contracts.generated.ts';
 
@@ -39,7 +40,7 @@ export type { LocalLora, LoraProvenance } from './contracts.generated.ts';
 export type { LocalControlNet, StructuralControl, ControlProvenance } from './contracts.generated.ts';
 
 export { installEngine, inspectEngine } from './runtime/engine/engine.ts';
-export type { EngineRuntime, EngineOptions, InstallEngineOptions, EngineIdentity, EngineRecord, ReadyEngine, EngineInspection, EngineInstallation } from './runtime/engine/types.ts';
+export type { PythonRuntime, EngineOptions, NativeEngineOptions, NativeInspectionOptions, InstallEngineOptions, EngineIdentity, EngineRecord, ReadyEngine, EngineInspection, EngineInstallation } from './runtime/engine/types.ts';
 
 export { readProfile, validateProfile } from './profile.ts';
 export type { PicPatchProfile, ProfileReadOptions, ProfileReadResult, ProfileRefusal } from './profile.ts';
@@ -50,11 +51,10 @@ export type { ImageFingerprint } from './images/fingerprint.ts';
 export type { PlannedDestination } from './images/output.ts';
 
 export { openModel, inspectModels, readModelRegistration, validateModelRegistration } from './models/opening.ts';
-export type { ModelRegistration, ModelOpenOptions, ModelPresenceIssue, OpenedModel, ModelOpenRefusal, ModelOpenResult, ManagedModelInventory, ModelInventoryFailure } from './models/opening.ts';
+export type { ModelRegistration, ModelRegistrationResult, ModelOpenOptions, OpenedModel, ModelOpenRefusal, ModelOpenResult, ManagedModelInventory, ModelInventoryFailure } from './models/opening.ts';
 
 export { readArtifactRecord, verifyArtifact, validateArtifactRecord } from './images/records.ts';
-export type { ArtifactReadOptions, ArtifactRefusal, ArtifactVerification } from './images/records.ts';
-
+export type { ArtifactReadOptions, ArtifactRefusal, ArtifactRecordResult, ArtifactVerification } from './images/records.ts';
 
 export { saveArtifact } from './images/saving.ts';
 export type { SaveArtifactOptions, SavedArtifact, SaveArtifactRefusal } from './images/saving.ts';

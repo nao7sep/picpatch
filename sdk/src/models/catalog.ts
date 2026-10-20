@@ -4,32 +4,14 @@ import distilled9Manifest from './catalog/klein-9b-4bit.manifest.json' with { ty
 import base9Manifest from './catalog/klein-base-9b-4bit.manifest.json' with { type: 'json' };
 import zImageManifest from './catalog/z-image-turbo-4bit.manifest.json' with { type: 'json' };
 import fillManifest from './catalog/flux1-fill-dev-4bit.manifest.json' with { type: 'json' };
-import type { LocalModel, ModelManifest, ModelCapabilities } from '../contracts.generated.ts';
-import { externalModels, modelCapabilities, modelDefinition, type ExternalModel } from './variants.ts';
+import { externalModels, modelCapabilities, modelDefinition } from './variants.ts';
 import { PicPatchSdkError } from '../errors.ts';
-import { modelEvidence, modelProfile, type Evidence, type ModelProfile, type Operation } from './profiles.ts';
+import { modelEvidence, modelProfile } from './profiles.ts';
 import { validateModelManifest } from './verification.ts';
-import { runtimeHosts, supportsRuntime, type HostId } from '../hosts.ts';
+import { runtimeHosts, supportsRuntime } from '../hosts.ts';
 
-export interface CatalogModel {
-  id: string;
-  capabilities: ModelCapabilities;
-  acquisition: 'pinned';
-  family: string;
-  evidence: Evidence;
-  /** Operations that ran with real trained weights for this exact selection. */
-  tested: Operation[];
-  profile: ModelProfile;
-  variant: LocalModel['variant'];
-  manifest: ModelManifest;
-  downloadBytes: number;
-  sourceUrl: string;
-  license: { id: string; url: string };
-  /** The hosts this runtime has a build for. */
-  runtime: { name: 'mflux'; version: string; hosts: readonly HostId[] };
-  /** Whether this computer is one of those hosts. */
-  supported: boolean;
-}
+export type { CatalogModel, CatalogRuntime, ExternalModel, ModelCatalogEntry } from './types.ts';
+import type { CatalogModel, ModelCatalogEntry } from './types.ts';
 /** Pinned community quantization, not an official upstream weight distribution. */
 export function listModels(): ModelCatalogEntry[] {
   const configurations = [
@@ -45,11 +27,10 @@ export function listModels(): ModelCatalogEntry[] {
       downloadBytes: pinned.components.reduce((total, component) => total + component.bytes, 0),
       sourceUrl: `https://huggingface.co/${pinned.source.repository}/tree/${pinned.source.revision}`,
       license: { id: configuration.license, url: configuration.licenseUrl },
-      runtime: { name: 'mflux', version: '0.22.0', hosts: runtimeHosts('mflux') }, supported: supportsRuntime('mflux') };
+      runtime: { name: 'mflux', engine: 'python', version: '0.22.0', hosts: runtimeHosts('mflux') }, supported: supportsRuntime('mflux') };
   });
   return [...pinned, ...externalModels(), ...nativeModels()];
 }
-export type ModelCatalogEntry = CatalogModel | ExternalModel | ReturnType<typeof nativeModels>[number];
 export function catalogModel(id: string): ModelCatalogEntry {
   const entry = listModels().find(model => model.id === id);
   if (!entry) throw new PicPatchSdkError('INVALID_REQUEST', 'Choose a model ID returned by listModels.');

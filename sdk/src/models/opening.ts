@@ -2,53 +2,33 @@ import { managedEntries, managedRoot as root, type ManagedModelEntry } from './m
 import { constants } from 'node:fs';
 import { open, realpath, stat } from '../storage.ts';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { withDiagnostics, type EventOptions } from '../diagnostics.ts';
-import { PicPatchSdkError, sdkError, type PicPatchSdkErrorData } from '../errors.ts';
+import { withDiagnostics } from '../diagnostics.ts';
+import type { CallOptions, ModelPresenceIssue } from '../types.ts';
+import { newerVersion, versionRefusal } from '../versions.ts';
+import { PicPatchSdkError, sdkError } from '../errors.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
 import type { PicPatchProfile } from '../profile.ts';
-import type { LocalModel } from '../contracts.generated.ts';
 import { catalogModel, listModels } from './catalog.ts';
 import { validateLocalModel } from './verification.ts';
 
-/** Persist this envelope, not an inference session or historical verification claim. */
-export interface ModelRegistration { version: 1; model: LocalModel }
-export interface ModelOpenOptions extends EventOptions {
-  signal?: AbortSignal;
-  timeoutMs?: number;
+export interface ModelOpenOptions extends CallOptions {
   profile?: PicPatchProfile;
   modelsDirectory?: string;
   /** Explicit complete catalog bundle. External selections use their saved registration. */
   directory?: string;
 }
-export interface ModelPresenceIssue {
-  path: string;
-  code: 'MODEL_FILE_MISSING' | 'MODEL_FILE_NOT_REGULAR' | 'MODEL_FILE_SIZE_MISMATCH' | 'MODEL_DIRECTORY_ESCAPE';
-  message: string;
-  effect: 'none';
-}
-export interface OpenedModel extends ModelRegistration {
-  status: 'present';
-  integrity: 'presence-only';
-  compatibility: 'unknown';
-}
-export interface ModelOpenRefusal {
-  status: 'refused';
-  code: 'MODEL_INCOMPLETE' | 'MODEL_REGISTRATION_VERSION_UNSUPPORTED';
-  message: string;
-  effect: 'none';
-  issues: ModelPresenceIssue[];
-}
-export type ModelOpenResult = OpenedModel | ModelOpenRefusal;
-export interface ModelInventoryFailure { status: 'failed'; error: PicPatchSdkErrorData }
-export interface ManagedModelInventory { entries: ManagedModelEntry[]; models: { id: string; directory: string; status: 'present' | 'missing' | 'incomplete' | 'failed'; result: ModelOpenResult | ModelInventoryFailure }[] }
+export type { ManagedModelInventory, ModelInventoryFailure, ModelOpenRefusal, ModelOpenResult, ModelPresenceIssue, ModelRegistration, ModelRegistrationResult, OpenedModel } from './types.ts';
+import type { ManagedModelInventory, ModelOpenRefusal, ModelOpenResult, ModelRegistration, ModelRegistrationResult } from './types.ts';
 
-export function validateModelRegistration(value: unknown): ModelRegistration {
+function checkRegistration(value: unknown): ModelRegistration {
   if (!value || typeof value !== 'object' || Array.isArray(value) || (value as ModelRegistration).version !== 1) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model registration.');
   return { version: 1, model: validateLocalModel((value as ModelRegistration).model) };
 }
-function unsupported(value: unknown): ModelOpenRefusal | undefined {
-  const version = (value as { version?: unknown } | null)?.version;
-  if (typeof version === 'number' && Number.isInteger(version) && version !== 1) return { status: 'refused', code: 'MODEL_REGISTRATION_VERSION_UNSUPPORTED', message: 'This model registration version is unsupported.', effect: 'none', issues: [] };
+/** Validates a registration the caller holds; a newer format version is refused, as the reader refuses it. */
+export function validateModelRegistration(value: unknown): ModelRegistrationResult {
+  const version = newerVersion(value);
+  if (version !== undefined) return versionRefusal('MODEL_REGISTRATION_VERSION_UNSUPPORTED', 'This model registration version is unsupported.', version);
+  return { status: 'completed', registration: checkRegistration(value) };
 }
 async function presence(registration: ModelRegistration, signal?: AbortSignal): Promise<ModelOpenResult> {
   const model = registration.model;
@@ -73,7 +53,7 @@ async function presence(registration: ModelRegistration, signal?: AbortSignal): 
     if (code) issues.push({ path, code, message: 'Model component is not present at its declared location and size.', effect: 'none' });
   }
   checkSignal(signal);
-  return issues.length ? { status: 'refused', code: 'MODEL_INCOMPLETE', message: 'The model bundle is incomplete; existing files were preserved.', effect: 'none', issues } : { ...registration, status: 'present', integrity: 'presence-only', compatibility: 'unknown' };
+  return issues.length ? { status: 'refused', code: 'MODEL_INCOMPLETE', message: 'The model bundle is incomplete; existing files were preserved.', subject: model.directory, details: { issues } } : { ...registration, status: 'completed', integrity: 'presence-only', compatibility: 'unknown' };
 }
 async function boundary<T>(options: ModelOpenOptions, action: (signal: AbortSignal) => Promise<T>): Promise<T> {
   validateOperation(options, ['profile', 'modelsDirectory', 'directory']);
@@ -85,7 +65,8 @@ async function boundary<T>(options: ModelOpenOptions, action: (signal: AbortSign
 function select(input: string | ModelRegistration, options: ModelOpenOptions): ModelRegistration | ModelOpenRefusal {
   if (typeof input !== 'string') {
     if (options.directory !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'A registration already names its directory.');
-    return unsupported(input) ?? validateModelRegistration(input);
+    const valid = validateModelRegistration(input);
+    return valid.status === 'refused' ? valid : valid.registration;
   }
   const entry = catalogModel(input);
   if (entry.acquisition !== 'pinned') throw new PicPatchSdkError('INVALID_REQUEST', 'Prepare an external selection once and pass its saved registration to openModel.');
@@ -99,7 +80,7 @@ export function openModel(input: string | ModelRegistration, options: ModelOpenO
   }));
 }
 /** Reads only the explicitly selected registration file. The caller owns its persistence. */
-export function readModelRegistration(path: string, options: ModelOpenOptions = {}): Promise<{ status: 'read'; registration: ModelRegistration } | ModelOpenRefusal> {
+export function readModelRegistration(path: string, options: ModelOpenOptions = {}): Promise<ModelRegistrationResult> {
   return withDiagnostics('readModelRegistration', options, operation => boundary(operation, async signal => {
     absolutePath(path); checkSignal(signal);
     const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -110,7 +91,8 @@ export function readModelRegistration(path: string, options: ModelOpenOptions = 
       checkSignal(signal);
       let value: unknown;
       try { value = JSON.parse(bytes); } catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model registration JSON.', { cause, subject: path }); }
-      return unsupported(value) ?? { status: 'read' as const, registration: validateModelRegistration(value) };
+      const result = validateModelRegistration(value);
+      return result.status === 'refused' ? { ...result, subject: path } : result;
     } finally { await file.close(); }
   }));
 }
@@ -134,8 +116,8 @@ export function inspectModels(options: ModelOpenOptions = {}): Promise<ManagedMo
         models.push({ id: entry.id, directory: registration.model.directory, status: 'failed', result: { status: 'failed', error: error.toJSON() } });
         continue;
       }
-      const missing = result.status === 'refused' && result.issues.every(issue => issue.code === 'MODEL_FILE_MISSING');
-      models.push({ id: entry.id, directory: registration.model.directory, status: result.status === 'present' ? 'present' : missing ? 'missing' : 'incomplete', result });
+      const missing = result.status === 'refused' && (result.details.issues ?? []).every(issue => issue.code === 'MODEL_FILE_MISSING');
+      models.push({ id: entry.id, directory: registration.model.directory, status: result.status === 'completed' ? 'present' : missing ? 'missing' : 'incomplete', result });
     }
     return { models, entries };
   }));
