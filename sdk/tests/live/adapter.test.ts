@@ -9,7 +9,7 @@ import { delimiter, join } from 'node:path';
 import { constants } from 'node:fs';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { createImageClient, inspectReadiness, type ImageClient, type ImageClientOptions } from '../../src/index.ts';
+import { inspectReadiness, type ImageClient, type ImageClientOptions } from '../../src/index.ts';
 
 it('accepts a local registration then returns a missing-runtime failure over real worker pipes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-adapter-'));

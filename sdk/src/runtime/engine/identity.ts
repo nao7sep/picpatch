@@ -4,13 +4,22 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PicPatchSdkError } from '../../errors.ts';
 import type { EngineIdentity, EngineRecord, PythonRuntime } from './types.ts';
+import { pythonVersion } from './versions.ts';
 
 const hash = (bytes: string) => createHash('sha256').update(bytes).digest('hex');
 /** The package's runtimes folder, from this module's own path. Not new URL(..., import.meta.url): a bundler treats that pattern as an asset import. */
 const runtimes = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'runtimes');
+/** What each runtime's environment must import (module:attribute names an export), and whether it needs PyTorch's Metal backend. */
+const probes: Record<PythonRuntime, { modules: string[]; metal: boolean }> = {
+  mflux: { modules: ['mflux', 'mlx.core', 'torch', 'jsonschema', 'referencing', 'transformers'], metal: false },
+  dreamo: { modules: ['torch', 'torchvision', 'diffusers', 'transformers', 'accelerate', 'peft', 'timm', 'einops', 'jsonschema'], metal: true },
+  diffusers: { modules: ['torch', 'torchvision', 'diffusers:GlmImagePipeline', 'diffusers:Flux2Pipeline', 'transformers', 'accelerate', 'jsonschema'], metal: true },
+};
 export function runtimePaths(runtime: PythonRuntime = 'mflux') {
   if (!['mflux', 'dreamo', 'diffusers'].includes(runtime)) throw new PicPatchSdkError('INVALID_REQUEST', 'Unknown engine runtime.');
-  return { projectDirectory: join(runtimes, runtime), probePath: join(runtimes, runtime, 'engine_probe.py') };
+  const projectDirectory = join(runtimes, runtime);
+  const { modules, metal } = probes[runtime];
+  return { projectDirectory, probePath: join(runtimes, 'common', 'engine_probe.py'), probeArguments: [join(projectDirectory, 'uv.lock'), pythonVersion, ...modules, ...(metal ? ['--metal'] : [])] };
 }
 export async function engineDefinition(runtime: PythonRuntime = 'mflux') {
   const { projectDirectory } = runtimePaths(runtime);
@@ -19,7 +28,7 @@ export async function engineDefinition(runtime: PythonRuntime = 'mflux') {
   return { identity: identifyEngine(manifest, lock, runtime), manifest, lock };
 }
 export function identifyEngine(manifest: string, lock: string, runtime: PythonRuntime = 'mflux'): EngineIdentity {
-  const fields = { platform: 'darwin', architecture: 'arm64', python: '3.15.0', dependencies: runtime === 'mflux' ? 'inference' : `${runtime}-inference` as const, lockSha256: hash(lock), manifestSha256: hash(manifest) } as const;
+  const fields = { platform: 'darwin', architecture: 'arm64', python: pythonVersion, dependencies: runtime === 'mflux' ? 'inference' : `${runtime}-inference` as const, lockSha256: hash(lock), manifestSha256: hash(manifest) } as const;
   return { id: hash(JSON.stringify({ version: 1, ...fields })), ...fields };
 }
 export function validRecord(value: unknown, identity: EngineIdentity): value is EngineRecord {

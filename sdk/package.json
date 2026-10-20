@@ -26,27 +26,14 @@
   "files": [
     "src/",
     "protocol/*.json",
-    "runtimes/mflux/pyproject.toml",
-    "runtimes/mflux/uv.lock",
-    "runtimes/mflux/src/**/*.py",
-    "runtimes/mflux/src/**/*.json",
-    "runtimes/mflux/engine_probe.py",
-    "runtimes/dreamo/pyproject.toml",
-    "runtimes/dreamo/uv.lock",
-    "runtimes/dreamo/src/**/*.py",
-    "runtimes/dreamo/src/**/*.json",
-    "runtimes/dreamo/engine_probe.py",
-    "runtimes/dreamo/THIRD_PARTY_NOTICES",
-    "runtimes/common/src/**/*.py",
-    "runtimes/diffusers/pyproject.toml",
-    "runtimes/diffusers/uv.lock",
-    "runtimes/diffusers/src/**/*.py",
-    "runtimes/diffusers/src/**/*.json",
-    "runtimes/diffusers/engine_probe.py",
+    "runtimes/*/pyproject.toml",
+    "runtimes/*/uv.lock",
+    "runtimes/*/engine_probe.py",
+    "runtimes/*/src/**/*.py",
+    "runtimes/*/src/**/*.json",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE",
-    "THIRD_PARTY_NOTICES"
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.types.json && tsc -p tsconfig.test.json",
@@ -58,8 +45,7 @@
     "contracts:check": "node scripts/generate-contracts.mjs --check",
     "test:python": "node scripts/python-tests.ts",
     "test:python:coverage": "node scripts/python-tests.ts --cov=picpatch_worker --cov-report=term-missing --cov-config=runtimes/mflux/pyproject.toml --cov-report=html:coverage/python",
-    "test:full": "npm test && vitest run --config vitest.live.config.ts",
-    "example:worker": "node examples/worker-session.ts"
+    "test:full": "npm test && vitest run --config vitest.live.config.ts"
   },
   "dependencies": {
     "ajv": "^8.20.0",

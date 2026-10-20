@@ -1,5 +1,6 @@
 import type { PicPatchProfile } from '../../types.ts';
 import type { RuntimeName } from '../../hosts.ts';
+import type { pythonVersion } from './versions.ts';
 
 /** The runtimes the managed Python engine installs; stable-diffusion.cpp has its own native engine verbs. */
 export type PythonRuntime = Exclude<RuntimeName, 'stable-diffusion.cpp'>;
@@ -32,7 +33,7 @@ export interface EngineIdentity {
   id: string;
   platform: 'darwin';
   architecture: 'arm64';
-  python: '3.15.0';
+  python: typeof pythonVersion;
   dependencies: 'inference' | 'dreamo-inference' | 'diffusers-inference';
   lockSha256: string;
   manifestSha256: string;

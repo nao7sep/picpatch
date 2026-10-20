@@ -7,13 +7,10 @@ import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { referenceWorkload } from '../../benchmarks/reference-workload.ts';
 import { createImageClient, listModels, prepareModel, inspectReadiness, discoverModels, resolveStoragePaths, type ImageClientOptions, type SdkEvent } from '../../src/index.ts';
-import { liveCache } from '../helpers/live-cache.ts';
+import { inferenceConfig } from '../helpers/live-cache.ts';
 
 async function localOptions(): Promise<ImageClientOptions> {
-  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
-  let options: ImageClientOptions;
-  try { options = JSON.parse(await readFile(path, 'utf8')) as ImageClientOptions; }
-  catch (cause) { throw new Error('Prepare the local inference test cache or set PICPATCH_INFERENCE_CONFIG to an editor-options JSON file. This test never downloads models.', { cause }); }
+  const options = await inferenceConfig<ImageClientOptions>();
   if (!options.model) throw new Error('PICPATCH_INFERENCE_CONFIG must include a local model configuration.');
   return inferenceOptions(options);
 }

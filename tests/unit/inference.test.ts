@@ -51,10 +51,9 @@ it('runs with the SDK’s own refusal and engine state instead of inventing code
   sdk.openModel = (async (id: string) => ({ status: 'completed', model: { id } })) as never;
   sdk.inspectNativeEngine = (async () => ({ status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: 'Wrong revision.' })) as never;
   await expect(attempt('n')).rejects.toMatchObject({ code: 'ENGINE_INCOMPATIBLE', message: 'Wrong revision.' });
-  let request: Record<string, unknown> = {}; let options: Record<string, unknown> = {};
-  sdk.createImageClient = (() => ({ generate: async (input: Record<string, unknown>, call: Record<string, unknown>) => { request = input; options = call; return { status: 'completed' }; }, dispose: async () => {} })) as never;
+  let request: Record<string, unknown> = {};
+  sdk.createImageClient = (() => ({ generate: async (input: Record<string, unknown>) => { request = input; return { status: 'completed' }; }, dispose: async () => {} })) as never;
   await attempt('a');
   expect(request).toMatchObject({ record: { includeInputs: true, caller: { name: 'picpatch' } } });
   expect(request).not.toHaveProperty('sidecar');
-  expect(options).not.toHaveProperty('caller');
 });

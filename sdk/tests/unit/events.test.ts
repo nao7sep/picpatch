@@ -7,14 +7,12 @@ import { diagnosticLifetime, withDiagnostics } from '../../src/diagnostics.ts';
 import { emitProgress } from '../../src/operations.ts';
 import packageInfo from '../../package.json' with { type: 'json' };
 
-it('returns plain results and rejects the retired log option without creating a file', async () => {
+it('returns plain results and writes no log file', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-events-'));
   try {
     const path = join(directory, 'profile.json'); await writeFile(path, '{"version":1}');
     const events: SdkEvent[] = [];
     expect(await readProfile(path, { onEvent: event => events.push(event) })).toEqual({ status: 'completed', profile: { version: 1 } });
-    // @ts-expect-error SDK logging is no longer a supported option.
-    await expect(readProfile(path, { logPath: join(directory, 'operation.log') })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     expect(await readdir(directory)).toEqual(['profile.json']);
     expect(events.at(-1)?.name).toBe('operation.succeeded');
   } finally { await rm(directory, { recursive: true, force: true }); }

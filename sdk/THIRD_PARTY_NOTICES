@@ -1,9 +1,0 @@
-PicPatchSdk
-Copyright (C) 2026 Yoshinao Inoguchi
-Project licence: GPL-3.0-or-later; see LICENSE.
-
-The SDK does not bundle model weights or a Python runtime. The DreamO engine's
-sources include modified Apache-2.0 files from DreamO and Diffusers; their
-notices and licence text are in runtimes/dreamo/THIRD_PARTY_NOTICES. npm and
-Python dependencies are obtained through npm and uv, retain their upstream
-licences, and are recorded in the package manifest and lockfiles.

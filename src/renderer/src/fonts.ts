@@ -1,4 +1,4 @@
-// The interface font from Settings, applied as the tokens' variable (app-chrome-conventions).
+// The interface font from Settings, applied as the tokens' variable so every surface follows it.
 import { defaultFont, fixedFont } from '../../shared/appearance.ts';
 
 export function applyFont(uiFont: string | undefined) {

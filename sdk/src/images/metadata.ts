@@ -1,4 +1,4 @@
-// What a published image carries (sdk-conventions › An artifact holds itself). A generated image
+// What a published image carries, so it can be shared as it is. A generated image
 // carries no metadata. An edit keeps its source image's metadata unchanged, with its pixels turned
 // back to the source's stored orientation and converted to its colour profile so those tags stay
 // true; only an EXIF preview thumbnail, which would show the image before the edit, is dropped.

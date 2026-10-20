@@ -6,10 +6,10 @@ import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel, type ImageClientOptions } from 'picpatchsdk';
 import { kleinLoraWeights } from '../helpers/lora-weights.ts';
-import { liveCache } from '../helpers/live-cache.ts';
+import { inferenceConfig } from '../helpers/live-cache.ts';
 
 it('applies local LoRAs to real quantized Klein generation and editing without baking or leaking paths', async () => {
-  const config: ImageClientOptions = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json'), 'utf8'));
+  const config: ImageClientOptions = await inferenceConfig();
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-mflux-lora-'));
   try {
     for (const component of config.model!.manifest.components) {

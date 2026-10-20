@@ -3,7 +3,7 @@ import { validateEditRequest, type EditRequest } from 'picpatchsdk';
 
 // Shape-only example: these paths are illustrative and no files are opened.
 const request = {
-  model: 'model-to-be-selected-after-evaluation',
+  model: 'flux2-klein-4b-4bit',
   instruction: 'Place both subjects together at a science fair beside a cardboard robot.',
   outputPath: resolve('edited.png'),
   references: [

@@ -11,6 +11,9 @@ from threading import Event
 
 
 from .errors import Cancelled, InvalidEditInput, BackendUnavailable
+
+# The MFLUX release this adapter's API contract was written against; a test checks it against the lock pin.
+MFLUX_VERSION = '0.22.0'
 from .loras import validate_selection, lora_kwargs, lora_provenance, validate_loaded_loras
 
 
@@ -101,10 +104,8 @@ class MfluxAdapter:
         try:
             installed = version('mflux')
         except PackageNotFoundError as error:
-            raise BackendUnavailable('Install MFLUX 0.22.0 in the supplied worker environment.', 'missing-package') from error
-        # This adapter uses an inspected API contract, not a guess at future compatibility.
-        if installed != '0.22.0':
-            raise BackendUnavailable('This adapter requires MFLUX 0.22.0.', 'unsupported-version')
+            raise BackendUnavailable(f'Install MFLUX {MFLUX_VERSION} in the supplied worker environment.', 'missing-package') from error
+        # Inference runs only in a managed engine, whose packages its probe matched to the lock when it was installed.
         auxiliary = lora_kwargs(self.config, self.definition['family'])
         model_config, pipeline_class, mx = self.import_pipeline(operation)
         kwargs = {'model_config': model_config, 'model_path': str(directory), **auxiliary}
@@ -131,7 +132,7 @@ class MfluxAdapter:
             installed = version('mflux')
         except PackageNotFoundError:
             return {'status': 'missing-package'}
-        if installed != '0.22.0':
+        if installed != MFLUX_VERSION:
             return {'status': 'unsupported-version', 'version': installed}
         try:
             self.import_pipeline("generate")

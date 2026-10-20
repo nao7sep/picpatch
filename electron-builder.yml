@@ -1,5 +1,5 @@
 appId: io.github.nao7sep.picpatch
-productName: PicPatch
+# productName comes from package.json, the name the launchers also read.
 copyright: Copyright © 2026 Yoshinao Inoguchi
 
 directories:
@@ -26,12 +26,6 @@ asar: false
 extraResources:
   - from: LICENSE
     to: LICENSE.txt
-  - from: THIRD_PARTY_NOTICES
-    to: THIRD_PARTY_NOTICES
-  - from: node_modules/electron/dist/LICENSE
-    to: electron/LICENSE
-  - from: node_modules/electron/dist/LICENSES.chromium.html
-    to: electron/LICENSES.chromium.html
   # The window icon Windows and Linux paint in the title bar and taskbar.
   - from: build/icon.png
     to: icon.png
@@ -44,12 +38,10 @@ mac:
     # macOS 26 at it; older macOS reads CFBundleIconFile, the classic build/icon.icns.
     - from: build/Assets.car
       to: Assets.car
-    # uv runs explicit Python engine setup; scripts/prepare-tools.mjs provides the pinned build.
+    # uv runs explicit Python engine setup; npm run prepare:tools stages the pinned build.
     # Windows runs only the native engine and bundles no uv.
-    - from: node_modules/.cache/picpatch-desktop/uv-0.13.1/uv
+    - from: node_modules/.cache/picpatch-desktop/uv/uv
       to: tools/uv
-    - from: node_modules/.cache/picpatch-desktop/uv-0.13.1/THIRD_PARTY_NOTICES
-      to: tools/THIRD_PARTY_NOTICES
   # Ad-hoc signed ("-"): no developer certificate, but a valid seal and a stable
   # bundle identity, which the dock name and per-app defaults rely on.
   # macOS still shows "unidentified developer" until a Developer ID cert + notarization.
@@ -76,7 +68,7 @@ mac:
     - target: zip
       arch:
         - arm64
-  # Release names are fixed (app-release-conventions): electron-builder's default
+  # Release names are fixed across the fleet's apps: electron-builder's default
   # appends the arch whenever it is not x64, which would ship "-arm64" names.
   # This is the portable zip's name; dmg below overrides it for the image.
   artifactName: ${productName}-${version}-mac.${ext}

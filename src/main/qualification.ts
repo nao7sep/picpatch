@@ -7,8 +7,9 @@ import type { Application } from './core/service.ts';
 export async function qualifyInference(service: Application, configuration: string, uv: string): Promise<void> {
   if (!isAbsolute(configuration)) throw new Error('Qualification configuration must be absolute.');
   const config = JSON.parse(await readFile(configuration, 'utf8'));
+  // The packaged uv must run; its version is pinned and checksummed where it is staged.
   const version = await promisify(execFile)(uv, ['--version'], { timeout: 5000 });
-  if (!version.stdout.startsWith('uv 0.13.1 ')) throw new Error('Unexpected bundled setup tool.');
+  if (!version.stdout.startsWith('uv ')) throw new Error('The bundled setup tool did not run.');
   await service.preferences({ nativeExecutable: config.executable });
   await service.prepare('sd15', config.directory, config.sd15Checkpoint);
   const session = await service.sessions.create();

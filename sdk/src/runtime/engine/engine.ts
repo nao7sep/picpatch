@@ -52,9 +52,9 @@ async function readReady(root: string, identity: EngineIdentity): Promise<Engine
   return { status: 'ready', code: 'ENGINE_READY', identity, engineDirectory: root, pythonExecutable };
 }
 async function probe(engine: ReadyEngine, signal: AbortSignal): Promise<void> {
-  const { projectDirectory, probePath } = runtimePaths(engine.identity.dependencies === 'inference' ? 'mflux' : engine.identity.dependencies === 'dreamo-inference' ? 'dreamo' : 'diffusers');
+  const { probePath, probeArguments } = runtimePaths(engine.identity.dependencies === 'inference' ? 'mflux' : engine.identity.dependencies === 'dreamo-inference' ? 'dreamo' : 'diffusers');
   const installation = dirname(dirname(dirname(engine.pythonExecutable)));
-  const result = await runCommand(engine.pythonExecutable, ['-I', '-B', probePath, join(projectDirectory, 'uv.lock')], installation, environment(installation), signal, 60_000);
+  const result = await runCommand(engine.pythonExecutable, ['-I', '-B', probePath, ...probeArguments], installation, environment(installation), signal, 60_000);
   try { if (JSON.parse(result).ready !== true) throw new Error('No ready result'); }
   catch (cause) { throw new PicPatchSdkError('ENGINE_UNAVAILABLE', 'The installed runtime did not confirm its dependencies.', { cause }); }
 }

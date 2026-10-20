@@ -1,4 +1,4 @@
-// The one modal shell (modal-dialog-conventions): title, scrolling body and footer
+// The one modal shell, so every dialog behaves alike: title, scrolling body and footer
 // bands over a scrim; focus kept inside and returned on close. Every close path
 // (Escape, the X, the scrim, Close Window) goes through the surface's onClose guard.
 import { useEffect, useId, useRef, type ReactNode } from 'react';

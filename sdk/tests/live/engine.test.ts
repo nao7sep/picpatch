@@ -8,7 +8,7 @@ import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, inspectEngine, installEngine } from 'picpatchsdk';
 import { testEngineDirectory } from '../helpers/engine.ts';
-import { liveCache } from '../helpers/live-cache.ts';
+import { inferenceConfig } from '../helpers/live-cache.ts';
 
 const exec = promisify(execFile);
 it('installs independent locked environments, shares only complete readiness, and runs real inference', async () => {
@@ -39,8 +39,7 @@ it('installs independent locked environments, shares only complete readiness, an
       expect(check.stdout.trim()).toBe('ok');
       expect(await readFile(join(dirname(dirname(engine.pythonExecutable)), 'pyvenv.cfg'), 'utf8')).not.toContain('/opt/homebrew');
     }
-    const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
-    const config = JSON.parse(await readFile(configPath, 'utf8'));
+        const config = await inferenceConfig();
     const editor = createImageClient({ engineDirectory: options.engineDirectory, model: config.model, defaults: { outputDirectory: directory, size: { width: 256, height: 256 }, seed: 42, parameters: { steps: 2 } } });
     try {
       const generated = await editor.generate({ prompt: 'A blue ceramic bowl on a white table.', sidecar: true });

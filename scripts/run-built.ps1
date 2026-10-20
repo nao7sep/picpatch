@@ -28,9 +28,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 $runtimeHelper = Join-Path $scriptDir "launcher-runtime.mjs"
 $runtimeToken = [guid]::NewGuid().ToString("N")
-$appName = "PicPatch"
 $outDir = "dist"
-$exePath = Join-Path $repoDir "$outDir/win-unpacked/$appName.exe"
 
 try {
     Set-Utf8Console
@@ -38,6 +36,8 @@ try {
     if (-not (Get-Command "node" -ErrorAction SilentlyContinue)) {
         throw "Missing required command: node"
     }
+    $appName = (& node $runtimeHelper app-name).Trim()
+    $exePath = Join-Path $repoDir "$outDir/win-unpacked/$appName.exe"
 
     Set-Location $repoDir
 
@@ -50,7 +50,7 @@ try {
 
     $builtAt = (Get-Item $exePath).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
     & node $runtimeHelper claim $runtimeToken
-    & node $runtimeHelper stop electron "PicPatch" "PicPatch"
+    & node $runtimeHelper stop
     if ($LASTEXITCODE -ne 0) { throw "Could not replace the existing PicPatch runtime." }
     Write-Step "Launching the existing packaged app (built: $builtAt)"
     Write-Host "If you changed source since then, run rebuild instead."

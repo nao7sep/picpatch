@@ -1,12 +1,11 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
-import { liveCache } from '../helpers/live-cache.ts';
+import { inferenceConfig } from '../helpers/live-cache.ts';
 
 it('checks every installed family constructor and mapping, rejects ignored tensors, and composes unbaked adapters', async () => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json'), 'utf8'));
+  const config = await inferenceConfig();
   const script = `import importlib, inspect, json, tempfile
 from types import SimpleNamespace
 from pathlib import Path

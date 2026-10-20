@@ -2,8 +2,8 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * The live cache the app's live lanes read prepared engines, models and configurations from
- * (tests-folder-conventions). PICPATCH_LIVE_CACHE chooses it; by default it is the one the picpatchsdk
+ * The live cache the app's live lanes read prepared engines, models and configurations from, ignored
+ * so nothing a test writes can be committed. PICPATCH_LIVE_CACHE chooses it; by default it is the one the picpatchsdk
  * package's live lane fills, found by resolving the package by name rather than by a path into it.
  */
 export const liveCacheRoot = resolveRoot();

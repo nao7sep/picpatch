@@ -1,13 +1,12 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { it } from 'vitest';
-import { liveCache } from '../helpers/live-cache.ts';
+import { inferenceConfig } from '../helpers/live-cache.ts';
 
 // This checks installed API compatibility, not model weights or image quality.
 it('matches the installed Krea 2, Boogu and Ming APIs without loading weights', async () => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json'), 'utf8'));
+  const config = await inferenceConfig();
   await promisify(execFile)(config.pythonExecutable, ['-c', `
 import inspect
 import tempfile

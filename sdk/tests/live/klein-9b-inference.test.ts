@@ -1,4 +1,4 @@
-import { inferenceOptions, testEngineDirectory } from '../helpers/engine.ts';
+import { inferenceOptions } from '../helpers/engine.ts';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

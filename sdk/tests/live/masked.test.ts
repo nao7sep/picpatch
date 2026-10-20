@@ -1,16 +1,15 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
-import { liveCache } from '../helpers/live-cache.ts';
+import { inferenceConfig } from '../helpers/live-cache.ts';
 
 it('composites black, white and soft masks with exact sRGB and alpha channel endpoints', async () => {
-  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
-  const config = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
+    const config = await inferenceConfig() as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-mask-pixels-'));
   try {
     const source = Buffer.from([11, 22, 33, 0, 100, 50, 25, 128, 10, 20, 30, 255]);
@@ -44,8 +43,7 @@ with Image.open(root / 'generated.png') as generated:
 }, 45_000);
 
 it('uses installed Fill mask conditioning with white-to-edit polarity and aligned resizing', async () => {
-  const configPath = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
-  const config = JSON.parse(await readFile(configPath, 'utf8')) as { pythonExecutable: string };
+    const config = await inferenceConfig() as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-fill-conditioning-'));
   try {
     const script = `from pathlib import Path

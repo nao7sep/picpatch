@@ -1,13 +1,11 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { inputGeometry } from '../../src/images/geometry.ts';
-import { liveCache } from '../helpers/live-cache.ts';
+import { inferenceConfig } from '../helpers/live-cache.ts';
 
 it('matches the installed MFLUX conditioning geometry and leaves prepared sizes unchanged', async () => {
-  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
-  const config = JSON.parse(await readFile(path, 'utf8')) as { pythonExecutable: string };
+    const config = await inferenceConfig() as { pythonExecutable: string };
   const sizes = [[16, 16], [33, 47], [1024, 1024], [2048, 1024], [1025, 1025], [4096, 64], [3001, 1999], [15, 32], [100000, 16]];
   const script = `import json, sys
 from mflux.models.flux2.variants.edit.flux2_klein_edit_helpers import _Flux2KleinEditHelpers as Helper
@@ -36,8 +34,7 @@ it('uses installed Kontext resizing and distinct reference positions without loa
   const { mkdtemp, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
-  const path = process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json');
-  const config = JSON.parse(await readFile(path, 'utf8')) as { pythonExecutable: string };
+    const config = await inferenceConfig() as { pythonExecutable: string };
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-kontext-'));
   try {
     const script = `from pathlib import Path

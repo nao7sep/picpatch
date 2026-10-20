@@ -1,6 +1,6 @@
 name: Release
 
-# Per the app-release-conventions: test → package → attach to a DRAFT release.
+# Test, then package, then attach to a DRAFT release, so a failing suite never ships.
 # CI stays minimal — the packaging complexity lives in electron-builder.yml and
 # the `dist` npm script. Nothing is published automatically; a draft is created
 # for the pushed tag, verified, then published by hand (gh release edit --draft=false).
@@ -35,7 +35,9 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-      - run: npm install --global npm@12.2.0
+      # The npm version comes from packageManager in package.json, its one source.
+      - run: npm install --global "$(node -p "require('./package.json').packageManager")"
+        shell: bash
       - run: npm ci
       - name: Verify tag matches package version
         if: github.ref_type == 'tag'
@@ -48,7 +50,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           npm run prepare:tools
-          echo "$PWD/node_modules/.cache/picpatch-desktop/uv-0.13.1" >> "$GITHUB_PATH"
+          echo "$PWD/node_modules/.cache/picpatch-desktop/uv" >> "$GITHUB_PATH"
       # npm test is a fixed set, so it runs the same here as it does locally.
       # The live lane stays out of CI: npm run test:full is a local gate.
       - run: npm test
@@ -71,7 +73,9 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-      - run: npm install --global npm@12.2.0
+      # The npm version comes from packageManager in package.json, its one source.
+      - run: npm install --global "$(node -p "require('./package.json').packageManager")"
+        shell: bash
       - run: npm ci
 
       # One command: electron-vite build + bundled tools + electron-builder.

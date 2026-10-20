@@ -9,6 +9,7 @@ import { PicPatchSdkError } from '../errors.ts';
 import { modelEvidence, modelProfile } from './profiles.ts';
 import { validateModelManifest } from './verification.ts';
 import { runtimeHosts, supportsRuntime } from '../hosts.ts';
+import { runtimeVersions } from '../runtime/engine/versions.ts';
 
 export type { CatalogModel, CatalogRuntime, ExternalModel, ModelCatalogEntry } from './types.ts';
 import type { CatalogModel, ModelCatalogEntry } from './types.ts';
@@ -27,7 +28,7 @@ export function listModels(): ModelCatalogEntry[] {
       downloadBytes: pinned.components.reduce((total, component) => total + component.bytes, 0),
       sourceUrl: `https://huggingface.co/${pinned.source.repository}/tree/${pinned.source.revision}`,
       license: { id: configuration.license, url: configuration.licenseUrl },
-      runtime: { name: 'mflux', engine: 'python', version: '0.22.0', hosts: runtimeHosts('mflux') }, supported: supportsRuntime('mflux') };
+      runtime: { name: 'mflux', engine: 'python', version: runtimeVersions.mflux, hosts: runtimeHosts('mflux') }, supported: supportsRuntime('mflux') };
   });
   return [...pinned, ...externalModels(), ...nativeModels()];
 }

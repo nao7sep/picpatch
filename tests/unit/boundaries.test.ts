@@ -27,7 +27,7 @@ function sdkPaths(source: string): string[] {
 async function files(directory: string): Promise<string[]> { const found = []; for (const entry of await readdir(directory, { withFileTypes: true })) { const path = join(directory, entry.name); if (entry.isDirectory()) found.push(...await files(path)); else if (/\.tsx?$/.test(path)) found.push(path); } return found; }
 it('consumes only the SDK public package entries, in the app and its tests, with planted violations proving the guard', async () => {
   const violations = [];
-  // The app's tests are consumers too: they use the SDK by name and never a path into its package (sdk-conventions).
+  // The app's tests are consumers too: they use the SDK by name and never a path into its package, so it can move to a repository of its own unchanged.
   for (const file of [...await files(join(root, 'src')), ...await files(join(root, 'tests'))]) {
     const source = await readFile(file, 'utf8');
     for (const specifier of imports(source)) if (forbidden(file, specifier)) violations.push(`${relative(root, file)}: ${specifier}`);

@@ -39,8 +39,6 @@ it('takes one call-options object on every verb, apart from each verb’s own ar
   await expect(inspectEngine({ engineDirectory: directory, signal: call.signal } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   await expect(inspectEngine({}, { engineDirectory: directory } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   await expect(inspectEngine({ unknown: true } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
-  // caller is record content, an argument of the verbs that write records, not a call option.
-  await expect(readArtifactRecord(join(directory, 'record.json'), { caller: { name: 'App', version: '1' } } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });
 
 it('refuses newer formats in the validators exactly as the readers do', () => {

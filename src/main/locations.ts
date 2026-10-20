@@ -17,5 +17,5 @@ export const locations = {
   worker: (name: 'backup-worker' | 'records-worker' | 'records-reader-worker') => join(out, 'main', `${name}.js`),
   /** The window icon Windows and Linux paint; macOS takes the bundle's. */
   icon: () => app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(out, '..', 'build', 'icon.png'),
-  uv: () => app.isPackaged ? join(process.resourcesPath, 'tools', uvName) : join(out, '..', 'node_modules', '.cache', 'picpatch-desktop', 'uv-0.13.1', uvName),
+  uv: () => app.isPackaged ? join(process.resourcesPath, 'tools', uvName) : join(out, '..', 'node_modules', '.cache', 'picpatch-desktop', 'uv', uvName),
 };

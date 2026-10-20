@@ -10,7 +10,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUNTIME_HELPER="$SCRIPT_DIR/launcher-runtime.mjs"
 RUNTIME_TOKEN="run-dev-$$-$(date +%s)-$RANDOM"
-RENDERER_URL="http://127.0.0.1:23297"
 
 log_step() {
   printf '\n==> %s\n' "$1"
@@ -36,7 +35,7 @@ cleanup() {
   local status="$?"
   trap - EXIT
   if node "$RUNTIME_HELPER" is-owner "$RUNTIME_TOKEN" >/dev/null 2>&1; then
-    node "$RUNTIME_HELPER" stop-if-owner "$RUNTIME_TOKEN" electron "PicPatch" "PicPatch" >/dev/null 2>&1 || true
+    node "$RUNTIME_HELPER" stop-if-owner "$RUNTIME_TOKEN" >/dev/null 2>&1 || true
   fi
   pause_on_failure "$status"
   exit "$status"
@@ -45,14 +44,15 @@ cleanup() {
 trap cleanup EXIT
 
 require_command node
+RENDERER_URL="$(node "$RUNTIME_HELPER" dev-url)"
 require_command npm
 
 cd "$REPO_DIR"
 
 log_step "Replacing any existing PicPatch runtime"
 node "$RUNTIME_HELPER" claim "$RUNTIME_TOKEN"
-node "$RUNTIME_HELPER" stop electron "PicPatch" "PicPatch"
-node "$RUNTIME_HELPER" check-endpoint 127.0.0.1 23297
+node "$RUNTIME_HELPER" stop
+node "$RUNTIME_HELPER" check-dev-endpoint
 
 log_step "Installing dependencies"
 npm install --no-audit --no-fund
@@ -67,7 +67,7 @@ fi
 log_step "Starting PicPatch in development mode"
 npm run dev &
 DEV_PID=$!
-node "$RUNTIME_HELPER" wait-http "$RENDERER_URL" 60000
+node "$RUNTIME_HELPER" wait-dev 60000
 node "$RUNTIME_HELPER" wait-process "$REPO_DIR/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron" 60000
 log_step "PicPatch is ready at $RENDERER_URL"
 wait "$DEV_PID"

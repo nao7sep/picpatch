@@ -1,4 +1,4 @@
-// The one menu layer (composite-control-conventions, Menu): a trigger that is the
+// The one menu layer, so every menu behaves alike: a trigger that is the
 // single tab stop and a popover of commands. Arrows move and stop at the ends,
 // typing jumps by label, Enter chooses, Escape and Tab close.
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';

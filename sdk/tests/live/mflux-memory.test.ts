@@ -1,12 +1,11 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { it } from 'vitest';
-import { liveCache } from '../helpers/live-cache.ts';
+import { inferenceConfig } from '../helpers/live-cache.ts';
 
 it.each(['flux2-klein-base-9b', 'z-image-turbo', 'flux1-fill-dev'])('uses the installed %s memory callback to release dead model stages', async variant => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json'), 'utf8'));
+  const config = await inferenceConfig();
   await promisify(execFile)(config.pythonExecutable, ['-c', `
 from types import SimpleNamespace
 import mlx.core as mx

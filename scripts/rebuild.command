@@ -10,7 +10,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-APP_NAME="PicPatch"
 RUNTIME_HELPER="$SCRIPT_DIR/launcher-runtime.mjs"
 RUNTIME_TOKEN="rebuild-$$-$(date +%s)-$RANDOM"
 OUT_DIR="dist"
@@ -38,6 +37,7 @@ pause_on_failure() {
 trap 'pause_on_failure $?' EXIT
 
 require_command node
+APP_NAME="$(node "$RUNTIME_HELPER" app-name)"
 require_command npm
 
 cd "$REPO_DIR"
@@ -87,6 +87,6 @@ fi
 
 log_step "Launching the packaged app"
 node "$RUNTIME_HELPER" claim "$RUNTIME_TOKEN"
-node "$RUNTIME_HELPER" stop electron "PicPatch" "PicPatch"
+node "$RUNTIME_HELPER" stop
 open -n "$APP_BUNDLE"
-node "$RUNTIME_HELPER" wait-process "$APP_BUNDLE/Contents/MacOS/PicPatch" 30000
+node "$RUNTIME_HELPER" wait-process "$APP_BUNDLE/Contents/MacOS/$APP_NAME" 30000

@@ -10,7 +10,7 @@ import type { ImageClientOptions } from 'picpatchsdk';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import pkg from '../../package.json' with { type: 'json' };
-import { liveCache } from '../helpers/live-cache.ts';
+import { liveCache, inferenceConfig } from '../helpers/live-cache.ts';
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(import.meta.url);
@@ -24,10 +24,9 @@ it('packs a source SDK and runs its public worker journey from an unrelated cons
     expect(files).toContain('protocol/worker.schema.json');
     expect(files).toContain('runtimes/mflux/src/picpatch_worker/backends/models.json');
     expect(files).toContain('runtimes/mflux/uv.lock');
-    expect(files).toContain('runtimes/mflux/engine_probe.py');
+    expect(files).toContain('runtimes/common/engine_probe.py');
     expect(files).toContain('runtimes/common/src/picpatch_worker_core/entry.py');
     expect(files).toContain('runtimes/dreamo/src/picpatch_dreamo/adapter.py');
-    expect(files).toContain('runtimes/dreamo/THIRD_PARTY_NOTICES');
     expect(files).not.toContain('benchmarks/comparison.ts');
     expect(files.some(path => /(?:\.venv|node_modules|__pycache__|\.safetensors|\.gguf|\.pyc|inference-config)/.test(path))).toBe(false);
     await exec('tar', ['-xzf', join(directory, packed.filename), '-C', directory], { timeout: 30_000 });
@@ -41,7 +40,7 @@ it('packs a source SDK and runs its public worker journey from an unrelated cons
       if (!installed) throw new Error(`Install the declared dependency: ${dependency}`);
       await symlink(installed, join(modules, dependency));
     }
-    const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? liveCache('inference-config.json'), 'utf8'));
+    const config = await inferenceConfig();
     const script = join(directory, 'consumer.ts');
     await writeFile(script, `import { inspectEngine, inspectRuntime, createImageClient, listModels } from 'picpatchsdk';
 const engine = await inspectEngine({engineDirectory:${JSON.stringify(testEngineDirectory)}});

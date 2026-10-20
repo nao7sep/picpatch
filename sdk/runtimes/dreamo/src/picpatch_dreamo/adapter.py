@@ -14,6 +14,10 @@ import secrets
 from picpatch_worker_core.errors import BackendUnavailable, Cancelled, InvalidEditInput
 from .conditioning import bind_references
 
+# The DreamO release vendored here, and the Diffusers release its pipeline was written against; a test checks them.
+DREAMO_VERSION = '1.1'
+DIFFUSERS_VERSION = '0.41.0'
+
 
 def check_cancelled(cancel):
     if cancel.is_set():
@@ -22,7 +26,7 @@ def check_cancelled(cancel):
 
 class DreamOAdapter:
     def __init__(self, config):
-        if config.get('variant') != 'flux1-dreamo-v1.1' or any(key in config for key in ('quantize', 'loras', 'controlNet', 'photoMaker', 'ipAdapter')):
+        if config.get('variant') != f'flux1-dreamo-v{DREAMO_VERSION}' or any(key in config for key in ('quantize', 'loras', 'controlNet', 'photoMaker', 'ipAdapter')):
             raise InvalidEditInput('Unsupported DreamO configuration.')
         self.config = config
         definitions = json.loads(Path(__file__).with_name('models.json').read_text())
@@ -37,7 +41,7 @@ class DreamOAdapter:
             installed = version('diffusers')
         except PackageNotFoundError:
             return {'status': 'missing-package'}
-        if installed != '0.41.0':
+        if installed != DIFFUSERS_VERSION:
             return {'status': 'unsupported-version', 'version': installed}
         try:
             from .vendor.pipeline import DreamOPipeline
@@ -174,7 +178,7 @@ class DreamOAdapter:
             check_cancelled(cancel)
             return {'image': {'path': request['outputPath'], 'mimeType': 'image/png', 'size': {'width': image.width, 'height': image.height}},
                     'model': request['model'], 'modelRevision': self.config['manifest']['source']['revision'],
-                    'runtime': {'name': 'dreamo', 'version': '1.1'}, 'seed': seed,
+                    'runtime': {'name': 'dreamo', 'version': DREAMO_VERSION}, 'seed': seed,
                     'references': request.get('references', []), 'effectiveParameters': parameters}
         finally:
             torch.mps.synchronize()

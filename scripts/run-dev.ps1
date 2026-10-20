@@ -49,19 +49,19 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 $runtimeHelper = Join-Path $scriptDir "launcher-runtime.mjs"
 $runtimeToken = [guid]::NewGuid().ToString("N")
-$rendererUrl = "http://127.0.0.1:23297"
 
 try {
     Set-Utf8Console
     Require-Command node
     Require-Command npm
+    $rendererUrl = (& node $runtimeHelper dev-url).Trim()
 
     Set-Location $repoDir
 
     Write-Step "Replacing any existing PicPatch runtime"
     Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "claim", $runtimeToken)
-    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "stop", "electron", "PicPatch", "PicPatch")
-    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "check-endpoint", "127.0.0.1", "23297")
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "stop")
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "check-dev-endpoint")
 
     Write-Step "Installing dependencies"
     Invoke-Native -FilePath "npm" -ArgumentList @("install", "--no-audit", "--no-fund")
@@ -75,7 +75,7 @@ try {
 
     Write-Step "Starting PicPatch in development mode"
     $devProcess = Start-Process -FilePath (Get-Command "npm.cmd").Source -ArgumentList @("run", "dev") -NoNewWindow -PassThru
-    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "wait-http", $rendererUrl, "60000")
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "wait-dev", "60000")
     Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "wait-process", (Join-Path $repoDir "node_modules/electron/dist/electron.exe"), "60000")
     Write-Step "PicPatch is ready at $rendererUrl"
     $devProcess.WaitForExit()
@@ -91,7 +91,7 @@ catch {
 finally {
     & node $runtimeHelper is-owner $runtimeToken *> $null
     if ($LASTEXITCODE -eq 0) {
-        & node $runtimeHelper stop-if-owner $runtimeToken electron "PicPatch" "PicPatch" *> $null
+        & node $runtimeHelper stop-if-owner $runtimeToken *> $null
         Read-Host "Press Enter to close" | Out-Null
     }
 }

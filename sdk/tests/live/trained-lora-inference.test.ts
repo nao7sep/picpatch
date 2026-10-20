@@ -7,7 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel, type ImageClientOptions } from 'picpatchsdk';
-import { liveCacheRoot } from '../helpers/live-cache.ts';
+import { liveCacheRoot, inferenceConfig } from '../helpers/live-cache.ts';
 const assets: { family: string; filename: string; bytes: number; sha256: string; scale: number; steps: number }[] = JSON.parse(await readFile(new URL('../fixtures/trained-lora-assets.json', import.meta.url), 'utf8'));
 
 const cache = liveCacheRoot;
@@ -19,7 +19,7 @@ it.each(assets)('applies the pinned trained $family pixel-art adapter through th
   try {
     let options: ImageClientOptions;
     if (asset.family === 'klein') {
-      const config: ImageClientOptions = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(cache, 'inference-config.json'), 'utf8'));
+      const config: ImageClientOptions = await inferenceConfig();
       for (const component of config.model!.manifest.components) {
         const target = join(directory, component.path);
         await mkdir(dirname(target), { recursive: true });

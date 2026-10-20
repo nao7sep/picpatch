@@ -50,13 +50,13 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 $runtimeHelper = Join-Path $scriptDir "launcher-runtime.mjs"
 $runtimeToken = [guid]::NewGuid().ToString("N")
-$appName = "PicPatch"
 $outDir = "dist"
-$exePath = Join-Path $repoDir "$outDir/win-unpacked/$appName.exe"
 
 try {
     Set-Utf8Console
     Require-Command node
+    $appName = (& node $runtimeHelper app-name).Trim()
+    $exePath = Join-Path $repoDir "$outDir/win-unpacked/$appName.exe"
     Require-Command npm
 
     Set-Location $repoDir
@@ -75,7 +75,7 @@ try {
     # happen before cleaning the package directory.
     Write-Step "Replacing any existing PicPatch runtime"
     Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "claim", $runtimeToken)
-    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "stop", "electron", "PicPatch", "PicPatch")
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "stop")
 
     # Remove stale output so a build that fails to emit a file can't be masked by
     # a leftover artifact from a previous run.

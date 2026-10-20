@@ -1,4 +1,4 @@
-import { inferenceOptions, testEngineDirectory } from '../helpers/engine.ts';
+import { inferenceOptions } from '../helpers/engine.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { expect, it } from 'vitest';
 import { createImageClient, prepareModel, type ImageClientOptions, type SdkEvent } from 'picpatchsdk';
-import { liveCacheRoot } from '../helpers/live-cache.ts';
+import { liveCacheRoot, inferenceConfig } from '../helpers/live-cache.ts';
 
 const exec = promisify(execFile);
 async function children(): Promise<number[]> {
@@ -74,7 +74,7 @@ it('recovers native sessions after real loading cancellation and protects prior 
 }, 600_000);
 
 it('recovers from cooperative MFLUX cancellation and survives failing progress hooks for real 512px inference', async () => {
-  const config = JSON.parse(await readFile(process.env.PICPATCH_INFERENCE_CONFIG ?? join(root, 'inference-config.json'), 'utf8')) as ImageClientOptions;
+  const config = await inferenceConfig() as ImageClientOptions;
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-mflux-recovery-'));
   const options: ImageClientOptions = { ...inferenceOptions(config), defaults: { outputDirectory: directory, size: { width: 512, height: 512 }, seed: 42 } };
   let editor = createImageClient(options);

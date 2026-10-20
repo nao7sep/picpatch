@@ -9,6 +9,9 @@ from pathlib import Path
 
 from picpatch_worker_core.errors import BackendUnavailable, Cancelled, InvalidEditInput
 
+# The Diffusers release this adapter's API contract was written against; a test checks it against the lock pin.
+DIFFUSERS_VERSION = '0.41.0'
+
 
 def check_cancelled(cancel):
     if cancel.is_set():
@@ -51,7 +54,7 @@ class GlmImageAdapter:
             installed = version('diffusers')
         except PackageNotFoundError:
             return {'status': 'missing-package'}
-        if installed != '0.41.0':
+        if installed != DIFFUSERS_VERSION:
             return {'status': 'unsupported-version', 'version': installed}
         try:
             from diffusers import GlmImagePipeline
@@ -157,7 +160,7 @@ class GlmImageAdapter:
             check_cancelled(cancel)
             return {'image': {'path': request['outputPath'], 'mimeType': 'image/png', 'size': {'width': image.width, 'height': image.height}},
                     'model': request['model'], 'modelRevision': self.config['manifest']['source']['revision'],
-                    'runtime': {'name': 'diffusers', 'version': '0.41.0'}, 'seed': seed,
+                    'runtime': {'name': 'diffusers', 'version': DIFFUSERS_VERSION}, 'seed': seed,
                     'references': request.get('references', []), 'effectiveParameters': parameters}
         finally:
             if handle is not None:

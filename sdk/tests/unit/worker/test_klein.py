@@ -113,8 +113,10 @@ def test_runtime_failure_releases_model(monkeypatch, config, request_data):
     assert calls[-2:] == [('sync',), ('clear',)]
 
 
-def test_loader_enforces_version_and_offline_before_import(monkeypatch, config):
-    monkeypatch.setattr(mflux_runtime, 'version', lambda name: '0.21.0')
+def test_loader_requires_mflux_and_goes_offline_before_import(monkeypatch, config):
+    def missing(name):
+        raise mflux_runtime.PackageNotFoundError(name)
+    monkeypatch.setattr(mflux_runtime, 'version', missing)
     for key in ['HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE', 'HF_HUB_DISABLE_TELEMETRY']:
         monkeypatch.setenv(key, '0')
     with pytest.raises(BackendUnavailable):
