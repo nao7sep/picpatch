@@ -2,7 +2,7 @@ import { storageWait } from '../storage.ts';
 import type { ImageFingerprint } from './fingerprint.ts';
 import { unlink } from '../storage.ts';
 import { join } from 'node:path';
-import sharp from 'sharp';
+import sharp from './sharp.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import type { ImageSize } from '../types.ts';
 import { checkCancellation, normalizeImage, snapshotImage } from './validation.ts';

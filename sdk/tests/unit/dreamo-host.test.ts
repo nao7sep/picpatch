@@ -22,7 +22,7 @@ it('admits separately named subjects and refuses pooling, missing bindings, raw 
 });
 it('selects isolated engine identity and source entry without ambient path configuration', () => {
   expect(identifyEngine('manifest', 'lock', 'dreamo').id).not.toBe(identifyEngine('manifest', 'lock').id);
-  expect(runtimePaths('dreamo').projectDirectory).toMatch(/runtimes\/dreamo\/$/);
+  expect(runtimePaths('dreamo').projectDirectory).toMatch(/runtimes[\\/]dreamo[\\/]$/);
   expect(() => runtimePaths('unknown' as never)).toThrow();
   const launch = workerLaunch('/tmp/python', '/tmp/install', 'dreamo');
   expect(launch.args?.join(' ')).toContain('picpatch_dreamo.__main__');

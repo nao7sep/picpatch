@@ -1,7 +1,7 @@
 // The few operating-system differences the SDK must handle: the minimal environment tools
 // start with, process ownership and termination, and how files and directories reach the disk.
 import { spawn } from 'node:child_process';
-import { join, win32 } from 'node:path';
+import { posix, win32 } from 'node:path';
 import { copyFile, link, open, symlink } from './storage.ts';
 
 import { currentHost, type Host } from './hosts.ts';
@@ -19,7 +19,7 @@ export function toolEnvironment(host: Host = currentHost(), extraPath: string[] 
 /** Windows' own tar (bsdtar) reads zip archives. */
 export const archiveTool = (host: Host = currentHost()): string => host.platform === 'win32' ? win32.join(windowsFolders().root, 'System32', 'tar.exe') : '/usr/bin/tar';
 /** A virtual environment's interpreter. */
-export const venvPython = (venv: string, host: Host = currentHost()): string => host.platform === 'win32' ? win32.join(venv, 'Scripts', 'python.exe') : join(venv, 'bin', 'python');
+export const venvPython = (venv: string, host: Host = currentHost()): string => host.platform === 'win32' ? win32.join(venv, 'Scripts', 'python.exe') : posix.join(venv, 'bin', 'python');
 
 /** POSIX children lead their own process group so the whole group can be signalled; Windows children get no console window. */
 export const ownedSpawn = { detached: process.platform !== 'win32', windowsHide: true } as const;

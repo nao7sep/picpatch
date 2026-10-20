@@ -7,7 +7,7 @@ import { constants, createReadStream, createWriteStream } from 'node:fs';
 import { chmod, lstat, open, unlink } from '../storage.ts';
 import { pipeline } from 'node:stream/promises';
 import { isAbsolute } from 'node:path';
-import sharp, { type Metadata } from 'sharp';
+import sharp, { type Metadata } from './sharp.ts';
 import { inputGeometry, type GeometryPolicy } from './geometry.ts';
 import type { InputGeometry } from '../types.ts';
 import { PicPatchSdkError } from '../errors.ts';

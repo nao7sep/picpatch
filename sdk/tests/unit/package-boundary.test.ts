@@ -1,6 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { builtinModules } from 'node:module';
-import { dirname, extname, isAbsolute, relative, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from '@babel/parser';
 import { expect, it } from 'vitest';
@@ -101,7 +101,8 @@ function ambientReads(text: string, file: string): string[] {
 it('keeps ambient caller state and standard streams outside SDK source', async () => {
   const failures: string[] = [];
   for (const file of (await files(resolve(root, 'src'))).filter(file => file.endsWith('.ts'))) {
-    failures.push(...ambientReads(await readFile(file, 'utf8'), relative(root, file)).map(reason => `${relative(root, file)}: ${reason}`));
+    const name = relative(root, file).split(sep).join('/');
+    failures.push(...ambientReads(await readFile(file, 'utf8'), name).map(reason => `${name}: ${reason}`));
   }
   expect(failures).toEqual([]);
 });

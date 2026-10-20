@@ -8,7 +8,8 @@ import { nativeRevision } from '../../src/backends/stable-diffusion-cpp/models.t
 import { hiDreamShapes, tensorFile } from '../helpers/native-assets.ts';
 
 // Protocol process double: verifies compilation/publication, not trained inference.
-it('routes HiDream source and multiple references through ordered native image inputs and records', async () => {
+// The fake sd-cli is a shebang script, which Windows cannot start.
+it.skipIf(process.platform === 'win32')('routes HiDream source and multiple references through ordered native image inputs and records', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-hidream-cli-'));
   try {
     const png = await sharp({ create: { width: 32, height: 32, channels: 3, background: 'blue' } }).png().toBuffer();

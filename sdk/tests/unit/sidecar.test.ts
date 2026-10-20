@@ -137,7 +137,7 @@ it('reports a racing sidecar conflict without overwriting it or deleting the sav
 
 it('reports a metadata write error as partial success with safe copy', async () => {
   vi.mocked(fs.open).mockImplementation(async (...args) => {
-    if (String(args[0]).endsWith('/sidecar.json')) throw Object.assign(new Error('private filesystem detail'), { code: 'ENOSPC' });
+    if (/[\\/]sidecar\.json$/.test(String(args[0]))) throw Object.assign(new Error('private filesystem detail'), { code: 'ENOSPC' });
     return actual.open(...args);
   });
   const saved = await editor.generate({ prompt: 'Blue', outputPath: output, sidecar: {} });

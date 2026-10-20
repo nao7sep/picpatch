@@ -1,5 +1,5 @@
 import { storageWait } from '../storage.ts';
-import sharp from 'sharp';
+import sharp from './sharp.ts';
 import { chmod } from '../storage.ts';
 import { join } from 'node:path';
 import type { OutpaintCanvas } from '../contracts.generated.ts';

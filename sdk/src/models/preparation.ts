@@ -141,7 +141,9 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
         checkSignal(signal);
         try { await rename(staging, directory); }
         catch (cause) {
-          if (!['EEXIST', 'ENOTEMPTY'].includes((cause as NodeJS.ErrnoException).code ?? '')) throw new PicPatchSdkError('MODEL_IO', 'Model publication could not be confirmed.', { cause, effect: 'unknown', subject: directory });
+          // Windows refuses a rename onto an existing directory with EPERM rather than EEXIST/ENOTEMPTY.
+          const conflict = ['EEXIST', 'ENOTEMPTY'].includes((cause as NodeJS.ErrnoException).code ?? '') || (process.platform === 'win32' && (cause as NodeJS.ErrnoException).code === 'EPERM' && await exists(directory));
+          if (!conflict) throw new PicPatchSdkError('MODEL_IO', 'Model publication could not be confirmed.', { cause, effect: 'unknown', subject: directory });
           await verified(directory); // A concurrent complete winner is reusable, never replaced.
           return result('cache');
         }

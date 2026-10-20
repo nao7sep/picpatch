@@ -4,7 +4,7 @@ import { Writable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, stat } from '../storage.ts';
-import sharp from 'sharp';
+import sharp from './sharp.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal } from '../operations.ts';
 
