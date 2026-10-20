@@ -20,7 +20,8 @@ it('retains exact latest bytes per launch and streams verified binary history wi
       const rows = db.prepare('SELECT * FROM backups ORDER BY id').all(); expect(rows).toHaveLength(2);
       expect(Buffer.from(rows[0]!.content as Uint8Array).toString()).toBe('last');
       const parts = db.prepare('SELECT content FROM backup_parts WHERE backup_id=? ORDER BY part').all(rows[1]!.id!);
-      expect(Buffer.concat(parts.map(part => Buffer.from(part.content as Uint8Array)))).toEqual(bytes);
+      // Buffer.equals: a deep comparison of 5 MB takes seconds.
+      expect(Buffer.concat(parts.map(part => Buffer.from(part.content as Uint8Array))).equals(bytes)).toBe(true);
     } finally { db.close(); }
   } finally { await worker.terminate(); await rm(root, { recursive: true, force: true }); }
 }, 15_000);

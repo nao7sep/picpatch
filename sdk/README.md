@@ -204,7 +204,7 @@ From `sdk/`, run `npm test` for contract drift checks, TypeScript checks, ordina
 
 ### Live test cache
 
-Live tests, their engines, models, configurations and outputs, and benchmark results live in the platform cache folder, outside the repository (`~/Library/Caches/picpatch-live` on macOS, `%LOCALAPPDATA%\picpatch-live` on Windows, `$XDG_CACHE_HOME/picpatch-live` elsewhere); `PICPATCH_LIVE_CACHE` moves it. The Python tests keep their uv environment under `picpatch-dev` in the same cache location and write no bytecode or pytest cache into the source tree.
+Live tests, their engines, models, configurations and outputs, and benchmark results live in the package's ignored `node_modules/.cache/picpatch-live`; `PICPATCH_LIVE_CACHE` moves it. The Python tests write no bytecode or pytest cache into the source tree.
 
 ### Live native tests
 

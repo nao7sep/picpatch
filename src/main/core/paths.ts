@@ -13,7 +13,8 @@ export function resolveAppPaths(): AppPaths {
     if (replacement === undefined) throw new Error(`Unresolved storage variable: ${name}`);
     return replacement;
   });
-  const root = isAbsolute(selected) ? selected : resolve(home, selected);
+  // resolve also normalizes separators a variable brought in (C:\Temp + /app).
+  const root = resolve(home, selected);
   return { root, sessions: join(root, 'sessions'), config: join(root, 'config.json'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') };
 }
 

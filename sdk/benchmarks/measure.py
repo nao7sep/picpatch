@@ -25,15 +25,9 @@ class Usage(ctypes.Structure):
 
 
 def live_cache() -> Path:
-    """The live-test cache outside the repository (see tests/helpers/live-cache.ts); PICPATCH_LIVE_CACHE moves it."""
+    """The live-test cache (see tests/helpers/live-cache.ts); PICPATCH_LIVE_CACHE moves it."""
     chosen = os.environ.get('PICPATCH_LIVE_CACHE')
-    if chosen:
-        return Path(chosen)
-    if sys.platform == 'darwin':
-        return Path.home() / 'Library' / 'Caches' / 'picpatch-live'
-    if sys.platform == 'win32':
-        return Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData' / 'Local')) / 'picpatch-live'
-    return Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'picpatch-live'
+    return Path(chosen) if chosen else Path(__file__).resolve().parent.parent / 'node_modules' / '.cache' / 'picpatch-live'
 
 def descendants(rows, root):
     selected = {root}

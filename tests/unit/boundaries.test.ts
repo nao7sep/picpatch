@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, readdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname, relative, resolve } from 'node:path';
+import { join, dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -12,7 +12,7 @@ function imports(source: string): string[] {
   function walk(value: any) { if (!value || typeof value !== 'object') return; if (['ImportDeclaration','ExportNamedDeclaration','ExportAllDeclaration','ImportExpression'].includes(value.type) && typeof value.source?.value === 'string') result.push(value.source.value); for (const child of Object.values(value)) if (Array.isArray(child)) child.forEach(walk); else if (child && typeof child === 'object') walk(child); }
   walk(ast); return result;
 }
-const forbidden = (file: string, specifier: string) => specifier.startsWith('picpatchsdk/') && specifier !== 'picpatchsdk/types' || specifier.startsWith('.') && relative(join(root, 'sdk'), resolve(dirname(file), specifier)).split('/')[0] !== '..';
+const forbidden = (file: string, specifier: string) => specifier.startsWith('picpatchsdk/') && specifier !== 'picpatchsdk/types' || specifier.startsWith('.') && relative(join(root, 'sdk'), resolve(dirname(file), specifier)).split(sep)[0] !== '..';
 async function files(directory: string): Promise<string[]> { const found = []; for (const entry of await readdir(directory, { withFileTypes: true })) { const path = join(directory, entry.name); if (entry.isDirectory()) found.push(...await files(path)); else if (/\.tsx?$/.test(path)) found.push(path); } return found; }
 it('consumes only the SDK public package entries, with a planted violation proving the guard', async () => {
   const violations = [];
@@ -26,7 +26,8 @@ it('keeps Node and browser global types separated', async () => {
       const fixture = join(directory, `${environment}.ts`); await writeFile(fixture, `${expression};\nexport {};\n`);
       const config = join(directory, `${environment}.json`); await writeFile(config, JSON.stringify({ extends: join(root, `tsconfig.${environment}.json`), compilerOptions: { typeRoots: [join(root, 'node_modules', '@types')] }, include: [], files: [fixture] }));
       let diagnostic = '';
-      try { await promisify(execFile)(join(root, 'node_modules', '.bin', 'tsc'), ['-p', config]); } catch (error) { diagnostic = (error as { stdout?: string }).stdout ?? ''; }
+      // Run the compiler through Node: node_modules/.bin/tsc is a shell script Windows cannot start.
+      try { await promisify(execFile)(process.execPath, [join(root, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', config]); } catch (error) { diagnostic = (error as { stdout?: string }).stdout ?? ''; }
       expect(diagnostic).toContain(`Cannot find name '${environment === 'node' ? 'document' : 'process'}'`);
     }
   } finally { await rm(directory, { recursive: true, force: true }); }

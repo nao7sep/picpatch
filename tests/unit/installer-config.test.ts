@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { languages } from '../../src/shared/i18n/index.ts';
-const config = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8');
+// A Windows checkout may have CRLF line endings.
+const config = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const scripts: Record<string, string> = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).scripts;
 /** The indented body of one top-level section of electron-builder.yml. */
 const section = (name: string) => new RegExp(`^${name}:\\n((?:[ #].*\\n|\\n)*)`, 'm').exec(config)?.[1] ?? '';
