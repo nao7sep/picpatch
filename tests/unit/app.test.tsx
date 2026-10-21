@@ -103,6 +103,57 @@ it('drops one image to edit it when nothing is being edited, and later images as
   expect(fake.calls('import').map((payload: any) => payload.path)).toEqual(['/drops/f0.png', '/drops/f0.png', '/drops/f1.png']);
 });
 
+it('keeps automatic reference names unique after removing a group without rewriting prompt references', async () => {
+  const initial = session();
+  initial.draft = { ...initial.draft, text: 'Keep Reference 2 on the right', references: [
+    { id: 'Reference 1', role: 'subject', images: [] }, { id: 'Reference 2', role: 'subject', images: [] },
+  ] };
+  const fake = await start(fakeBridge(initial, { import: () => [{ id: 'photo', name: 'photo.png', file: 'x', bytes: 1, sha256: 'x' }] }));
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Reference 1' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add images' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Reference photos' }));
+  await waitFor(() => expect(fake.session.draft.references.map(group => group.id)).toEqual(['Reference 2', 'Reference 3']));
+  expect(fake.session.draft.text).toBe(initial.draft.text);
+});
+
+it('allocates names from edited IDs when imports settle and from each preceding queued import', async () => {
+  const initial = session();
+  initial.draft.references = [{ id: 'Person', role: 'subject', images: [] }];
+  let finishImport!: (assets: typeof initial.assets) => void;
+  const fake = await start(fakeBridge(initial, { import: () => new Promise(resolve => { finishImport = resolve; }) }));
+  const zone = document.querySelector('[data-drop-receiver]')!;
+  const drop = () => fireEvent.drop(zone, { dataTransfer: { types: ['Files'], files: [new File(['x'], 'a.png'), new File(['x'], 'b.png')] } });
+  // The first import stays open while the existing group is renamed.
+  fireEvent.click(screen.getByRole('button', { name: 'Add images' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Reference photos' }));
+  await waitFor(() => expect(fake.calls('import')).toHaveLength(1));
+  fireEvent.click(screen.getByRole('button', { name: 'Subject Person' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Reference group name' }), { target: { value: 'Reference 2' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+  drop(); drop();
+  let next = 0;
+  const asset = () => [{ id: `photo${next++}`, name: 'photo.png', file: 'x', bytes: 1, sha256: 'x' }];
+  fake.handlers.import = asset;
+  await act(async () => finishImport(asset()));
+  await waitFor(() => expect(fake.session.draft.references.map(group => group.id)).toEqual(['Reference 2', 'Reference 3', 'Reference 4', 'Reference 5']));
+  expect(fake.session.draft.references.map(group => group.images.length)).toEqual([0, 1, 2, 2]);
+});
+
+it('checks localized automatic names against existing IDs while preserving names from other locales', async () => {
+  const initial = session();
+  initial.draft.references = [{ id: '参照グループ3', role: 'subject', images: [] }, { id: 'Reference 4', role: 'subject', images: [] }];
+  const fake = fakeBridge(initial, { import: () => [{ id: 'photo', name: 'photo.png', file: 'x', bytes: 1, sha256: 'x' }] });
+  const overview = await fake.bridge.call('overview');
+  const locale = { language: 'ja', format: 'ja', systemLanguage: 'ja' };
+  fake.handlers.locale = () => locale;
+  fake.handlers.overview = () => ({ ...overview, locale });
+  window.picpatch = fake.bridge;
+  render(<App />);
+  await screen.findByText('参照グループ3');
+  fireEvent.drop(document.querySelector('[data-drop-receiver]')!, { dataTransfer: { types: ['Files'], files: [new File(['x'], 'a.png'), new File(['x'], 'b.png')] } });
+  await waitFor(() => expect(fake.session.draft.references.map(group => group.id)).toEqual(['参照グループ3', 'Reference 4', '参照グループ4']));
+});
+
 it('blocks workspace shortcuts and commands behind a modal and closes only the front surface', async () => {
   const fake = await start();
   await act(async () => fake.command('settingsButton'));

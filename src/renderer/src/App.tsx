@@ -209,7 +209,14 @@ export function App() {
 
   // ---- Composer commands ----
   const addAssets = useCallback((assets: Asset[]) => patchSession(value => ({ ...value, assets: [...value.assets, ...assets.filter(asset => !value.assets.some(item => item.id === asset.id))] })), [patchSession]);
-  const group = (images: string[]): ReferenceDraft => ({ id: t('reference.name', { number: (draftRef.current?.references.length ?? 0) + 1 }), role: 'subject', images });
+  const group = (images: string[]): ReferenceDraft => {
+    const references = draftRef.current?.references ?? [];
+    const ids = new Set(references.map(reference => reference.id));
+    let number = references.length + 1;
+    let id = t('reference.name', { number });
+    while (ids.has(id)) id = t('reference.name', { number: ++number });
+    return { id, role: 'subject', images };
+  };
   const attachTarget = useCallback(() => command('import', async () => {
     const owner = sessionRef.current; if (!owner) return;
     const assets = await api.importImages(owner.id, undefined, false);
