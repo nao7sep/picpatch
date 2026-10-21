@@ -136,15 +136,15 @@ export class Sessions {
     try { this.saved(path, bytes); } catch { /* Backup history cannot fail a primary save. */ }
   }
   /**
-   * `status` marks a run-status change from the queue: it is saved, but the session's updated time, and so its place
-   * in the collection, moves only when its content changes. A new image is content, so its completion is not `status`.
+   * Saves a change. Only `newImage`, a completed result, moves the session's updated time and so brings it to the top
+   * of the collection; edits, commands and run-status changes keep its place.
    */
-  update(key: string, change: (session: Session) => void, status = false): Promise<Session> {
+  update(key: string, change: (session: Session) => void, newImage = false): Promise<Session> {
     return this.serial(async () => {
       const session = await this.get(key); const before = JSON.stringify(session); change(session);
       // A change that alters nothing is not written and does not reorder the collection.
       if (JSON.stringify(session) === before) return session;
-      if (!status) session.updated = new Date().toISOString();
+      if (newImage) session.updated = new Date().toISOString();
       await this.publish(session); return session;
     });
   }

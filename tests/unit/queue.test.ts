@@ -172,21 +172,21 @@ it('lets running work finish when the limit drops and stops everything on quit',
   await queue.stop(); expect(queue.state.active).toEqual([]);
   expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['refused', 'refused', 'cancelled']);
 });
-it('moves a session up for a submitted command or a new image, not for other run-status changes', async () => {
+it('moves a session up only for a new image, not for commands, edits, renames or other run-status changes', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
   const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
   const completed = { status: 'completed' as const, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record };
   let outcome: typeof completed | typeof refusal = refusal;
   const queue = new Queue(sessions, async () => ({ outcome })); queue.state.paused = true;
   const tick = () => new Promise(resolve => setTimeout(resolve, 5));
-  const [, cancelled] = await queue.submit(session.id, session.draft, 2);
-  const submitted = (await sessions.get(session.id)).updated;
+  const created = session.updated;
+  await tick(); const [, cancelled] = await queue.submit(session.id, session.draft, 2);
   await tick(); await queue.cancel(session.id, cancelled!.id); await queue.resume(session.id); await queue.settled();
-  const refused = await sessions.get(session.id);
-  expect(refused.runs.map(run => run.status)).toEqual(['refused', 'cancelled']); expect(refused.updated).toBe(submitted);
-  outcome = completed; queue.state.paused = true; await tick(); await queue.submit(session.id, session.draft, 1);
-  const resubmitted = (await sessions.get(session.id)).updated; expect(resubmitted > submitted).toBe(true);
+  await tick(); await sessions.update(session.id, value => { value.draft.text = 'Edited'; value.name = 'Renamed'; });
+  const unmoved = await sessions.get(session.id);
+  expect(unmoved.runs.map(run => run.status)).toEqual(['refused', 'cancelled']); expect(unmoved.name).toBe('Renamed'); expect(unmoved.updated).toBe(created);
+  outcome = completed; queue.state.paused = true; await queue.submit(session.id, session.draft, 1);
   await tick(); await queue.resume(session.id); await queue.settled();
   const imaged = await sessions.get(session.id);
-  expect(imaged.runs.at(-1)!.status).toBe('completed'); expect(imaged.updated > resubmitted).toBe(true);
+  expect(imaged.runs.at(-1)!.status).toBe('completed'); expect(imaged.updated > created).toBe(true);
 });

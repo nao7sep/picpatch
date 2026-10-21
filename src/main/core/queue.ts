@@ -86,7 +86,7 @@ export class Queue {
       const session = await this.sessions.update(selected.sessionId, value => {
         const run = value.runs.find(r => r.id === selected.runId);
         if (run?.status === 'queued') { run.status = 'running'; run.started = new Date().toISOString(); taken = true; }
-      }, true);
+      });
       const attempt = session.runs.find(r => r.id === selected.runId);
       if (!taken || !attempt) return;
       let completion: RunCompletion;
@@ -103,7 +103,7 @@ export class Queue {
           run.status = cause.kind === 'cancelled' ? 'cancelled' : 'failed'; run.ended = new Date().toISOString();
           run.issue = { code: cause.code ?? 'APP_RUN_FAILED', message: cause.message ?? 'Could not complete the attempt.', effect: cause.effect ?? 'unknown' };
           value.draft = recoverCommand(value.draft, value.runs);
-        }, true);
+        });
         if (cause.code === 'TERMINATION_FAILED') this.terminationUnconfirmed = true;
         if (cause.code === 'TERMINATION_FAILED' || cause.effect === 'unknown') throw error;
         return;
@@ -120,7 +120,7 @@ export class Queue {
           if (notices.length) run.notices = notices;
         }
         value.draft = recoverCommand(value.draft, value.runs);
-      }, outcome.status !== 'completed');
+      }, outcome.status === 'completed');
     } catch (error) {
       // A result may already exist. Never replay a failed metadata write or uncertain process outcome.
       this.state.paused = true; this.state.issue = queueIssue(error);
@@ -130,7 +130,7 @@ export class Queue {
     const running = this.running.get(runId);
     if (running) { running.controller.abort(); return; }
     this.pending = this.pending.filter(item => item.sessionId !== sessionId || item.runId !== runId);
-    await this.sessions.update(sessionId, session => { const run = session.runs.find(r => r.id === runId); if (run?.status === 'queued') { run.status = 'cancelled'; run.ended = new Date().toISOString(); session.draft = recoverCommand(session.draft, session.runs); } }, true);
+    await this.sessions.update(sessionId, session => { const run = session.runs.find(r => r.id === runId); if (run?.status === 'queued') { run.status = 'cancelled'; run.ended = new Date().toISOString(); session.draft = recoverCommand(session.draft, session.runs); } });
     this.changed();
   }
   /** Resource changes wait for queued work and for a confirmed worker stop. */
