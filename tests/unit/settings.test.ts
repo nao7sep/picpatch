@@ -65,20 +65,19 @@ it('stores Images at once only when it differs from 1 and ignores an invalid sto
   await app.preferences({}); expect(JSON.parse(await readFile(config, 'utf8')).concurrency).toBeUndefined();
   await writeFile(config, JSON.stringify({ version: 1, concurrency: 99 })); expect((await readSettings(config)).concurrency).toBeUndefined();
 });
-it('keeps a newer profile or registration as saved while the rest of the settings stay usable', async () => {
+it('stops startup on a newer resource profile, and keeps a newer registration as saved for its own model', async () => {
   const config = join(root, 'config.json');
-  const newerProfile = { version: 2, futureField: true };
+  const newer = JSON.stringify({ version: 1, theme: 'dark', profile: { version: 2, futureField: true } });
+  await writeFile(config, newer);
+  // A newer profile is a newer format like any other: startup names config.json and leaves it unchanged.
+  await expect(readSettings(config)).rejects.toMatchObject({ notice: { key: 'startup.settingsFile', values: { path: config } } });
+  expect(await readFile(config, 'utf8')).toBe(newer);
   const newerRegistration = { version: 3, model: { future: true } };
-  await writeFile(config, JSON.stringify({ version: 1, theme: 'dark', profile: newerProfile, registrations: { future: newerRegistration } }));
-  const settings = await readSettings(config);
-  // Only the newer items are set aside: the theme still applies, and resources fall back to the defaults.
-  expect(settings).toMatchObject({ theme: 'dark', profile: { version: 1 }, newerProfile, registrations: { future: newerRegistration } });
+  await writeFile(config, JSON.stringify({ version: 1, theme: 'dark', registrations: { future: newerRegistration } }));
+  expect(await readSettings(config)).toMatchObject({ theme: 'dark', profile: { version: 1 }, registrations: { future: newerRegistration } });
   const app = await Application.open({ root, config, sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
   await app.preferences({ theme: 'light' });
-  expect(JSON.parse(await readFile(config, 'utf8'))).toMatchObject({ theme: 'light', profile: newerProfile, registrations: { future: newerRegistration } });
-  // Choosing resources replaces the newer profile; the registration stays until that model is prepared again.
-  await app.preferences({ modelsDirectory: join(root, 'models') });
-  expect(JSON.parse(await readFile(config, 'utf8'))).toMatchObject({ profile: { version: 1, modelsDirectory: join(root, 'models') }, registrations: { future: newerRegistration } });
+  expect(JSON.parse(await readFile(config, 'utf8'))).toMatchObject({ theme: 'light', registrations: { future: newerRegistration } });
 });
 
 it('round-trips literal selected resource paths without expanding or trimming them', async () => {

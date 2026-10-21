@@ -69,7 +69,6 @@ export class Application {
   }
   static async open(paths: AppPaths, changed: (scope?: 'progress') => void = () => {}, backup: (path: string, bytes: Buffer) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> {
     const settings = await readSettings(paths.config);
-    if (settings.newerProfile !== undefined) diagnostic('warn', 'Resource settings were saved by a newer PicPatch; the defaults are used and the saved settings are kept.', {});
     return new Application(paths, settings, changed, backup, diagnostic);
   }
   sdkEvents(context: Record<string, unknown> = {}): (event: SdkEvent) => void {
@@ -156,8 +155,6 @@ export class Application {
       for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) {
         if (value[key]) next.profile[key] = value[key]; else delete next.profile[key];
       }
-      // Choosing resources here replaces a profile a newer PicPatch saved.
-      if (this.resourcesChanged(value)) delete next.newerProfile;
       const language = preference(value.language); if (language) next.language = language; else delete next.language;
       if (value.theme) next.theme = value.theme; else delete next.theme;
       if (typeof value.uiFont === 'string' && value.uiFont.trim()) next.uiFont = value.uiFont; else delete next.uiFont;

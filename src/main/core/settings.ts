@@ -6,8 +6,6 @@ import { validateProfile, validateModelRegistration } from 'picpatchsdk';
 import type { ModelRegistration, PicPatchProfile } from 'picpatchsdk';
 export interface Settings {
   version: 1; sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; concurrency?: number; uiFont?: string; theme?: 'light' | 'dark'; language?: Language;
-  /** A profile saved by a newer PicPatch: kept unchanged and written back, while this version uses the default resources. */
-  newerProfile?: unknown;
 }
 import { writeJson } from './files.ts';
 import { maxConcurrency } from '../../shared/session.ts';
@@ -30,14 +28,14 @@ function parseSettings(value: Settings): Settings {
   value.language = preference(value.language);
   if (typeof value.uiFont !== 'string' || !value.uiFont.trim()) delete value.uiFont;
   if (!validConcurrency(value.concurrency) || value.concurrency === 1) delete value.concurrency;
-  // A newer profile or registration affects only itself: the profile falls back to the defaults and a
-  // registration stays as saved, where opening the model refuses it. Both are written back unchanged.
-  if (validateProfile(value.profile).status === 'refused') { value.newerProfile = value.profile; value.profile = { version: 1 }; }
+  // A resource profile from a newer PicPatch is a newer format like any other. A newer registration affects only its
+  // own model: it stays as saved, and opening that model refuses it.
+  if (validateProfile(value.profile).status === 'refused') throw new Error('Resource profile from a newer PicPatch.');
   for (const entry of Object.values(value.registrations)) validateModelRegistration(entry);
   if (value.sessionsDirectory !== undefined && !isAbsolute(value.sessionsDirectory)) throw new Error('Stored resource paths must be absolute.');
   return value;
 }
-/** The profile settings may hold; a newer one is preserved elsewhere, never written over. */
+/** The profile settings may hold; a newer one is never written. */
 export function usableProfile(value: unknown): PicPatchProfile {
   const result = validateProfile(value);
   if (result.status === 'refused') throw new UiError('error.newer_format');
@@ -46,9 +44,7 @@ export function usableProfile(value: unknown): PicPatchProfile {
 export async function saveSettings(path: string, value: Settings): Promise<Buffer> {
   usableProfile(value.profile);
   const stored: Record<string, unknown> = { ...structuredClone(value) };
-  delete stored.newerProfile;
-  if (value.newerProfile !== undefined) stored.profile = value.newerProfile;
-  else if (Object.keys(value.profile).length === 1) delete stored.profile;
+  if (Object.keys(value.profile).length === 1) delete stored.profile;
   if (!Object.keys(value.registrations).length) delete stored.registrations;
   return writeJson(path, stored);
 }
