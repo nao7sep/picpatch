@@ -436,6 +436,7 @@
   "conversation.unavailable": "Bild nicht verfügbar",
   "conversation.view": "{name} ansehen",
   "conversation.viewShort": "Ansehen",
+  "export.exists": "PicPatch speichert nur neue Dateien. Wählen Sie einen noch nicht verwendeten Dateinamen.",
   "export.choose": "Speicherort wählen",
   "export.sidecar": "Auch eine Einstellungsdatei speichern",
   "management.downloaded": "Heruntergeladen.",

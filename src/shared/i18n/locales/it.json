@@ -442,6 +442,7 @@
   "conversation.unavailable": "Immagine non disponibile",
   "conversation.view": "Visualizza {name}",
   "conversation.viewShort": "Visualizza",
+  "export.exists": "PicPatch salva solo nuovi file. Scegli un nome di file non ancora utilizzato.",
   "export.choose": "Scegli posizione",
   "export.sidecar": "Salva anche un file delle impostazioni",
   "management.downloaded": "Scaricato.",

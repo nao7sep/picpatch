@@ -68,7 +68,7 @@ export const api = {
   collection: () => call<boolean>('collection'),
   preferences: (value: Preferences) => call<Overview>('preferences', value),
   pickPath: (file = false, initialPath?: string) => call<string | undefined>('pickPath', { file, initialPath }),
-  pickComponent: (directory: string) => call<string | undefined>('pickComponent', { directory }),
+  pickComponent: (directory: string, current?: string) => call<string | undefined>('pickComponent', { directory, current }),
   engines: (modelId: string) => call<Engines>('engines', { modelId }),
   installPython: (modelId: string) => call<unknown>('installPython', { modelId }),
   installNative: (modelId: string) => call<unknown>('installNative', { modelId }),

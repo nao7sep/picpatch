@@ -442,7 +442,7 @@ export function App() {
           await writer.flush();
           const result = await api.exportImage(owner.id, spec.runId, sidecar, includeInputs);
           if (!result || closingRef.current) return undefined;
-          if (result.status === 'refused') return describeError(result);
+          if (result.status === 'refused') return result.code === 'OUTPUT_CONFLICT' ? t('export.exists') : describeError(result);
           // A save that finishes after its dialog was dismissed must not close what is now in front.
           setModals(items => items.at(-1) === spec ? items.slice(0, -1) : items); setSaved(value => ({ runId: spec.runId, count: (value?.runId === spec.runId ? value.count : 0) + 1 }));
           if (result.sidecar?.status === 'failed') show('export', { notice: message('ui.image_saved_its_settings_sidecar_could_not_be_saved') }); else clear('export');

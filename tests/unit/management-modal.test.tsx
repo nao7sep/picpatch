@@ -25,10 +25,32 @@ it('keeps first bundle selection generic, reuses the chosen bundle for replaceme
   await waitFor(() => expect(fake.calls('pickPath')[2]).toEqual({ file: false, initialPath: directory }));
   expect(screen.getByTitle(directory, { normalizer: value => value })).toBeTruthy();
   choose('VAE');
-  await waitFor(() => expect(fake.calls('pickComponent')[0]).toEqual({ directory }));
+  await waitFor(() => expect(fake.calls('pickComponent')[0]).toEqual({ directory, current: undefined }));
   choose('Checkpoint');
-  await waitFor(() => expect(fake.calls('pickComponent')[1]).toEqual({ directory }));
+  await waitFor(() => expect(fake.calls('pickComponent')[1]).toEqual({ directory, current: '' }));
   fireEvent.click(screen.getByRole('button', { name: 'Add LoRA' }));
-  await waitFor(() => expect(fake.calls('pickComponent')[2]).toEqual({ directory }));
+  await waitFor(() => expect(fake.calls('pickComponent')[2]).toEqual({ directory, current: undefined }));
   expect(screen.getByTitle(directory, { normalizer: value => value })).toBeTruthy();
+});
+
+it('reopens each component and checkpoint at its current selection and keeps it after cancellation', async () => {
+  const fake = fakeBridge(); window.picpatch = fake.bridge;
+  fake.handlers.engines = () => ({ python: { status: 'ready' }, native: { status: 'ready' } });
+  fake.handlers.models = () => ({ entries: [] });
+  fake.handlers.pickPath = () => '/bundles/native';
+  const overview = fake.handlers.overview!(undefined) as Overview;
+  render(<ManagementModal models={overview.models} initial="sd15" onClose={vi.fn()} onChanged={async () => ({})} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Register local bundle' }));
+  const choose = (label: string) => fireEvent.click(within(screen.getByText(label).closest('.field') as HTMLElement).getByRole('button', { name: 'Choose' }));
+  choose('Bundle directory');
+  await screen.findByTitle('/bundles/native');
+  for (const [label, current] of [['VAE', 'encoders/vae.safetensors'], ['Checkpoint', 'checkpoints/model.safetensors']]) {
+    fake.handlers.pickComponent = () => current;
+    choose(label!);
+    await screen.findByTitle(current!);
+    fake.handlers.pickComponent = () => undefined;
+    choose(label!);
+    await waitFor(() => expect(fake.calls('pickComponent').at(-1)).toEqual({ directory: '/bundles/native', current }));
+    expect(screen.getByTitle(current!)).toBeTruthy();
+  }
 });

@@ -442,6 +442,7 @@
   "conversation.unavailable": "Image indisponible",
   "conversation.view": "Afficher {name}",
   "conversation.viewShort": "Afficher",
+  "export.exists": "PicPatch enregistre uniquement de nouveaux fichiers. Choisissez un nom de fichier inutilisé.",
   "export.choose": "Choisir l’emplacement",
   "export.sidecar": "Enregistrer aussi un fichier de réglages",
   "management.downloaded": "Téléchargé.",

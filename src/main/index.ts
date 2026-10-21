@@ -1,4 +1,4 @@
-import { pickPaths } from './native-pickers.ts';
+import { pickBundleComponent, pickPaths } from './native-pickers.ts';
 import { startupFailureWindow } from './startup-failure.ts';
 import { menuTemplate } from './menu-template.ts';
 import { RecordsReader } from './core/records-reader.ts';
@@ -17,11 +17,11 @@ import { Records, errorRecord } from './core/records.ts';
 import { checkPaneState, readPaneState, savePaneState } from './core/layout-state.ts';
 import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor, nativeTheme, systemPreferences, screen, session as browserSession, shell } from 'electron';
 import { pathToFileURL } from 'node:url';
-import { dirname, join, isAbsolute, delimiter } from 'node:path';
+import { dirname, join, delimiter } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { runSmoke } from './qualification.ts';
 import { isPicPatchSdkError } from 'picpatchsdk';
-import { insideBundle, trustedSender } from './trust.ts';
+import { trustedSender } from './trust.ts';
 import { appPaths, resolveAppPaths } from './core/paths.ts';
 import { Application, downloadableModel, exportDefaultPath, pythonToolDirectories } from './core/service.ts';
 import { Backup } from './core/backup.ts';
@@ -269,11 +269,7 @@ async function dispatch(action: string, payload: any) {
     case 'cancelManaged': service.cancelManaged(); return;
     case 'preferences': await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
     case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location'), payload.initialPath))[0];
-    case 'pickComponent': {
-      if (typeof payload.directory !== 'string' || !isAbsolute(payload.directory)) throw new UiError('ui.choose_the_model_bundle_first');
-      const file = (await pick(['openFile'], t('ui.choose_a_file_inside_the_model_bundle'), payload.directory))[0]; if (!file) return;
-      const path = insideBundle(payload.directory, file); if (!path) throw new UiError('ui.choose_a_file_inside_the_selected_bundle'); return path;
-    }
+    case 'pickComponent': return pickBundleComponent(window!, payload.directory, payload.current, t('ui.choose_a_file_inside_the_model_bundle'));
     case 'verify': return service.verify(payload.modelId);
     case 'removeManaged': {
       const answer = await ask({ message: message('ui.remove_this_managed_model_revision'), detail: message('ui.other_apps_using_this_shared_model_may_fail_sessions'), buttons: [message('ui.keep_model'), message('ui.remove_revision')] });

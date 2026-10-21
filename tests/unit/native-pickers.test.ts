@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BrowserWindow } from 'electron';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { pickPaths } from '../../src/main/native-pickers.ts';
+import { pickBundleComponent, pickPaths } from '../../src/main/native-pickers.ts';
 import { insideBundle } from '../../src/main/trust.ts';
 
 const { showOpenDialog } = vi.hoisted(() => ({ showOpenDialog: vi.fn() }));
@@ -37,4 +37,27 @@ it('uses an existing ancestor for missing locations and leaves generic pickers t
     await pickPaths(owner, ['openFile', 'multiSelections'], 'Images', value);
     expect(showOpenDialog.mock.calls.at(-1)?.[1]).not.toHaveProperty('defaultPath');
   }
+});
+
+it('reopens a component inside its bundle and validates the next selection independently of the hint', async () => {
+  const bundle = join(root, 'bundle');
+  const folder = join(bundle, 'encoders'); await mkdir(folder, { recursive: true });
+  const file = join(folder, 'vae.safetensors'); await writeFile(file, 'weights');
+  showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [file] });
+  await expect(pickBundleComponent(owner, bundle, undefined, 'Component')).resolves.toBe('encoders/vae.safetensors');
+  expect(showOpenDialog.mock.calls.at(-1)?.[1].defaultPath).toBe(bundle);
+  await expect(pickBundleComponent(owner, bundle, 'encoders/vae.safetensors', 'Component')).resolves.toBe('encoders/vae.safetensors');
+  expect(showOpenDialog.mock.calls.at(-1)?.[1].defaultPath).toBe(file);
+  await pickBundleComponent(owner, bundle, 'encoders/missing.safetensors', 'Component');
+  expect(showOpenDialog.mock.calls.at(-1)?.[1].defaultPath).toBe(folder);
+  for (const hint of ['../outside.png', join(root, 'outside.png')]) {
+    await pickBundleComponent(owner, bundle, hint, 'Component');
+    expect(showOpenDialog.mock.calls.at(-1)?.[1].defaultPath).toBe(bundle);
+  }
+  showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [join(root, 'outside.png')] });
+  await expect(pickBundleComponent(owner, bundle, 'encoders/vae.safetensors', 'Component')).rejects.toThrow();
+  showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [file] });
+  await expect(pickBundleComponent(owner, bundle, 'encoders/vae.safetensors', 'Component')).resolves.toBeUndefined();
+  await expect(pickBundleComponent(owner, 'relative', undefined, 'Component')).rejects.toThrow();
+  expect(await readFile(file, 'utf8')).toBe('weights');
 });

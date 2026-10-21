@@ -448,6 +448,7 @@
   "conversation.unavailable": "Недоступное изображение",
   "conversation.view": "Открыть {name}",
   "conversation.viewShort": "Открыть",
+  "export.exists": "PicPatch сохраняет только новые файлы. Выберите имя файла, которое ещё не используется.",
   "export.choose": "Выбрать расположение",
   "export.sidecar": "Также сохранить файл настроек",
   "management.downloaded": "Скачано.",

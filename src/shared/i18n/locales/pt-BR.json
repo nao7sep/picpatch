@@ -442,6 +442,7 @@
   "conversation.unavailable": "Imagem indisponível",
   "conversation.view": "Ver {name}",
   "conversation.viewShort": "Ver",
+  "export.exists": "O PicPatch salva apenas novos arquivos. Escolha um nome de arquivo que não esteja em uso.",
   "export.choose": "Escolher local",
   "export.sidecar": "Salvar também um arquivo de configurações",
   "management.downloaded": "Baixado.",

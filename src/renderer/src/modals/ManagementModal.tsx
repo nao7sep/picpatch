@@ -61,9 +61,9 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
     if (registration.loras.length) components.loras = registration.loras;
     return api.register(choice, registration.directory || undefined, registration.checkpoint || undefined, components);
   }, t('management.registered'));
-  const pick = async (apply: (path: string) => void, directory = false) => {
+  const pick = async (apply: (path: string) => void, directory = false, current?: string) => {
     try {
-      const path = directory ? await api.pickPath(false, registration.directory || undefined) : await api.pickComponent(registration.directory);
+      const path = directory ? await api.pickPath(false, registration.directory || undefined) : await api.pickComponent(registration.directory, current);
       if (path) apply(path);
     } catch (error) { setFailure(errorText(error)); }
   };
@@ -105,12 +105,12 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
           <h3 className="group-label">{t('ui.local_bundle_and_adapters')}</h3>
           <PathField label={t('ui.bundle_directory')} value={registration.directory} disabled={busy} onChoose={() => void pick(path => setRegistration({ ...emptyRegistration(), directory: path }), true)} />
           {native(model) && (
-            <PathField label={t('component.checkpoint')} value={registration.checkpoint} disabled={busy || !registration.directory} onChoose={() => void pick(path => setRegistration(value => ({ ...value, checkpoint: path })))} />
+            <PathField label={t('component.checkpoint')} value={registration.checkpoint} disabled={busy || !registration.directory} onChoose={() => void pick(path => setRegistration(value => ({ ...value, checkpoint: path })), false, registration.checkpoint)} />
           )}
           {shownFields.map(key => (
             <PathField key={key} label={t(`component.${key}`)} value={registration.components[key] ?? ''} disabled={busy || !registration.directory}
               note={fields.includes(key) ? undefined : t('management.unused')}
-              onChoose={() => void pick(path => setRegistration(value => ({ ...value, components: { ...value.components, [key]: path } })))}
+              onChoose={() => void pick(path => setRegistration(value => ({ ...value, components: { ...value.components, [key]: path } })), false, registration.components[key])}
               onClear={() => setRegistration(value => { const components = { ...value.components }; delete components[key]; return { ...value, components }; })}
               extra={key === 'controlNet' ? (
                 <select aria-label={t('ui.control_kind')} value={registration.controlKind} onChange={event => setRegistration(value => ({ ...value, controlKind: event.target.value }))}>

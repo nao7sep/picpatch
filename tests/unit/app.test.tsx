@@ -233,3 +233,25 @@ it('asks the fleet discard question when quitting with unsaved settings, keeping
   await expect(answer!).resolves.toBe(false);
   expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
 });
+
+it('keeps export choices after a filename conflict and retries only on an explicit click', async () => {
+  const fake = await start(fakeBridge(session({ runs: [run('a1')] }), { export: () => ({ status: 'refused', code: 'OUTPUT_CONFLICT' }) }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save image' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Save image' });
+  const sidecar = within(dialog).getByRole('checkbox', { name: 'Also save a settings file' }) as HTMLInputElement;
+  const prompts = within(dialog).getByRole('checkbox', { name: 'Include prompts' }) as HTMLInputElement;
+  const choose = within(dialog).getByRole('button', { name: 'Choose location' });
+  fireEvent.click(sidecar); fireEvent.click(prompts); fireEvent.click(choose);
+  expect(await within(dialog).findByRole('alert')).toHaveProperty('textContent', 'PicPatch saves new files only. Choose an unused filename.');
+  expect(sidecar.checked).toBe(true); expect(prompts.checked).toBe(true);
+  expect(fake.calls('export')).toHaveLength(1);
+  fake.handlers.export = () => undefined;
+  fireEvent.click(choose);
+  await waitFor(() => expect((choose as HTMLButtonElement).disabled).toBe(false));
+  expect(fake.calls('export')).toHaveLength(2);
+  expect(sidecar.checked).toBe(true); expect(prompts.checked).toBe(true);
+  fake.handlers.export = () => ({ status: 'completed' });
+  fireEvent.click(choose);
+  expect(await screen.findByText('Image saved.')).toBeTruthy();
+  expect(fake.calls('export')).toEqual(Array(3).fill({ id: fake.session.id, runId: 'a1', sidecar: true, includeInputs: true }));
+});

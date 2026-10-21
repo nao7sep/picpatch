@@ -430,6 +430,7 @@
   "conversation.unavailable": "사용할 수 없는 이미지",
   "conversation.view": "{name} 보기",
   "conversation.viewShort": "보기",
+  "export.exists": "PicPatch는 새 파일만 저장합니다. 아직 사용하지 않은 파일 이름을 선택하십시오.",
   "export.choose": "위치 선택",
   "export.sidecar": "설정 파일도 저장",
   "management.downloaded": "다운로드했습니다.",
