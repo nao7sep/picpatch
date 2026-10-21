@@ -43,7 +43,7 @@ export class Queue {
       if (parent) runs.forEach(run => { run.parent = parent; });
       session.runs.push(...runs);
       session.draft = afterCommand(draft, runs[0]!.id);
-    });
+    }, true);
     this.pending.push(...runs.map(run => ({ sessionId, runId: run.id })));
     this.changed(); this.wake(); return structuredClone(runs);
   }
@@ -120,7 +120,7 @@ export class Queue {
           if (notices.length) run.notices = notices;
         }
         value.draft = recoverCommand(value.draft, value.runs);
-      }, outcome.status === 'completed');
+      });
     } catch (error) {
       // A result may already exist. Never replay a failed metadata write or uncertain process outcome.
       this.state.paused = true; this.state.issue = queueIssue(error);

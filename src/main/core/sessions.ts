@@ -136,15 +136,16 @@ export class Sessions {
     try { this.saved(path, bytes); } catch { /* Backup history cannot fail a primary save. */ }
   }
   /**
-   * Saves a change. Only `newImage`, a completed result, moves the session's updated time and so brings it to the top
-   * of the collection; edits, commands and run-status changes keep its place.
+   * Saves a change. As in a chat list, only `submitted`, a command the user sent, moves the session's updated time and
+   * so brings it to the top of the collection; the run's result keeps it there, and edits, imports, masks, renames and
+   * run-status changes keep its place.
    */
-  update(key: string, change: (session: Session) => void, newImage = false): Promise<Session> {
+  update(key: string, change: (session: Session) => void, submitted = false): Promise<Session> {
     return this.serial(async () => {
       const session = await this.get(key); const before = JSON.stringify(session); change(session);
       // A change that alters nothing is not written and does not reorder the collection.
       if (JSON.stringify(session) === before) return session;
-      if (newImage) session.updated = new Date().toISOString();
+      if (submitted) session.updated = new Date().toISOString();
       await this.publish(session); return session;
     });
   }
