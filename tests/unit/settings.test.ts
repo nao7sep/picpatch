@@ -80,3 +80,13 @@ it('keeps a newer profile or registration as saved while the rest of the setting
   await app.preferences({ modelsDirectory: join(root, 'models') });
   expect(JSON.parse(await readFile(config, 'utf8'))).toMatchObject({ profile: { version: 1, modelsDirectory: join(root, 'models') }, registrations: { future: newerRegistration } });
 });
+
+it('round-trips literal selected resource paths without expanding or trimming them', async () => {
+  const config = join(root, 'config.json');
+  const app = await Application.open({ root, config, sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
+  const resources = { engineDirectory: join(root, '$HOME', 'engine '), modelsDirectory: join(root, '%MODELS%', 'models '), nativeExecutable: join(root, 'sd-cli ') };
+  await app.preferences(resources);
+  expect((await readSettings(config)).profile).toEqual({ version: 1, ...resources });
+  expect((await app.overview()).locations).toMatchObject({ engineDirectory: resources.engineDirectory, modelsDirectory: resources.modelsDirectory });
+  expect((await app.overview()).resourceDefaults).toEqual({ engineDirectory: join(homedir(), '.picpatchsdk', 'engine'), modelsDirectory: join(homedir(), '.picpatchsdk', 'models') });
+});

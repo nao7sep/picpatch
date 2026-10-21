@@ -24,13 +24,16 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
     engineDirectory: overview.settings.profile.engineDirectory ?? '', modelsDirectory: overview.settings.profile.modelsDirectory ?? '', nativeExecutable: overview.settings.profile.nativeExecutable ?? '',
   });
   const [form, setForm] = useState<Form>(initial.current);
+  // Saved and native-selected paths are literal; only authored edits trim surrounding whitespace.
+  const authoredPaths = useRef(new Set<typeof PATHS[number]>());
+  const pathValue = (key: typeof PATHS[number]) => authoredPaths.current.has(key) ? form[key].trim() : form[key];
   const [tab, setTab] = useState<'general' | 'resources'>('general');
   const [failure, setFailure] = useState<string>();
   const [saving, setSaving] = useState(false);
   const pendingSave = useRef<Promise<void>>(Promise.resolve());
   const failedSubmit = useRef<(() => Promise<void>) | undefined>(undefined);
   const dirty = JSON.stringify(form) !== JSON.stringify(initial.current);
-  const invalid = PATHS.filter(key => !absolute(form[key].trim()));
+  const invalid = PATHS.filter(key => !absolute(pathValue(key)));
   const locked = overview.resourcesBusy;
   const formRef = useRef(form); formRef.current = form;
   const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
@@ -46,7 +49,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
     if (saving || !dirty || invalid.length) return;
     const submitted = form;
     const value: Preferences = {};
-    for (const key of PATHS) if (submitted[key].trim()) value[key] = submitted[key].trim();
+    for (const key of PATHS) if (pathValue(key)) value[key] = pathValue(key);
     if (submitted.language !== 'system') value.language = submitted.language;
     if (submitted.theme !== 'system') value.theme = submitted.theme;
     if (submitted.uiFont.trim()) value.uiFont = submitted.uiFont;
@@ -64,7 +67,12 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
   };
   const close = async () => { if (saving) return; if (!dirty || await confirmDiscard()) onClose(); };
   const choose = async (key: typeof PATHS[number]) => {
-    try { const path = await api.pickPath(key === 'nativeExecutable'); if (path) set(key, path); }
+    try {
+      const current = pathValue(key);
+      const fallback = key === 'nativeExecutable' ? (pathValue('engineDirectory') || overview.resourceDefaults.engineDirectory) : overview.resourceDefaults[key];
+      const path = await api.pickPath(key === 'nativeExecutable', (absolute(current) && current) || fallback);
+      if (path) { authoredPaths.current.delete(key); set(key, path); }
+    }
     catch (error) { setFailure(errorText(error)); }
   };
 
@@ -127,7 +135,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
                 <span className="field-label">{t(key === 'engineDirectory' ? 'ui.engine_folder' : key === 'modelsDirectory' ? 'ui.models_folder' : 'ui.external_native_executable')}</span>
                 <span className="path-row">
                   <input type="text" value={form[key]} disabled={locked} aria-invalid={invalid.includes(key)}
-                    placeholder={key === 'nativeExecutable' ? t('ui.managed_native_engine') : overview.locations[key] ?? ''} onChange={event => set(key, event.target.value)} />
+                    placeholder={key === 'nativeExecutable' ? t('ui.managed_native_engine') : overview.resourceDefaults[key] ?? ''} onChange={event => { authoredPaths.current.add(key); set(key, event.target.value); }} />
                   <button type="button" className="button" disabled={locked} onClick={() => void choose(key)}>{t('ui.choose')}</button>
                 </span>
               </label>

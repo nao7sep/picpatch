@@ -32,7 +32,7 @@ export function fakeBridge(initial: Session = session(), overrides: Record<strin
     paneState: () => ({ railWidth: 264, optionsPane: false }),
     savePane: () => undefined,
     modelReadiness: () => ({ 'flux2-klein-4b-4bit': 'ready', sd15: 'missing' }),
-    overview: () => ({ sessions: [{ id: current.id, name: current.name, updated: current.updated, results: current.runs.filter(r => r.output).length }], failures: [], models, queue: { paused: false, active: [] }, settings: { version: 1, profile: { version: 1 }, registrations: {} }, locations: { engineDirectory: '/e', modelsDirectory: '/m', sessionsDirectory: '/s' }, resourcesBusy: false, locale: { language: 'en', format: 'en', systemLanguage: 'en' }, systemDark: false }),
+    overview: () => ({ sessions: [{ id: current.id, name: current.name, updated: current.updated, results: current.runs.filter(r => r.output).length }], failures: [], models, queue: { paused: false, active: [] }, settings: { version: 1, profile: { version: 1 }, registrations: {} }, resourceDefaults: { engineDirectory: '/e', modelsDirectory: '/m' }, locations: { engineDirectory: '/e', modelsDirectory: '/m', sessionsDirectory: '/s' }, resourcesBusy: false, locale: { language: 'en', format: 'en', systemLanguage: 'en' }, systemDark: false }),
     get: () => structuredClone(current),
     draft: ({ draft }: { draft: Draft }) => { current = { ...current, draft }; return structuredClone(current); },
     create: () => { throw new Error('unexpected create'); },

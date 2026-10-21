@@ -83,7 +83,7 @@ export class Application {
       ...await this.sessions.list(),
       models: listModels().filter(model => model.supported), unsupportedModels: listModels().filter(model => !model.supported).length,
       queue: structuredClone(this.queue.state), resourcesBusy: this.resourcesBusy(), historyIssue,
-      settings: structuredClone(this.settings), locations: { ...resources, sessionsDirectory: this.sessions.root },
+      settings: structuredClone(this.settings), resourceDefaults: resolveStoragePaths(), locations: { ...resources, sessionsDirectory: this.sessions.root },
     };
   }
   /**

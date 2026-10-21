@@ -22,6 +22,7 @@ export interface Overview {
   unsupportedModels: number; queue: QueueState;
   historyIssue?: string | { message: string; notice?: Message }; settings: AppSettings;
   locations: { engineDirectory?: string; modelsDirectory?: string; sessionsDirectory: string };
+  resourceDefaults: { engineDirectory: string; modelsDirectory: string };
   resourcesBusy: boolean; locale: LocaleState; systemDark: boolean;
 }
 export interface PaneState { railWidth: number; optionsPane: boolean }
@@ -66,7 +67,7 @@ export const api = {
   exportImage: (id: string, runId: string, sidecar: boolean, includeInputs: boolean) => call<ExportResult | undefined>('export', { id, runId, sidecar, includeInputs }),
   collection: () => call<boolean>('collection'),
   preferences: (value: Preferences) => call<Overview>('preferences', value),
-  pickPath: (file = false) => call<string | undefined>('pickPath', { file }),
+  pickPath: (file = false, initialPath?: string) => call<string | undefined>('pickPath', { file, initialPath }),
   pickComponent: (directory: string) => call<string | undefined>('pickComponent', { directory }),
   engines: (modelId: string) => call<Engines>('engines', { modelId }),
   installPython: (modelId: string) => call<unknown>('installPython', { modelId }),

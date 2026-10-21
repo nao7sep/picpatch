@@ -1,3 +1,4 @@
+import { pickPaths } from './native-pickers.ts';
 import { startupFailureWindow } from './startup-failure.ts';
 import { menuTemplate } from './menu-template.ts';
 import { RecordsReader } from './core/records-reader.ts';
@@ -222,8 +223,8 @@ async function start() {
   window.on('closed', () => { rendererReady = false; requests.cancelAll(); });
   await window.loadURL(renderer);
 }
-async function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections')[], title: string) {
-  const result = await dialog.showOpenDialog(window!, { title, properties }); return result.canceled ? [] : result.filePaths;
+function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections')[], title: string, initialPath?: string) {
+  return pickPaths(window!, properties, title, initialPath);
 }
 async function dispatch(action: string, payload: any) {
   switch (action) {
@@ -267,10 +268,10 @@ async function dispatch(action: string, payload: any) {
     }
     case 'cancelManaged': service.cancelManaged(); return;
     case 'preferences': await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
-    case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location')))[0];
+    case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location'), payload.initialPath))[0];
     case 'pickComponent': {
       if (typeof payload.directory !== 'string' || !isAbsolute(payload.directory)) throw new UiError('ui.choose_the_model_bundle_first');
-      const file = (await pick(['openFile'], t('ui.choose_a_file_inside_the_model_bundle')))[0]; if (!file) return;
+      const file = (await pick(['openFile'], t('ui.choose_a_file_inside_the_model_bundle'), payload.directory))[0]; if (!file) return;
       const path = insideBundle(payload.directory, file); if (!path) throw new UiError('ui.choose_a_file_inside_the_selected_bundle'); return path;
     }
     case 'verify': return service.verify(payload.modelId);
@@ -294,7 +295,7 @@ async function dispatch(action: string, payload: any) {
     case 'engines': return service.engines(payload.modelId);
     case 'installNative': return service.installNative();
     case 'installPython': return service.installPython(payload.modelId, locations.uv(), pythonToolDirectories(process.env.PATH, delimiter));
-    case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection')); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
+    case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection'), service.sessions.root); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }
 }

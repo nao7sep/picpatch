@@ -63,7 +63,7 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
   }, t('management.registered'));
   const pick = async (apply: (path: string) => void, directory = false) => {
     try {
-      const path = directory ? await api.pickPath(false) : await api.pickComponent(registration.directory);
+      const path = directory ? await api.pickPath(false, registration.directory || undefined) : await api.pickComponent(registration.directory);
       if (path) apply(path);
     } catch (error) { setFailure(errorText(error)); }
   };
