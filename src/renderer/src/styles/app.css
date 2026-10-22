@@ -194,6 +194,8 @@ fieldset.plain { margin: 0; padding: 0; border: 0; min-width: 0; }
 .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 650; }
 .head-meta { margin-left: auto; color: var(--ink-3); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .transcript { position: relative; flex: 1 1 auto; min-height: 120px; overflow-y: auto; outline: none; }
+/* The transcript sits on the window background, darker in dark mode than the surface row lines are tuned on. */
+.transcript { --line-row: var(--line-row-bg); }
 .column { max-width: 860px; margin: 0 auto; padding: 26px 28px 12px; }
 .empty-state { display: flex; align-items: center; justify-content: center; min-height: 40vh; }
 .empty-line { max-width: 40ch; text-align: center; color: var(--ink-3); font-size: 15px; }
@@ -275,7 +277,8 @@ fieldset.plain { margin: 0; padding: 0; border: 0; min-width: 0; }
 .composer-wrap { max-width: 860px; margin: 0 auto; }
 .composer {
   position: relative; padding: 10px 10px 8px;
-  border: 1px solid var(--line-control); border-radius: var(--radius-modal); background: var(--surface); box-shadow: var(--shadow-print);
+  /* Its lift shadow darkens what is painted beside its edge. */
+  border: 1px solid var(--line-control-raised); border-radius: var(--radius-modal); background: var(--surface); box-shadow: var(--shadow-print);
   transition: border-color var(--motion), box-shadow var(--motion);
 }
 .composer:focus-within { border-color: var(--accent-rule); }
@@ -362,6 +365,8 @@ fieldset.plain { margin: 0; padding: 0; border: 0; min-width: 0; }
 /* ---------- Options pane ---------- */
 
 .options-pane { display: flex; flex-direction: column; flex: none; width: 304px; min-height: 0; border-left: 1px solid var(--line-divider); background: var(--rail); }
+/* The pane's own rail colour sits closer to the lines than the white surface they are tuned on. */
+.options-pane { --line-row: var(--line-row-rail); --line-control: var(--line-control-rail); }
 .pane-head { display: flex; align-items: center; justify-content: space-between; height: 52px; flex: none; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line-divider); }
 .pane-head h2 { margin: 0; font-size: 13.5px; font-weight: 650; }
 .pane-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px 20px; }
@@ -443,6 +448,8 @@ kbd {
 /* ---------- Viewer ---------- */
 
 .viewer .modal-body { padding: 0; background: var(--sunken); }
+/* The header and caption bands meet the sunken stage, not the white surface the divider is tuned on. */
+.viewer .modal-head, .viewer-caption { --line-divider: var(--line-divider-sunken); }
 .viewer-stage { position: relative; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 16px; min-height: 0; padding: 20px; overflow: hidden; outline: none; }
 .viewer-stage.actual { align-items: flex-start; justify-content: flex-start; overflow: auto; }
 .viewer-figure { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; min-height: 0; max-height: 100%; margin: 0; }
@@ -454,7 +461,7 @@ kbd {
 .viewer-figure.wipe { position: relative; display: block; }
 .viewer-figure.wipe img { max-height: calc(85vh - 160px); }
 .wipe-top { position: absolute; inset: 0; width: 100%; height: 100%; }
-.viewer-caption { margin: 0 !important; padding: 8px 20px; color: var(--ink-3); font-size: 12px; background: var(--surface); border-top: 1px solid var(--line-row); }
+.viewer-caption { margin: 0 !important; padding: 8px 20px; color: var(--ink-3); font-size: 12px; background: var(--surface); border-top: 1px solid var(--line-divider); }
 .viewer .modal-foot { padding: 8px 12px; }
 .viewer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
 .viewer-count { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); }

@@ -4,7 +4,10 @@
  * open session and focus, and the icon's apricot for the patch being edited (the
  * target image and the painted mask). Line colours meet the fleet's contrast targets
  * against the surfaces they sit on: row separator 1.15-1.30, divider and band edge
- * 1.35-1.70, control edge 2.0-2.5.
+ * 1.35-1.70, control edge 2.0-2.5. A surface a line would otherwise miss its target on
+ * sets that line's variant as a container: the rail-coloured options pane, the lifted
+ * composer whose shadow sits beside its edge, the transcript on the window background,
+ * and the image viewer's sunken stage.
  */
 :root {
   color-scheme: light dark;
@@ -19,6 +22,11 @@
   --line-row: #e0e5e1;
   --line-divider: #c6cfcc;
   --line-control: #9aa7a6;
+  --line-row-rail: #d5d9d6;
+  --line-row-bg: #e0e5e1;
+  --line-control-rail: #96a2a2;
+  --line-control-raised: #919d9d;
+  --line-divider-sunken: #bec6c3;
   --accent: #2b7174;
   --accent-hover: #235e61;
   --accent-ink: #ffffff;
@@ -73,6 +81,11 @@
     --line-row: #253036;
     --line-divider: #303e44;
     --line-control: #4b5d64;
+    --line-row-rail: #253036;
+    --line-row-bg: #212a30;
+    --line-control-rail: #4b5d64;
+    --line-control-raised: #4b5d64;
+    --line-divider-sunken: #303e44;
     --accent: #6cc4c4;
     --accent-hover: #86d2d2;
     --accent-ink: #0c1d1f;
