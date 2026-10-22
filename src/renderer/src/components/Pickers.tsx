@@ -4,7 +4,7 @@ import { incompatibilities } from '../../../shared/admission.ts';
 import type { Draft } from '../../../shared/session.ts';
 import type { CatalogModel, Readiness } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
-import { modelLabel, modelSummary, tierOrder } from '../models.ts';
+import { modelLabel, modelRows, modelSummary, tierOrder } from '../models.ts';
 import { ChevronDownIcon, ShapeIcon } from './icons.tsx';
 import { Popover } from './Popover.tsx';
 
@@ -19,9 +19,10 @@ export function ModelPicker({ draft, models, hidden = 0, readiness, onDraft, onS
   const comparing = draft.modelIds.length > 1;
   const state = (id: string) => readiness?.[id] ?? 'missing';
   const order = (a: CatalogModel, b: CatalogModel) => tierOrder[a.profile.tier] - tierOrder[b.profile.tier] || a.profile.name.localeCompare(b.profile.name) || a.id.localeCompare(b.id);
-  const ready = models.filter(model => state(model.id) === 'ready').sort(order);
-  const recommended = models.filter(model => state(model.id) !== 'ready' && model.profile.tier === 'recommended').sort(order);
-  const rest = models.filter(model => state(model.id) !== 'ready' && model.profile.tier !== 'recommended').sort(order);
+  const rows = modelRows(models, draft.modelIds, state).map(entry => entry.model);
+  const ready = rows.filter(model => state(model.id) === 'ready').sort(order);
+  const recommended = rows.filter(model => state(model.id) !== 'ready' && model.profile.tier === 'recommended').sort(order);
+  const rest = rows.filter(model => state(model.id) !== 'ready' && model.profile.tier !== 'recommended').sort(order);
   const showRest = more || rest.some(model => draft.modelIds.includes(model.id));
   const label = draft.modelIds.length === 0 ? t('composer.noModel') : comparing ? t('composer.models', { count: draft.modelIds.length }) : modelLabel(draft.modelIds[0]!);
   const unready = draft.modelIds.some(id => state(id) !== 'ready');

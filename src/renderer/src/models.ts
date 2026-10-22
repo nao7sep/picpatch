@@ -20,3 +20,19 @@ export function modelSummary(model: CatalogModel): { purposes: string; facts: st
   const facts = [term('memory', profile.memory), term('speed', profile.speed), profile.licence === 'commercial' ? undefined : term('licence', profile.licence), term('evidence', model.evidence === 'real-weights' ? 'tested' : 'untested')];
   return { purposes: profile.purposes.slice(0, 3).map(purpose => term('purpose', purpose)).join(' · '), facts: facts.filter(Boolean).join(' · ') };
 }
+
+/**
+ * One row per model, whether it comes as a download, from the user's own files, or both: the row uses the copy that is
+ * selected or ready, preferring the user's own files when both are ready, since registering them was a deliberate choice.
+ */
+export function modelRows(models: readonly CatalogModel[], selected: readonly string[], state: (id: string) => string): { model: CatalogModel; copies: CatalogModel[] }[] {
+  const byVariant = new Map<string, CatalogModel[]>();
+  for (const model of models) byVariant.set(model.variant, [...(byVariant.get(model.variant) ?? []), model]);
+  return [...byVariant.values()].map(copies => {
+    const chosen = copies.find(copy => selected.includes(copy.id))
+      ?? copies.find(copy => copy.acquisition !== 'pinned' && state(copy.id) === 'ready')
+      ?? copies.find(copy => state(copy.id) === 'ready')
+      ?? copies.find(copy => copy.acquisition === 'pinned') ?? copies[0]!;
+    return { model: chosen, copies };
+  });
+}

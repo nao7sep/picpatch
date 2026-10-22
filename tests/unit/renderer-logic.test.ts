@@ -65,3 +65,17 @@ describe('native component fields', () => {
     expect(componentFields(models[0] as never)).toEqual([]);
   });
 });
+
+import { modelRows } from '../../src/renderer/src/models.ts';
+import type { CatalogModel } from '../../src/renderer/src/api.ts';
+it('shows one picker row per model, using the copy that is selected or ready', () => {
+  const copy = (id: string, acquisition: 'pinned' | 'external', variant = 'flux2-klein-4b') => ({ id, variant, acquisition }) as CatalogModel;
+  const models = [copy('klein-4bit', 'pinned'), copy('klein-own', 'external'), copy('zimage', 'pinned', 'z-image-turbo')];
+  const rows = (selected: string[], ready: string[]) => modelRows(models, selected, id => ready.includes(id) ? 'ready' : 'missing').map(row => row.model.id);
+  expect(rows([], [])).toEqual(['klein-4bit', 'zimage']);
+  expect(rows([], ['klein-own'])).toEqual(['klein-own', 'zimage']);
+  // Both ready: the user's own registered files win; an explicit selection always wins.
+  expect(rows([], ['klein-4bit', 'klein-own'])).toEqual(['klein-own', 'zimage']);
+  expect(rows(['klein-4bit'], ['klein-4bit', 'klein-own'])).toEqual(['klein-4bit', 'zimage']);
+  expect(modelRows(models, [], () => 'missing')[0]!.copies.map(copy => copy.id)).toEqual(['klein-4bit', 'klein-own']);
+});
