@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from '../../src/renderer/src/App.tsx';
 import { DRAFT_DELAY } from '../../src/renderer/src/draft-writer.ts';
@@ -338,4 +338,59 @@ it('keeps a model operation visible after Managed tools closes, with its own Can
   const failure = screen.getByText(/A model or engine operation did not finish\./).closest('.notice') as HTMLElement;
   fireEvent.click(within(failure).getByRole('button', { name: 'Clear message' }));
   expect(screen.queryByText(/A model or engine operation did not finish\./)).toBeNull();
+});
+
+// File delivery: what Electron's test surfaces reach. A real Finder drag is dogfooding's; these cover receipt and routing.
+const filesTransfer = (names: string[]) => ({ types: ['Files'], files: names.map(name => new File(['x'], name)), dropEffect: 'none' });
+it('reports a committed drop that imports nothing, leaves the draft as it was, and keeps the report until dismissed', async () => {
+  const fake = await start(fakeBridge(session(), { import: () => { throw Object.assign(new Error('Select a regular image file.'), { notice: { key: 'error.select_a_regular_image_file' } }); } }));
+  const before = structuredClone(fake.session.draft);
+  fireEvent.drop(document.querySelector('[data-drop-receiver]')!, { dataTransfer: filesTransfer(['notes.txt']) });
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('Select a regular image file.');
+  expect(fake.session.draft).toEqual(before);
+  await new Promise(resolve => setTimeout(resolve, DRAFT_DELAY + 50));
+  expect(screen.getByRole('alert')).toBeTruthy();
+  fireEvent.click(within(alert.closest('.notice') as HTMLElement).getByRole('button', { name: 'Clear message' }));
+  expect(screen.queryByText('Select a regular image file.')).toBeNull();
+});
+
+it('leaves everything unchanged when a drag over the composer is abandoned', async () => {
+  const fake = await start();
+  const zone = document.querySelector('[data-drop-receiver]')!;
+  fireEvent.dragOver(zone, { dataTransfer: filesTransfer(['photo.png']) });
+  expect(zone.classList.contains('dropping')).toBe(true);
+  fireEvent.dragLeave(zone, { dataTransfer: filesTransfer(['photo.png']), relatedTarget: document.body });
+  expect(zone.classList.contains('dropping')).toBe(false);
+  expect(fake.calls('import')).toEqual([]);
+});
+
+it('imports through the picker like a drop, and a cancelled picker changes nothing', async () => {
+  let picked: unknown[] = [];
+  const fake = await start(fakeBridge(session(), { import: () => picked }));
+  const before = structuredClone(fake.session.draft);
+  const choose = () => { fireEvent.click(screen.getByRole('button', { name: 'Add images' })); fireEvent.click(screen.getByRole('menuitem', { name: 'Reference photos' })); };
+  choose();
+  await waitFor(() => expect(fake.calls('import')).toHaveLength(1));
+  expect(fake.calls('import')[0]).toMatchObject({ id: fake.session.id });
+  expect(fake.session.draft).toEqual(before);
+  picked = [{ id: '00000000-0000-4000-8000-000000000009', name: 'photo.png', file: 'x', bytes: 1, sha256: 'x' }];
+  choose();
+  await waitFor(() => expect(fake.session.draft.references.map(group => group.images)).toEqual([['00000000-0000-4000-8000-000000000009']]));
+});
+
+it('refuses files outside the composer and anything that is not a file, opening and importing nothing', async () => {
+  const fake = await start();
+  const transcript = document.querySelector('.transcript')!;
+  for (const type of ['dragOver', 'drop'] as const) {
+    const event = createEvent[type](transcript, { dataTransfer: filesTransfer(['photo.png']) });
+    fireEvent(transcript, event);
+    expect(event.defaultPrevented).toBe(true); expect((event as DragEvent).dataTransfer!.dropEffect).toBe('none');
+  }
+  // A link dragged from a browser carries no file, so the composer does not take it either.
+  const zone = document.querySelector('[data-drop-receiver]')!;
+  const link = createEvent.drop(zone, { dataTransfer: { types: ['text/uri-list'], files: [], dropEffect: 'none' } });
+  fireEvent(zone, link);
+  expect(zone.classList.contains('dropping')).toBe(false);
+  expect(fake.calls('import')).toEqual([]);
 });

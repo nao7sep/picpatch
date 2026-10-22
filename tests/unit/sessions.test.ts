@@ -101,3 +101,17 @@ it('lists a collection from summaries without keeping every session loaded, and 
   await sessions.remove(second.id);
   expect((await sessions.list()).sessions.map(item => item.id)).toEqual([first.id]);
 });
+it('leaves the original file and its times untouched whether an import is accepted or refused', async () => {
+  const sessions = new Sessions(root); const session = await sessions.create();
+  const photo = join(root, 'photo.png'), notes = join(root, 'notes.txt'); const old = new Date('2020-01-02T03:04:05Z');
+  await writeFile(photo, await png('#123456')); await writeFile(notes, 'not an image');
+  for (const path of [photo, notes]) await utimes(path, old, old);
+  const before = await Promise.all([photo, notes].map(async path => ({ bytes: await readFile(path), mtime: (await stat(path)).mtime.toISOString() })));
+  await sessions.importImage(session.id, photo);
+  await expect(sessions.importImage(session.id, notes)).rejects.toThrow();
+  const after = await Promise.all([photo, notes].map(async path => ({ bytes: await readFile(path), mtime: (await stat(path)).mtime.toISOString() })));
+  expect(after).toEqual(before);
+  // Only the accepted image joined the session; the refused file left nothing behind.
+  expect((await sessions.get(session.id)).assets.map(asset => asset.name)).toEqual(['photo.png']);
+  expect(await readdir(join(root, session.id, 'assets'))).toHaveLength(1);
+});
