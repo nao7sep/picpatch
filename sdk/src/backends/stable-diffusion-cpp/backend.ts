@@ -111,8 +111,10 @@ export class NativeBackend implements EditBackend {
       args.push('--ip-adapter', join(this.model.directory, this.model.ipAdapter), '--clip_vision', join(this.model.directory, this.model.clipVision!), '--ip-adapter-image', group.images[0], '--ip-adapter-strength', String(effectiveParameters.appearanceStrength));
     }
     const verb = 'prompt' in request ? 'generate' : 'edit';
-    emitProgress(options, { type: 'progress', verb, stage: verb === 'generate' ? 'generating' : 'editing', message: 'Running native image inference.' });
-    await this.process.run(args, directory, verb === 'generate' ? this.timeouts.generateMs ?? this.timeouts.editMs : this.timeouts.editMs, options.signal);
+    const stage = verb === 'generate' ? 'generating' : 'editing';
+    emitProgress(options, { type: 'progress', verb, stage, message: 'Running native image inference.' });
+    await this.process.run(args, directory, verb === 'generate' ? this.timeouts.generateMs ?? this.timeouts.editMs : this.timeouts.editMs, options.signal, false,
+      (completed, total) => emitProgress(options, { type: 'progress', verb, stage, completed, total, message: 'Native inference step.' }));
     emitProgress(options, { type: 'progress', verb, stage: 'saving', message: 'Validating native image output.' });
     return { model: request.model, modelRevision: this.model.manifest.source.revision, runtime: { name: 'stable-diffusion.cpp', version: nativeRevision },
       seed, effectiveParameters,

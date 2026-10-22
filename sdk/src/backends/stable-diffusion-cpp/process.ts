@@ -4,6 +4,22 @@ import { checkSignal } from '../../operations.ts';
 import { ownedSpawn, signalOwned, toolEnvironment } from '../../platform.ts';
 import type { WorkerTimeouts } from '../../worker/process.ts';
 
+/**
+ * sd-cli's step line, "|====>   | 3/20 - 1.23s/it" redrawn with carriage returns. Only the counts are read; loading
+ * progress (MB/s) is not a step. Nothing else of the output is kept, since inference output may contain private text.
+ */
+const STEP = /(\d+)\/(\d+) - [\d.]+(?:s\/it|it\/s)/;
+export function stepParser(onSteps: (completed: number, total: number) => void): (chunk: Buffer) => void {
+  let pending = '';
+  return chunk => {
+    const lines = (pending + chunk.toString('utf8')).split(/[\r\n]/);
+    pending = lines.pop()!.slice(-256);
+    for (const line of lines) {
+      const match = STEP.exec(line);
+      if (match) onSteps(Number(match[1]), Number(match[2]));
+    }
+  };
+}
 /** One short-lived native process, with ownership through pipe closure and termination. */
 export class NativeProcess {
   private readonly lifetime = new AbortController();
@@ -13,7 +29,7 @@ export class NativeProcess {
   private readonly executable: string;
   private readonly timeouts: WorkerTimeouts;
 
-  run(args: string[], cwd: string, timeout: number, signal?: AbortSignal, capture = false): Promise<string> {
+  run(args: string[], cwd: string, timeout: number, signal?: AbortSignal, capture = false, onSteps?: (completed: number, total: number) => void): Promise<string> {
     if (this.lifetime.signal.aborted) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Native runtime is disposed.'));
     if (this.poisoned) return Promise.reject(this.poisoned);
     if (this.active) return Promise.reject(new PicPatchSdkError('INTERNAL', 'Native runtime is busy.'));
@@ -49,7 +65,8 @@ export class NativeProcess {
         child.stdout.on('error', cause => stop(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Native output pipe failed.', { cause })));
         child.stderr.on('error', cause => stop(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Native diagnostic pipe failed.', { cause })));
         // Capture only bounded help/version output. Inference output may contain private text.
-        child.stdout.on('data', (chunk: Buffer) => { if (capture && output.length < 8192) output = Buffer.concat([output, chunk.subarray(0, 8192 - output.length)]); });
+        const steps = onSteps && stepParser(onSteps);
+        child.stdout.on('data', (chunk: Buffer) => { steps?.(chunk); if (capture && output.length < 8192) output = Buffer.concat([output, chunk.subarray(0, 8192 - output.length)]); });
         child.stderr.resume();
         child.once('close', (code, signal) => {
           closed = true; clearTimeout(deadline); clearTimeout(escalation); clearTimeout(termination);
