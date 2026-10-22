@@ -43,7 +43,7 @@ it('packages and starts the real renderer from outside the checkout without mode
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 
-it('runs generation and saves its sidecar through the packaged application with existing model weights', async () => {
+it('runs generation through the packaged application with existing model weights, keeping its record in the session', async () => {
   const home = await mkdtemp(join(tmpdir(), 'picpatch-inference-'));
   try {
     const executable = join(bundlePath, 'Contents/MacOS', name);
@@ -55,7 +55,9 @@ it('runs generation and saves its sidecar through the packaged application with 
     expect(completed.runs[0].status).toBe('completed');
     const image = join(home, 'sessions', completed.id, completed.runs[0].output);
     expect(await sharp(image).metadata()).toMatchObject({ format: 'png', width: 512, height: 512 });
-    expect(JSON.parse(await readFile(image.slice(0, -4) + '-picpatchsdk.json', 'utf8'))).toHaveProperty('seed', 42);
+    // The session holds the record; no settings file is written beside session outputs.
+    expect(completed.runs[0].record).toHaveProperty('seed', 42);
+    await expect(readFile(image.slice(0, -4) + '-picpatchsdk.json', 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   } finally { await rm(home, { recursive: true, force: true }); }
 }, 330_000);
 
