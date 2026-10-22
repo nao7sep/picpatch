@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RecordsWindow } from '../../src/renderer/src/records/RecordsWindow.tsx';
 import type { LogsBridge } from '../../src/shared/logs-bridge.ts';
@@ -24,16 +24,50 @@ function bridge(overrides: Partial<LogsBridge> = {}) {
   return { api, change: () => changed?.() };
 }
 
-it('lists records literally, shows the selected record and offers new records without refreshing', async () => {
-  const { api, change } = bridge();
+it('lists records literally and adds new records live at the top, keeping the selection', async () => {
+  let newest = 3;
+  const { api, change } = bridge({ query: vi.fn(async query => ({ records: query.before ? [row(1, 'Oldest')] : [...(newest > 3 ? [row(4, 'Arrived')] : []), row(3, '<b>Literal</b>', 'error'), row(2, 'Second')], more: !query.before })) });
   render(<RecordsWindow api={api} />);
   expect(await screen.findByText('<b>Literal</b>')).toBeTruthy();
   expect(document.querySelector('.pill.level-error')!.textContent).toBe('Error');
   fireEvent.click(screen.getByText('Second'));
   expect(await screen.findByText('Detail 2')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
+  newest = 4; await act(async () => change());
+  const list = screen.getByRole('listbox', { name: 'Records' });
+  await waitFor(() => expect(within(list).getAllByRole('option').map(option => option.textContent)).toEqual([expect.stringContaining('Arrived'), expect.stringContaining('Literal'), expect.stringContaining('Second')]));
+  expect(within(list).getByRole('option', { selected: true }).textContent).toContain('Second');
+  expect(screen.getByText('Detail 2')).toBeTruthy();
+});
+
+it('holds new records while the list is scrolled away and adds them on return to the top', async () => {
+  let newest = 3;
+  const { api, change } = bridge({ query: vi.fn(async query => ({ records: query.before ? [] : [...(newest > 3 ? [row(4, 'Arrived')] : []), row(3, 'Third'), row(2, 'Second')], more: false })) });
+  render(<RecordsWindow api={api} />);
+  await screen.findByText('Third');
+  const list = screen.getByRole('listbox', { name: 'Records' });
+  list.scrollTop = 200; newest = 4;
   await act(async () => change());
-  expect(screen.getByText('New records are available.')).toBeTruthy();
-  expect(api.query).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('New records are available.')).toBeTruthy(); expect(screen.queryByText('Arrived')).toBeNull();
+  list.scrollTop = 0; fireEvent.scroll(list);
+  expect(await screen.findByText('Arrived')).toBeTruthy();
+  expect(screen.queryByText('New records are available.')).toBeNull();
+});
+
+it('moves the splitter 16 px per arrow press, reaches its bounds with Home and End, and saves once on release', async () => {
+  const { api } = bridge();
+  render(<RecordsWindow api={api} />);
+  await screen.findByText('Second');
+  const splitter = screen.getByRole('separator');
+  const start = Number(splitter.getAttribute('aria-valuenow'));
+  for (let i = 0; i < 3; i++) fireEvent.keyDown(splitter, { key: 'ArrowRight' });
+  expect(Number(splitter.getAttribute('aria-valuenow'))).toBe(start + 48); expect(api.resizeList).not.toHaveBeenCalled();
+  fireEvent.keyUp(splitter, { key: 'ArrowRight' });
+  await waitFor(() => expect(api.resizeList).toHaveBeenCalledTimes(1)); expect(api.resizeList).toHaveBeenLastCalledWith(start + 48);
+  fireEvent.keyDown(splitter, { key: 'End' });
+  expect(splitter.getAttribute('aria-valuenow')).toBe(splitter.getAttribute('aria-valuemax'));
+  fireEvent.keyDown(splitter, { key: 'Home' }); fireEvent.blur(splitter);
+  await waitFor(() => expect(api.resizeList).toHaveBeenLastCalledWith(320)); expect(api.resizeList).toHaveBeenCalledTimes(2);
 });
 
 it('queries each filter change and settles typed search before querying', async () => {
@@ -58,12 +92,12 @@ it('drops a detail that arrives after a newer selection', async () => {
   expect(screen.queryByText('Stale')).toBeNull();
 });
 
-it('keeps a failed read visible until Refresh is chosen', async () => {
+it('keeps a failed read visible until the next record arrives, then reads again', async () => {
   const query = vi.fn().mockRejectedValueOnce(new Error('locked')).mockResolvedValue({ records: [row(5, 'Back')], more: false });
-  const { api } = bridge({ query });
+  const { api, change } = bridge({ query });
   render(<RecordsWindow api={api} />);
-  expect(await screen.findByText('Records could not be read. Try Refresh again.')).toBeTruthy();
+  expect(await screen.findByText('Records could not be read.')).toBeTruthy();
   expect(query).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+  await act(async () => change());
   expect(await screen.findByText('Back')).toBeTruthy();
 });

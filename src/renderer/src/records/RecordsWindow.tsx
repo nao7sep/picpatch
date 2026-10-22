@@ -1,17 +1,18 @@
 // The Records window: the app's diagnostic history, filtered by launch, severity and
 // text, newest first, with the selected record's fields and raw detail beside it.
-// Results never refresh on their own; new records only offer Refresh.
+// New records join the top of the list while it is scrolled to the top, keeping the selection; scrolled away, they
+// wait until the list returns to the top.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { activeLocale, t, useLocale } from '../../../shared/i18n/index.ts';
 import type { LogsBridge } from '../../../shared/logs-bridge.ts';
-import type { RecordSummary, RecordsQuery } from '../../../shared/records.ts';
+import { recordsPageSize, type RecordSummary, type RecordsQuery } from '../../../shared/records.ts';
 import { applyFont } from '../fonts.ts';
 import { LanguageRevision } from '../i18n.tsx';
 import { isComposing } from '../ime.ts';
 
 declare global { interface Window { picpatchLogs: LogsBridge } }
 
-const LIST_MIN = 320, DETAIL_MIN = 440;
+const LIST_MIN = 320, DETAIL_MIN = 440, SPLITTER_STEP = 16;
 const LEVELS = ['all', 'attention', 'error', 'warn', 'info', 'debug'] as const;
 
 export function RecordsWindow({ api }: { api: LogsBridge }) {
@@ -53,12 +54,13 @@ function Records({ api }: { api: LogsBridge }) {
   const [detail, setDetail] = useState<string | null | undefined>();
   const [width, setWidth] = useState<number>(LIST_MIN);
   const [drag, setDrag] = useState<number | null>(null);
-  const queryRevision = useRef(0), detailRevision = useRef(0);
+  const [keyed, setKeyed] = useState<number | null>(null);
+  // listRevision changes only when the list restarts (a filter change), so loading an older page never discards new records.
+  const queryRevision = useRef(0), detailRevision = useRef(0), listRevision = useRef(0);
   const list = useRef<HTMLDivElement>(null), shell = useRef<HTMLDivElement>(null);
   const [shellWidth, setShellWidth] = useState(1100);
 
   useEffect(() => { void api.appearance().then(view => { if (view.listWidth) setWidth(view.listWidth); }, () => {}); }, [api]);
-  useEffect(() => api.onRecordsChanged(() => setChanged(true)), [api]);
   useEffect(() => {
     const element = shell.current; if (!element) return;
     const observer = new ResizeObserver(() => setShellWidth(element.clientWidth)); observer.observe(element);
@@ -74,8 +76,8 @@ function Records({ api }: { api: LogsBridge }) {
 
   const load = useCallback(async (next: RecordsQuery, before?: number) => {
     const revision = ++queryRevision.current;
-    setPending(true); setFailed(false); setChanged(false);
-    if (before === undefined) { ++detailRevision.current; setSelected(undefined); setDetail(undefined); setRows([]); }
+    setPending(true); setFailed(false);
+    if (before === undefined) { setChanged(false); ++listRevision.current; ++detailRevision.current; setSelected(undefined); setDetail(undefined); setRows([]); }
     try {
       const page = await api.query({ ...next, ...(before === undefined ? {} : { before }) });
       if (revision !== queryRevision.current) return;
@@ -86,6 +88,28 @@ function Records({ api }: { api: LogsBridge }) {
   }, [api]);
 
   useEffect(() => { void load(query); }, [load, query]);
+  // The newest page merges into the list without a reload, so loaded older pages and the selection stay.
+  const queryRef = useRef(query); queryRef.current = query;
+  const rowsRef = useRef(rows); rowsRef.current = rows;
+  const addNewest = useCallback(async () => {
+    const revision = listRevision.current;
+    try {
+      const page = await api.query(queryRef.current);
+      if (revision !== listRevision.current) return;
+      setChanged(false);
+      const newest = rowsRef.current[0]?.id ?? 0, added = page.records.filter(row => row.id > newest);
+      // A full page of new records may leave a gap before the loaded ones, so the list restarts from this page.
+      if (added.length >= recordsPageSize) { setRows(page.records); setMore(page.more); }
+      else if (added.length) setRows(existing => [...added.filter(row => row.id > (existing[0]?.id ?? 0)), ...existing]);
+    } catch { if (revision === listRevision.current) setFailed(true); }
+  }, [api]);
+  const atTop = () => (list.current?.scrollTop ?? 0) <= 8;
+  // A read that failed is retried when the next record arrives, or when a filter changes.
+  const failedRef = useRef(failed); failedRef.current = failed;
+  useEffect(() => api.onRecordsChanged(() => {
+    if (failedRef.current) void load(queryRef.current);
+    else if (atTop()) void addNewest(); else setChanged(true);
+  }), [api, addNewest, load]);
   // Typing settles briefly before it queries; the filters apply at once.
   useEffect(() => {
     if (search === query.search) return;
@@ -114,7 +138,10 @@ function Records({ api }: { api: LogsBridge }) {
     void choose(rows[index]!.id);
   };
 
-  const shown = Math.max(LIST_MIN, Math.min(drag ?? width, shellWidth - DETAIL_MIN));
+  const widest = Math.max(LIST_MIN, shellWidth - DETAIL_MIN);
+  const shown = Math.max(LIST_MIN, Math.min(drag ?? keyed ?? width, widest));
+  // Keys move the splitter at once; the width is saved once, when the key is released or focus leaves.
+  const saveKeyed = () => { if (keyed === null) return; setKeyed(null); if (keyed !== width) saveWidth(keyed); };
   const saveWidth = (value: number) => { setWidth(value); void api.resizeList(value).catch(() => setFailed(true)); };
   const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -144,13 +171,12 @@ function Records({ api }: { api: LogsBridge }) {
           </div>
           <div className="records-status-row">
             <span className={`records-state${failed ? ' problem' : ''}`} role="status">{status}</span>
-            <button type="button" className="button compact" onClick={() => void load(query)}>{t('logs.refresh')}</button>
           </div>
         </div>
         <div
           ref={list} className="records-rows" role="listbox" tabIndex={0} aria-label={t('ui.logs')}
           aria-activedescendant={activeIndex >= 0 ? `record-${activeIndex}` : undefined} onKeyDown={onListKey}
-          onScroll={event => { const el = event.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) loadOlder(); }}
+          onScroll={event => { const el = event.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) loadOlder(); if (changed && atTop()) void addNewest(); }}
         >
           {rows.map((row, index) => (
             <div key={row.id} id={`record-${index}`} role="option" aria-selected={row.id === selected} className={`record-card${row.id === selected ? ' selected' : ''}`} onClick={() => void choose(row.id)}>
@@ -160,13 +186,15 @@ function Records({ api }: { api: LogsBridge }) {
           ))}
         </div>
       </section>
-      <div className="splitter" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={t('logs.splitter')} aria-valuemin={LIST_MIN} aria-valuenow={Math.round(shown)}
+      <div className="splitter" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={t('logs.splitter')} aria-valuemin={LIST_MIN} aria-valuemax={Math.round(widest)} aria-valuenow={Math.round(shown)}
         onPointerDown={startDrag}
         onKeyDown={event => {
           if (isComposing(event.nativeEvent)) return;
-          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); saveWidth(Math.max(LIST_MIN, Math.min(shown + (event.key === 'ArrowRight' ? 20 : -20), shellWidth - DETAIL_MIN))); }
-          else if (event.key === 'Home') { event.preventDefault(); saveWidth(LIST_MIN); }
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setKeyed(Math.max(LIST_MIN, Math.min(shown + (event.key === 'ArrowRight' ? SPLITTER_STEP : -SPLITTER_STEP), widest))); }
+          else if (event.key === 'Home') { event.preventDefault(); setKeyed(LIST_MIN); }
+          else if (event.key === 'End') { event.preventDefault(); setKeyed(widest); }
         }}
+        onKeyUp={saveKeyed} onBlur={saveKeyed}
       />
       <section className="records-detail" aria-label={t('logs.detail')}>
         {selected === undefined ? <p className="records-state">{t('logs.select')}</p> : detail === undefined ? <p className="records-state">{t('logs.loading')}</p> : (
