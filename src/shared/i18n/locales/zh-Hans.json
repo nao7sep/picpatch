@@ -496,7 +496,6 @@
   "viewer.title": "图像查看器",
   "collection.unavailableTitle": "会话集不可用",
   "collection.unavailableDetail": "PicPatch 无法访问 {path}。请重新连接该驱动器后重试，或打开其他会话集。",
-  "collection.open": "打开会话集…",
   "memory.light": "内存需 8 GB 以内",
   "memory.medium": "内存需 16 GB 以内",
   "memory.heavy": "内存需 32 GB 以内",

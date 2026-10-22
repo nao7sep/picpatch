@@ -512,7 +512,6 @@
   "viewer.title": "Visionneuse d’images",
   "collection.unavailableTitle": "Collection de sessions indisponible",
   "collection.unavailableDetail": "PicPatch ne parvient pas à accéder à {path}. Reconnectez le disque et réessayez, ou ouvrez une autre collection.",
-  "collection.open": "Ouvrir une collection…",
   "memory.light": "Moins de 8\u00a0Go de mémoire",
   "memory.medium": "Moins de 16\u00a0Go de mémoire",
   "memory.heavy": "Moins de 32\u00a0Go de mémoire",

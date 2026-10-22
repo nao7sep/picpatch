@@ -16,7 +16,7 @@ export function StartupFailure({ retrying, onRetry, onQuit, collection, onOpenCo
         <p role="alert">{collection === undefined ? t('startup.detail') : t('collection.unavailableDetail', { path: collection })}</p>
         <div className="startup-actions">
           <button type="button" className="button" onClick={onQuit}>{t('native.quit')}</button>
-          {collection !== undefined && onOpenCollection && <button type="button" className="button" disabled={retrying} onClick={onOpenCollection}>{t('collection.open')}</button>}
+          {collection !== undefined && onOpenCollection && <button type="button" className="button" disabled={retrying} onClick={onOpenCollection}>{t('ui.open_collection')}</button>}
           <button type="button" className="button primary" disabled={retrying} onClick={onRetry}>{t('ui.retry')}</button>
         </div>
       </div>

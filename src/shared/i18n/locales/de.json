@@ -504,7 +504,6 @@
   "viewer.title": "Bildbetrachter",
   "collection.unavailableTitle": "Sitzungssammlung nicht verfügbar",
   "collection.unavailableDetail": "PicPatch kann {path} nicht erreichen. Verbinden Sie das Laufwerk erneut und versuchen Sie es noch einmal, oder öffnen Sie eine andere Sammlung.",
-  "collection.open": "Sammlung öffnen\u00a0…",
   "memory.light": "Unter 8 GB Arbeitsspeicher",
   "memory.medium": "Unter 16 GB Arbeitsspeicher",
   "memory.heavy": "Unter 32 GB Arbeitsspeicher",

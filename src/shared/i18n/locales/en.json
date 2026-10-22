@@ -504,7 +504,6 @@
   "viewer.title": "Image viewer",
   "collection.unavailableTitle": "Session collection unavailable",
   "collection.unavailableDetail": "PicPatch cannot reach {path}. Reconnect the drive and retry, or open another collection.",
-  "collection.open": "Open collection…",
   "memory.light": "Under 8 GB memory",
   "memory.medium": "Under 16 GB memory",
   "memory.heavy": "Under 32 GB memory",

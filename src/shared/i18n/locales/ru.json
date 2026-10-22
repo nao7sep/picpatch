@@ -520,7 +520,6 @@
   "viewer.title": "Просмотр изображений",
   "collection.unavailableTitle": "Коллекция сеансов недоступна",
   "collection.unavailableDetail": "PicPatch не может получить доступ к {path}. Снова подключите диск и повторите попытку или откройте другую коллекцию.",
-  "collection.open": "Открыть коллекцию…",
   "memory.light": "Менее 8 ГБ памяти",
   "memory.medium": "Менее 16 ГБ памяти",
   "memory.heavy": "Менее 32 ГБ памяти",

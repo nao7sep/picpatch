@@ -512,7 +512,6 @@
   "viewer.title": "Visualizador de imagens",
   "collection.unavailableTitle": "Coleção de sessões indisponível",
   "collection.unavailableDetail": "O PicPatch não consegue acessar {path}. Reconecte a unidade e tente novamente, ou abra outra coleção.",
-  "collection.open": "Abrir coleção…",
   "memory.light": "Menos de 8 GB de memória",
   "memory.medium": "Menos de 16 GB de memória",
   "memory.heavy": "Menos de 32 GB de memória",

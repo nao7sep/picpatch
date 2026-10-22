@@ -496,7 +496,6 @@
   "viewer.title": "画像ビューアー",
   "collection.unavailableTitle": "セッションのコレクションを利用できません",
   "collection.unavailableDetail": "PicPatchが {path} にアクセスできません。ドライブを再接続してやり直すか、別のコレクションを開いてください。",
-  "collection.open": "コレクションを開く…",
   "memory.light": "メモリ 8 GB 未満",
   "memory.medium": "メモリ 16 GB 未満",
   "memory.heavy": "メモリ 32 GB 未満",

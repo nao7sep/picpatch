@@ -512,7 +512,6 @@
   "viewer.title": "Visualizzatore immagini",
   "collection.unavailableTitle": "Raccolta di sessioni non disponibile",
   "collection.unavailableDetail": "PicPatch non riesce a raggiungere {path}. Ricollega l’unità e riprova, oppure apri un’altra raccolta.",
-  "collection.open": "Apri raccolta…",
   "memory.light": "Meno di 8 GB di memoria",
   "memory.medium": "Meno di 16 GB di memoria",
   "memory.heavy": "Meno di 32 GB di memoria",

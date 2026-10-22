@@ -496,7 +496,6 @@
   "viewer.title": "이미지 뷰어",
   "collection.unavailableTitle": "세션 컬렉션을 사용할 수 없습니다",
   "collection.unavailableDetail": "PicPatch에서 {path}에 접근할 수 없습니다. 드라이브를 다시 연결한 후 다시 시도하거나 다른 컬렉션을 여십시오.",
-  "collection.open": "컬렉션 열기…",
   "memory.light": "메모리 8GB 미만",
   "memory.medium": "메모리 16GB 미만",
   "memory.heavy": "메모리 32GB 미만",
