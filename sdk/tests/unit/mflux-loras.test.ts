@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { listModels, prepareModel, verifyModel } from 'picpatchsdk';
 import { tensorFile } from '../helpers/native-assets.ts';
+import { validateLocalModel } from '../../src/models/verification.ts';
 let directory: string;
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-mflux-loras-'));
@@ -49,4 +50,13 @@ it('rechecks metadata after preparation callbacks and honors cancellation', asyn
   await expect(prepareModel('flux2-klein-4b', { directory, loras: [{ path: 'adapter.safetensors' }] }, { onProgress: event => {
     if (event.stage === 'loras') writeFileSync(join(directory, 'adapter.safetensors'), 'invalid');
   } })).rejects.toMatchObject({ code: 'MODEL_COMPONENT_INVALID' });
+});
+it.each(['krea-2', 'krea-2-raw', 'boogu-image-turbo', 'ming-image-design', 'ideogram4-fp8'])('refuses LoRAs for %s, which takes none, before reading them', async id => {
+  await tensorFile(join(directory, 'adapter.safetensors'), shapes);
+  let read = false;
+  await expect(prepareModel(id, { directory, loras: [{ path: 'adapter.safetensors' }] }, { onProgress: () => { read = true; } })).rejects.toMatchObject({ code: 'UNSUPPORTED_CAPABILITY' });
+  expect(read).toBe(false);
+  // A saved registration that names LoRAs for such a model is refused too, before any worker starts.
+  const { model } = await prepareModel('flux2-klein-4b', { directory, loras: [{ path: 'adapter.safetensors' }] });
+  expect(() => validateLocalModel({ ...model, variant: id })).toThrow('This model does not take LoRAs.');
 });

@@ -76,7 +76,8 @@ async function prepareModelOperation(id: string, options: PrepareModelOptions = 
     const { modelsDirectory: _modelsDirectory, ...nativeOptions } = options;
     return prepareNativeModel(entry.variant, nativeOptions);
   }
-  if (entry.runtime.name !== 'mflux' && options.loras !== undefined) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This runtime uses fixed trained components; additional LoRAs are unsupported.');
+  // The model's advertised capabilities decide, not its runtime: several MFLUX families take no LoRAs either.
+  if (options.loras !== undefined && !entry.capabilities.loraFormats?.length) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This model does not take LoRAs.');
   if (options.loras !== undefined) {
     validateMfluxLoras(options.loras);
     const loras = structuredClone(options.loras);

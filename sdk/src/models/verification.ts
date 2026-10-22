@@ -1,6 +1,6 @@
-import { modelRuntime } from './variants.ts';
+import { modelCapabilities, modelRuntime } from './variants.ts';
 import { validateFlowAssets } from '../backends/stable-diffusion-cpp/flow.ts';
-import { isNativeVariant } from '../backends/stable-diffusion-cpp/models.ts';
+import { isNativeVariant, nativeCapabilities } from '../backends/stable-diffusion-cpp/models.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -42,7 +42,9 @@ export function validateModelManifest(input: unknown): ModelManifest {
 export function validateLocalModel(input: unknown): LocalModel {
   if (!contractValidator<LocalModel>('LocalModel')(input)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid local model configuration.');
   absolutePath(input.directory);
-  if (!isNativeVariant(input.variant) && modelRuntime(input.variant) !== 'mflux' && (input.loras !== undefined || input.quantize !== undefined)) throw new PicPatchSdkError('INVALID_REQUEST', 'This model requires fixed local components without quantization or extra LoRAs.');
+  if (!isNativeVariant(input.variant) && modelRuntime(input.variant) !== 'mflux' && input.quantize !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'This model requires fixed local components without quantization.');
+  const capabilities = isNativeVariant(input.variant) ? nativeCapabilities(input.variant) : modelCapabilities(input.variant);
+  if (input.loras !== undefined && !capabilities.loraFormats?.length) throw new PicPatchSdkError('INVALID_REQUEST', 'This model does not take LoRAs.');
   const loraPaths = input.loras?.map(lora => lora.path) ?? [];
   if (new Set(loraPaths.map(path => path.toLowerCase())).size !== loraPaths.length || loraPaths.some(path => !path.toLowerCase().endsWith('.safetensors') || !input.manifest.components.some(component => component.path === path && component.role === 'weights'))) throw new PicPatchSdkError('INVALID_REQUEST', 'LoRAs must be distinct declared safetensors weights.');
   if (isNativeVariant(input.variant)) {
