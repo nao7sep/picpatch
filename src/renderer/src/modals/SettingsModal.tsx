@@ -83,7 +83,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
   const systemName = new Intl.DisplayNames([document.documentElement.lang || 'en'], { type: 'language' }).of(overview.locale.systemLanguage ?? 'en') ?? '';
   const tabs = ['general', 'resources'] as const;
   return (
-    <Modal title={t('ui.settings')} width={600} onClose={() => void close()} guarded={dirty || saving}
+    <Modal title={t('ui.settings')} width={600} onClose={() => void close()} guarded={dirty} closeDisabled={saving}
       band={<div className="tab-strip" role="tablist" aria-label={t('ui.settings')} onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();

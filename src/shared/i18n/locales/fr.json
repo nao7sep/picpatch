@@ -49,7 +49,6 @@
   "ui.add_lora": "Ajouter un LoRA",
   "ui.verify_selected_model": "Vérifier le modèle sélectionné",
   "ui.register_local_bundle": "Ajouter l’ensemble local",
-  "ui.cancel_operation": "Annuler l’opération",
   "ui.empty_resource_paths_use_the_displayed_sdk_default_changing": "Un chemin de ressource vide utilise le chemin par défaut du SDK affiché. Changer d’emplacement ne déplace jamais les fichiers existants.",
   "ui.engine_folder": "Dossier des moteurs",
   "ui.models_folder": "Dossier des modèles",
@@ -79,7 +78,6 @@
   "ui.image_saved_its_settings_sidecar_could_not_be_saved": "Image enregistrée\u00a0; impossible d’enregistrer le fichier annexe de réglages.",
   "ui.image_saved": "Image enregistrée.",
   "ui.remove_revision": "Supprimer la version",
-  "ui.working": "Traitement en cours…",
   "ui.scale_1": "Coefficient 1",
   "ui.remove": "Retirer",
   "ui.clear": "Effacer",
@@ -540,5 +538,14 @@
   "discard.quitBody": "Des modifications ne sont pas enregistrées. Les abandonner et quitter\u00a0?",
   "discard.keep": "Continuer à modifier",
   "discard.confirm": "Abandonner",
-  "quit.anyway": "Quitter quand même"
+  "quit.anyway": "Quitter quand même",
+  "managed.running.installPython": "Installation du moteur Python…",
+  "managed.running.installNative": "Installation du moteur natif…",
+  "managed.running.download": "Téléchargement de {model}…",
+  "managed.running.register": "Ajout de {model}…",
+  "managed.running.verify": "Vérification de {model}…",
+  "managed.running.remove": "Suppression d’une version de {model}…",
+  "managed.progress": "{task} {percent}\u00a0%",
+  "managed.cancelled": "Annulé.",
+  "managed.failed": "Une opération sur un modèle ou un moteur n’a pas abouti. {reason}"
 }

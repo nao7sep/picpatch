@@ -49,7 +49,6 @@
   "ui.add_lora": "LoRA hinzufügen",
   "ui.verify_selected_model": "Ausgewähltes Modell verifizieren",
   "ui.register_local_bundle": "Lokales Modellpaket registrieren",
-  "ui.cancel_operation": "Vorgang abbrechen",
   "ui.empty_resource_paths_use_the_displayed_sdk_default_changing": "Bei leeren Ressourcenpfaden gilt die angezeigte SDK-Vorgabe. Ein geänderter Speicherort verschiebt keine vorhandenen Dateien.",
   "ui.engine_folder": "Engine-Ordner",
   "ui.models_folder": "Modellordner",
@@ -79,7 +78,6 @@
   "ui.image_saved_its_settings_sidecar_could_not_be_saved": "Bild gespeichert; die separate Einstellungsdatei konnte nicht gespeichert werden.",
   "ui.image_saved": "Bild gespeichert.",
   "ui.remove_revision": "Version entfernen",
-  "ui.working": "Wird bearbeitet\u00a0…",
   "ui.scale_1": "Stärke 1",
   "ui.remove": "Entfernen",
   "ui.clear": "Leeren",
@@ -532,5 +530,14 @@
   "discard.quitBody": "Sie haben nicht gespeicherte Änderungen. Verwerfen und beenden?",
   "discard.keep": "Weiter bearbeiten",
   "discard.confirm": "Verwerfen",
-  "quit.anyway": "Trotzdem beenden"
+  "quit.anyway": "Trotzdem beenden",
+  "managed.running.installPython": "Python-Engine wird installiert\u00a0…",
+  "managed.running.installNative": "Native Engine wird installiert\u00a0…",
+  "managed.running.download": "{model} wird heruntergeladen\u00a0…",
+  "managed.running.register": "{model} wird registriert\u00a0…",
+  "managed.running.verify": "{model} wird verifiziert\u00a0…",
+  "managed.running.remove": "Eine Version von {model} wird entfernt\u00a0…",
+  "managed.progress": "{task} {percent}\u00a0%",
+  "managed.cancelled": "Abgebrochen.",
+  "managed.failed": "Ein Modell- oder Engine-Vorgang wurde nicht abgeschlossen. {reason}"
 }

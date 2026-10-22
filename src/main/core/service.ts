@@ -1,5 +1,6 @@
 import { modelReadiness } from './model-readiness.ts';
-import { preference, UiError } from '../../shared/i18n/index.ts';
+import { errorNotice, message, preference, UiError } from '../../shared/i18n/index.ts';
+import type { ManagedResult, ManagedState, ManagedTarget, ManagedOperation } from '../../shared/managed.ts';
 import { errorRecord } from './records.ts';
 import { listModels, inspectModels, prepareModel, saveArtifact, openModel, verifyModel, removeModel, resolveStoragePaths, isPicPatchSdkError, inspectEngine, inspectNativeEngine, installEngine, installNativeEngine } from 'picpatchsdk';
 import { isAbsolute, join } from 'node:path';
@@ -32,6 +33,13 @@ export function downloadableModel(modelId: unknown) {
   if (!model || model.acquisition !== 'pinned' || !model.supported) throw new UiError('ui.no_downloadable_bundle_for_this_selection');
   return model;
 }
+/** How a finished operation's own result reads: a refusal or a failed verification is not success. */
+function managedOutcome(result: unknown): Omit<ManagedResult, 'id' | keyof ManagedTarget> {
+  const status = result && typeof result === 'object' ? (result as { status?: unknown }).status : undefined;
+  if (status === 'refused') return { status: 'refused', notice: errorNotice(result) };
+  if (status === 'invalid') return { status: 'failed', notice: message('error.model_files') };
+  return { status: 'completed' };
+}
 /** Save image suggests the image's number as shown in the conversation, in the folder the last save used. */
 export function exportDefaultPath(session: Session, runId: string, directory: string | undefined): string {
   const index = session.runs.findIndex(run => run.id === runId && run.output);
@@ -44,7 +52,9 @@ export class Application {
   queue: Queue;
   historyIssue?: string | { message: string; notice?: import('../../shared/i18n/index.ts').Message };
   private settingsTail: Promise<unknown> = Promise.resolve();
-  private managed?: { controller: AbortController; task: Promise<unknown> };
+  private managed?: { view: ManagedOperation; controller: AbortController; task: Promise<unknown> };
+  private lastManaged?: ManagedResult;
+  private managedSerial = 0;
   private runner(): Runner {
     const run = inference(() => this.sessions, () => this.settings);
     return async (sessionId, attempt, events) => {
@@ -64,11 +74,11 @@ export class Application {
       return completion;
     };
   }
-  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: (scope?: 'progress') => void, private backup: (path: string, bytes: Buffer) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
+  private constructor(readonly paths: AppPaths, public settings: Settings, private changed: (scope?: 'progress' | 'managed') => void, private backup: (path: string, bytes: Buffer) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
     this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined);
     this.queue = new Queue(this.sessions, this.runner(), changed, () => this.settings.concurrency ?? 1);
   }
-  static async open(paths: AppPaths, changed: (scope?: 'progress') => void = () => {}, backup: (path: string, bytes: Buffer) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> {
+  static async open(paths: AppPaths, changed: (scope?: 'progress' | 'managed') => void = () => {}, backup: (path: string, bytes: Buffer) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> {
     const settings = await readSettings(paths.config);
     return new Application(paths, settings, changed, backup, diagnostic);
   }
@@ -82,20 +92,47 @@ export class Application {
     return {
       ...await this.sessions.list(),
       models: listModels().filter(model => model.supported), unsupportedModels: listModels().filter(model => !model.supported).length,
-      queue: structuredClone(this.queue.state), resourcesBusy: this.resourcesBusy(), historyIssue,
+      queue: structuredClone(this.queue.state), resourcesBusy: this.resourcesBusy(), managed: this.managedState, historyIssue,
       settings: structuredClone(this.settings), resourceDefaults: resolveStoragePaths(), locations: { ...resources, sessionsDirectory: this.sessions.root },
     };
   }
   /**
-   * Resource operations (preparing, verifying or removing models, installing engines) run one at a time and receive
-   * the operation's cancellation signal. Image work does not start while one runs, and the queue's own idle checks
-   * keep resources from changing under image work.
+   * Resource operations (preparing, verifying or removing models, installing engines) run one at a time. Application
+   * state owns each one end to end: its identity, progress, cancellation and one terminal result, so a view that shows
+   * it can close without changing anything. Image work does not start while one runs, and the queue's own idle checks
+   * keep resources from changing under image work. A second operation is refused at once, before it starts.
    */
-  private manage<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
-    if (this.managed) return Promise.reject(new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it'));
-    const controller = new AbortController(); const task = work(controller.signal);
-    const managed = this.managed = { controller, task };
-    return task.finally(() => { if (this.managed === managed) this.managed = undefined; });
+  private manage<T>(target: ManagedTarget, work: (call: { signal: AbortSignal; onEvent: (event: SdkEvent) => void }) => Promise<T>): Promise<T> {
+    if (this.managed) throw new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it');
+    const controller = new AbortController(); const view: ManagedOperation = { id: ++this.managedSerial, ...target };
+    const record = this.sdkEvents({ action: target.action, ...(target.modelId ? { modelId: target.modelId } : {}) });
+    const onEvent = (event: SdkEvent) => {
+      record(event);
+      const progress = event.name === 'operation.progress' ? (event as { progress?: { completed?: number; total?: number } }).progress : undefined;
+      if (progress?.total && Number.isFinite(progress.completed)) { view.progress = { completed: progress.completed!, total: progress.total }; this.changed('managed'); }
+    };
+    const managed = { view, controller, task: Promise.resolve() as Promise<unknown> };
+    this.managed = managed;
+    const settle = (result: Omit<ManagedResult, 'id' | keyof ManagedTarget>) => {
+      if (this.managed === managed) this.managed = undefined;
+      this.lastManaged = { id: view.id, ...target, ...result };
+      if (result.status === 'failed') this.diagnostic('error', 'Resource operation did not complete.', { ...target, notice: result.notice });
+      this.changed('managed'); this.changed();
+    };
+    let task: Promise<T>;
+    try { task = work({ signal: controller.signal, onEvent }); }
+    catch (error) { this.managed = undefined; throw error; }
+    managed.task = task;
+    // Views and the standing state learn of the start at once; other views refresh what it holds back.
+    this.changed('managed'); this.changed();
+    return task.then(result => { settle(managedOutcome(result)); return result; }, error => {
+      settle(isPicPatchSdkError(error) && error.kind === 'cancelled' ? { status: 'cancelled' } : { status: 'failed', notice: errorNotice(error) });
+      throw error;
+    });
+  }
+  /** The running operation and the latest terminal result, for every view and the standing state. */
+  get managedState(): ManagedState {
+    return structuredClone({ ...(this.managed ? { active: this.managed.view } : {}), ...(this.lastManaged ? { last: this.lastManaged } : {}) });
   }
   private requireNoResourceOperation() { if (this.managed) throw new UiError('ui.wait_for_the_current_resource_operation'); }
   get managing(): boolean { return this.managed !== undefined; }
@@ -109,9 +146,9 @@ export class Application {
     const events = { onEvent: this.sdkEvents({ action: 'engines' }) };
     return { python: await inspectEngine({ ...pythonEngine(modelId), profile: this.settings.profile }, events), native: await inspectNativeEngine({ profile: this.settings.profile }, events) };
   }
-  installNative() { return this.manage(signal => installNativeEngine({ profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ action: 'installNative' }) })); }
-  installPython(modelId: unknown, uvExecutable: string, toolDirectories: string[]) {
-    return this.manage(signal => installEngine({ ...pythonEngine(modelId), profile: this.settings.profile, uvExecutable, toolDirectories }, { signal, onEvent: this.sdkEvents({ action: 'installPython' }) }));
+  installNative(modelId?: string) { return this.manage({ action: 'installNative', ...(modelId ? { modelId } : {}) }, call => installNativeEngine({ profile: this.settings.profile }, call)); }
+  installPython(modelId: string | undefined, uvExecutable: string, toolDirectories: string[]) {
+    return this.manage({ action: 'installPython', ...(modelId ? { modelId } : {}) }, call => installEngine({ ...pythonEngine(modelId), profile: this.settings.profile, uvExecutable, toolDirectories }, call));
   }
   /** Autosave acknowledges only; the renderer already holds the draft it sent. */
   async draft(sessionId: string, draft: Draft): Promise<void> { const valid = validateDraft(draft); await this.sessions.update(sessionId, value => { value.draft = valid; }); }
@@ -139,9 +176,9 @@ export class Application {
   async readiness() { return modelReadiness(this.settings, { signal: AbortSignal.timeout(120_000), onEvent: this.sdkEvents({ action: 'readiness' }) }); }
   async models() { return inspectModels({ profile: this.settings.profile }, { onEvent: this.sdkEvents({ action: 'models' }) }); }
   prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelSettings, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}) {
-    return this.manage(async signal => {
-      this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_prepared_models');
-      const prepared = await prepareModel(modelId, { ...components, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download }, { signal, onEvent: this.sdkEvents({ action: 'prepare', modelId }) });
+    this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_prepared_models');
+    return this.manage({ action: download ? 'download' : 'register', modelId }, async call => {
+      const prepared = await prepareModel(modelId, { ...components, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download }, call);
       await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
     });
   }
@@ -167,17 +204,15 @@ export class Application {
     this.queue.wake();
   }
   verify(modelId: string) {
-    return this.manage(async signal => {
-      const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ modelId }) });
+    return this.manage({ action: 'verify', modelId }, async call => {
+      const opened = await openModel(this.settings.registrations[modelId] ?? modelId, { profile: this.settings.profile }, call);
       if (opened.status === 'refused') return opened;
-      return verifyModel(opened.model.directory, opened.model.manifest, { signal, onEvent: this.sdkEvents({ modelId }) });
+      return verifyModel(opened.model.directory, opened.model.manifest, call);
     });
   }
   removeManaged(modelId: string, name: string) {
-    return this.manage(async signal => {
-      this.queue.requireIdle('error.finish_or_cancel_queued_work_before_removing_models');
-      return removeModel(modelId, name, { profile: this.settings.profile }, { signal, onEvent: this.sdkEvents({ modelId }) });
-    });
+    this.queue.requireIdle('error.finish_or_cancel_queued_work_before_removing_models');
+    return this.manage({ action: 'remove', modelId, revision: name }, call => removeModel(modelId, name, { profile: this.settings.profile }, call));
   }
   private updateSettings(change: (value: Settings) => void): Promise<void> {
     const next = this.settingsTail.then(async () => {

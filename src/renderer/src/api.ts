@@ -12,6 +12,7 @@ declare global { interface Window { picpatch: Bridge } }
 /** The SDK's catalog entry, as main sends it. */
 export type CatalogModel = ModelCatalogEntry;
 import type { Readiness } from '../../shared/readiness.ts';
+import type { ManagedState } from '../../shared/managed.ts';
 export type { Readiness };
 export interface LocaleState { language: Language; format: string; systemLanguage?: string; uiFont?: string }
 export interface ResourcePaths { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }
@@ -23,9 +24,10 @@ export interface Overview {
   historyIssue?: string | { message: string; notice?: Message }; settings: AppSettings;
   locations: { engineDirectory?: string; modelsDirectory?: string; sessionsDirectory: string };
   resourceDefaults: { engineDirectory: string; modelsDirectory: string };
-  resourcesBusy: boolean; locale: LocaleState; systemDark: boolean;
+  resourcesBusy: boolean; managed: ManagedState; locale: LocaleState; systemDark: boolean;
 }
 export interface PaneState { railWidth: number; optionsPane: boolean }
+export type Started = { started: true };
 export type ExportResult = SavedArtifact | SaveArtifactRefusal;
 export interface Engines { python: EngineInspection; native: NativeEngineInspection }
 export type Inventory = ManagedModelInventory;
@@ -70,12 +72,14 @@ export const api = {
   pickPath: (file = false, initialPath?: string) => call<string | undefined>('pickPath', { file, initialPath }),
   pickComponent: (directory: string, current?: string) => call<string | undefined>('pickComponent', { directory, current }),
   engines: (modelId: string) => call<Engines>('engines', { modelId }),
-  installPython: (modelId: string) => call<unknown>('installPython', { modelId }),
-  installNative: (modelId: string) => call<unknown>('installNative', { modelId }),
-  download: (modelId: string) => call<{ status?: string } | undefined>('prepare', { modelId, download: true }),
-  register: (modelId: string, directory: string | undefined, checkpoint: string | undefined, components: Components) => call<{ status?: string } | undefined>('prepare', { modelId, directory, checkpoint, components }),
-  verify: (modelId: string) => call<{ status?: string }>('verify', { modelId }),
-  removeManaged: (modelId: string, name: string) => call<{ status?: string } | undefined>('removeManaged', { modelId, name }),
+  // Model and engine operations answer once they start (undefined when a question was declined or a picker cancelled);
+  // their progress and result arrive through onManaged.
+  installPython: (modelId: string) => call<Started>('installPython', { modelId }),
+  installNative: (modelId: string) => call<Started>('installNative', { modelId }),
+  download: (modelId: string) => call<Started | undefined>('prepare', { modelId, download: true }),
+  register: (modelId: string, directory: string | undefined, checkpoint: string | undefined, components: Components) => call<Started | undefined>('prepare', { modelId, directory, checkpoint, components }),
+  verify: (modelId: string) => call<Started>('verify', { modelId }),
+  removeManaged: (modelId: string, name: string) => call<Started | undefined>('removeManaged', { modelId, name }),
   inventory: () => call<Inventory>('models'),
   cancelManaged: () => call<void>('cancelManaged'),
   droppedFile: (file: File) => window.picpatch.droppedFile(file),
@@ -83,6 +87,8 @@ export const api = {
   onChange: (listener: () => void) => window.picpatch.onChange(listener),
   /** Stage and progress of the active run only. */
   onQueue: (listener: (state: QueueState) => void) => window.picpatch.onQueue(state => listener(state as QueueState)),
+  /** The running model or engine operation and the latest result, whenever either changes. */
+  onManaged: (listener: (state: ManagedState) => void) => window.picpatch.onManaged(state => listener(state as ManagedState)),
   onRequest: (listener: (request: RendererRequest) => Promise<unknown>) => window.picpatch.onRequest(listener),
 };
 

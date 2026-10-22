@@ -106,10 +106,10 @@ export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard,
   };
 
   return (
-    <Modal title={t('mask.title')} large onClose={() => void close()} guarded footer={<>
+    <Modal title={t('mask.title')} large onClose={() => void close()} guarded closeDisabled={saving} footer={<>
       <span className="foot-note">{note}</span>
       <span className="spacer" />
-      <button type="button" className="button" onClick={() => void close()}>{t('ui.cancel')}</button>
+      <button type="button" className="button" disabled={saving} onClick={() => void close()}>{t('ui.cancel')}</button>
       <button type="button" className="button primary" disabled={!size || saving} onClick={() => void done()}>{t('ui.done')}</button>
     </>}>
       <div className="mask-editor" onKeyDown={onKeyDown}>

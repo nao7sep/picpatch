@@ -1,7 +1,12 @@
-// Models and engines: the engine a model runs on, readiness, download, verification,
-// registration of files already on this computer, and removal of managed revisions.
-// Inspection never acquires anything; each change is an explicit action.
+// Managed tools: the engine a model runs on, readiness, download, verification, registration
+// of files already on this computer, and removal of managed revisions. Inspection never
+// acquires anything; each change is an explicit action. Application state owns every
+// operation, so this view only shows it and sends commands: Close always closes, the work
+// carries on, and the running row offers its own Cancel.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { sameTarget, type ManagedState, type ManagedTarget } from '../../../shared/managed.ts';
+import type { Message } from '../../../shared/i18n/index.ts';
+import { resultMessage, runningMessage } from '../managed.ts';
 import { controlKinds } from '../../../shared/session.ts';
 import { modelLabel, modelOption } from '../models.ts';
 import { api, type CatalogModel, type Components, type Engines, type Inventory, type Readiness } from '../api.ts';
@@ -9,24 +14,28 @@ import { useI18n } from '../i18n.tsx';
 import { CloseIcon, PlusIcon } from '../components/icons.tsx';
 import { Modal } from './Modal.tsx';
 import { acceptsLoras, componentFields, engineReady, native, type ComponentKey } from './resources.ts';
-import { useOperation } from './useOperation.ts';
 
 type Registration = { directory: string; checkpoint: string; components: Partial<Record<ComponentKey, string>>; controlKind: string; loras: { path: string; scale?: number }[] };
 const emptyRegistration = (): Registration => ({ directory: '', checkpoint: '', components: {}, controlKind: 'canny', loras: [] });
 
-export function ManagementModal({ models, initial, nativeExecutable, onClose, onChanged }: {
-  models: readonly CatalogModel[]; initial?: string; nativeExecutable?: string; onClose: () => void; onChanged: () => Promise<Readiness>;
+export function ManagementModal({ models, initial, nativeExecutable, readiness, managed, onClose }: {
+  models: readonly CatalogModel[]; initial?: string; nativeExecutable?: string; readiness: Readiness | undefined; managed: ManagedState; onClose: () => void;
 }) {
   const { t, term, number, errorText } = useI18n();
+  const say = (value: Message) => t(value.key, value.values);
   const [choice, setChoice] = useState(initial ?? models[0]?.id ?? '');
-  const [readiness, setReadiness] = useState<Readiness>();
   const [engines, setEngines] = useState<Engines>();
   const [inventory, setInventory] = useState<Inventory>();
   const [registration, setRegistration] = useState<Registration>(emptyRegistration);
   const [registering, setRegistering] = useState(false);
-  const [done, setDone] = useState<string>();
+  // A request refused before it started; a started operation reports through application state.
+  const [failure, setFailure] = useState<string>();
   const inspection = useRef(0);
-  const { busy, failure, setFailure, run, cancel } = useOperation();
+  const { active, last } = managed;
+  const busy = Boolean(active);
+  // Results that arrive while this view is open are shown here; an earlier failure stays visible too.
+  const opened = useRef(last?.id ?? 0);
+  const result = last && (last.id > opened.current || last.status === 'failed' || last.status === 'refused') ? last : undefined;
   const model = models.find(item => item.id === choice);
   const fields = componentFields(model);
   const shownFields = [...fields, ...(Object.keys(registration.components) as ComponentKey[]).filter(key => registration.components[key] && !fields.includes(key))];
@@ -38,19 +47,24 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
     catch (error) { if (revision === inspection.current) setFailure(errorText(error)); }
   }, [errorText, setFailure]);
   const refresh = useCallback(async () => {
-    const [state, managed] = await Promise.all([api.readiness().catch(() => ({})), api.inventory().catch(error => { setFailure(errorText(error)); return undefined; })]);
-    setReadiness(state); setInventory(managed);
-  }, [errorText, setFailure]);
-  useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { if (choice) void inspect(choice); setDone(undefined); }, [choice, inspect]);
+    try { setInventory(await api.inventory()); } catch (error) { setFailure(errorText(error)); }
+  }, [errorText]);
+  // Facts are read when the view opens and again when an operation settles.
+  useEffect(() => { void refresh(); }, [refresh, last?.id]);
+  useEffect(() => { if (choice) void inspect(choice); }, [choice, inspect, last?.id]);
 
-  const changed = async (message?: string) => { setReadiness(await onChanged()); await refresh(); await inspect(choice); setDone(message); };
-  const act = (work: () => Promise<{ status?: string } | unknown>, message: string) => void run(async () => {
-    const result = await work();
-    if (result === undefined) return undefined; // declined in main's question, or cancelled picker
-    await changed((result as { status?: string })?.status === 'refused' ? undefined : message);
-    return result;
-  });
+  const act = (work: () => Promise<unknown>) => {
+    setFailure(undefined);
+    void work().catch(error => setFailure(errorText(error)));
+  };
+  const cancel = () => void api.cancelManaged().catch(error => setFailure(errorText(error)));
+  /** A row's own running state: its progress and Cancel, in place of its action. */
+  const running = (target: ManagedTarget) => sameTarget(active, target) ? (
+    <span className="row-running" role="status">
+      <span className="task-status">{say(runningMessage(active!))}</span>
+      <button type="button" className="button compact" onClick={cancel}>{t('ui.cancel')}</button>
+    </span>
+  ) : null;
 
   const register = () => act(() => {
     const components: Components = {};
@@ -60,7 +74,7 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
     }
     if (registration.loras.length) components.loras = registration.loras;
     return api.register(choice, registration.directory || undefined, registration.checkpoint || undefined, components);
-  }, t('management.registered'));
+  });
   const pick = async (apply: (path: string) => void, directory = false, current?: string) => {
     try {
       const path = directory ? await api.pickPath(false, registration.directory || undefined) : await api.pickComponent(registration.directory, current);
@@ -72,17 +86,23 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
   const engineStatus = !engines ? t('model.checking') : native(model) && nativeExecutable ? t('management.externalEngine') : term('status', (native(model) ? engines.native : engines.python).status);
   const entries = inventory?.entries ?? [];
 
+  // The selected model's actions are one row; whichever of them runs shows there with its Cancel.
+  const engineTarget: ManagedTarget = { action: native(model) ? 'installNative' : 'installPython', modelId: choice };
+  const rowTargets: ManagedTarget[] = [engineTarget, { action: 'download', modelId: choice }, { action: 'verify', modelId: choice }, { action: 'register', modelId: choice }];
+  const rowRunning = rowTargets.map(running).find(Boolean)
+    // Work started for another model, or from Setup, shows here too, so it can always be cancelled where it is seen.
+    ?? (active && active.action !== 'remove' ? running(active) : null);
+
   return (
-    <Modal title={t('ui.managed_tools_and_models')} width={680} guarded={busy} onClose={() => { if (!busy) onClose(); }} footer={<>
-      {busy ? <span className="task-status">{t('ui.working')}</span> : done ? <span className="task-status" role="status">{done}</span> : null}
+    <Modal title={t('ui.managed_tools_and_models')} width={680} onClose={onClose} footer={<>
+      {result && result.status !== 'failed' && result.status !== 'refused' ? <span className="task-status" role="status">{say(resultMessage(result))}</span> : null}
       <span className="spacer" />
-      {busy && <button type="button" className="button" onClick={cancel}>{t('ui.cancel_operation')}</button>}
-      <button type="button" className="button" disabled={busy} onClick={onClose}>{t('ui.close')}</button>
+      <button type="button" className="button" onClick={onClose}>{t('ui.close')}</button>
     </>}>
       <p className="modal-intro">{t('ui.engines_and_models_are_shared_sdk_resources_sessions_remain')}</p>
       <label className="field">
         <span className="field-label">{t('ui.model')}</span>
-        <select value={choice} disabled={busy} data-autofocus="true" onChange={event => { setChoice(event.target.value); setRegistration(emptyRegistration()); setRegistering(false); }}>
+        <select value={choice} data-autofocus="true" onChange={event => { setChoice(event.target.value); setRegistration(emptyRegistration()); setRegistering(false); }}>
           {models.map(item => <option key={item.id} value={item.id}>{modelOption(item)}</option>)}
         </select>
       </label>
@@ -92,23 +112,25 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
         {model?.acquisition === 'pinned' ? <div><dt>{t('management.downloadSize')}</dt><dd>{`${number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 })} GB`}</dd></div> : null}
       </dl>
       <div className="button-row">
-        <button type="button" className="button" disabled={busy || !engines || engineReady(model, engines) || (native(model) && Boolean(nativeExecutable))}
-          onClick={() => act(() => native(model) ? api.installNative(choice) : api.installPython(choice), t('management.installed'))}>{t('setup.install')}</button>
-        <button type="button" className="button" disabled={busy || model?.acquisition !== 'pinned' || state === 'ready'} onClick={() => act(() => api.download(choice), t('management.downloaded'))}>{t('ui.download')}</button>
-        <button type="button" className="button" disabled={busy || state !== 'ready'} onClick={() => act(() => api.verify(choice), t('management.verified'))}>{t('ui.verify_selected_model')}</button>
-        <button type="button" className="button" disabled={busy} aria-expanded={registering} onClick={() => setRegistering(value => !value)}>{t('ui.register_local_bundle')}</button>
+        {rowRunning ?? <>
+          <button type="button" className="button" disabled={busy || !engines || engineReady(model, engines) || (native(model) && Boolean(nativeExecutable))}
+            onClick={() => act(() => native(model) ? api.installNative(choice) : api.installPython(choice))}>{t('setup.install')}</button>
+          <button type="button" className="button" disabled={busy || model?.acquisition !== 'pinned' || state === 'ready'} onClick={() => act(() => api.download(choice))}>{t('ui.download')}</button>
+          <button type="button" className="button" disabled={busy || state !== 'ready'} onClick={() => act(() => api.verify(choice))}>{t('ui.verify_selected_model')}</button>
+        </>}
+        <button type="button" className="button" aria-expanded={registering} onClick={() => setRegistering(value => !value)}>{t('ui.register_local_bundle')}</button>
       </div>
       <p className="field-help">{t('ui.the_python_setup_tool_is_included_building_python_dependencies')}</p>
 
       {registering && (
         <section className="settings-group register">
           <h3 className="group-label">{t('ui.local_bundle_and_adapters')}</h3>
-          <PathField label={t('ui.bundle_directory')} value={registration.directory} disabled={busy} onChoose={() => void pick(path => setRegistration({ ...emptyRegistration(), directory: path }), true)} />
+          <PathField label={t('ui.bundle_directory')} value={registration.directory} onChoose={() => void pick(path => setRegistration({ ...emptyRegistration(), directory: path }), true)} />
           {native(model) && (
-            <PathField label={t('component.checkpoint')} value={registration.checkpoint} disabled={busy || !registration.directory} onChoose={() => void pick(path => setRegistration(value => ({ ...value, checkpoint: path })), false, registration.checkpoint)} />
+            <PathField label={t('component.checkpoint')} value={registration.checkpoint} disabled={!registration.directory} onChoose={() => void pick(path => setRegistration(value => ({ ...value, checkpoint: path })), false, registration.checkpoint)} />
           )}
           {shownFields.map(key => (
-            <PathField key={key} label={t(`component.${key}`)} value={registration.components[key] ?? ''} disabled={busy || !registration.directory}
+            <PathField key={key} label={t(`component.${key}`)} value={registration.components[key] ?? ''} disabled={!registration.directory}
               note={fields.includes(key) ? undefined : t('management.unused')}
               onChoose={() => void pick(path => setRegistration(value => ({ ...value, components: { ...value.components, [key]: path } })), false, registration.components[key])}
               onClear={() => setRegistration(value => { const components = { ...value.components }; delete components[key]; return { ...value, components }; })}
@@ -130,7 +152,7 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
                   <button type="button" className="icon-button" aria-label={t('ui.remove')} title={t('ui.remove')} onClick={() => setRegistration(value => ({ ...value, loras: value.loras.filter((_, i) => i !== index) }))}><CloseIcon /></button>
                 </span>
               ))}
-              <button type="button" className="button compact" disabled={busy || !registration.directory} onClick={() => void pick(path => setRegistration(value => ({ ...value, loras: [...value.loras, { path }] })))}><PlusIcon /><span>{t('ui.add_lora')}</span></button>
+              <button type="button" className="button compact" disabled={!registration.directory} onClick={() => void pick(path => setRegistration(value => ({ ...value, loras: [...value.loras, { path }] })))}><PlusIcon /><span>{t('ui.add_lora')}</span></button>
               <span className="field-help">{t('ui.weights_stay_in_the_selected_model_bundle_these_choices')}</span>
             </div>
           )}
@@ -148,13 +170,15 @@ export function ManagementModal({ models, initial, nativeExecutable, onClose, on
               <li key={`${entry.modelId}:${entry.name}`}>
                 <span className="revision-name">{modelLabel(entry.modelId)}</span>
                 <span className="revision-meta">{t('management.revision', { revision: entry.name.slice(0, 12), size: number(entry.bytes / 1e9, { maximumFractionDigits: 2 }) })}</span>
-                <button type="button" className="button compact outline-danger" disabled={busy} onClick={() => act(() => api.removeManaged(entry.modelId, entry.name), t('management.removed'))}>{t('ui.remove_revision')}</button>
+                {running({ action: 'remove', modelId: entry.modelId, revision: entry.name })
+                  ?? <button type="button" className="button compact outline-danger" disabled={busy} onClick={() => act(() => api.removeManaged(entry.modelId, entry.name))}>{t('ui.remove_revision')}</button>}
               </li>
             ))}
           </ul>
         )}
       </section>
-      {failure && <p className="field-error" role="alert">{failure}</p>}
+      {failure ? <p className="field-error" role="alert">{failure}</p>
+        : result && (result.status === 'failed' || result.status === 'refused') ? <p className="field-error" role="alert">{say(resultMessage(result))}</p> : null}
     </Modal>
   );
 }

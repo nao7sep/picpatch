@@ -318,3 +318,24 @@ it('chooses a display time zone from the list, with System naming the computer z
   fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
   await waitFor(() => expect(fake.calls('preferences')).toEqual([{ timeZone: 'Asia/Tokyo' }]));
 });
+
+it('keeps a model operation visible after Managed tools closes, with its own Cancel, until its result arrives', async () => {
+  const fake = await start();
+  fake.handlers.engines = () => ({ python: { status: 'ready' }, native: { status: 'ready' } });
+  fake.handlers.models = () => ({ entries: [] });
+  await act(async () => fake.command('manage'));
+  await screen.findByRole('dialog', { name: 'Managed tools' });
+  await act(async () => fake.managed({ active: { id: 7, action: 'download', modelId: 'flux2-klein-4b-4bit', progress: { completed: 1, total: 4 } } }));
+  fireEvent.keyDown(screen.getByRole('dialog', { name: 'Managed tools' }), { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Managed tools' })).toBeNull());
+  const notice = screen.getByText('Downloading FLUX.2 Klein 4B… 25%').closest('.notice') as HTMLElement;
+  expect(fake.calls('cancelManaged')).toHaveLength(0);
+  fireEvent.click(within(notice).getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(fake.calls('cancelManaged')).toHaveLength(1));
+  // The terminal result replaces the progress; a failure stays until dismissed.
+  await act(async () => fake.managed({ last: { id: 7, action: 'download', modelId: 'flux2-klein-4b-4bit', status: 'failed', notice: { key: 'error.storage' } } }));
+  expect(screen.queryByText('Downloading FLUX.2 Klein 4B… 25%')).toBeNull();
+  const failure = screen.getByText(/A model or engine operation did not finish\./).closest('.notice') as HTMLElement;
+  fireEvent.click(within(failure).getByRole('button', { name: 'Clear message' }));
+  expect(screen.queryByText(/A model or engine operation did not finish\./)).toBeNull();
+});

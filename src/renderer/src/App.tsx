@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Asset, Draft, ReferenceDraft, Run, Session } from '../../shared/session.ts';
 import { afterCommand, canPaintMask, imageCommand, maskNote, recoverCommand, targetImage, withoutTarget } from '../../shared/image-command.ts';
 import { displayTimeZone } from '../../shared/time-zone.ts';
-import { errorText as describeError, message, t, useLocale } from '../../shared/i18n/index.ts';
+import { resultMessage, runningMessage } from './managed.ts';
+import { errorText as describeError, message, t, useLocale, type Message } from '../../shared/i18n/index.ts';
 import { layout, minimum } from '../../shared/layout.ts';
 import type { RendererRequest } from '../../shared/messages.ts';
 import { setCatalog } from './models.ts';
@@ -54,6 +55,7 @@ export function App() {
   const [pane, setPane] = useState<PaneState>({ railWidth: layout.railDefault, optionsPane: false });
   const [modals, setModals] = useState<ModalSpec[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [managedDismissed, setManagedDismissed] = useState<number>();
   /** The backup notice the user dismissed; a different one shows again. */
   const [historyDismissed, setHistoryDismissed] = useState<string>();
   const [closing, setClosing] = useState(false);
@@ -168,6 +170,18 @@ export function App() {
     });
   }, [clear, refresh, show]);
   // Progress replaces only the queue state; sessions are reloaded when a run settles.
+  // Model and engine operations live in application state, so closing Managed tools or Setup changes nothing.
+  useEffect(() => api.onManaged(managed => {
+    const current = overviewRef.current; if (!current) return;
+    const next = { ...current, managed }; overviewRef.current = next; setOverview(next);
+  }), []);
+  const lastManaged = overview?.managed.last?.id;
+  const seenManaged = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    // A finished operation may have changed what is ready; the first value is only the state at startup.
+    if (lastManaged !== undefined && seenManaged.current !== undefined && lastManaged !== seenManaged.current) void checkModels();
+    seenManaged.current = lastManaged ?? seenManaged.current ?? 0;
+  }, [lastManaged, checkModels]);
   useEffect(() => api.onQueue(queue => {
     const current = overviewRef.current; if (!loaded.current || !current) return;
     const next = { ...current, queue }; overviewRef.current = next; setOverview(next);
@@ -401,6 +415,8 @@ export function App() {
                 <div ref={composerBox} className="stage-foot">
                   <StageNotices
                     notices={notices} onDismiss={clear} queue={overview.queue} session={session} onResume={() => void resume()}
+                    managed={overview.managed} managedDismissed={managedDismissed} onDismissManaged={setManagedDismissed}
+                    onShowManaged={() => dispatchRef.current('manage')} onCancelManaged={() => void api.cancelManaged().catch(error => show('managed', error))}
                     history={JSON.stringify(overview.historyIssue ?? null) === historyDismissed ? undefined : overview.historyIssue} onDismissHistory={() => setHistoryDismissed(JSON.stringify(overview.historyIssue ?? null))}
                   />
                   <Composer
@@ -433,12 +449,11 @@ export function App() {
     const owner = session!, current = draft!, models = overview!.models;
     switch (spec.kind) {
       case 'settings': return <SettingsModal overview={overview!} guard={settingsGuard} onClose={pop} confirmDiscard={confirm} onSaved={next => { void applyOverview(next); void checkModels(); }} />;
-      case 'setup': return <SetupModal models={models} initial={spec.modelId} onClose={pop}
-        onChanged={async () => { const next = await checkModels(); await refreshOverview(); return next; }}
+      case 'setup': return <SetupModal models={models} initial={spec.modelId} readiness={readiness} managed={overview!.managed} onClose={pop}
         onUse={id => { updateDraft({ ...draftRef.current!, modelIds: [id] }); pop(); }}
         onManage={id => setModals(items => [...items.slice(0, -1), { kind: 'manage', modelId: id }])} />;
-      case 'manage': return <ManagementModal models={models} initial={spec.modelId} nativeExecutable={overview!.settings.profile.nativeExecutable} onClose={pop}
-        onChanged={async () => { const next = await checkModels(); await refreshOverview(); return next; }} />;
+      case 'manage': return <ManagementModal models={models} initial={spec.modelId} nativeExecutable={overview!.settings.profile.nativeExecutable}
+        readiness={readiness} managed={overview!.managed} onClose={pop} />;
       case 'about': return <AboutModal onClose={pop} />;
       case 'shortcuts': return <ShortcutsModal onClose={pop} />;
       case 'rename': return <RenameModal name={owner.name} onClose={pop} onDirty={markDraft} confirmDiscard={() => confirm()} onRename={async name => {
@@ -490,11 +505,16 @@ export function App() {
 }
 
 /** Results the stage keeps above the composer: failed commands, the backup notice and a paused queue. */
-function StageNotices({ notices, onDismiss, queue, session, onResume, history, onDismissHistory }: {
+function StageNotices({ notices, onDismiss, queue, session, onResume, history, onDismissHistory, managed, managedDismissed, onDismissManaged, onShowManaged, onCancelManaged }: {
   notices: Notice[]; onDismiss: (key: string) => void; queue: Overview['queue']; session: Session; onResume: () => void;
   history: Overview['historyIssue']; onDismissHistory: () => void;
+  managed: Overview['managed']; managedDismissed: number | undefined; onDismissManaged: (id: number) => void; onShowManaged: () => void; onCancelManaged: () => void;
 }) {
   const { t, errorText } = useI18n();
+  const { active, last } = managed;
+  const say = (value: Message) => t(value.key, value.values);
+  // A failure stays until dismissed or the next operation; success and cancellation need no standing notice.
+  const failed = !active && last && (last.status === 'failed' || last.status === 'refused') && last.id !== managedDismissed ? last : undefined;
   const waiting = queue.paused || (session.runs.some(run => run.status === 'queued') && !queue.active.length);
   return (
     <div className="stage-notices">
@@ -502,6 +522,24 @@ function StageNotices({ notices, onDismiss, queue, session, onResume, history, o
         <div className="notice notice-warn" role="status">
           <span>{queue.paused ? t('run.paused', { reason: queue.issue ? errorText(queue.issue) : t('ui.resume_when_ready') }) : t('conversation.queuedWaiting')}</span>
           <button type="button" className="button compact" onClick={onResume}><ResumeIcon /><span>{t('ui.resume_queued')}</span></button>
+        </div>
+      )}
+      {active && (
+        <div className="notice" role="status">
+          <span>{say(runningMessage(active))}</span>
+          <span className="notice-actions">
+            <button type="button" className="button compact" onClick={onShowManaged}>{t('ui.managed_tools_and_models')}</button>
+            <button type="button" className="button compact" onClick={onCancelManaged}>{t('ui.cancel')}</button>
+          </span>
+        </div>
+      )}
+      {failed && (
+        <div className="notice notice-error" role="alert">
+          <span>{t('managed.failed', { reason: resultMessage(failed) })}</span>
+          <span className="notice-actions">
+            <button type="button" className="button compact" onClick={onShowManaged}>{t('ui.managed_tools_and_models')}</button>
+            <button type="button" className="icon-button tiny" onClick={() => onDismissManaged(failed.id)} aria-label={t('ui.clear_message')} title={t('ui.clear_message')}><CloseIcon /></button>
+          </span>
         </div>
       )}
       {history && (

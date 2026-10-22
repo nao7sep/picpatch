@@ -25,14 +25,14 @@ export function run(id: string, patch: Partial<Run> = {}): Run {
 
 export function fakeBridge(initial: Session = session(), overrides: Record<string, (payload: any) => unknown> = {}) {
   let current = structuredClone(initial);
-  const commands: ((id: string) => void)[] = [], changes: (() => void)[] = [];
+  const commands: ((id: string) => void)[] = [], changes: (() => void)[] = [], managedListeners: ((state: unknown) => void)[] = [];
   let request: ((request: RendererRequest) => Promise<unknown>) | undefined;
   const handlers: Record<string, (payload: any) => unknown> = {
     locale: () => ({ language: 'en', format: 'en', systemLanguage: 'en' }),
     paneState: () => ({ railWidth: 264, optionsPane: false }),
     savePane: () => undefined,
     modelReadiness: () => ({ 'flux2-klein-4b-4bit': 'ready', sd15: 'missing' }),
-    overview: () => ({ sessions: [{ id: current.id, name: current.name, updated: current.updated, results: current.runs.filter(r => r.output).length }], failures: [], models, queue: { paused: false, active: [] }, settings: { version: 1, profile: { version: 1 }, registrations: {} }, resourceDefaults: { engineDirectory: '/e', modelsDirectory: '/m' }, locations: { engineDirectory: '/e', modelsDirectory: '/m', sessionsDirectory: '/s' }, resourcesBusy: false, locale: { language: 'en', format: 'en', systemLanguage: 'en' }, systemDark: false }),
+    overview: () => ({ sessions: [{ id: current.id, name: current.name, updated: current.updated, results: current.runs.filter(r => r.output).length }], failures: [], models, queue: { paused: false, active: [] }, settings: { version: 1, profile: { version: 1 }, registrations: {} }, resourceDefaults: { engineDirectory: '/e', modelsDirectory: '/m' }, locations: { engineDirectory: '/e', modelsDirectory: '/m', sessionsDirectory: '/s' }, resourcesBusy: false, managed: {}, locale: { language: 'en', format: 'en', systemLanguage: 'en' }, systemDark: false }),
     get: () => structuredClone(current),
     draft: ({ draft }: { draft: Draft }) => { current = { ...current, draft }; return structuredClone(current); },
     create: () => { throw new Error('unexpected create'); },
@@ -47,6 +47,7 @@ export function fakeBridge(initial: Session = session(), overrides: Record<strin
     onCommand: listener => { commands.push(listener); return () => {}; },
     onChange: listener => { changes.push(listener); return () => {}; },
     onQueue: () => () => {},
+    onManaged: listener => { managedListeners.push(listener); return () => {}; },
     onRequest: listener => { request = listener; },
     droppedFile: file => `/drops/${file.name}`,
   };
@@ -55,6 +56,8 @@ export function fakeBridge(initial: Session = session(), overrides: Record<strin
     get session() { return current; }, set session(value: Session) { current = value; },
     command: (id: string) => commands.forEach(listener => listener(id)),
     change: () => changes.forEach(listener => listener()),
+    /** Main's push of the running model or engine operation and the latest result. */
+    managed: (state: unknown) => managedListeners.forEach(listener => listener(state)),
     request: (value: RendererRequest) => request!(value),
     calls: (action: string) => call.mock.calls.filter(([name]) => name === action).map(([, payload]) => payload),
   };

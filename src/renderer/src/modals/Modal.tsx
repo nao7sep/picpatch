@@ -31,19 +31,26 @@ export interface ModalProps {
   band?: ReactNode;
   /** About-style surfaces name themselves in their content; the title stays for assistive technology. */
   hideTitle?: boolean;
-  /** While true, the scrim does not close the surface (drafts, busy work). */
+  /** While true, the scrim does not close the surface (drafts that ask before closing). */
   guarded?: boolean;
+  /**
+   * While true, no path closes the surface: modal-owned work whose interruption would leave an invalid result. The X
+   * is disabled and Escape and the scrim do nothing, as the surface's own Cancel must be. Work application state owns
+   * never sets this; closing leaves it running.
+   */
+  closeDisabled?: boolean;
   describedBy?: string;
   className?: string;
   children?: ReactNode;
 }
 
-export function Modal({ title, onClose, width = 460, large, footer, band, hideTitle, guarded, describedBy, className, children }: ModalProps) {
+export function Modal({ title, onClose, width = 460, large, footer, band, hideTitle, guarded, closeDisabled, describedBy, className, children }: ModalProps) {
   const { t } = useI18n();
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const closeDisabledRef = useRef(closeDisabled); closeDisabledRef.current = closeDisabled;
 
   useEffect(() => {
     const entry = { close: () => closeRef.current() };
@@ -61,7 +68,7 @@ export function Modal({ title, onClose, width = 460, large, footer, band, hideTi
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (isComposing(event.nativeEvent)) return;
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeRef.current(); return; }
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!closeDisabledRef.current) closeRef.current(); return; }
     if (event.key !== 'Tab') return;
     const items = [...panel.current!.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(el => el.offsetParent !== null || el === document.activeElement);
     if (!items.length) { event.preventDefault(); return; }
@@ -71,7 +78,7 @@ export function Modal({ title, onClose, width = 460, large, footer, band, hideTi
   };
 
   return (
-    <div className="scrim" onMouseDown={event => { if (event.target === event.currentTarget && !guarded) closeRef.current(); }}>
+    <div className="scrim" onMouseDown={event => { if (event.target === event.currentTarget && !guarded && !closeDisabled) closeRef.current(); }}>
       <div
         ref={panel}
         className={`modal${large ? ' modal-large' : ''}${hideTitle ? ' modal-panel' : ''}${className ? ` ${className}` : ''}`}
@@ -81,7 +88,7 @@ export function Modal({ title, onClose, width = 460, large, footer, band, hideTi
       >
         <header className="modal-head">
           <h2 id={titleId} className={hideTitle ? 'visually-hidden' : undefined}>{title}</h2>
-          <button type="button" className="icon-button modal-close" data-close="true" aria-label={t('ui.close')} title={t('ui.close')} onClick={() => closeRef.current()}>
+          <button type="button" className="icon-button modal-close" data-close="true" disabled={closeDisabled} aria-label={t('ui.close')} title={t('ui.close')} onClick={() => closeRef.current()}>
             <CloseIcon />
           </button>
         </header>

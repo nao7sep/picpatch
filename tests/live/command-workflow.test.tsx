@@ -52,7 +52,7 @@ it('generates, edits with references, branches and reopens through the real rend
       default: throw new Error(`Unexpected bridge call: ${action}`);
     }
   };
-  window.picpatch = { call, onChange: listener => { change = listener; return () => {}; }, onQueue: () => () => {}, onCommand: () => () => {}, onRequest: listener => { flush = () => listener({ kind: 'flush' }); }, droppedFile: () => { throw new Error('No native drop in this test'); } };
+  window.picpatch = { call, onChange: listener => { change = listener; return () => {}; }, onQueue: () => () => {}, onManaged: () => () => {}, onCommand: () => () => {}, onRequest: listener => { flush = () => listener({ kind: 'flush' }); }, droppedFile: () => { throw new Error('No native drop in this test'); } };
   Element.prototype.scrollIntoView ??= () => {};
   const field = () => screen.getByRole('textbox', { name: 'Command' }) as HTMLTextAreaElement;
   const command = async (text: string) => {

@@ -171,7 +171,11 @@ async function start() {
     records?.write('warn', 'Backup capture failed.', { diagnostic: issue.diagnostic });
     service.historyIssue = new UiError('ui.backup_history_could_not_capture_some_work_primary_session'); window?.webContents.send('picpatch:changed');
   });
-  const changed = (scope?: 'progress') => scope === 'progress' ? window?.webContents.send('picpatch:queue', service?.queue.state) : window?.webContents.send('picpatch:changed');
+  const changed = (scope?: 'progress' | 'managed') => {
+    if (scope === 'progress') window?.webContents.send('picpatch:queue', service?.queue.state);
+    else if (scope === 'managed') window?.webContents.send('picpatch:managed', service?.managedState);
+    else window?.webContents.send('picpatch:changed');
+  };
   service = await Application.open(paths, changed, (path, bytes) => backup?.capture(path, bytes), (level, message, details) => records?.write(level, message, details));
   protocol.handle('picpatch-image', async request => {
     try {
@@ -226,6 +230,12 @@ async function start() {
 function pick(properties: ('openFile' | 'openDirectory' | 'multiSelections')[], title: string, initialPath?: string) {
   return pickPaths(window!, properties, title, initialPath);
 }
+/**
+ * A model or engine operation that has started answers its request at once; its progress and terminal result reach
+ * every view through application state, so closing the view that asked changes nothing. A refusal to start still
+ * answers the request as an error.
+ */
+function started(task: Promise<unknown>): { started: true } { task.catch(() => {}); return { started: true }; }
 async function dispatch(action: string, payload: any) {
   switch (action) {
     case 'modalState': modalOpen = payload.open === true; for (const id of ['picpatch-about','picpatch-settings']) { const item = Menu.getApplicationMenu()?.getMenuItemById(id); if (item) item.enabled = !modalOpen; } return;
@@ -270,10 +280,10 @@ async function dispatch(action: string, payload: any) {
     case 'preferences': await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
     case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location'), payload.initialPath))[0];
     case 'pickComponent': return pickBundleComponent(window!, payload.directory, payload.current, t('ui.choose_a_file_inside_the_model_bundle'));
-    case 'verify': return service.verify(payload.modelId);
+    case 'verify': return started(service.verify(payload.modelId));
     case 'removeManaged': {
       const answer = await ask({ message: message('ui.remove_this_managed_model_revision'), detail: message('ui.other_apps_using_this_shared_model_may_fail_sessions'), buttons: [message('ui.keep_model'), message('ui.remove_revision')] });
-      if (answer.response === 1) return service.removeManaged(payload.modelId, payload.name); return;
+      if (answer.response === 1) return started(service.removeManaged(payload.modelId, payload.name)); return;
     }
     case 'models': return service.models();
     case 'prepare': {
@@ -282,15 +292,15 @@ async function dispatch(action: string, payload: any) {
         const size = number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 });
         const answer = await ask({ message: message('management.download', { model: model.profile.name }), detail: message('management.downloadScope', { size }), buttons: [message('ui.cancel'), message('ui.download')], destructive: false });
         if (answer.response !== 1) return;
-        return service.prepare(model.id, undefined, undefined, true, {});
+        return started(service.prepare(model.id, undefined, undefined, true, {}));
       }
       // Native bundles name their checkpoint through pickComponent before Register is enabled.
       const paths = payload.directory ? [payload.directory] : await pick(['openDirectory'], t('ui.select_the_model_bundle')); if (!paths[0]) return;
-      return service.prepare(payload.modelId, paths[0], payload.checkpoint, false, payload.components);
+      return started(service.prepare(payload.modelId, paths[0], payload.checkpoint, false, payload.components));
     }
     case 'engines': return service.engines(payload.modelId);
-    case 'installNative': return service.installNative();
-    case 'installPython': return service.installPython(payload.modelId, locations.uv(), pythonToolDirectories(process.env.PATH, delimiter));
+    case 'installNative': return started(service.installNative(payload.modelId));
+    case 'installPython': return started(service.installPython(payload.modelId, locations.uv(), pythonToolDirectories(process.env.PATH, delimiter)));
     case 'collection': { const paths = await pick(['openDirectory'], t('ui.open_sessions_collection'), service.sessions.root); if (!paths[0]) return false; await service.collection(paths[0]); return true; }
     default: throw new Error('Unknown action.');
   }
