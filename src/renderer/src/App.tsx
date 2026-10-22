@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Asset, Draft, ReferenceDraft, Run, Session } from '../../shared/session.ts';
 import { afterCommand, canPaintMask, imageCommand, maskNote, recoverCommand, targetImage, withoutTarget } from '../../shared/image-command.ts';
+import { displayTimeZone } from '../../shared/time-zone.ts';
 import { errorText as describeError, message, t, useLocale } from '../../shared/i18n/index.ts';
 import { layout, minimum } from '../../shared/layout.ts';
 import type { RendererRequest } from '../../shared/messages.ts';
@@ -387,7 +388,7 @@ export function App() {
             <div className="shell" inert={closing} style={{ minWidth: minimum(pane.optionsPane).width, minHeight: minimum(pane.optionsPane).height }}>
               <Rail
                 sessions={overview.sessions} failures={overview.failures.length} currentId={session.id} working={new Set(overview.queue.active.map(item => item.sessionId))}
-                width={pane.railWidth} optionsPane={pane.optionsPane} onWidth={setRailWidth}
+                width={pane.railWidth} optionsPane={pane.optionsPane} timeZone={displayTimeZone(overview.settings.timeZone)} onWidth={setRailWidth}
                 onOpen={id => void open(id)} onNew={() => void newSession()} onRename={() => push({ kind: 'rename' })} onDelete={() => void deleteSession()}
                 onMenu={dispatch}
               />

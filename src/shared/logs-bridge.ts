@@ -1,6 +1,6 @@
 import type { Locale } from './i18n/index.ts';
 import type { RecordsQuery, RecordsPage } from './records.ts';
-export interface LogsAppearance { locale: Locale; dark: boolean; uiFont?: string; uiZoom?: number; listWidth?: number }
+export interface LogsAppearance { locale: Locale; dark: boolean; uiFont?: string; uiZoom?: number; listWidth?: number; timeZone?: string }
 export interface LogsBridge {
   query(query: RecordsQuery): Promise<RecordsPage>;
   detail(id: number): Promise<string | null>;

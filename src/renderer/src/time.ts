@@ -1,9 +1,9 @@
-// Relative times for identifying text (the rail), in the interface language's format.
+// Relative times for identifying text (the rail), in the interface language's format and the display time zone.
 import { activeLocale } from '../../shared/i18n/index.ts';
 
 const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 
-export function relativeTime(iso: string, now = Date.now()): string {
+export function relativeTime(iso: string, timeZone: string, now = Date.now()): string {
   const then = Date.parse(iso);
   if (!Number.isFinite(then)) return '';
   const format = activeLocale().format;
@@ -13,7 +13,7 @@ export function relativeTime(iso: string, now = Date.now()): string {
   if (elapsed < HOUR) return relative.format(-Math.floor(elapsed / MINUTE), 'minute');
   if (elapsed < DAY) return relative.format(-Math.floor(elapsed / HOUR), 'hour');
   if (elapsed < 7 * DAY) return relative.format(-Math.floor(elapsed / DAY), 'day');
-  return new Intl.DateTimeFormat(format, { dateStyle: 'medium' }).format(then);
+  return new Intl.DateTimeFormat(format, { dateStyle: 'medium', timeZone }).format(then);
 }
 
 /** Elapsed seconds as m:ss, for a running result. */

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { activeLocale, t, useLocale } from '../../../shared/i18n/index.ts';
 import type { LogsBridge } from '../../../shared/logs-bridge.ts';
 import { recordsPageSize, type RecordSummary, type RecordsQuery } from '../../../shared/records.ts';
+import { displayTimeZone } from '../../../shared/time-zone.ts';
 import { applyFont } from '../fonts.ts';
 import { LanguageRevision } from '../i18n.tsx';
 import { isComposing } from '../ime.ts';
@@ -22,7 +23,7 @@ export function RecordsWindow({ api }: { api: LogsBridge }) {
     const apply = async () => {
       try {
         const view = await api.appearance(); if (stopped) return;
-        applyFont(view.uiFont); await useLocale(view.locale);
+        applyFont(view.uiFont); await useLocale(view.locale); zone = displayTimeZone(view.timeZone);
         document.documentElement.lang = view.locale.language; document.title = t('ui.logs');
         setRevision(value => value + 1);
       } catch { if (!stopped) setRevision(value => Math.max(0, value)); }
@@ -35,9 +36,11 @@ export function RecordsWindow({ api }: { api: LogsBridge }) {
   return <LanguageRevision value={revision}><Records api={api} /></LanguageRevision>;
 }
 
+/** The display zone, set with the window's appearance before each render. */
+let zone = displayTimeZone(undefined);
 function formatTime(value: string) {
   const instant = new Date(value);
-  return Number.isNaN(instant.valueOf()) ? value : new Intl.DateTimeFormat(activeLocale().format, { dateStyle: 'medium', timeStyle: 'medium' }).format(instant);
+  return Number.isNaN(instant.valueOf()) ? value : new Intl.DateTimeFormat(activeLocale().format, { dateStyle: 'medium', timeStyle: 'medium', timeZone: zone }).format(instant);
 }
 
 function Records({ api }: { api: LogsBridge }) {

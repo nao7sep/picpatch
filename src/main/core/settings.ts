@@ -6,9 +6,12 @@ import { validateProfile, validateModelRegistration } from 'picpatchsdk';
 import type { ModelRegistration, PicPatchProfile } from 'picpatchsdk';
 export interface Settings {
   version: 1; sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; concurrency?: number; uiFont?: string; theme?: 'light' | 'dark'; language?: Language;
+  /** An IANA zone; absent means System. */
+  timeZone?: string;
 }
 import { writeJson } from './files.ts';
 import { maxConcurrency } from '../../shared/session.ts';
+import { validTimeZone } from '../../shared/time-zone.ts';
 /**
  * Settings that cannot be used (unreadable, malformed or in a newer format) stop startup with the file's full path;
  * the file is never rewritten or moved, so the user decides what happens to it.
@@ -27,6 +30,7 @@ function parseSettings(value: Settings): Settings {
   if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) delete value.theme;
   value.language = preference(value.language);
   if (typeof value.uiFont !== 'string' || !value.uiFont.trim()) delete value.uiFont;
+  if (value.timeZone !== undefined && !validTimeZone(value.timeZone)) delete value.timeZone;
   if (!validConcurrency(value.concurrency) || value.concurrency === 1) delete value.concurrency;
   // A resource profile from a newer PicPatch is a newer format like any other. A newer registration affects only its
   // own model: it stays as saved, and opening that model refuses it.

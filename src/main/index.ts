@@ -182,7 +182,7 @@ async function start() {
     }
     catch { return new Response('Image unavailable', { status: 404 }); }
   });
-  logs = new LogsWindow(recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }), width => storePane({ recordsListWidth: width }));
+  logs = new LogsWindow(recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth, timeZone: service.settings.timeZone }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }), width => storePane({ recordsListWidth: width }));
   const renderer = locations.page('index');
   ipcMain.handle('picpatch:call', async (event, action: string, payload: unknown) => {
     if (!trustedSender(event, window, renderer)) throw new Error('Untrusted request.');

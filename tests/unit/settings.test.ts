@@ -89,3 +89,15 @@ it('round-trips literal selected resource paths without expanding or trimming th
   expect((await app.overview()).locations).toMatchObject({ engineDirectory: resources.engineDirectory, modelsDirectory: resources.modelsDirectory });
   expect((await app.overview()).resourceDefaults).toEqual({ engineDirectory: join(homedir(), '.picpatchsdk', 'engine'), modelsDirectory: join(homedir(), '.picpatchsdk', 'models') });
 });
+
+it('keeps a known display time zone, drops an unknown one on read and refuses it on save', async () => {
+  const config = join(root, 'config.json');
+  await writeFile(config, JSON.stringify({ version: 1, timeZone: 'Asia/Tokyo' })); expect((await readSettings(config)).timeZone).toBe('Asia/Tokyo');
+  await writeFile(config, JSON.stringify({ version: 1, timeZone: 'Mars/Olympus' })); expect((await readSettings(config)).timeZone).toBeUndefined();
+  await rm(config);
+  const app = await Application.open({ root, config, sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
+  await app.preferences({ timeZone: 'Europe/Berlin' }); expect(JSON.parse(await readFile(config, 'utf8')).timeZone).toBe('Europe/Berlin');
+  await expect(app.preferences({ timeZone: 'Mars/Olympus' })).rejects.toThrow('This time zone is not known.');
+  // System is the absence of a choice.
+  await app.preferences({}); expect(JSON.parse(await readFile(config, 'utf8')).timeZone).toBeUndefined();
+});

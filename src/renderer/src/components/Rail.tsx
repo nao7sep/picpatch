@@ -18,6 +18,8 @@ export interface RailProps {
   working: ReadonlySet<string>;
   width: number;
   optionsPane: boolean;
+  /** The display zone dates are shown in. */
+  timeZone: string;
   onWidth: (width: number) => void;
   onOpen: (id: string) => void;
   onNew: () => void;
@@ -111,7 +113,7 @@ export function Rail(props: RailProps) {
               <span className="session-text">
                 <span className="session-title">{session.name}</span>
                 <span className="session-meta">
-                  {props.working.has(session.id) ? t('rail.working') : (session.results ? t('rail.meta', { when: relativeTime(session.updated), count: session.results }) : relativeTime(session.updated))}
+                  {props.working.has(session.id) ? t('rail.working') : (session.results ? t('rail.meta', { when: relativeTime(session.updated, props.timeZone), count: session.results }) : relativeTime(session.updated, props.timeZone))}
                 </span>
               </span>
             </div>

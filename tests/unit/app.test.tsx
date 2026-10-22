@@ -306,3 +306,15 @@ it('keeps export choices after a filename conflict and retries only on an explic
   expect(await screen.findByText('Image saved.')).toBeTruthy();
   expect(fake.calls('export')).toEqual(Array(3).fill({ id: fake.session.id, runId: 'a1', sidecar: true, includeInputs: true }));
 });
+
+it('chooses a display time zone from the list, with System naming the computer zone', async () => {
+  const fake = await start(fakeBridge(session(), { preferences: () => fake.handlers.overview!(undefined) }));
+  await act(async () => fake.command('settingsButton'));
+  const zone = screen.getByRole('combobox', { name: 'Time zone' }) as HTMLSelectElement;
+  expect(zone.value).toBe('system');
+  expect(zone.options[0]!.textContent).toBe(`System (${Intl.DateTimeFormat().resolvedOptions().timeZone})`);
+  expect([...zone.options].some(option => option.value === 'Asia/Tokyo')).toBe(true);
+  fireEvent.change(zone, { target: { value: 'Asia/Tokyo' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+  await waitFor(() => expect(fake.calls('preferences')).toEqual([{ timeZone: 'Asia/Tokyo' }]));
+});

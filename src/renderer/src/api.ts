@@ -15,7 +15,7 @@ import type { Readiness } from '../../shared/readiness.ts';
 export type { Readiness };
 export interface LocaleState { language: Language; format: string; systemLanguage?: string; uiFont?: string }
 export interface ResourcePaths { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }
-export interface AppSettings { profile: ResourcePaths; uiFont?: string; theme?: 'light' | 'dark'; language?: Language; concurrency?: number }
+export interface AppSettings { profile: ResourcePaths; uiFont?: string; theme?: 'light' | 'dark'; language?: Language; concurrency?: number; timeZone?: string }
 export interface Overview {
   sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string }; models: CatalogModel[];
   /** Catalog models with no build for this computer, left out of models. */
@@ -31,7 +31,7 @@ export interface Engines { python: EngineInspection; native: NativeEngineInspect
 export type Inventory = ManagedModelInventory;
 export type ManagedEntry = Inventory['entries'][number];
 export interface Components { vae?: string; clipL?: string; clipG?: string; t5?: string; photoMaker?: string; ipAdapter?: string; clipVision?: string; controlNet?: { path: string; kind: string }; loras?: { path: string; scale?: number }[] }
-export type Preferences = ResourcePaths & { theme?: 'light' | 'dark'; language?: Language; uiFont?: string; concurrency?: number };
+export type Preferences = ResourcePaths & { theme?: 'light' | 'dark'; language?: Language; uiFont?: string; concurrency?: number; timeZone?: string };
 
 const call = <T>(action: string, payload?: unknown): Promise<T> => window.picpatch.call(action, payload);
 

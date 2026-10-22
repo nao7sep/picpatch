@@ -1,9 +1,10 @@
 // Settings: General (appearance, language, interface font) and Resources (where the
 // SDK keeps engines and models). A draft until Save; closing a changed draft asks first.
-import { useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { defaultFont } from '../../../shared/appearance.ts';
 import { languages, type Language } from '../../../shared/i18n/index.ts';
 import { maxConcurrency } from '../../../shared/session.ts';
+import { systemTimeZone } from '../../../shared/time-zone.ts';
 import { api, type Overview, type Preferences } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { Modal } from './Modal.tsx';
@@ -11,7 +12,7 @@ import { Modal } from './Modal.tsx';
 export interface SettingsGuard { approveQuit: () => Promise<boolean>; settleSave: () => Promise<void> }
 
 const PATHS = ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const;
-type Form = { theme: 'system' | 'light' | 'dark'; language: 'system' | Language; uiFont: string; concurrency: number } & Record<typeof PATHS[number], string>;
+type Form = { theme: 'system' | 'light' | 'dark'; language: 'system' | Language; timeZone: string; uiFont: string; concurrency: number } & Record<typeof PATHS[number], string>;
 
 const absolute = (value: string) => !value || (/Win/.test(navigator.platform) ? /^(?:[a-z]:[\\/]|\\\\)/i.test(value) : value.startsWith('/'));
 
@@ -20,7 +21,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
 }) {
   const { t, errorText, number } = useI18n();
   const initial = useRef<Form>({
-    theme: overview.settings.theme ?? 'system', language: overview.settings.language ?? 'system', uiFont: overview.settings.uiFont ?? '', concurrency: overview.settings.concurrency ?? 1,
+    theme: overview.settings.theme ?? 'system', language: overview.settings.language ?? 'system', timeZone: overview.settings.timeZone ?? 'system', uiFont: overview.settings.uiFont ?? '', concurrency: overview.settings.concurrency ?? 1,
     engineDirectory: overview.settings.profile.engineDirectory ?? '', modelsDirectory: overview.settings.profile.modelsDirectory ?? '', nativeExecutable: overview.settings.profile.nativeExecutable ?? '',
   });
   const [form, setForm] = useState<Form>(initial.current);
@@ -52,6 +53,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
     for (const key of PATHS) if (pathValue(key)) value[key] = pathValue(key);
     if (submitted.language !== 'system') value.language = submitted.language;
     if (submitted.theme !== 'system') value.theme = submitted.theme;
+    if (submitted.timeZone !== 'system') value.timeZone = submitted.timeZone;
     if (submitted.uiFont.trim()) value.uiFont = submitted.uiFont;
     if (submitted.concurrency !== 1) value.concurrency = submitted.concurrency;
     const attempt = async () => {
@@ -76,6 +78,8 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
     catch (error) { setFailure(errorText(error)); }
   };
 
+  // Zones are chosen from the platform's list, never typed; System names the zone it resolves to now.
+  const zones = useMemo(() => Intl.supportedValuesOf('timeZone'), []);
   const systemName = new Intl.DisplayNames([document.documentElement.lang || 'en'], { type: 'language' }).of(overview.locale.systemLanguage ?? 'en') ?? '';
   const tabs = ['general', 'resources'] as const;
   return (
@@ -112,6 +116,13 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
                 <select value={form.language} onChange={event => set('language', event.target.value as Form['language'])}>
                   <option value="system">{t('settings.system', { value: systemName })}</option>
                   {languages.map(([tag, name]) => <option key={tag} value={tag} lang={tag}>{name}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">{t('settings.timeZone')}</span>
+                <select value={form.timeZone} onChange={event => set('timeZone', event.target.value)}>
+                  <option value="system">{t('settings.system', { value: systemTimeZone() })}</option>
+                  {zones.map(zone => <option key={zone} value={zone}>{zone}</option>)}
                 </select>
               </label>
             </section>

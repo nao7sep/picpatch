@@ -4,6 +4,7 @@ import { errorRecord } from './records.ts';
 import { listModels, inspectModels, prepareModel, saveArtifact, openModel, verifyModel, removeModel, resolveStoragePaths, isPicPatchSdkError, inspectEngine, inspectNativeEngine, installEngine, installNativeEngine } from 'picpatchsdk';
 import { isAbsolute, join } from 'node:path';
 import { exportName } from '../../shared/export-name.ts';
+import { validTimeZone } from '../../shared/time-zone.ts';
 import type { AppPaths } from './paths.ts';
 import { Sessions, validateDraft } from './sessions.ts';
 import { Queue } from './queue.ts';
@@ -147,9 +148,10 @@ export class Application {
   resourcesChanged(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }): boolean {
     return (['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const).some(key => (value[key] || undefined) !== this.settings.profile[key]);
   }
-  async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string; uiFont?: string; concurrency?: number }) {
+  async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string; uiFont?: string; concurrency?: number; timeZone?: string }) {
     if (this.resourcesChanged(value)) { this.requireNoResourceOperation(); this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_resource_settings'); }
     if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new UiError('error.invalid_theme');
+    if (value.timeZone !== undefined && !validTimeZone(value.timeZone)) throw new UiError('error.invalid_time_zone');
     if (value.concurrency !== undefined && !validConcurrency(value.concurrency)) throw new UiError('error.invalid_concurrency');
     await this.updateSettings(next => {
       for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) {
@@ -157,6 +159,7 @@ export class Application {
       }
       const language = preference(value.language); if (language) next.language = language; else delete next.language;
       if (value.theme) next.theme = value.theme; else delete next.theme;
+      if (value.timeZone) next.timeZone = value.timeZone; else delete next.timeZone;
       if (typeof value.uiFont === 'string' && value.uiFont.trim()) next.uiFont = value.uiFont; else delete next.uiFont;
       if (value.concurrency !== undefined && value.concurrency !== 1) next.concurrency = value.concurrency; else delete next.concurrency;
     });

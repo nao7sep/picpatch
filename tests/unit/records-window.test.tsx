@@ -101,3 +101,12 @@ it('keeps a failed read visible until the next record arrives, then reads again'
   await act(async () => change());
   expect(await screen.findByText('Back')).toBeTruthy();
 });
+
+it('shows record times in the display zone and follows a change of zone', async () => {
+  let timeZone = 'UTC'; let changed: () => void = () => {};
+  const { api } = bridge({ appearance: vi.fn(async () => ({ locale: { language: 'en' as const, format: 'en' }, dark: false, timeZone })), onAppearanceChanged: listener => { changed = listener; return () => {}; } });
+  render(<RecordsWindow api={api} />);
+  expect(await screen.findAllByText('Oct 1, 2026, 12:00:00 AM')).toHaveLength(2);
+  timeZone = 'Asia/Tokyo'; await act(async () => changed());
+  expect(await screen.findAllByText('Oct 1, 2026, 9:00:00 AM')).toHaveLength(2);
+});
