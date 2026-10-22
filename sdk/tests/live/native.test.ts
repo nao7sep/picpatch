@@ -46,7 +46,8 @@ it('runs native generation and masked editing through public preparation, pipes 
         await sharp({ create: { width: 16, height: 16, channels: 3, background: 'white' } }).toColourspace('b-w').png().toFile(join(directory, 'mask.png'));
         const result = variant === 'sdxl' ? await editor.generate({ prompt: 'Blue', parameters: { steps: 3 } }) : await editor.edit({ instruction: 'Blue', sourceImage: join(directory, 'source.png'), maskImage: join(directory, 'mask.png') });
         if (result.status === 'refused') throw new Error(result.code);
-        expect(await readFile(result.image.path)).toEqual(png);
+        // Published output is re-encoded: the engine's pixels, with no metadata the engine wrote.
+        expect(await sharp(result.image.path).raw().toBuffer()).toEqual(await sharp(png).raw().toBuffer());
         expect(result.effectiveParameters).toMatchObject({ steps: variant === 'sdxl' ? 3 : 20, guidance: 7, sampler: 'euler_a', scheduler: 'discrete' });
         expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
         if (variant === 'sdxl') {

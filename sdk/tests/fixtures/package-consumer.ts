@@ -21,7 +21,7 @@ async function artifact(result: EditResult) {
   const bytes = await readFile(result.image.path);
   const parsed = await readArtifactRecord(result.sidecar!.path);
   if (parsed.status === 'refused') throw new Error(parsed.code);
-  assert.equal((await verifyArtifact(result.image.path, parsed.record)).status, 'verified');
+  assert.equal((await verifyArtifact(result.image.path, parsed.record)).status, 'completed');
   const text = await readFile(result.sidecar!.path, 'utf8');
   const record = JSON.parse(text);
   assert.equal(record.image.filename, basename(result.image.path));

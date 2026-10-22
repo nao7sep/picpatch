@@ -29,13 +29,15 @@ for variant, definition in MODEL_DEFINITIONS.items():
                 actual = kwargs.get(names[key], signature.parameters[names[key]].default)
                 assert actual == descriptor['default'], (variant, key, actual)
         # Qwen's shifted linear schedule is non-finite at one step; its advertised minimum must exclude it.
-        for scheduler in caps['parameters']['scheduler']['values']:
+        # A family without a scheduler setting uses the pipeline's own schedule.
+        for scheduler in caps['parameters']['scheduler']['values'] if 'scheduler' in caps['parameters'] else [None]:
             for steps in (int(caps['parameters']['steps']['minimum']), effective['steps']):
-                config = Config(model_config=model_config, num_inference_steps=steps, width=256, height=256, scheduler=scheduler)
+                config = Config(model_config=model_config, num_inference_steps=steps, width=256, height=256, **({'scheduler': scheduler} if scheduler else {}))
                 sigmas = config.scheduler.sigmas
                 mx.eval(sigmas)
                 assert bool(mx.all(mx.isfinite(sigmas))), (variant, scheduler, steps)
-        supplied = {'steps': 3, 'scheduler': effective['scheduler']}
+        supplied = {'steps': 3}
+        if 'scheduler' in caps['parameters']: supplied['scheduler'] = effective['scheduler']
         if 'guidance' in caps['parameters']: supplied['guidance'] = 2.0
         if 'negativePrompt' in caps['parameters']: supplied['negativePrompt'] = ''
         if 'strength' in caps['parameters'] and operation == 'edit': supplied['strength'] = 0.5

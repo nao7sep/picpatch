@@ -21,6 +21,8 @@ with tempfile.TemporaryDirectory() as directory:
     path = Path(directory) / 'adapter.safetensors'
     for variant, definition in MODEL_DEFINITIONS.items():
         adapter = create_adapter({'variant': variant, 'manifest': {'model': variant}})
+        # Families that do not advertise LoRA support refuse LoRAs before loading; only the rest are checked here.
+        if not adapter.capabilities.get('loraFormats'): continue
         for operation in ('generate', 'edit'):
             if not adapter.capabilities['textToImage' if operation == 'generate' else 'instructionEditing']: continue
             _, pipeline, _ = adapter.import_pipeline(operation)

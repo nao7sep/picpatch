@@ -32,7 +32,7 @@ it.each([false, true])('acquires a tiny HTTP fixture through the production stre
   const storage = { modelsDirectory: join(directory, 'models') };
   const events: SdkEvent[] = [];
   try {
-    await expect(prepareModel(entry.id, { ...storage })).rejects.toMatchObject({ code: 'MODEL_IO' });
+    await expect(prepareModel(entry.id, { ...storage })).rejects.toMatchObject({ code: 'MODEL_MISSING' });
     expect(fetch).not.toHaveBeenCalled();
     const preparation = prepareModel(entry.id, { ...storage, download: true }, { signal: controller.signal, onEvent: event => events.push(event) });
     if (cancel) await expect(preparation).rejects.toMatchObject({ code: 'CANCELLED' });

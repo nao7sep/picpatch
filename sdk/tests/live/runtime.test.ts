@@ -11,6 +11,6 @@ it('inspects the real environment and reports truthful model-free readiness', as
 it('reports an absent interpreter through the public runtime check', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-runtime-'));
   try {
-    await expect(inspectRuntime(join(directory, 'absent-python'))).rejects.toMatchObject({ code: 'FILE_NOT_FOUND', kind: 'unavailable', effect: 'none' });
+    await expect(inspectRuntime(join(directory, 'absent-python'))).rejects.toMatchObject({ code: 'ENGINE_MISSING', kind: 'unavailable', effect: 'none' });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

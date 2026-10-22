@@ -29,7 +29,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
     expect(resolveStoragePaths(storage).modelsDirectory).toBe(join(directory, 'models'));
     await mkdir(storage.modelsDirectory);
     expect(await discoverModels([storage.modelsDirectory])).toEqual({ models: [] });
-    await expect(prepareModel(selected.id, { ...storage })).rejects.toMatchObject({ code: 'MODEL_IO' });
+    await expect(prepareModel(selected.id, { ...storage })).rejects.toMatchObject({ code: 'MODEL_MISSING' });
     const prepared = await prepareModel(selected.id, { directory: options.model!.directory });
     expect(prepared).toMatchObject({ origin: 'external', integrity: 'matches-manifest' });
     expect(await inspectReadiness((await managedPython()), prepared.model)).toMatchObject({
