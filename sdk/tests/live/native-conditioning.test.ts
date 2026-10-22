@@ -24,6 +24,7 @@ const fs = require('node:fs'); const path = require('node:path'); const args = p
 if(args.includes('--help')) { console.log('stable-diffusion.cpp version fixture, commit ${nativeRevision}'); process.exit(0); }
 const value = name => args[args.indexOf(name)+1]; const prompt = fs.readFileSync(value('--prompt-file'),'utf8');
 if (value('--batched-cfg') !== 'off') process.exit(10);
+if (value('--flash-attn') !== 'on') process.exit(11);
 if (args.includes('--init-img') || args.includes('--mask') || args.includes('--strength') || !args.includes('--disable-image-metadata')) process.exit(5);
 if (${identity}) {
  if (value('--lora-apply-mode') !== 'at_runtime') process.exit(11);

@@ -77,7 +77,12 @@ export class NativeBackend implements EditBackend {
     checkSignal(options.signal);
     const args = [...nativeWeightArguments(this.model), '--prompt-file', 'prompt.txt', '--negative-prompt-file', 'negative.txt',
       // The pinned Metal GROUP_NORM kernel corrupts batched CFG (upstream issue #2149).
-      '--batched-cfg', 'off', '--output', basename(request.outputPath), '--disable-image-metadata', '--log-level', 'error', '--batch-count', '1',
+      '--batched-cfg', 'off',
+      // Flash attention is chosen explicitly: the engine's own "auto" chose differently between runs of the same
+      // request, so one seed gave two different images, and on is about three times faster for SD 1.5 at equal
+      // memory. Weights are read, not memory-mapped: mapping gained nothing measurable and changed auto's choice.
+      // These flags are fixed for each SDK release, so the record's writer and runtime versions identify them.
+      '--flash-attn', 'on', '--output', basename(request.outputPath), '--disable-image-metadata', '--log-level', 'error', '--batch-count', '1',
       '--width', String(size.width), '--height', String(size.height), '--seed', String(seed),
       '--steps', String(effectiveParameters.steps), '--cfg-scale', String(effectiveParameters.guidance),
       '--sampling-method', effectiveParameters.sampler!, '--scheduler', effectiveParameters.scheduler!, '--lora-model-dir', directory];
