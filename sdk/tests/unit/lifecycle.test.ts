@@ -71,6 +71,38 @@ describe('owned worker lifecycle', () => {
     expect(child.requests.map(message => message.type)).toEqual(['hello', 'edit', 'edit', 'shutdown']);
     await expect(editor.edit(request)).rejects.toMatchObject({ code: 'DISPOSED' });
   });
+  it('reuses a healthy worker through repeated verbose operations and retains all terminal stderr', async () => {
+    const { child, editor } = setup();
+    const base = child.onRequest;
+    const output = 'verbose 日本語\n'.repeat(10_000);
+    child.onRequest = message => {
+      base(message);
+      if (message.type === 'edit') {
+        child.stderr.write(output);
+        if (child.requests.filter(request => request.type === 'edit').length <= 5) child.result(message.id);
+        else {
+          // Exit may precede the final stderr bytes; close is the diagnostic boundary.
+          child.ignoreTerm = true;
+          child.emit('exit', 7, null);
+          child.stderr.write('terminal tail\n');
+          child.close();
+        }
+      }
+    };
+    for (let i = 0; i < 5; i++) await expect(editor.edit(request)).resolves.toMatchObject({ seed: 1 });
+    const failure = await editor.edit(request).catch((error: unknown) => error) as { code: string; details: { diagnostic: { output: string } } };
+    expect(failure.code).toBe('WORKER_EXITED');
+    expect(failure.details.diagnostic.output === output.repeat(6) + 'terminal tail\n').toBe(true);
+    await editor.dispose();
+  });
+  it('reports diagnostic capture failure during idle disposal', async () => {
+    const { child, worker } = setup();
+    await worker.start();
+    child.stderr.destroy(Object.assign(new Error('diagnostic pipe failed'), { code: 'EIO' }));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    await expect(worker.dispose()).rejects.toMatchObject({ code: 'WORKER_UNAVAILABLE' });
+    expect(child.closed).toBe(true);
+  });
   it('rejects overlapping work before startup completes', async () => {
     const { child, editor } = setup();
     const active = editor.edit(request); const caught = expect(active).rejects.toMatchObject({ code: 'CANCELLED' });

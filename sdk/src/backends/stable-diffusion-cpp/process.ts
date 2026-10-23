@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import { PicPatchSdkError } from '../../errors.ts';
+import { processDiagnostics } from '../../process-diagnostics.ts';
 import { checkSignal } from '../../operations.ts';
-import { ownedSpawn, signalOwned, streamText, toolEnvironment } from '../../platform.ts';
+import { ownedSpawn, signalOwned, toolEnvironment } from '../../platform.ts';
 import type { WorkerTimeouts } from '../../worker/process.ts';
 
 /**
@@ -67,18 +68,22 @@ export class NativeProcess {
         // Capture only bounded help/version output. Inference output may contain private text.
         const steps = onSteps && stepParser(onSteps);
         child.stdout.on('data', (chunk: Buffer) => { steps?.(chunk); if (capture && output.length < 8192) output = Buffer.concat([output, chunk.subarray(0, 8192 - output.length)]); });
-        const errors = streamText(child.stderr);
+        const errors = processDiagnostics(child.stderr, cause => stop(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Native diagnostic capture failed.', { cause })));
         child.once('close', (code, signal) => {
           closed = true; clearTimeout(deadline); clearTimeout(escalation); clearTimeout(termination);
           combined.removeEventListener('abort', abort);
-          if (failure) reject(failure);
-          else if (code !== 0) {
-            const error = new PicPatchSdkError('WORKER_EXITED', 'Native runtime did not complete successfully.');
-            const errorOutput = errors();
-            error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}), ...(errorOutput ? { output: errorOutput } : {}) };
-            reject(error);
-          }
-          else resolve(output.toString('utf8'));
+          void (async () => {
+            try {
+              const errorOutput = await errors.finish(!failure && code !== 0);
+              if (failure) reject(failure);
+              else if (code !== 0) {
+                const error = new PicPatchSdkError('WORKER_EXITED', 'Native runtime did not complete successfully.');
+                error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}), ...(errorOutput ? { output: errorOutput } : {}) };
+                reject(error);
+              }
+              else resolve(output.toString('utf8'));
+            } catch (cause) { reject(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Native diagnostic capture or cleanup failed.', { cause: failure ? new AggregateError([failure, cause], 'Process failure and diagnostic storage failure.', { cause }) : cause })); }
+          })();
         });
         if (combined.aborted) abort();
       });
