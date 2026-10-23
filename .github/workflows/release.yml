@@ -65,7 +65,11 @@ jobs:
     strategy:
       fail-fast: false # a Windows failure never cancels the macOS build
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            installer: dist/*.dmg
+          - os: windows-latest
+            installer: dist/*.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -105,6 +109,5 @@ jobs:
             - **macOS**: right-click the app → **Open** (or `xattr -dr com.apple.quarantine PicPatch.app`)
             - **Windows**: SmartScreen → **More info** → **Run anyway**
           files: |
-            dist/*.dmg
-            dist/*.exe
+            ${{ matrix.installer }}
             dist/*.zip

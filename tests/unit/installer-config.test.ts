@@ -12,10 +12,35 @@ function listUnder(key: string, within = config): string[] {
   for (const line of lines.slice(start + 1)) { const match = /^\s+- (\S+)$/.exec(line); if (!match) break; items.push(match[1]!); }
   return items;
 }
+function preparationProblems(script: string): string[] {
+  const builders = [...script.matchAll(/\belectron-builder\b/g)];
+  return builders.flatMap(builder => ['npm run prepare:tools', 'npm run prepare:electron'].filter(command => {
+    const index = script.indexOf(command);
+    return index < 0 || index >= builder.index;
+  }));
+}
 it('prepares the bundled tools and Electron before every builder invocation', () => {
-  for (const script of Object.values(scripts)) if (script.includes('electron-builder --publish')) {
-    expect(script.indexOf('npm run prepare:tools')).toBeGreaterThanOrEqual(0); expect(script.indexOf('npm run prepare:electron')).toBeLessThan(script.indexOf('electron-builder'));
-  }
+  const builders = Object.values(scripts).filter(script => script.includes('electron-builder'));
+  expect(builders.length).toBeGreaterThan(0);
+  for (const script of builders) expect(preparationProblems(script), script).toEqual([]);
+});
+it.each(['tools', 'electron'])('rejects missing and late %s preparation', tool => {
+  const command = `npm run prepare:${tool}`;
+  const other = tool === 'tools' ? 'electron' : 'tools';
+  const prefix = `npm run prepare:${other} && `;
+  expect(preparationProblems(`${prefix}electron-builder --publish never`)).toContain(command);
+  expect(preparationProblems(`${prefix}electron-builder --publish never && ${command}`)).toContain(command);
+  expect(preparationProblems(`${prefix}${command} && electron-builder --publish never`)).toEqual([]);
+  expect(preparationProblems(`electron-builder --publish never && ${prefix}${command} && electron-builder --publish never`)).toContain(command);
+});
+it('requires only the installer produced by each isolated release runner, plus its portable', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
+  const build = workflow.slice(workflow.indexOf('  build:'));
+  const matrix = [...build.matchAll(/- os: ([^\n]+)\n\s+installer: ([^\n]+)/g)].map(([, os, installer]) => [os, installer]);
+  expect(matrix).toEqual([['macos-latest', 'dist/*.dmg'], ['windows-latest', 'dist/*.exe']]);
+  const files = /files: \|\n((?: +[^\n]+\n?)*)/.exec(build)?.[1]?.trim().split('\n').map(line => line.trim());
+  expect(files).toEqual(['${{ matrix.installer }}', 'dist/*.zip']);
+  expect(build).toMatch(/fail_on_unmatched_files: true/);
 });
 it('declares the interface languages in the macOS bundle, both Electron locale sets and the installer, English first', () => {
   const tags = languages.map(([tag]) => tag).sort();
