@@ -13,8 +13,7 @@ import { runtimeVersions } from '../runtime/engine/versions.ts';
 
 export type { CatalogModel, CatalogRuntime, ExternalModel, ModelCatalogEntry } from './types.ts';
 import type { CatalogModel, ModelCatalogEntry } from './types.ts';
-/** Pinned community quantization, not an official upstream weight distribution. */
-export function listModels(): ModelCatalogEntry[] {
+function buildCatalog(): ModelCatalogEntry[] {
   const configurations = [
     { manifest, variant: 'flux2-klein-4b' as const, license: 'Apache-2.0', licenseUrl: `https://huggingface.co/${manifest.source.repository}/blob/${manifest.source.revision}/README.md` },
     { manifest: base9Manifest, variant: 'flux2-klein-base-9b' as const, license: 'flux-non-commercial-license', licenseUrl: 'https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B/blob/main/LICENSE.md' },
@@ -32,8 +31,28 @@ export function listModels(): ModelCatalogEntry[] {
   });
   return [...pinned, ...externalModels(), ...nativeModels()];
 }
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) deepFreeze(item);
+    Object.freeze(value);
+  }
+  return value;
+}
+let catalog: { entries: ModelCatalogEntry[]; byId: Map<string, ModelCatalogEntry> } | undefined;
+function modelCatalog() {
+  if (!catalog) {
+    // Detach shared definition/profile/host values before freezing the private snapshot.
+    const entries = deepFreeze(structuredClone(buildCatalog()));
+    catalog = { entries, byId: new Map(entries.map(entry => [entry.id, entry])) };
+  }
+  return catalog;
+}
+/** Pinned community quantization, not an official upstream weight distribution. Caller-owned entries. */
+export function listModels(): ModelCatalogEntry[] {
+  return structuredClone(modelCatalog().entries);
+}
 export function catalogModel(id: string): ModelCatalogEntry {
-  const entry = listModels().find(model => model.id === id);
+  const entry = modelCatalog().byId.get(id);
   if (!entry) throw new PicPatchSdkError('INVALID_REQUEST', 'Choose a model ID returned by listModels.');
-  return entry;
+  return structuredClone(entry);
 }
