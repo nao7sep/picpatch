@@ -92,4 +92,4 @@ def test_diagnostics_bound_cycles_and_classify_custom_exceptions_generically():
     error.__cause__ = error
     result = diagnostic(error, 'saving')
     assert result['causes'] == [{'kind': 'Exception', 'type': 'test_diagnostics_bound_cycles_and_classify_custom_exceptions_generically.<locals>.PrivateSentinel', 'message': 'secret'}]
-    assert len(result['traceback']) <= 16000
+    assert result['traceback'].endswith('PrivateSentinel: secret\n')

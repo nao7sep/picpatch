@@ -1,14 +1,14 @@
 import { spawn } from 'node:child_process';
 import { PicPatchSdkError } from '../../errors.ts';
 import { checkSignal } from '../../operations.ts';
-import { ownedSpawn, signalOwned } from '../../platform.ts';
+import { ownedSpawn, signalOwned, streamText } from '../../platform.ts';
 
 /** Own the installer process group (on Windows, its process tree) until closure. Never expose package-manager output to caller streams. */
 export function runCommand(executable: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, signal: AbortSignal, timeoutMs: number): Promise<string> {
   checkSignal(signal);
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], ...ownedSpawn });
-    let output = ''; let diagnostic = ''; let failure: Error | undefined; let closed = false;
+    let output = ''; let failure: Error | undefined; let closed = false;
     let escalation: ReturnType<typeof setTimeout> | undefined;
     let termination: ReturnType<typeof setTimeout> | undefined;
     const kill = (value: NodeJS.Signals) => {
@@ -34,15 +34,16 @@ export function runCommand(executable: string, args: string[], cwd: string, env:
     signal.addEventListener('abort', abort, { once: true });
     child.once('error', cause => { failure ??= new PicPatchSdkError('ENGINE_UNAVAILABLE', 'Could not start the engine tool.', { cause }); });
     child.stdout.on('data', (bytes: Buffer) => { if (output.length < 65536) output += bytes.toString('utf8').slice(0, 65536 - output.length); });
-    child.stderr.on('data', (bytes: Buffer) => { diagnostic = (diagnostic + bytes.toString('utf8')).slice(-8192); });
+    const errors = streamText(child.stderr);
     child.stdout.on('error', cause => stop(new PicPatchSdkError('ENGINE_UNAVAILABLE', 'Engine output pipe failed.', { cause })));
     child.stderr.on('error', cause => stop(new PicPatchSdkError('ENGINE_UNAVAILABLE', 'Engine diagnostic pipe failed.', { cause })));
     child.once('close', (code, exitSignal) => {
       closed = true; cleanup();
       if (!failure && code !== 0) {
         // Tool diagnostics contain only installation facts: no caller credentials/environment are passed.
-        const error = new PicPatchSdkError('INSTALL_FAILED', 'The engine tool exited unsuccessfully.', { cause: new Error(diagnostic) });
-        error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(exitSignal ? { signal: exitSignal } : {}) };
+        const error = new PicPatchSdkError('INSTALL_FAILED', 'The engine tool exited unsuccessfully.');
+        const errorOutput = errors();
+        error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(exitSignal ? { signal: exitSignal } : {}), ...(errorOutput ? { output: errorOutput } : {}) };
         failure = error;
       }
       if (!failure) { resolve(output); return; }

@@ -12,11 +12,11 @@ export interface WorkerDiagnostic {
   /** `type` and `message` are the original exception's, for records; `kind` is the classification to branch on. */
   causes: { kind: 'BackendUnavailable' | 'ModuleNotFoundError' | 'FileNotFoundError' | 'PermissionError' | 'MemoryError' | 'ValueError' | 'OSError' | 'RuntimeError' | 'Exception' | 'ProcessExit'; errno?: number; type?: string; message?: string }[];
   reason?: 'missing-package' | 'unsupported-version' | 'missing-directory';
-  /** The worker's traceback, without frame locals, at most its last 16,000 characters. */
+  /** The worker's whole traceback, without frame locals. */
   traceback?: string;
   exitCode?: number;
   signal?: string;
-  /** What a process that exited unexpectedly last wrote to its error stream, at most its last 8 KiB. */
+  /** Everything a process that exited unexpectedly wrote to its error stream. */
   output?: string;
 }
 export interface ErrorDetails { diagnostic?: WorkerDiagnostic; recoveryDirectory?: string }

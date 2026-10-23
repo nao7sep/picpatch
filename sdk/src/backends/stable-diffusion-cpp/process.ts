@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { PicPatchSdkError } from '../../errors.ts';
 import { checkSignal } from '../../operations.ts';
-import { ownedSpawn, signalOwned, streamTail, toolEnvironment } from '../../platform.ts';
+import { ownedSpawn, signalOwned, streamText, toolEnvironment } from '../../platform.ts';
 import type { WorkerTimeouts } from '../../worker/process.ts';
 
 /**
@@ -67,7 +67,7 @@ export class NativeProcess {
         // Capture only bounded help/version output. Inference output may contain private text.
         const steps = onSteps && stepParser(onSteps);
         child.stdout.on('data', (chunk: Buffer) => { steps?.(chunk); if (capture && output.length < 8192) output = Buffer.concat([output, chunk.subarray(0, 8192 - output.length)]); });
-        const errors = streamTail(child.stderr);
+        const errors = streamText(child.stderr);
         child.once('close', (code, signal) => {
           closed = true; clearTimeout(deadline); clearTimeout(escalation); clearTimeout(termination);
           combined.removeEventListener('abort', abort);

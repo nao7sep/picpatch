@@ -75,8 +75,8 @@ it('preserves the previous reference when a replacement fails and cleans only it
   await writeFile(previous.pythonExecutable, `#!${process.execPath}\nprocess.exit(1);\n`);
   const reference = join(previous.engineDirectory, 'ready', `${previous.identity.id}.json`);
   const bytes = await readFile(reference);
-  await writeFile(tool, `#!${process.execPath}\nprocess.exit(12);\n`);
-  await expect(installEngine(options())).rejects.toMatchObject({ code: 'INSTALL_FAILED', details: { diagnostic: { exitCode: 12 } } });
+  await writeFile(tool, `#!${process.execPath}\nprocess.stderr.write('error: ' + 'resolution detail '.repeat(1000));\nprocess.exit(12);\n`);
+  await expect(installEngine(options())).rejects.toMatchObject({ code: 'INSTALL_FAILED', details: { diagnostic: { exitCode: 12, output: `error: ${'resolution detail '.repeat(1000)}` } } });
   expect(await readFile(reference)).toEqual(bytes);
   expect(await readdir(join(previous.engineDirectory, 'installations'))).toHaveLength(1);
 });

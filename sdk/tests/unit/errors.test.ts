@@ -24,7 +24,7 @@ it('round-trips errors through JSON and another realm without class identity or 
 });
 it('rejects unknown codes, inconsistent kinds/effects and malformed details', () => {
   const value = new PicPatchSdkError('CANCELLED', 'Cancelled.').toJSON();
-  for (const change of [{ code: 'OTHER' }, { code: '__proto__' }, { kind: 'internal' }, { effect: 'success' }, { details: null }, { details: { diagnostic: 'private' } }, { details: { diagnostic: { phase: 'loading', causes: [{ kind: 'Exception', locals: 'private' }] } } }, { details: { diagnostic: { phase: 'loading', causes: [{ kind: 'Exception', message: 'x'.repeat(2001) }] } } }]) {
+  for (const change of [{ code: 'OTHER' }, { code: '__proto__' }, { kind: 'internal' }, { effect: 'success' }, { details: null }, { details: { diagnostic: 'private' } }, { details: { diagnostic: { phase: 'loading', causes: [{ kind: 'Exception', locals: 'private' }] } } }, { details: { diagnostic: { phase: 'loading', causes: [{ kind: 'Exception', message: 42 }] } } }]) {
     expect(isPicPatchSdkError({ ...value, ...change })).toBe(false);
   }
   expect(Object.isFrozen(errorCodes)).toBe(true);

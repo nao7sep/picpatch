@@ -5,16 +5,16 @@ from .protocol import Protocol, ProtocolError
 from .errors import Cancelled, BackendUnavailable, InvalidEditInput
 
 
-def _text(value, limit):
+def _text(value):
     try:
-        return str(value)[:limit]
+        return str(value)
     except Exception:
-        return object.__repr__(value)[:limit]
+        return object.__repr__(value)
 
 
 def diagnostic(error, phase):
-    """The failure's diagnostic representation for the caller's records: each cause's type, message
-    and errno, and the traceback without frame locals. The authored protocol message stays free of it."""
+    """The failure's diagnostic representation for the caller's records, kept whole: each cause's type,
+    message and errno, and the traceback without frame locals. The authored protocol message stays free of it."""
     causes = []
     seen = set()
     current = error
@@ -23,12 +23,12 @@ def diagnostic(error, phase):
     while current is not None and id(current) not in seen and len(causes) < 4:
         seen.add(id(current))
         kind = next((item.__name__ for item in kinds if isinstance(current, item)), 'Exception')
-        cause = {'kind': kind, 'type': _text(type(current).__qualname__, 200), 'message': _text(current, 2000)}
+        cause = {'kind': kind, 'type': type(current).__qualname__, 'message': _text(current)}
         if isinstance(current, OSError) and type(current.errno) is int and 0 <= current.errno <= 4095:
             cause['errno'] = current.errno
         causes.append(cause)
         current = current.__cause__ or (None if current.__suppress_context__ else current.__context__)
-    result = {'phase': phase, 'causes': causes, 'traceback': ''.join(format_exception(error))[-16000:]}
+    result = {'phase': phase, 'causes': causes, 'traceback': ''.join(format_exception(error))}
     if isinstance(error, BackendUnavailable) and error.reason in {'missing-package', 'unsupported-version', 'missing-directory'}:
         result['reason'] = error.reason
     return result

@@ -438,12 +438,10 @@
                 "maximum": 4095
               },
               "type": {
-                "type": "string",
-                "maxLength": 200
+                "type": "string"
               },
               "message": {
-                "type": "string",
-                "maxLength": 2000
+                "type": "string"
               }
             },
             "required": [
@@ -460,8 +458,7 @@
           ]
         },
         "traceback": {
-          "type": "string",
-          "maxLength": 16000
+          "type": "string"
         }
       },
       "required": [

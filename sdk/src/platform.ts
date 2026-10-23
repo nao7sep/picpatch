@@ -33,11 +33,14 @@ export function ownedTermination(pid: number, signal: NodeJS.Signals, platform: 
   return { command: win32.join(windowsFolders().root, 'System32', 'taskkill.exe'), args: ['/PID', String(pid), '/T', '/F'] };
 }
 /** Throws only when the request itself could not be made; a process already gone is not an error. */
-/** Keeps the last bytes a child process wrote to a stream, so a process that fails can say why. */
-export function streamTail(stream: NodeJS.ReadableStream, limit = 8192): () => string | undefined {
-  let tail = Buffer.alloc(0);
-  stream.on('data', (chunk: Buffer) => { tail = Buffer.concat([tail, chunk]); if (tail.length > limit) tail = tail.subarray(tail.length - limit); });
-  return () => tail.length ? tail.toString('utf8') : undefined;
+/**
+ * Keeps everything a child process writes to its error stream, so a process that fails can say why in full.
+ * It lives as long as the process: a worker's library warnings and progress lines, which the app ends when idle.
+ */
+export function streamText(stream: NodeJS.ReadableStream): () => string | undefined {
+  const chunks: Buffer[] = [];
+  stream.on('data', (chunk: Buffer) => { chunks.push(chunk); });
+  return () => chunks.length ? Buffer.concat(chunks).toString('utf8') : undefined;
 }
 export function signalOwned(pid: number, signal: NodeJS.Signals): void {
   const termination = ownedTermination(pid, signal);
