@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import sharp from 'sharp';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as storage from '../../src/storage.ts';
 import { ImageWorkspace } from '../../src/images/output.ts';
 import { ImageClientImpl } from '../../src/execution/session.ts';
 import { PicPatchSdkError, type EditRequest } from '../../src/index.ts';
@@ -74,6 +75,26 @@ describe('safe image publication', () => {
     }));
     await expect(editor.edit(request)).rejects.toMatchObject({ code: 'INVALID_OUTPUT' });
     expect(await readdir(directory)).not.toContain('out.png'); expect(await leftovers()).toEqual([]); await editor.dispose();
+  });
+  it.each([
+    ['snapshot', 'ENOSPC', 'DISK_FULL'], ['snapshot', 'EACCES', 'PERMISSION_DENIED'],
+    ['normalization', 'ENOSPC', 'DISK_FULL'], ['normalization', 'EPERM', 'PERMISSION_DENIED'],
+  ])('preserves %s storage failure %s in the caller-facing error', async (stage, errno, code) => {
+    let failure: ReturnType<typeof vi.spyOn> | undefined;
+    const cause = Object.assign(new Error('Storage unavailable'), { code: errno, path: request.outputPath });
+    const editor = new ImageClientImpl(backend(async r => {
+      const reply = await render(r);
+      failure = stage === 'snapshot' ? vi.spyOn(storage, 'open').mockRejectedValueOnce(cause)
+        : vi.spyOn(storage, 'chmod').mockRejectedValueOnce(cause);
+      return reply;
+    }));
+    try {
+      const error = await editor.edit(request).catch(error => error);
+      expect(error).toBeInstanceOf(PicPatchSdkError);
+      expect(error.toJSON()).toMatchObject({ code, kind: 'unavailable', effect: 'none', cause: { code: errno } });
+      expect(error.cause).toBe(cause);
+      expect(await readdir(directory)).not.toContain('out.png'); expect(await leftovers()).toEqual([]);
+    } finally { failure?.mockRestore(); await editor.dispose(); }
   });
   it('rejects mask size mismatch before submitting any work', async () => {
     const mask = join(directory, 'mask.png'); await sharp(Buffer.alloc(1), { raw: { width: 1, height: 1, channels: 1 } }).toColourspace('b-w').png().toFile(mask);

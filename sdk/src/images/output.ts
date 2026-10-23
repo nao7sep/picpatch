@@ -123,6 +123,9 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
       }
     } catch (cause) {
       checkCancellation(signal);
+      // Missing, linked or invalid worker contents are malformed output; storage failures keep their recovery code.
+      if (cause instanceof PicPatchSdkError && cause.kind === 'unavailable' && cause.code !== 'FILE_NOT_FOUND' &&
+          !(cause.code === 'IMAGE_IO' && (cause.cause as NodeJS.ErrnoException | undefined)?.code === 'ELOOP')) throw cause;
       throw new PicPatchSdkError('INVALID_OUTPUT', 'Worker output is missing, malformed, or inconsistent with its metadata.', { cause });
     }
     checkCancellation(signal);
