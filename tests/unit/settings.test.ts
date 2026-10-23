@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { readSettings, saveSettings } from '../../src/main/core/settings.ts';
+import { readSettings, readSettingsSync, saveSettings } from '../../src/main/core/settings.ts';
 import { Application } from '../../src/main/core/service.ts';
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'picpatch-settings-')); });
@@ -100,4 +100,32 @@ it('keeps a known display time zone, drops an unknown one on read and refuses it
   await expect(app.preferences({ timeZone: 'Mars/Olympus' })).rejects.toThrow('This time zone is not known.');
   // System is the absence of a choice.
   await app.preferences({}); expect(JSON.parse(await readFile(config, 'utf8')).timeZone).toBeUndefined();
+});
+
+it('captures missing settings synchronously without creating the file', async () => {
+  const config = join(root, 'config.json');
+  expect(readSettingsSync(config)).toEqual(await readSettings(config));
+  expect(readSettingsSync(config)).toEqual({ version: 1, profile: { version: 1 }, registrations: {} });
+  await expect(readFile(config)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+it('uses the same validation for the synchronous startup snapshot and later asynchronous reads', async () => {
+  const config = join(root, 'config.json');
+  await writeFile(config, JSON.stringify({ version: 1, language: 'ja', theme: 'dark', timeZone: 'Asia/Tokyo', concurrency: 99 }));
+  const captured = readSettingsSync(config);
+  expect(captured).toEqual(await readSettings(config));
+  expect(captured).toMatchObject({ language: 'ja', theme: 'dark', timeZone: 'Asia/Tokyo' });
+  expect(captured.concurrency).toBeUndefined();
+  await writeFile(config, JSON.stringify({ version: 1, language: 'de' }));
+  expect(captured.language).toBe('ja');
+  expect((await readSettings(config)).language).toBe('de');
+});
+it.each(['{"version":1,', '{"version":99,"language":"ja"}', '{"version":1,"profile":{"version":2}}'])('rejects unusable synchronous startup settings and preserves their bytes: %s', async contents => {
+  const config = join(root, 'config.json'); await writeFile(config, contents);
+  let syncError: unknown; try { readSettingsSync(config); } catch (error) { syncError = error; }
+  expect(syncError).toMatchObject({ notice: { key: 'startup.settingsFile', values: { path: config } }, cause: expect.any(Error) });
+  await expect(readSettings(config)).rejects.toMatchObject({ notice: { key: 'startup.settingsFile', values: { path: config } } });
+  expect(await readFile(config, 'utf8')).toBe(contents);
+});
+it('reports synchronous storage read failures instead of fabricating defaults', () => {
+  expect(() => readSettingsSync(root)).toThrow(root);
 });

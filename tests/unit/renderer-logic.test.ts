@@ -4,7 +4,7 @@ import { withoutTarget } from '../../src/shared/image-command.ts';
 import { commandIssues } from '../../src/renderer/src/command-issues.ts';
 import { DraftWriter, DRAFT_DELAY } from '../../src/renderer/src/draft-writer.ts';
 import { componentFields } from '../../src/renderer/src/modals/resources.ts';
-import { commandTurns } from '../../src/renderer/src/transcript.ts';
+import { commandTurns, imageNumber } from '../../src/renderer/src/transcript.ts';
 import { models } from '../helpers/bridge.ts';
 
 const run = (id: string, created: string, text = 'x'): Run => ({ id, modelId: 'm', seed: 1, created, status: 'completed', draft: { ...initialDraft(), text } });
@@ -78,4 +78,33 @@ it('shows one picker row per model, using the copy that is selected or ready', (
   expect(rows([], ['klein-4bit', 'klein-own'])).toEqual(['klein-own', 'zimage']);
   expect(rows(['klein-4bit'], ['klein-4bit', 'klein-own'])).toEqual(['klein-4bit', 'zimage']);
   expect(modelRows(models, [], () => 'missing')[0]!.copies.map(copy => copy.id)).toEqual(['klein-4bit', 'klein-own']);
+});
+
+it('never retries a failed older draft after a newer intent is already queued, including navigation flush', async () => {
+  let reject!: (error: Error) => void;
+  const saved: string[] = [];
+  const writer = new DraftWriter(async (_id, draft) => {
+    saved.push(draft.text);
+    if (draft.text === 'old') await new Promise((_resolve, fail) => { reject = fail; });
+  }, vi.fn());
+  const old = writer.now('s', { ...initialDraft(), text: 'old' });
+  await Promise.resolve(); await Promise.resolve();
+  const newer = writer.now('s', { ...initialDraft(), text: 'new' });
+  reject(new Error('disk'));
+  await expect(old).rejects.toThrow('disk'); await newer;
+  await writer.flush();
+  await writer.now('other', initialDraft()); await writer.flush();
+  expect(saved).toEqual(['old', 'new', '']);
+});
+
+
+it('builds display numbering once for an unchanged long runs revision, including unsuccessful attempts', () => {
+  const runs = Array.from({ length: 5000 }, (_, index) => ({ ...run(String(index), 't'), status: (['failed', 'queued', 'completed'] as const)[index % 3]! }));
+  const owner: Session = { version: 1, id: 's', name: 'n', created: '', updated: '', draft: initialDraft(), assets: [], runs };
+  const mapped = vi.spyOn(runs, 'map');
+  for (let index = 0; index < runs.length; index++) expect(imageNumber(owner, String(index))).toBe(index + 1);
+  expect(mapped).toHaveBeenCalledTimes(1);
+  expect(imageNumber({ ...owner, draft: { ...owner.draft, text: 'typing' } }, '4999')).toBe(5000);
+  expect(mapped).toHaveBeenCalledTimes(1);
+  expect(imageNumber({ ...owner, runs: [...runs, run('new', 'later')] }, 'new')).toBe(5001);
 });

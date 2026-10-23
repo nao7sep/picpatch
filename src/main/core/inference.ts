@@ -5,6 +5,7 @@ import type { EditInput, ReferenceGroup, ImageClient, ImageOutcome } from 'picpa
 
 /** The SDK calls inference makes; tests substitute them. */
 export interface InferenceSdk { createImageClient: typeof createImageClient; openModel: typeof openModel; listModels: typeof listModels; inspectNativeEngine: typeof inspectNativeEngine }
+import { commandGeometry } from '../../shared/image-command.ts';
 import type { Settings } from './settings.ts';
 import type { Runner } from './queue.ts';
 import type { Sessions } from './sessions.ts';
@@ -48,13 +49,14 @@ export function inference(current: () => Sessions, settings: () => Settings, sdk
     const record = { includeInputs: true, caller: { name: 'picpatch', version: packageInfo.version } };
     let outcome: ImageOutcome;
     try {
-      const common = { outputPath: join(sessions.directory(sessionId), 'outputs', `${run.id}.png`), size: { width: draft.width, height: draft.height }, seed: run.seed, parameters: draft.parameters, record, ...(draft.control ? { control: { ...draft.control, image: await sessions.imagePath(sessionId, draft.control.image) } } : {}) };
+      const geometry = commandGeometry(draft, selected.capabilities.maskMode);
+      const common = { ...geometry, outputPath: await sessions.stagedOutput(sessionId, run.id), seed: run.seed, parameters: draft.parameters, record, ...(draft.control ? { control: { ...draft.control, image: await sessions.imagePath(sessionId, draft.control.image) } } : {}) };
       if (draft.mode === 'generate') {
         if (draft.source || draft.mask || draft.references.length || draft.outpaint) throw new PicPatchSdkError('INVALID_REQUEST', 'Switch to Edit to use source images, references or masks.');
         outcome = await editor.generate({ ...common, prompt: draft.text }, callOptions);
       } else {
         const references = await Promise.all(draft.references.map(async group => ({ ...group, images: await Promise.all(group.images.map(image => sessions.imagePath(sessionId, image))) as ReferenceGroup['images'] })));
-        const request: EditInput = { ...common, instruction: draft.text, ...(draft.source ? { sourceImage: await sessions.imagePath(sessionId, draft.source) } : {}), ...(references.length ? { references: references as [ReferenceGroup, ...ReferenceGroup[]] } : {}), ...(draft.mask ? { maskImage: await sessions.imagePath(sessionId, draft.mask) } : {}), ...(draft.outpaint ? { outpaint: { size: { width: draft.outpaint.width, height: draft.outpaint.height }, left: draft.outpaint.left, top: draft.outpaint.top } } : {}) };
+        const request: EditInput = { ...common, instruction: draft.text, ...(draft.source ? { sourceImage: await sessions.imagePath(sessionId, draft.source) } : {}), ...(references.length ? { references: references as [ReferenceGroup, ...ReferenceGroup[]] } : {}), ...(draft.mask ? { maskImage: await sessions.imagePath(sessionId, draft.mask) } : {}) };
         outcome = await editor.edit(request, callOptions);
       }
     } catch (error) {
@@ -62,6 +64,10 @@ export function inference(current: () => Sessions, settings: () => Settings, sdk
       busy--;
       try { await editor.dispose(); } catch (cleanupError) { onTeardownError(cleanupError); }
       throw error;
+    }
+    if (outcome.status === 'completed') {
+      try { await sessions.completeOutput(sessionId, run.id, outcome.record); outcome.image.path = join(sessions.directory(sessionId), 'outputs', `${run.id}.png`); }
+      catch (error) { busy--; try { await editor.dispose(); } catch (cleanupError) { onTeardownError(cleanupError); } throw error; }
     }
     // Publication has settled. Eviction cannot replace its result or release active ownership again.
     busy--; warm.push({ key, editor });

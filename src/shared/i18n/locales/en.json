@@ -101,7 +101,8 @@
   "ui.picpatch_could_not_finish_closing": "PicPatch could not finish closing.",
   "ui.enter_a_session_name": "Enter a session name.",
   "ui.delete_this_session_and_its_retained_images": "Delete this session and its retained images?",
-  "ui.exported_images_and_original_files_are_kept": "Exported images and original files are kept.",
+  "ui.exported_images_and_original_files_are_kept": "Exported images and original files are kept. Local backup history retains session text and painted masks.",
+  "ui.session_cleanup_pending": "The session was removed from the list, but its files could not be deleted. Retained location: {path}",
   "ui.keep_session": "Keep session",
   "ui.add_images": "Add images",
   "ui.wait_for_the_current_resource_operation": "Wait for the current resource operation.",
@@ -429,6 +430,7 @@
     "one": "{count} result",
     "other": "{count} results"
   },
+  "conversation.sourceSize": "Source image size",
   "conversation.size": "{width}×{height}",
   "conversation.unavailable": "Unavailable image",
   "conversation.view": "View {name}",

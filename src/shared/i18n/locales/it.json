@@ -101,7 +101,8 @@
   "ui.picpatch_could_not_finish_closing": "Impossibile completare la chiusura di PicPatch.",
   "ui.enter_a_session_name": "Inserisci un nome per la sessione.",
   "ui.delete_this_session_and_its_retained_images": "Eliminare questa sessione e le immagini conservate al suo interno?",
-  "ui.exported_images_and_original_files_are_kept": "Le immagini esportate e i file originali vengono conservati.",
+  "ui.exported_images_and_original_files_are_kept": "Le immagini esportate e i file originali vengono conservati. La cronologia dei backup locali conserva il testo della sessione e le maschere dipinte.",
+  "ui.session_cleanup_pending": "La sessione è stata rimossa dall’elenco, ma non è stato possibile eliminare i suoi file. Posizione conservata: {path}",
   "ui.keep_session": "Mantieni sessione",
   "ui.add_images": "Aggiungi immagini",
   "ui.wait_for_the_current_resource_operation": "Attendi il completamento dell'operazione sulle risorse in corso.",
@@ -437,6 +438,7 @@
     "many": "{count} di risultati",
     "other": "{count} risultati"
   },
+  "conversation.sourceSize": "Dimensioni dell’immagine sorgente",
   "conversation.size": "{width}×{height}",
   "conversation.unavailable": "Immagine non disponibile",
   "conversation.view": "Visualizza {name}",

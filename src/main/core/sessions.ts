@@ -1,14 +1,18 @@
+import { PendingResults } from './pending-results.ts';
+import { Settlement } from './settlement.ts';
+import { sessionEncoder } from './session-encoder.ts';
+import { isDeepStrictEqual } from 'node:util';
 import { UiError } from '../../shared/i18n/index.ts';
 import { recoverCommand } from '../../shared/image-command.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { mkdir, open, readdir, readFile, rename, rm, realpath, lstat, utimes } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename, rm, realpath, lstat } from 'node:fs/promises';
 import { join, basename, isAbsolute, relative, sep } from 'node:path';
 import { validateArtifactRecord } from 'picpatchsdk';
 import sharp from 'sharp';
 import { controlKinds, initialDraft } from '../../shared/session.ts';
 import type { Session, SessionSummary, Draft, Asset } from '../../shared/session.ts';
-import { writeJson } from './files.ts';
+import { writeBytes, syncDirectory } from './files.ts';
 
 const removing = /^[a-f0-9-]{36}\.removing-[a-f0-9-]{36}$/;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -66,9 +70,16 @@ async function checkImage(path: string): Promise<void> {
 /** Single GUI process owns this collection; outside concurrent editing is not supported. */
 export class Sessions {
   readonly root: string;
+  private effects = new Settlement();
+  private results = new PendingResults(key => this.directory(key));
   private tail: Promise<unknown> = Promise.resolve();
   /** Full sessions the user opened or work touched; the collection listing keeps only summaries. */
   private loaded = new Map<string, Session>();
+  private focused?: string;
+  private pins = new Map<string, number>();
+  focus(key?: string) { this.focused = key; this.evict(); }
+  pin(key: string): () => void { this.pins.set(key, (this.pins.get(key) ?? 0) + 1); return () => { const n = this.pins.get(key)! - 1; if (n) this.pins.set(key, n); else this.pins.delete(key); this.evict(); }; }
+  private evict() { for (const key of this.loaded.keys()) if (key !== this.focused && !this.pins.has(key)) this.loaded.delete(key); }
   private summaries = new Map<string, SessionSummary>();
   constructor(root: string, private saved: (path: string, bytes: Buffer) => void = () => {}, private existingCollection = false) {
     if (!isAbsolute(root)) throw new UiError('error.session_collection_must_be_absolute');
@@ -84,7 +95,7 @@ export class Sessions {
     catch (error) { if (!this.existingCollection) throw error; const code = (error as { code?: unknown }).code; return { sessions: [], failures: [], unavailable: { path: this.root, ...(typeof code === 'string' ? { code } : {}) } }; }
     const sessions: SessionSummary[] = [], failures: { id: string; message: string }[] = [];
     for (const entry of entries) {
-      if (entry.isDirectory() && removing.test(entry.name)) { void rm(join(this.root, entry.name), { recursive: true, force: true }).catch(() => {}); continue; }
+      if (entry.isDirectory() && removing.test(entry.name)) { try { await this.effects.track(() => rm(join(this.root, entry.name), { recursive: true, force: true })); } catch (error) { failures.push({ id: entry.name, message: new UiError('ui.session_cleanup_pending', { path: join(this.root, entry.name) }, { cause: error }).message }); } continue; }
       if (!uuid.test(entry.name) || !entry.isDirectory()) continue;
       try {
         let summary = this.summaries.get(entry.name);
@@ -105,6 +116,7 @@ export class Sessions {
     if ((await lstat(directory)).isSymbolicLink()) throw new UiError('error.linked_sessions_are_not_supported');
     const session = validateSession(JSON.parse(await readFile(join(directory, 'session.json'), 'utf8')));
     if (session.id !== key) throw new UiError('error.session_identity_does_not_match_its_directory');
+    await this.results.recover(session);
     return session;
   }
   /** The cached session itself; callers only read it. */
@@ -119,20 +131,26 @@ export class Sessions {
     const newer = this.loaded.get(key); if (newer) return newer;
     this.loaded.set(key, session); return session;
   }
-  async create(name = 'Untitled session'): Promise<Session> {
+  stagedOutput(key: string, runId: string): Promise<string> { id(runId); return this.results.staged(key, runId); }
+  completeOutput(key: string, runId: string, record: import('picpatchsdk').ArtifactRecord): Promise<void> {
+    return this.effects.track(() => this.results.publish(key, runId, record));
+  }
+  async retireOutput(key: string, runId: string): Promise<void> { await this.results.retire(key, runId); }
+  async create(name = 'Untitled session', draft = initialDraft()): Promise<Session> {
     return this.serial(async () => {
       const key = randomUUID(); const now = new Date().toISOString();
-      const session: Session = { version: 1, id: key, name, created: now, updated: now, draft: initialDraft(), assets: [], runs: [] };
+      const session: Session = { version: 1, id: key, name, created: now, updated: now, draft: validateDraft(draft), assets: [], runs: [] };
       await mkdir(join(this.directory(key), 'assets'), { recursive: true, mode: 0o700 });
       await mkdir(join(this.directory(key), 'outputs'), { mode: 0o700 });
       await this.publish(session); return structuredClone(session);
     });
   }
-  private async publish(session: Session): Promise<void> {
-    const valid = validateSession(session);
+  private async publish(session: Session, historyChanged = true): Promise<void> {
+    const valid = session;
     const path = join(this.directory(session.id), 'session.json');
-    const bytes = await writeJson(path, valid);
-    this.loaded.set(session.id, valid); this.summaries.set(session.id, summarize(valid));
+    const bytes = await writeBytes(path, await sessionEncoder.encode(valid));
+    this.loaded.set(session.id, valid);
+    if (historyChanged || !this.summaries.has(session.id)) this.summaries.set(session.id, summarize(valid));
     try { this.saved(path, bytes); } catch { /* Backup history cannot fail a primary save. */ }
   }
   /**
@@ -146,18 +164,29 @@ export class Sessions {
       // A change that alters nothing is not written and does not reorder the collection.
       if (JSON.stringify(session) === before) return session;
       if (submitted) session.updated = new Date().toISOString();
-      await this.publish(session); return session;
+      const valid = validateSession(session);
+      await this.publish(valid); this.evict(); return session;
+    });
+  }
+  saveDraft(key: string, draft: Draft): Promise<void> {
+    return this.serial(async () => {
+      const session = await this.read(key);
+      if (isDeepStrictEqual(session.draft, draft)) return;
+      const valid = validateDraft(draft);
+      for (const ref of [valid.source, valid.mask, valid.control?.image, ...valid.references.flatMap(group => group.images)]) if (ref !== undefined && !session.assets.some(asset => asset.id === ref) && !session.runs.some(run => run.id === ref)) throw new UiError('error.session_references_a_missing_image');
+      await this.publish({ ...session, draft: valid }, false); this.evict();
     });
   }
   async imagePath(key: string, assetId: string): Promise<string> {
-    const session = await this.read(key); id(assetId);
+    const session = this.loaded.get(key) ?? await this.parse(key); id(assetId);
     const file = session.assets.find(a => a.id === assetId)?.file ?? session.runs.find(r => r.id === assetId)?.output;
     if (!file) throw new UiError('error.image_is_not_part_of_this_session');
     const directory = await realpath(this.directory(key)); const path = await realpath(join(directory, file)); const part = relative(directory, path);
     if (part.startsWith(`..${sep}`) || part === '..' || isAbsolute(part)) throw new UiError('error.image_escapes_its_session');
     return path;
   }
-  async importImage(key: string, source: string): Promise<Asset> {
+  importImage(key: string, source: string): Promise<Asset> { const release = this.pin(key); return this.effects.track(() => this.copyImage(key, source)).finally(release); }
+  private async copyImage(key: string, source: string): Promise<Asset> {
     if (!isAbsolute(source)) throw new UiError('error.select_an_absolute_image_path');
     await this.read(key);
     const assetId = randomUUID(); const file = `assets/${assetId}`; const path = join(this.directory(key), file); const temporary = `${path}.tmp`;
@@ -169,14 +198,16 @@ export class Sessions {
       try {
         const buffer = Buffer.alloc(1024 * 1024);
         for (;;) { const chunk = await input.read(buffer, 0, buffer.length, bytes); if (!chunk.bytesRead) break; const data = buffer.subarray(0, chunk.bytesRead); hash.update(data); await output.writeFile(data); bytes += chunk.bytesRead; }
+        // Preserve metadata before the final durability flush.
+        await output.utimes(Number(before.atimeNs) / 1e9, Number(before.mtimeNs) / 1e9);
         await output.sync();
       } finally { await output.close(); }
       const after = await input.stat({ bigint: true });
       if (before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new UiError('error.source_image_changed_while_copying');
       await checkImage(temporary);
       // A copy keeps the original's modified time.
-      await utimes(temporary, Number(before.atimeNs) / 1e9, Number(before.mtimeNs) / 1e9);
       await rename(temporary, path);
+      if (process.platform !== 'win32') await syncDirectory(join(this.directory(key), 'assets'));
       asset = { id: assetId, name: basename(source), file, bytes, sha256: hash.digest('hex') };
     } finally { await input.close(); await rm(temporary, { force: true }); }
     // A failed metadata save leaves the copied image intact for inspection.
@@ -184,7 +215,8 @@ export class Sessions {
     return asset;
   }
   /** An image the app made, such as a painted mask, joins the session from memory, checked like an import. */
-  async addImage(key: string, name: string, bytes: Uint8Array): Promise<Asset> {
+  addImage(key: string, name: string, bytes: Uint8Array): Promise<Asset> { const release = this.pin(key); return this.effects.track(() => this.writeImage(key, name, bytes)).finally(release); }
+  private async writeImage(key: string, name: string, bytes: Uint8Array): Promise<Asset> {
     await this.read(key);
     const assetId = randomUUID(); const file = `assets/${assetId}`; const path = join(this.directory(key), file); const temporary = `${path}.tmp`;
     try {
@@ -192,6 +224,7 @@ export class Sessions {
       try { await output.writeFile(bytes); await output.sync(); } finally { await output.close(); }
       await checkImage(temporary);
       await rename(temporary, path);
+      if (process.platform !== 'win32') await syncDirectory(join(this.directory(key), 'assets'));
     } finally { await rm(temporary, { force: true }); }
     const asset: Asset = { id: assetId, name, file, bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') };
     // A failed metadata save leaves the image intact for inspection.
@@ -199,12 +232,15 @@ export class Sessions {
     return asset;
   }
   /** Removal hides the session at once; deleting its files runs outside the save lock, and a later listing retries leftovers. */
-  async remove(key: string): Promise<void> {
+  remove(key: string): Promise<{ cleanup?: import('../../shared/i18n/index.ts').Message }> { return this.effects.track(() => this.removeFiles(key)); }
+  private async removeFiles(key: string): Promise<{ cleanup?: import('../../shared/i18n/index.ts').Message }> {
     const hidden = await this.serial(async () => {
       await this.read(key); const hidden = join(this.root, `${key}.removing-${randomUUID()}`);
       await rename(this.directory(key), hidden); this.loaded.delete(key); this.summaries.delete(key); return hidden;
     });
-    await rm(hidden, { recursive: true, force: true }).catch(() => {});
+    try { await rm(hidden, { recursive: true, force: true }); } catch { return { cleanup: { key: 'ui.session_cleanup_pending', values: { path: hidden } } }; }
+    return {};
   }
-  async settled(): Promise<void> { await this.tail; }
+  async settled(): Promise<void> { await this.effects.settled(); await this.tail; }
+  async close(): Promise<void> { await this.settled(); }
 }

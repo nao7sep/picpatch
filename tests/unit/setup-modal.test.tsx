@@ -28,3 +28,17 @@ it.each([
   expect(onClose).toHaveBeenCalledTimes(1);
   expect(fake.calls('cancelManaged')).toHaveLength(0);
 });
+
+it('shows the selected resource’s failure and keeps a healthy model usable', async () => {
+  const fake = fakeBridge(); window.picpatch = fake.bridge;
+  fake.handlers.engines = () => ({ python: { status: 'ready' }, native: { status: 'ready' } });
+  const overview = fake.handlers.overview!(undefined) as Overview;
+  render(<SetupModal models={overview.models} initial="flux2-klein-4b-4bit"
+    readiness={{ 'flux2-klein-4b-4bit': { status: 'failed', notice: { key: 'error.storage' } }, sd15: 'ready' }}
+    managed={{}} onClose={vi.fn()} onUse={vi.fn()} onManage={vi.fn()} />);
+  expect((await screen.findByRole('alert')).textContent).toMatch(/files could not be read or saved/i);
+  expect((screen.getByRole('button', { name: 'Use this model' }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'sd15' } });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect((screen.getByRole('button', { name: 'Use this model' }) as HTMLButtonElement).disabled).toBe(false);
+});

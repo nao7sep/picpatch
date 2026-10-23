@@ -67,11 +67,23 @@ export function App() {
 
   const sessionRef = useRef<Session>(undefined);
   const draftRef = useRef<Draft>(undefined);
+  // Only text and the target change on submission completion. Each user edit retires that ownership.
+  const draftIntent = useRef({ text: 0, target: 0 });
   const overviewRef = useRef<Overview>(undefined);
   const loaded = useRef(false);
   const closingRef = useRef(false);
   const closeFocus = useRef<HTMLElement | null>(null);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const acceptedRendererWork = useRef(new Set<Promise<void>>());
+  const failedMaskSave = useRef<{ error: unknown } | undefined>(undefined);
+  const acceptMaskSave = useCallback((task: Promise<void>) => {
+    acceptedRendererWork.current.add(task);
+    void task.then(() => {
+      acceptedRendererWork.current.delete(task); failedMaskSave.current = undefined;
+    }, error => {
+      acceptedRendererWork.current.delete(task); failedMaskSave.current = { error };
+    });
+  }, []);
   const settingsGuard = useRef<SettingsGuard>(null);
   /** Whether the front modal holds an unsaved edit (a painted mask, a typed name) that quitting would discard. */
   const modalDraft = useRef(false);
@@ -118,6 +130,9 @@ export function App() {
     const next = change(owner); sessionRef.current = next; setSession(next);
   }, []);
   const updateDraft = useCallback((next: Draft, save: 'later' | 'now' | 'none' = 'now') => {
+    const previous = draftRef.current;
+    if (previous?.text !== next.text) draftIntent.current.text++;
+    if (JSON.stringify([previous?.source, previous?.mask, previous?.outpaint]) !== JSON.stringify([next.source, next.mask, next.outpaint])) draftIntent.current.target++;
     const value = imageCommand(next); draftRef.current = value; setDraftState(value);
     const owner = sessionRef.current; if (!owner || save === 'none') return;
     if (save === 'later') writer.later(owner.id, value); else void writer.now(owner.id, value).catch(() => {});
@@ -215,7 +230,9 @@ export function App() {
   const deleteSession = useCallback(() => command('delete', async () => {
     const owner = sessionRef.current; if (!owner) return;
     await writer.flush();
-    if (await api.remove(owner.id)) await restart();
+    const result = await api.remove(owner.id);
+    if (result) await restart();
+    if (result && typeof result === 'object' && result.cleanup) throw { notice: result.cleanup };
   }), [command, restart, writer]);
   const openCollection = useCallback(() => command('collection', async () => {
     await writer.flush();
@@ -234,23 +251,22 @@ export function App() {
   };
   const attachTarget = useCallback(() => command('import', async () => {
     const owner = sessionRef.current; if (!owner) return;
-    const assets = await api.importImages(owner.id, undefined, false);
-    if (!assets[0]) return;
-    addAssets(assets); updateDraft(targetImage(draftRef.current!, assets[0].id));
-    focusComposer.current();
+    const { assets, failures } = await api.importImages(owner.id, undefined, false);
+    if (assets[0]) { addAssets(assets); updateDraft(targetImage(draftRef.current!, assets[0].id)); focusComposer.current(); }
+    if (failures[0]) throw failures[0];
   }), [addAssets, command, updateDraft]);
   const addReference = useCallback(() => command('addReference', async () => {
     const owner = sessionRef.current; if (!owner) return;
-    const assets = await api.importImages(owner.id);
-    if (!assets.length) return;
-    addAssets(assets); updateDraft({ ...draftRef.current!, references: [...draftRef.current!.references, group(assets.map(asset => asset.id))] });
+    const { assets, failures } = await api.importImages(owner.id);
+    if (assets.length) { addAssets(assets); updateDraft({ ...draftRef.current!, references: [...draftRef.current!.references, group(assets.map(asset => asset.id))] }); }
+    if (failures[0]) throw failures[0];
   }), [addAssets, command, updateDraft]);
   const dropFiles = useCallback((files: File[]) => command('import', async () => {
     const owner = sessionRef.current; if (!owner) return;
     const paths = files.map(file => api.droppedFile(file)).filter(Boolean);
     // Every file that can be imported is kept and used; the first failure is reported afterwards.
     const assets: Asset[] = []; let failure: unknown;
-    for (const path of paths) { try { assets.push(...await api.importImages(owner.id, path)); } catch (error) { failure ??= error; } }
+    for (const path of paths) { try { const result = await api.importImages(owner.id, path); assets.push(...result.assets); failure ??= result.failures[0]; } catch (error) { failure ??= error; } }
     if (!assets.length) { if (failure) throw failure; return; }
     addAssets(assets);
     const current = draftRef.current!;
@@ -261,9 +277,9 @@ export function App() {
   }), [addAssets, command, updateDraft]);
   const chooseControl = useCallback((kind: NonNullable<Draft['control']>['kind']) => command('addControl', async () => {
     const owner = sessionRef.current; if (!owner) return;
-    const [asset] = await api.importImages(owner.id, undefined, false);
-    if (!asset) return;
-    addAssets([asset]); updateDraft({ ...draftRef.current!, control: { image: asset.id, kind } });
+    const { assets: [asset], failures } = await api.importImages(owner.id, undefined, false);
+    if (asset) { addAssets([asset]); updateDraft({ ...draftRef.current!, control: { image: asset.id, kind } }); }
+    if (failures[0]) throw failures[0];
   }), [addAssets, command, updateDraft]);
 
   const issues = session && draft && overview ? commandIssues(session, draft, overview.models, readiness) : [];
@@ -271,16 +287,25 @@ export function App() {
     const owner = sessionRef.current, current = draftRef.current, models = overviewRef.current?.models;
     if (!owner || !current || !models || !current.text.trim() || commandIssues(owner, current, models, readiness).length) return;
     setSubmitting(true);
+    const intent = { ...draftIntent.current };
     try {
       await writer.flush();
       const runs = await api.submit(owner.id, current, samples);
       // The backend saved this same next draft with the submission.
       const next = afterCommand(current, runs[0]!.id);
       patchSession(value => ({ ...value, runs: [...value.runs, ...runs.filter(run => !value.runs.some(item => item.id === run.id))] }));
-      const typed = draftRef.current;
-      if (typed === current) { draftRef.current = next; setDraftState(next); }
-      // Text typed while the command was being sent is the next instruction; keep it, aimed at the new result.
-      else updateDraft({ ...next, text: typed?.text ?? '' }, 'now');
+      if (sessionRef.current?.id !== owner.id) return;
+      const latest = draftRef.current!;
+      // Start from current controls; settle only the text and target this submission still owns.
+      const settled = { ...latest };
+      if (draftIntent.current.text === intent.text) settled.text = next.text;
+      if (draftIntent.current.target === intent.target) {
+        settled.source = next.source;
+        if (next.mask === undefined) delete settled.mask; else settled.mask = next.mask;
+        if (next.outpaint === undefined) delete settled.outpaint; else settled.outpaint = next.outpaint;
+      }
+      if (latest === current) { const value = imageCommand(settled); draftRef.current = value; setDraftState(value); }
+      else updateDraft(settled, 'now');
     } finally { setSubmitting(false); focusComposer.current(); }
   }), [command, patchSession, readiness, samples, updateDraft, writer]);
 
@@ -300,10 +325,12 @@ export function App() {
     updateDraft({ ...structuredClone(run.draft), seed: run.seed, modelIds: [run.modelId] });
     setTimeout(() => focusComposer.current(), 0);
   }, [updateDraft]);
-  const cancelRuns = useCallback((ids: string[]) => command('cancel', async () => {
-    const owner = sessionRef.current; if (!owner) return;
-    for (const id of ids) await api.cancel(owner.id, id);
-  }), [command]);
+  const cancelRuns = useCallback(async (ids: string[]) => {
+    const sessionId = sessionRef.current?.id; if (!sessionId) return;
+    const runIds = [...ids];
+    try { await Promise.all(runIds.map(id => api.cancel(sessionId, id))); clear('cancel'); }
+    catch (error) { show('cancel', error); }
+  }, [clear, show]);
   const resume = useCallback(() => command('resume', async () => { const owner = sessionRef.current; if (owner) await api.resume(owner.id); }), [command]);
   const saveTarget = (sidecar: boolean) => {
     const owner = sessionRef.current; if (!owner) return;
@@ -360,8 +387,11 @@ export function App() {
       if (settingsGuard.current) return settingsGuard.current.approveQuit();
       return !modalDraft.current || await confirm('quit');
     }
-    // Capture the draft first: an open picker or import in the command chain must not delay or block it.
+    // An accepted mask save may still be encoding before its final draft reaches the writer.
+    // Observe the same work on Retry; neither caller timeout nor a failure replays its effects.
+    await Promise.allSettled([...acceptedRendererWork.current]);
     await writer.flush(); await settingsGuard.current?.settleSave();
+    if (failedMaskSave.current) throw failedMaskSave.current.error;
   };
   // The bridge offers no unsubscribe, so the listener is registered once per page.
   const listening = useRef(false);
@@ -414,7 +444,7 @@ export function App() {
                 />
                 <div ref={composerBox} className="stage-foot">
                   <StageNotices
-                    notices={notices} onDismiss={clear} queue={overview.queue} session={session} onResume={() => void resume()}
+                    notices={modals.at(-1)?.kind === 'reference' ? notices.filter(notice => notice.key !== 'draft' && notice.key !== 'addPhotos') : notices} onDismiss={clear} queue={overview.queue} session={session} onResume={() => void resume()}
                     managed={overview.managed} managedDismissed={managedDismissed} onDismissManaged={setManagedDismissed}
                     onShowManaged={() => dispatchRef.current('manage')} onCancelManaged={() => void api.cancelManaged().catch(error => show('managed', error))}
                     history={JSON.stringify(overview.historyIssue ?? null) === historyDismissed ? undefined : overview.historyIssue} onDismissHistory={() => setHistoryDismissed(JSON.stringify(overview.historyIssue ?? null))}
@@ -479,7 +509,7 @@ export function App() {
         if (!current.source || !canPaintMask(owner, current, model?.capabilities.maskMode)) return null;
         return <MaskModal source={imageUrl(owner.id, current.source)} mask={current.mask ? imageUrl(owner.id, current.mask) : undefined}
           note={t(maskNote(model?.capabilities.maskMode))}
-          onClose={pop} confirmDiscard={() => confirm()} onDirty={markDraft}
+          onClose={() => { failedMaskSave.current = undefined; pop(); }} onAccepted={acceptMaskSave} confirmDiscard={() => confirm()} onDirty={markDraft}
           onDone={async bytes => {
             try {
               if (!bytes) { const next = { ...draftRef.current! }; delete next.mask; updateDraft(next); pop(); return undefined; }
@@ -492,13 +522,23 @@ export function App() {
         const value = current.references[spec.index];
         if (!value) return null;
         const replace = (next: ReferenceDraft, save: 'later' | 'now') => updateDraft({ ...draftRef.current!, references: draftRef.current!.references.map((item, i) => i === spec.index ? next : item) }, save);
-        return <ReferenceModal session={owner} group={value} models={models.filter(model => current.modelIds.includes(model.id))} onClose={pop} onChange={replace}
+        return <ReferenceModal session={owner} group={value} models={models.filter(model => current.modelIds.includes(model.id))} errors={notices.filter(notice => notice.key === 'draft' || notice.key === 'addPhotos').map(notice => notice.error)} onClose={pop} onChange={replace}
           onRemove={() => { updateDraft({ ...draftRef.current!, references: draftRef.current!.references.filter((_, i) => i !== spec.index) }); pop(); }}
-          onAddPhotos={() => void command('addPhotos', async () => {
-            const assets = await api.importImages(owner.id); if (!assets.length) return;
-            addAssets(assets); const latest = draftRef.current!.references[spec.index]!;
-            replace({ ...latest, images: [...latest.images, ...assets.map(asset => asset.id)] }, 'now');
-          })} />;
+          onAddPhotos={() => {
+            const groupId = value.id;
+            void command('addPhotos', async () => {
+              const { assets, failures } = await api.importImages(owner.id);
+              if (assets.length) {
+                addAssets(assets);
+                const latest = draftRef.current!;
+                // Imports belong to the chosen group, even after another group was removed.
+                // A removed group leaves the accepted assets in the session without retargeting them.
+                const index = latest.references.findIndex(group => group.id === groupId);
+                if (index !== -1) updateDraft({ ...latest, references: latest.references.map((group, i) => i === index ? { ...group, images: [...group.images, ...assets.map(asset => asset.id)] } : group) }, 'now');
+              }
+              if (failures[0]) throw failures[0];
+            });
+          }} />;
       }
     }
   }

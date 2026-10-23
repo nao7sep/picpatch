@@ -1,26 +1,37 @@
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import sharp from 'sharp';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { inference, type InferenceSdk } from '../../src/main/core/inference.ts';
-import { PicPatchSdkError } from 'picpatchsdk';
+import { PicPatchSdkError, createImageClient, type EditInput, type ArtifactRecord, type ModelCapabilities } from 'picpatchsdk';
 import { Queue } from '../../src/main/core/queue.ts';
 import { Sessions } from '../../src/main/core/sessions.ts';
 import type { Settings } from '../../src/main/core/settings.ts';
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'picpatch-inference-')); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+/** A completed SDK boundary writes a real image and supplies the exact private artifact record. */
+async function completedImage(request: { outputPath: string; seed: number }) {
+  const bytes = await sharp({ create: { width: 1, height: 1, channels: 3, background: 'blue' } }).png().toBuffer();
+  await writeFile(request.outputPath, bytes);
+  const record: ArtifactRecord = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
+  record.image.filename = basename(request.outputPath); record.seed = request.seed;
+  record.bytes = bytes.length; record.sha256 = createHash('sha256').update(bytes).digest('hex');
+  return { status: 'completed' as const, model: record.model, modelRevision: record.modelRevision, runtime: record.runtime, seed: record.seed, references: [], effectiveParameters: record.effectiveParameters, image: { path: request.outputPath, mimeType: 'image/png' as const, size: record.image.size }, record };
+}
 /** A fake SDK whose clients count how often they are created and closed. */
 function fakeSdk() {
   const clients: { model: string; disposed: boolean }[] = [];
   const sdk = {
-    listModels: () => [{ id: 'a', runtime: { name: 'mflux', engine: 'python' } }, { id: 'b', runtime: { name: 'mflux', engine: 'python' } }, { id: 'n', runtime: { name: 'stable-diffusion.cpp', engine: 'native' } }],
+    listModels: () => [{ id: 'a', capabilities: { maskMode: 'composite' }, runtime: { name: 'mflux', engine: 'python' } }, { id: 'b', capabilities: { maskMode: 'latent-composite' }, runtime: { name: 'mflux', engine: 'python' } }, { id: 'n', capabilities: { maskMode: 'native' }, runtime: { name: 'stable-diffusion.cpp', engine: 'native' } }],
     openModel: async (id: string) => ({ status: 'completed', model: { id } }),
     inspectNativeEngine: async () => ({ status: 'ready' }),
     createImageClient: (options: { model: { id: string } }) => {
       const client = { model: options.model.id, disposed: false };
       clients.push(client);
-      return { generate: vi.fn(async () => ({ status: 'completed', image: { path: '/out.png' } })), edit: async () => ({}), dispose: vi.fn(async () => { client.disposed = true; }) };
+      return { generate: vi.fn(completedImage), edit: async () => ({}), dispose: vi.fn(async () => { client.disposed = true; }) };
     },
   } as unknown as InferenceSdk;
   return { sdk, clients };
@@ -54,7 +65,7 @@ it('runs with the SDK’s own refusal and engine state instead of inventing code
   sdk.inspectNativeEngine = (async () => ({ status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: 'Wrong revision.' })) as never;
   await expect(attempt('n')).rejects.toMatchObject({ code: 'ENGINE_INCOMPATIBLE', message: 'Wrong revision.' });
   let request: Record<string, unknown> = {};
-  sdk.createImageClient = (() => ({ generate: async (input: Record<string, unknown>) => { request = input; return { status: 'completed' }; }, dispose: async () => {} })) as never;
+  sdk.createImageClient = (() => ({ generate: async (input: { outputPath: string; seed: number }) => { request = input; return completedImage(input); }, dispose: async () => {} })) as never;
   await attempt('a');
   expect(request).toMatchObject({ record: { includeInputs: true, caller: { name: 'picpatch' } } });
   expect(request).not.toHaveProperty('sidecar');
@@ -64,7 +75,7 @@ it('runs with the SDK’s own refusal and engine state instead of inventing code
 it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output and provenance when lowering concurrency evicts a client with %s', async code => {
   const sessions = new Sessions(root), session = await sessions.create();
   const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {}, concurrency: 2 };
-  const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
+  const records: ArtifactRecord[] = [];
   const teardown = new PicPatchSdkError(code, 'Worker teardown failed.');
   const held: (() => void)[] = [];
   const disposals: ReturnType<typeof vi.fn>[] = [];
@@ -74,10 +85,9 @@ it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output an
     const dispose = vi.fn(async () => { if (index === 0) throw teardown; });
     disposals.push(dispose);
     return {
-      generate: async (request: { outputPath: string }) => {
+      generate: async (request: { outputPath: string; seed: number }) => {
         await new Promise<void>(resolve => { held[index] = resolve; });
-        await writeFile(request.outputPath, 'published');
-        return { status: 'completed', model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 1, references: [], effectiveParameters: {}, image: { path: request.outputPath, mimeType: 'image/png', size: { width: 1, height: 1 } }, record };
+        const result = await completedImage(request); records[index] = result.record; return result;
       }, dispose,
     };
   }) as never;
@@ -93,8 +103,10 @@ it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output an
   held[1]!(); await queue.settled();
   const saved = await sessions.get(session.id);
   expect(saved.runs.map(run => run.status)).toEqual(['completed', 'completed', 'queued']);
-  expect(saved.runs[0]!.record).toEqual(record);
-  expect(await readFile(join(sessions.directory(session.id), saved.runs[0]!.output!), 'utf8')).toBe('published');
+  expect(saved.runs[0]!.record).toEqual(records[0]);
+  const published = await readFile(join(sessions.directory(session.id), saved.runs[0]!.output!));
+  expect(createHash('sha256').update(published).digest('hex')).toBe(records[0]!.sha256);
+  expect(await sharp(published).metadata()).toMatchObject({ format: 'png', width: 1, height: 1 });
   if (code === 'TERMINATION_FAILED') {
     await expect(queue.resume(session.id)).rejects.toThrow('termination is unconfirmed');
     await expect(queue.submit(session.id, session.draft, 1)).rejects.toThrow('termination is unconfirmed');
@@ -168,4 +180,47 @@ it.each(['generate', 'edit'] as const)('keeps app teardown reporting outside the
   const run = inference(() => sessions, () => settings, sdk);
   await run(session.id, { id: crypto.randomUUID(), modelId: 'a', seed: 1, draft: { ...session.draft, mode }, status: 'running', created: '' }, { signal: new AbortController().signal, onEvent: () => {}, onProgress: () => {}, onTeardownError: () => {} });
   expect(operation).toHaveBeenCalledOnce(); await run.release!();
+});
+
+it.each(['a', 'b', 'n'])('maps canvas and painted-mask geometry through real SDK validation for %s', async modelId => {
+  const { validateEditRequest } = await import('picpatchsdk');
+  const sessions = new Sessions(root), session = await sessions.create();
+  const sourcePath = join(root, 'source.jpg'), maskPath = join(root, 'mask.png');
+  // EXIF orientation swaps the imported source dimensions; masks use the displayed orientation.
+  await sharp({ create: { width: 80, height: 48, channels: 3, background: 'blue' } }).withMetadata({ orientation: 6 }).jpeg().toFile(sourcePath);
+  await sharp({ create: { width: 48, height: 80, channels: 3, background: 'white' } }).toColourspace('b-w').png().toFile(maskPath);
+  const source = await sessions.importImage(session.id, sourcePath), mask = await sessions.importImage(session.id, maskPath);
+  const { sdk } = fakeSdk(); const requests: Record<string, any>[] = [];
+  const planner = createImageClient({ model: { variant: modelId === 'n' ? 'sd15-inpaint' : 'flux2-klein-4b', directory: root,
+    ...(modelId === 'n' ? { checkpoint: 'weights.bin' } : {}),
+    manifest: { version: 1, model: 'test', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [{ path: 'weights.bin', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] },
+  }, profile: { version: 1 }, ...(modelId === 'n' ? { nativeExecutable: join(root, 'unused-native') } : { engineDirectory: join(root, 'unused-engine') }) });
+  const caps: ModelCapabilities = { model: 'test', instructionEditing: true, referenceRoles: ['subject' as const], maskMode: modelId === 'n' ? 'native' as const : 'composite' as const, outpainting: true };
+  sdk.createImageClient = (() => ({ edit: async (input: Record<string, unknown>) => {
+    requests.push(input);
+    const request = validateEditRequest({ ...input, model: 'test' }, caps);
+    if (input.outpaint) expect(request.size).toEqual({ width: 1280, height: 1280 });
+    else {
+      // Public planning applies oriented source geometry without loading weights or a runtime.
+      const plan = await planner.plan(input as unknown as EditInput);
+      if (plan.status !== 'completed') throw new Error(plan.code);
+      expect(plan.request.size).toEqual(modelId === 'n' ? { width: 1024, height: 1024 } : { width: 48, height: 80 });
+    }
+    return { status: 'refused', code: 'OUTPUT_CONFLICT', message: 'Test only.', details: {} };
+  }, dispose: async () => {} })) as never;
+  const run = inference(() => sessions, () => ({ version: 1, profile: { version: 1 }, registrations: {} }), sdk);
+  const events = { signal: new AbortController().signal, onEvent: () => {}, onProgress: () => {}, onTeardownError: () => {} };
+  const attempt = (draft: typeof session.draft) => run(session.id, { id: crypto.randomUUID(), modelId, seed: 1, draft, status: 'running', created: '' }, events);
+  const draft = { ...session.draft, mode: 'edit' as const, text: 'Make it blue', source: source.id };
+  await attempt({ ...draft, outpaint: { width: 1280, height: 1280, left: 128, top: 128 } });
+  expect(requests[0]).toMatchObject({ size: { width: 1280, height: 1280 }, outpaint: { size: { width: 1280, height: 1280 }, left: 128, top: 128 } });
+  await attempt({ ...draft, mask: mask.id });
+  if (modelId === 'n') expect(requests[1]).toHaveProperty('size', { width: 1024, height: 1024 }); else expect(requests[1]).not.toHaveProperty('size');
+  if (modelId !== 'n') {
+    await sharp({ create: { width: 80, height: 49, channels: 3, background: 'blue' } }).withMetadata({ orientation: 6 }).jpeg().toFile(sourcePath);
+    await sharp({ create: { width: 49, height: 80, channels: 3, background: 'white' } }).toColourspace('b-w').png().toFile(maskPath);
+    const unalignedSource = await sessions.importImage(session.id, sourcePath), unalignedMask = await sessions.importImage(session.id, maskPath);
+    await expect(attempt({ ...draft, source: unalignedSource.id, mask: unalignedMask.id })).rejects.toMatchObject({ code: 'INVALID_MASK' });
+  }
+  await planner.dispose(); await run.release!();
 });

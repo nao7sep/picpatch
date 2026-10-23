@@ -1,3 +1,5 @@
+import { readSettingsSync, type Settings } from './core/settings.ts';
+import { observe } from './core/settlement.ts';
 import { pickBundleComponent, pickPaths } from './native-pickers.ts';
 import { startupFailureWindow } from './startup-failure.ts';
 import { menuTemplate } from './menu-template.ts';
@@ -31,7 +33,8 @@ import { locations } from './locations.ts';
 import type { Draft } from '../shared/session.ts';
 app.setName('PicPatch');
 let earlyFailure: unknown;
-try { prepareChromiumLanguage(resolveAppPaths().config); } catch (error) { earlyFailure = error; }
+let startupSettings: Settings;
+try { startupSettings = readSettingsSync(resolveAppPaths().config); prepareChromiumLanguage(startupSettings.language); } catch (error) { earlyFailure = error; }
 protocol.registerSchemesAsPrivileged([{ scheme: 'picpatch-image', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 let window: BrowserWindow | undefined; let service: Application; let quitting = false;
 let backup: Backup | undefined;
@@ -96,7 +99,6 @@ async function ask(options: { message: Message; detail?: Message; buttons: Messa
 const editorAvailable = () => rendererReady && !!window && !window.isDestroyed() && !window.webContents.isDestroyed();
 /** A step stuck in native I/O would hold Electron's own exit, so the bounded teardown ends with SIGKILL instead. */
 const forceExit = () => process.kill(process.pid, 'SIGKILL');
-const delay = (milliseconds: number) => new Promise<'late'>(resolve => setTimeout(() => resolve('late'), milliseconds));
 const lifetime = quitFlow({
   freeze: value => { closing = value; command(value ? 'beginClose' : 'endClose'); },
   flush: async () => { if (editorAvailable()) await requests.request({ kind: 'flush' }, 5000); },
@@ -110,20 +112,15 @@ const lifetime = quitFlow({
     if (service.queue.busy() && (await ask({ duringClose: true, message: message('ui.cancel_the_remaining_work_and_quit'), buttons: [message('ui.keep_working'), message('ui.cancel_work_and_quit')] })).response !== 1) return false;
     return true;
   },
-  finish: async () => {
-    await service.stopManaged();
-    await service.queue.stop();
-    if (quitting) return;
-    // Saves already accepted (renames, masks, exports) settle before teardown, within a bound a stalled volume cannot extend.
-    const late = await Promise.race([service.sessions.settled().then(() => 'settled' as const), delay(5000)]) === 'late';
-    if (late) records?.write('warn', 'Session saves did not settle before quitting.');
-    await backup?.close();
-    logs?.close(); await recordsReader?.close();
+  settle: () => observe(service.settleForQuit(), 5000),
+  finish: async (abandon = false) => {
+    logs?.close();
     records?.write('info', 'PicPatch closed normally.');
-    const recordsLate = await Promise.race([records?.close().then(() => 'closed' as const), delay(2000)]) === 'late';
+    let late = abandon;
+    try { const results = await observe(Promise.allSettled([backup?.close(), recordsReader?.close(), records?.close()]), 2000); late ||= results.some(result => result.status === 'rejected' || result.value === false); }
+    catch { late = true; }
     quitting = true;
-    // Electron's own exit waits on Node cleanup, which a step still stuck in native I/O would hold forever.
-    if (late || recordsLate) forceExit(); else app.quit();
+    if (late) forceExit(); else app.quit();
   },
   failed: async error => {
     records?.write('error', 'Closing did not complete.', { error: errorRecord(error) });
@@ -131,7 +128,7 @@ const lifetime = quitFlow({
     catch { /* No usable message surface: ordinary quit remains cancelled. */ }
   },
   interrupt: () => { quitting = true; command('shutdown'); requests.cancelAll(); service?.cancelManaged(); void service?.queue.stop(); },
-  shutdownSave: async () => { await requests.request({ kind: 'flush' }, 800); await service.sessions.settled(); },
+  shutdownSave: async () => { await requests.request({ kind: 'flush' }, 800); await service.settled(); },
   exit: () => app.exit(0),
   forceExit,
 });
@@ -160,23 +157,23 @@ async function start() {
   browserSession.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   browserSession.defaultSession.setPermissionCheckHandler(() => false);
   if (earlyFailure) throw earlyFailure;
-  await bootstrapLanguage(paths.config);
+  await bootstrapLanguage(startupSettings!.language);
   records = new Records(paths.root, locations.worker('records-worker'), () => logs?.changed());
   recordsReader = new RecordsReader(paths.root, records.session, locations.worker('records-reader-worker'));
   records.write('info', 'PicPatch started.', { version: app.getVersion() });
   process.on('uncaughtExceptionMonitor', error => records?.write('error', 'Uncaught exception.', { error: errorRecord(error) }));
   backup = new Backup(paths.backups, locations.worker('backup-worker'), issue => {
     if (!service) return;
-    if (issue.kind === 'unavailable') { service.historyIssue = new UiError('ui.backup_history_is_unavailable_primary_session_saves_remain_active'); return; }
+    if (issue.kind === 'unavailable') { service.historyIssue = new UiError('ui.backup_history_is_unavailable_primary_session_saves_remain_active'); window?.webContents.send('picpatch:changed'); return; }
     records?.write('warn', 'Backup capture failed.', { diagnostic: issue.diagnostic });
     service.historyIssue = new UiError('ui.backup_history_could_not_capture_some_work_primary_session'); window?.webContents.send('picpatch:changed');
   });
   const changed = (scope?: 'progress' | 'managed') => {
-    if (scope === 'progress') window?.webContents.send('picpatch:queue', service?.queue.state);
+    if (scope === 'progress') window?.webContents.send('picpatch:queue', service?.queue.snapshot());
     else if (scope === 'managed') window?.webContents.send('picpatch:managed', service?.managedState);
     else window?.webContents.send('picpatch:changed');
   };
-  service = await Application.open(paths, changed, (path, bytes) => backup?.capture(path, bytes), (level, message, details) => records?.write(level, message, details));
+  service = await Application.open(paths, changed, (path, bytes) => backup?.capture(path, bytes), (level, message, details) => records?.write(level, message, details), startupSettings!);
   protocol.handle('picpatch-image', async request => {
     try {
       const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1));
@@ -186,7 +183,7 @@ async function start() {
     }
     catch { return new Response('Image unavailable', { status: 404 }); }
   });
-  logs = new LogsWindow(recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth, timeZone: service.settings.timeZone }), error => records?.write('error', 'Logs could not be read.', { error: errorRecord(error) }), width => storePane({ recordsListWidth: width }));
+  logs = new LogsWindow(recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth, timeZone: service.settings.timeZone }), error => records?.readFailed(error), width => storePane({ recordsListWidth: width }));
   const renderer = locations.page('index');
   ipcMain.handle('picpatch:call', async (event, action: string, payload: unknown) => {
     if (!trustedSender(event, window, renderer)) throw new Error('Untrusted request.');
@@ -257,13 +254,13 @@ async function dispatch(action: string, payload: any) {
     case 'locale': return { ...localeState(), uiFont: service.settings.uiFont };
     case 'modelReadiness': return service.readiness();
     case 'overview': return { ...await service.overview(), locale: localeState(), systemDark: systemDark() };
-    case 'create': return service.sessions.create(t('session.untitled'));
-    case 'get': return service.sessions.get(payload.id);
+    case 'create': return service.create(t('session.untitled'));
+    case 'get': service.sessions.focus(payload.id); return service.sessions.get(payload.id);
     case 'focus': service.queue.focus(typeof payload.id === 'string' ? payload.id : undefined); return;
     case 'draft': return service.draft(payload.id, payload.draft as Draft);
     case 'rename': if (typeof payload.name !== 'string' || !payload.name.trim()) throw new UiError('ui.enter_a_session_name'); return service.sessions.update(payload.id, session => { session.name = payload.name; });
-    case 'delete': { if (service.queue.busy(payload.id)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); const answer = await ask({ message: message('ui.delete_this_session_and_its_retained_images'), detail: message('ui.exported_images_and_original_files_are_kept'), buttons: [message('ui.keep_session'), message('ui.delete_session')] }); if (answer.response !== 1) return false; await service.remove(payload.id); return true; }
-    case 'import': { const files = payload.path ? [payload.path] : await pick(payload.multiple === false ? ['openFile'] : ['openFile', 'multiSelections'], t('ui.add_images')); const assets = []; for (const path of files) assets.push(await service.importImage(payload.id, path)); return assets; }
+    case 'delete': { if (service.queue.busy(payload.id)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); const answer = await ask({ message: message('ui.delete_this_session_and_its_retained_images'), detail: message('ui.exported_images_and_original_files_are_kept'), buttons: [message('ui.keep_session'), message('ui.delete_session')] }); if (answer.response !== 1) return false; return { removed: true, ...await service.remove(payload.id) }; }
+    case 'import': { const files = payload.path ? [payload.path] : await pick(payload.multiple === false ? ['openFile'] : ['openFile', 'multiSelections'], t('ui.add_images')); if (closing) throw new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it'); return service.importImages(payload.id, files); }
     case 'mask': return service.mask(payload.id, payload.bytes);
     case 'submit': return service.submit(payload.id, payload.draft, payload.samples);
     case 'cancel': return service.queue.cancel(payload.id, payload.runId);

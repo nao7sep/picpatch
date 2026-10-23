@@ -26,6 +26,7 @@ export interface Overview {
   resourceDefaults: { engineDirectory: string; modelsDirectory: string };
   resourcesBusy: boolean; managed: ManagedState; locale: LocaleState; systemDark: boolean;
 }
+export interface ImportResult { assets: Asset[]; failures: { path: string; notice: Message }[] }
 export interface PaneState { railWidth: number; optionsPane: boolean }
 export type Started = { started: true };
 export type ExportResult = SavedArtifact | SaveArtifactRefusal;
@@ -59,9 +60,9 @@ export const api = {
   /** The open session's queued runs take the next free slot. */
   focus: (id: string) => call<void>('focus', { id }),
   rename: (id: string, name: string) => call<Session>('rename', { id, name }),
-  remove: (id: string) => call<boolean>('delete', { id }),
+  remove: (id: string) => call<boolean | { removed: true; cleanup?: Message }>('delete', { id }),
   /** Without a path, opens the file picker; `multiple: false` where only one image is used. */
-  importImages: (id: string, path?: string, multiple = true) => call<Asset[]>('import', path ? { id, path } : { id, multiple }),
+  importImages: (id: string, path?: string, multiple = true) => call<ImportResult>('import', path ? { id, path } : { id, multiple }),
   saveMask: (id: string, bytes: Uint8Array) => call<Asset>('mask', { id, bytes }),
   submit: (id: string, draft: Draft, samples: number) => call<Run[]>('submit', { id, draft, samples }),
   cancel: (id: string, runId: string) => call<void>('cancel', { id, runId }),
@@ -85,7 +86,7 @@ export const api = {
   droppedFile: (file: File) => window.picpatch.droppedFile(file),
   onCommand: (listener: (id: string) => void) => window.picpatch.onCommand(listener),
   onChange: (listener: () => void) => window.picpatch.onChange(listener),
-  /** Stage and progress of the active run only. */
+  /** Full queue state, including every active run’s progress, pause state and issue. */
   onQueue: (listener: (state: QueueState) => void) => window.picpatch.onQueue(state => listener(state as QueueState)),
   /** The running model or engine operation and the latest result, whenever either changes. */
   onManaged: (listener: (state: ManagedState) => void) => window.picpatch.onManaged(state => listener(state as ManagedState)),

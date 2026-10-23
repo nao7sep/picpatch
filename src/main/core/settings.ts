@@ -1,5 +1,6 @@
 import { preference, UiError } from '../../shared/i18n/index.ts';
 import type { Language } from '../../shared/i18n/index.ts';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { validateProfile, validateModelRegistration } from 'picpatchsdk';
@@ -19,7 +20,21 @@ import { validTimeZone } from '../../shared/time-zone.ts';
 export async function readSettings(path: string): Promise<Settings> {
   let text: string;
   try { text = await readFile(path, 'utf8'); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, profile: { version: 1 }, registrations: {} }; throw unusable(path, error); }
+  catch (error) { return settingsReadFailure(path, error); }
+  return settingsText(path, text);
+}
+/** Startup captures one validated snapshot before Chromium and native language setup. */
+export function readSettingsSync(path: string): Settings {
+  let text: string;
+  try { text = readFileSync(path, 'utf8'); }
+  catch (error) { return settingsReadFailure(path, error); }
+  return settingsText(path, text);
+}
+function settingsReadFailure(path: string, error: unknown): Settings {
+  if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, profile: { version: 1 }, registrations: {} };
+  throw unusable(path, error);
+}
+function settingsText(path: string, text: string): Settings {
   try { return parseSettings(JSON.parse(text)); }
   catch (error) { throw unusable(path, error); }
 }

@@ -4,9 +4,11 @@ import { modelName } from '../../shared/model-name.ts';
 import { t, term } from '../../shared/i18n/index.ts';
 import type { CatalogModel } from './api.ts';
 
-let names = new Map<string, string>();
-export function setCatalog(models: readonly CatalogModel[]): void { names = new Map(models.map(model => [model.id, model.profile.name])); }
-export function modelLabel(id: string): string { return names.get(id) ?? modelName(id); }
+let catalog = new Map<string, CatalogModel>();
+export function setCatalog(models: readonly CatalogModel[]): void { catalog = new Map(models.map(model => [model.id, model])); }
+export function modelLabel(id: string): string { return catalog.get(id)?.profile.name ?? modelName(id); }
+
+export function modelCapabilities(id: string) { return catalog.get(id)?.capabilities; }
 
 /** Recommended models first, then standard, then specialist. */
 export const tierOrder = { recommended: 0, standard: 1, specialist: 2 } as const;

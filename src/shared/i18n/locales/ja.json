@@ -101,7 +101,8 @@
   "ui.picpatch_could_not_finish_closing": "PicPatchの終了処理を完了できませんでした。",
   "ui.enter_a_session_name": "セッション名を入力してください。",
   "ui.delete_this_session_and_its_retained_images": "このセッションと保持されている画像を削除しますか？",
-  "ui.exported_images_and_original_files_are_kept": "書き出した画像と元のファイルは保持されます。",
+  "ui.exported_images_and_original_files_are_kept": "書き出した画像と元のファイルは保持されます。ローカルのバックアップ履歴には、セッションのテキストと描画したマスクが残ります。",
+  "ui.session_cleanup_pending": "セッションは一覧から削除されましたが、ファイルを削除できませんでした。ファイルが残っている場所：{path}",
   "ui.keep_session": "セッションを保持",
   "ui.add_images": "画像を追加",
   "ui.wait_for_the_current_resource_operation": "現在のリソース操作が終わるまで待ってください。",
@@ -425,6 +426,7 @@
   "conversation.results": {
     "other": "{count}件の結果"
   },
+  "conversation.sourceSize": "元画像のサイズ",
   "conversation.size": "{width}×{height}",
   "conversation.unavailable": "利用できない画像",
   "conversation.view": "{name}を表示",

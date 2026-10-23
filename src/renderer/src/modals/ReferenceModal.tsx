@@ -11,11 +11,11 @@ const ROLES = ['subject', 'object', 'style', 'background'] as const;
 const CONDITIONING = ['prompt', 'identity', 'appearance'] as const;
 const CLASSES = ['man', 'woman', 'girl', 'boy'] as const;
 
-export function ReferenceModal({ session, group, models, onChange, onAddPhotos, onRemove, onClose }: {
-  session: Session; group: ReferenceDraft; models: readonly CatalogModel[];
+export function ReferenceModal({ session, group, models, errors = [], onChange, onAddPhotos, onRemove, onClose }: {
+  session: Session; group: ReferenceDraft; models: readonly CatalogModel[]; errors?: unknown[];
   onChange: (group: ReferenceDraft, save: 'later' | 'now') => void; onAddPhotos: () => void; onRemove: () => void; onClose: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, errorText } = useI18n();
   const conditioning = new Set(models.map(model => model.capabilities.referenceConditioning));
   const independent = conditioning.has('independent-subject');
   // The class word only matters to identity conditioning; an authored value stays visible to clear.
@@ -26,6 +26,7 @@ export function ReferenceModal({ session, group, models, onChange, onAddPhotos, 
       <span className="spacer" />
       <button type="button" className="button primary" onClick={onClose}>{t('ui.done')}</button>
     </>}>
+      {errors.map((error, index) => <p key={index} className="notice notice-error" role="alert">{errorText(error)}</p>)}
       {independent && <p className="field-help">{t('admission.independent', { reference: group.id })}</p>}
       <label className="field">
         <span className="field-label">{t('ui.reference_group_name')}</span>

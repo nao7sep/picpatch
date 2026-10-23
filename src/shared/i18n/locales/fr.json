@@ -101,7 +101,8 @@
   "ui.picpatch_could_not_finish_closing": "PicPatch n’a pas pu terminer sa fermeture.",
   "ui.enter_a_session_name": "Saisissez un nom de session.",
   "ui.delete_this_session_and_its_retained_images": "Supprimer cette session et les images qu’elle conserve\u00a0?",
-  "ui.exported_images_and_original_files_are_kept": "Les images exportées et les fichiers d’origine sont conservés.",
+  "ui.exported_images_and_original_files_are_kept": "Les images exportées et les fichiers d’origine sont conservés. L’historique des sauvegardes locales conserve le texte de la session et les masques peints.",
+  "ui.session_cleanup_pending": "La session a été retirée de la liste, mais ses fichiers n’ont pas pu être supprimés. Emplacement conservé\u00a0: {path}",
   "ui.keep_session": "Conserver la session",
   "ui.add_images": "Ajouter des images",
   "ui.wait_for_the_current_resource_operation": "Attendez la fin de l’opération en cours sur les ressources.",
@@ -437,6 +438,7 @@
     "many": "{count} de résultats",
     "other": "{count} résultats"
   },
+  "conversation.sourceSize": "Taille de l’image source",
   "conversation.size": "{width}×{height}",
   "conversation.unavailable": "Image indisponible",
   "conversation.view": "Afficher {name}",

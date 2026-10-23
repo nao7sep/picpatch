@@ -1,14 +1,15 @@
 import { t, term } from './i18n/index.ts';
 import { admissionIssues, type AdmissionIssue, type ModelCapabilities } from 'picpatchsdk/types';
+import { commandGeometry } from './image-command.ts';
 import type { Draft } from './session.ts';
 /** The SDK's own admission rules, presented in the window's copy. The SDK remains authoritative at execution; a draft is never rewritten. */
 export function incompatibilities(draft: Draft, capabilities: ModelCapabilities): string[] {
   const issues = admissionIssues({
-    operation: draft.mode,
+    operation: draft.mode, text: draft.text,
     sourceImage: draft.source !== undefined, maskImage: draft.mask !== undefined,
-    ...(draft.outpaint ? { outpaint: { size: { width: draft.outpaint.width, height: draft.outpaint.height }, left: draft.outpaint.left, top: draft.outpaint.top } } : {}),
+    ...commandGeometry(draft, capabilities.maskMode),
     references: draft.references.map(group => ({ id: group.id, role: group.role, ...(group.conditioning ? { conditioning: group.conditioning } : {}), ...(group.className !== undefined ? { className: group.className } : {}), images: group.images.length })),
-    parameters: draft.parameters, size: { width: draft.width, height: draft.height },
+    parameters: draft.parameters,
     ...(draft.control ? { control: { kind: draft.control.kind } } : {}),
   }, capabilities);
   return [...new Set(issues.map(issue => copy(issue, draft)))];

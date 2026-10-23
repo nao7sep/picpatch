@@ -1,5 +1,6 @@
 import { UiError } from '../../shared/i18n/index.ts';
 import type { Key, Message } from '../../shared/i18n/index.ts';
+import { performance } from 'node:perf_hooks';
 import { randomInt, randomUUID } from 'node:crypto';
 import type { ImageOutcome, ModelOpenRefusal, ProgressEvent, SdkEvent } from 'picpatchsdk';
 import type { Draft, Run, QueueState } from '../../shared/session.ts';
@@ -20,7 +21,13 @@ export class Queue {
   private running = new Map<string, { controller: AbortController; task: Promise<void> }>();
   private terminationUnconfirmed = false;
   private releasing: Promise<void> = Promise.resolve();
+  private releasingCount = 0;
   private focused: string | undefined;
+  private starts = new Map<string, number>();
+  snapshot(): QueueState {
+    const now = performance.now();
+    return structuredClone({ ...this.state, active: this.state.active.map(item => ({ ...item, elapsedMs: Math.max(0, now - (this.starts.get(item.runId) ?? now)) })) });
+  }
   state: QueueState = { paused: false, active: [] };
   /** `changed('progress')` reports only active runs' stage and progress, so listeners need not reload sessions. */
   constructor(private sessions: Sessions, private run: Runner, private changed: (scope?: 'progress') => void = () => {}, private limit: () => number = () => 1) {}
@@ -64,9 +71,12 @@ export class Queue {
   }
   private launch(selected: { sessionId: string; runId: string }): void {
     const controller = new AbortController();
-    const active = { ...selected, stage: 'preparing', startedAt: Date.now() } as QueueState['active'][number];
+    const unpin = this.sessions.pin(selected.sessionId);
+    const active = { ...selected, stage: 'preparing', startedAt: Date.now(), elapsedMs: 0 } as QueueState['active'][number];
+    this.starts.set(selected.runId, performance.now());
     this.state.active.push(active); this.changed();
     const task = this.execute(selected, controller.signal, active).finally(() => {
+      unpin(); this.starts.delete(selected.runId);
       this.running.delete(selected.runId); this.state.active = this.state.active.filter(item => item !== active);
       this.changed(); this.wake();
     });
@@ -75,7 +85,8 @@ export class Queue {
   /** A warm worker is closed once nothing is running; an unconfirmed close blocks further work. */
   private idle(): void {
     if (!this.run.release) return;
-    this.releasing = this.releasing.then(() => this.run.release!()).catch(error => this.halt(error));
+    this.releasingCount++;
+    this.releasing = this.releasing.then(() => this.run.release!()).catch(error => this.halt(error)).finally(() => { this.releasingCount--; });
   }
   /** Teardown trouble has its own outcome: it pauses the queue, and an unconfirmed stop blocks further work. */
   private halt(error: unknown): void {
@@ -83,6 +94,8 @@ export class Queue {
     this.state.paused = true; this.state.issue = queueIssue(error); this.changed();
   }
   private async execute(selected: { sessionId: string; runId: string }, signal: AbortSignal, active: QueueState['active'][number]): Promise<void> {
+    const started = performance.now();
+    const progressChanged = () => { active.elapsedMs = performance.now() - started; this.changed('progress'); };
     try {
       // A run cancelled or already taken since it was listed is simply skipped.
       let taken = false;
@@ -98,8 +111,8 @@ export class Queue {
           signal,
           // A published image or primary error remains the run's result.
           onTeardownError: error => this.halt(error),
-          onEvent: event => { if (event.name === 'operation.stage') { if (active.stage !== event.stage) delete active.progress; active.stage = event.stage; this.changed('progress'); } },
-          onProgress: event => { active.stage = event.stage; active.progress = { completed: event.completed, total: event.total }; this.changed('progress'); },
+          onEvent: event => { if (event.name === 'operation.stage') { if (active.stage !== event.stage) delete active.progress; active.stage = event.stage; progressChanged(); } },
+          onProgress: event => { active.stage = event.stage; active.progress = { completed: event.completed, total: event.total }; progressChanged(); },
         });
       } catch (error) {
         const cause = error as { code?: string; kind?: string; effect?: 'none' | 'unknown'; message?: string };
@@ -126,6 +139,7 @@ export class Queue {
         }
         value.draft = recoverCommand(value.draft, value.runs);
       });
+      if (outcome.status === 'completed') await this.sessions.retireOutput(selected.sessionId, selected.runId);
     } catch (error) {
       // A result may already exist. Never replay a failed metadata write or uncertain process outcome.
       this.state.paused = true; this.state.issue = queueIssue(error);
@@ -141,7 +155,7 @@ export class Queue {
   /** Resource changes wait for queued work and for a confirmed worker stop. */
   requireIdle(reason: Key): void {
     if (this.terminationUnconfirmed) throw new UiError('error.worker_termination_is_unconfirmed_restart_picpatch_before_starting_more_work');
-    if (this.busy()) throw new UiError(reason);
+    if (this.busy() || this.releasingCount) throw new UiError(reason);
   }
   busy(sessionId?: string): boolean { return this.state.active.some(item => !sessionId || item.sessionId === sessionId) || this.pending.some(item => !sessionId || item.sessionId === sessionId); }
   async stop(): Promise<void> { this.state.paused = true; for (const { controller } of this.running.values()) controller.abort(); await this.settled(); }

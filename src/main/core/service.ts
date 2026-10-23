@@ -1,3 +1,4 @@
+import { Settlement } from './settlement.ts';
 import { modelReadiness } from './model-readiness.ts';
 import { errorNotice, message, preference, UiError } from '../../shared/i18n/index.ts';
 import type { ManagedResult, ManagedState, ManagedTarget, ManagedOperation } from '../../shared/managed.ts';
@@ -7,13 +8,15 @@ import { isAbsolute, join } from 'node:path';
 import { exportName } from '../../shared/export-name.ts';
 import { validTimeZone } from '../../shared/time-zone.ts';
 import type { AppPaths } from './paths.ts';
-import { Sessions, validateDraft } from './sessions.ts';
+import { Sessions } from './sessions.ts';
 import { Queue } from './queue.ts';
 import { inference } from './inference.ts';
 import { readSettings, saveSettings, usableProfile, validConcurrency } from './settings.ts';
 import type { Runner } from './queue.ts';
+import { initialDraft } from '../../shared/session.ts';
+import type { Readiness } from '../../shared/readiness.ts';
 import type { Draft, Session } from '../../shared/session.ts';
-import type { PrepareModelSettings, SdkEvent } from 'picpatchsdk';
+import type { PrepareModelSettings, SdkEvent, ProgressEvent } from 'picpatchsdk';
 import type { Settings } from './settings.ts';
 /** The Python runtime the catalog names for a model; native models and no selection use the default Python engine. */
 function pythonEngine(modelId: unknown) {
@@ -49,6 +52,8 @@ export function exportDefaultPath(session: Session, runId: string, directory: st
 }
 export class Application {
   sessions: Sessions;
+  private effects = new Settlement();
+  private lastReadiness: Readiness = {};
   queue: Queue;
   historyIssue?: string | { message: string; notice?: import('../../shared/i18n/index.ts').Message };
   private settingsTail: Promise<unknown> = Promise.resolve();
@@ -57,16 +62,17 @@ export class Application {
   private managedSerial = 0;
   private runner(): Runner {
     const run = inference(() => this.sessions, () => this.settings);
-    return async (sessionId, attempt, events) => {
+    const wrapped: Runner = async (sessionId, attempt, events) => {
       const context = { sessionId, runId: attempt.id };
       let completion;
+      let terminalFailure = false;
       try {
-        completion = await run(sessionId, attempt, { ...events, onEvent: event => { this.sdkEvents(context)(event); events.onEvent(event); }, onTeardownError: error => {
+        completion = await run(sessionId, attempt, { ...events, onEvent: event => { if (event.name === 'operation.failed' || event.name === 'operation.cancelled') terminalFailure = true; this.sdkEvents(context)(event); events.onEvent(event); }, onTeardownError: error => {
           this.diagnostic('error', 'Image client teardown failed.', { ...context, error: errorRecord(error) });
           events.onTeardownError(error);
         } });
       } catch (error) {
-        this.diagnostic(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Image attempt ended without a result.', { ...context, error: errorRecord(error) });
+        if (!terminalFailure) this.diagnostic(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Image attempt ended without a result.', { ...context, error: errorRecord(error) });
         throw error;
       }
       const result = completion.outcome;
@@ -76,13 +82,15 @@ export class Application {
       }
       return completion;
     };
+    wrapped.release = run.release;
+    return wrapped;
   }
   private constructor(readonly paths: AppPaths, public settings: Settings, private changed: (scope?: 'progress' | 'managed') => void, private backup: (path: string, bytes: Buffer) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
     this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined);
     this.queue = new Queue(this.sessions, this.runner(), changed, () => this.settings.concurrency ?? 1);
   }
-  static async open(paths: AppPaths, changed: (scope?: 'progress' | 'managed') => void = () => {}, backup: (path: string, bytes: Buffer) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}): Promise<Application> {
-    const settings = await readSettings(paths.config);
+  static async open(paths: AppPaths, changed: (scope?: 'progress' | 'managed') => void = () => {}, backup: (path: string, bytes: Buffer) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}, snapshot?: Settings): Promise<Application> {
+    const settings = snapshot ?? await readSettings(paths.config);
     return new Application(paths, settings, changed, backup, diagnostic);
   }
   sdkEvents(context: Record<string, unknown> = {}): (event: SdkEvent) => void {
@@ -95,7 +103,7 @@ export class Application {
     return {
       ...await this.sessions.list(),
       models: listModels().filter(model => model.supported), unsupportedModels: listModels().filter(model => !model.supported).length,
-      queue: structuredClone(this.queue.state), resourcesBusy: this.resourcesBusy(), managed: this.managedState, historyIssue,
+      queue: this.queue.snapshot(), resourcesBusy: this.resourcesBusy(), managed: this.managedState, historyIssue,
       settings: structuredClone(this.settings), resourceDefaults: resolveStoragePaths(), locations: { ...resources, sessionsDirectory: this.sessions.root },
     };
   }
@@ -105,14 +113,12 @@ export class Application {
    * it can close without changing anything. Image work does not start while one runs, and the queue's own idle checks
    * keep resources from changing under image work. A second operation is refused at once, before it starts.
    */
-  private manage<T>(target: ManagedTarget, work: (call: { signal: AbortSignal; onEvent: (event: SdkEvent) => void }) => Promise<T>): Promise<T> {
+  private manage<T>(target: ManagedTarget, work: (call: { signal: AbortSignal; onEvent: (event: SdkEvent) => void; onProgress: (event: ProgressEvent) => void }) => Promise<T>): Promise<T> {
     if (this.managed) throw new UiError('ui.wait_for_the_current_managed_operation_or_cancel_it');
     const controller = new AbortController(); const view: ManagedOperation = { id: ++this.managedSerial, ...target };
     const record = this.sdkEvents({ action: target.action, ...(target.modelId ? { modelId: target.modelId } : {}) });
-    const onEvent = (event: SdkEvent) => {
-      record(event);
-      const progress = event.name === 'operation.progress' ? (event as { progress?: { completed?: number; total?: number } }).progress : undefined;
-      if (progress?.total && Number.isFinite(progress.completed)) { view.progress = { completed: progress.completed!, total: progress.total }; this.changed('managed'); }
+    const onProgress = (progress: ProgressEvent) => {
+      if (progress.total > 0 && Number.isFinite(progress.completed)) { view.progress = { completed: progress.completed, total: progress.total }; this.changed('managed'); }
     };
     const managed = { view, controller, task: Promise.resolve() as Promise<unknown> };
     this.managed = managed;
@@ -123,7 +129,7 @@ export class Application {
       this.changed('managed'); this.changed();
     };
     let task: Promise<T>;
-    try { task = work({ signal: controller.signal, onEvent }); }
+    try { task = work({ signal: controller.signal, onEvent: record, onProgress }); }
     catch (error) { this.managed = undefined; throw error; }
     managed.task = task;
     // Views and the standing state learn of the start at once; other views refresh what it holds back.
@@ -154,20 +160,37 @@ export class Application {
     return this.manage({ action: 'installPython', ...(modelId ? { modelId } : {}) }, call => installEngine({ ...pythonEngine(modelId), profile: this.settings.profile, uvExecutable, toolDirectories }, call));
   }
   /** Autosave acknowledges only; the renderer already holds the draft it sent. */
-  async draft(sessionId: string, draft: Draft): Promise<void> { const valid = validateDraft(draft); await this.sessions.update(sessionId, value => { value.draft = valid; }); }
+  async draft(sessionId: string, draft: Draft): Promise<void> { await this.sessions.saveDraft(sessionId, draft); }
   /**
    * Backup history holds what the user authors: settings, session documents and painted masks. Imported copies
    * (the user keeps the original) and generated results (saved with Save image when wanted) are transient work.
    */
   async importImage(sessionId: string, path: string) { return this.sessions.importImage(sessionId, path); }
+  importImages(sessionId: string, paths: string[]) {
+    return this.effects.track(async () => {
+      const assets: import('../../shared/session.ts').Asset[] = [];
+      const failures: { path: string; notice: import('../../shared/i18n/index.ts').Message }[] = [];
+      for (const path of paths) {
+        try { assets.push(await this.sessions.importImage(sessionId, path)); }
+        catch (error) { failures.push({ path, notice: errorNotice(error) }); }
+      }
+      return { assets, failures };
+    });
+  }
+  async settled(): Promise<void> { await this.effects.settled(); await this.sessions.settled(); await this.settingsTail; }
+  async settleForQuit(): Promise<void> { await Promise.all([this.stopManaged(), this.queue.stop()]); await this.settled(); }
+
   async mask(sessionId: string, bytes: Uint8Array) {
     // Authored mask pixels belong to the GUI; the SDK validates their image semantics on execution.
     if (!(bytes instanceof Uint8Array) || bytes.byteLength > 64 * 1024 * 1024) throw new UiError('error.invalid_mask_image');
     const asset = await this.sessions.addImage(sessionId, 'mask.png', bytes);
     this.backup(await this.sessions.imagePath(sessionId, asset.id), Buffer.from(bytes)); return asset;
   }
-  async remove(sessionId: string) { if (this.queue.busy(sessionId)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); await this.sessions.remove(sessionId); }
-  async export(sessionId: string, runId: string, destination: string, sidecar: boolean, includeInputs: boolean) {
+  async remove(sessionId: string) { if (this.queue.busy(sessionId)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); return this.sessions.remove(sessionId); }
+  export(sessionId: string, runId: string, destination: string, sidecar: boolean, includeInputs: boolean) {
+    return this.effects.track(() => this.exportImage(sessionId, runId, destination, sidecar, includeInputs));
+  }
+  private async exportImage(sessionId: string, runId: string, destination: string, sidecar: boolean, includeInputs: boolean) {
     const session = await this.sessions.get(sessionId); const run = session.runs.find(r => r.id === runId);
     if (!run?.record || !run.output) throw new UiError('error.select_a_completed_image');
     // The SDK leaves the inputs out of the saved copy when the user did not choose to share them.
@@ -175,8 +198,9 @@ export class Application {
     if (result.status === 'completed' && result.sidecar?.status === 'failed') this.diagnostic('warn', 'Image saved; its settings sidecar could not be saved.', { sessionId, runId, sidecar: result.sidecar });
     return result;
   }
-  /** Presence checks are cheap; the signal bounds a probe that stops responding, such as an engine on a stalled volume. */
-  async readiness() { return modelReadiness(this.settings, { signal: AbortSignal.timeout(120_000), onEvent: this.sdkEvents({ action: 'readiness' }) }); }
+  /** Model presence and shared engine dependency-import probes do not load weights; the signal bounds stalled probes. */
+  async readiness() { return this.lastReadiness = await modelReadiness(this.settings, { signal: AbortSignal.timeout(120_000), onEvent: this.sdkEvents({ action: 'readiness' }) }); }
+  create(name: string) { return this.sessions.create(name, freshDraft(listModels(), this.lastReadiness)); }
   async models() { return inspectModels({ profile: this.settings.profile }, { onEvent: this.sdkEvents({ action: 'models' }) }); }
   prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelSettings, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}) {
     this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_prepared_models');
@@ -230,6 +254,14 @@ export class Application {
     const selected = new Sessions(directory, (path, bytes) => this.backup(path, bytes), true);
     if ((await selected.list()).unavailable) throw new UiError('error.storage');
     await this.updateSettings(value => { value.sessionsDirectory = directory; });
-    this.queue.use(selected); this.sessions = selected;
+    const previous = this.sessions; this.queue.use(selected); this.sessions = selected; await previous.close();
   }
+}
+
+/** Fresh selections come from this host's catalog; saved sessions retain their authored choices. */
+export function freshDraft(models: readonly { id: string; supported: boolean }[], readiness: Readiness = {}): Draft {
+  const draft = initialDraft(); const supported = models.filter(model => model.supported);
+  const chosen = supported.find(model => readiness[model.id] === 'ready') ?? supported.find(model => draft.modelIds.includes(model.id)) ?? supported[0];
+  draft.modelIds = chosen ? [chosen.id] : [];
+  return draft;
 }

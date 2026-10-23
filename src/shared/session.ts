@@ -15,7 +15,7 @@ export interface Run {
   status: 'queued' | 'running' | 'completed' | 'refused' | 'failed' | 'cancelled' | 'interrupted';
   created: string; started?: string; ended?: string; output?: string; record?: ArtifactRecord;
   notices?: (string | { notice?: import('./i18n/index.ts').Message; code?: string })[];
-  /** Why the SDK refused the run. effect is present only on runs recorded before refusals stopped carrying one. */
+  /** Why a run was refused, failed, cancelled or interrupted; effect records uncertainty about execution. */
   issue?: { code: string; message: string; effect?: 'none' | 'unknown' };
 }
 export interface Session {
@@ -27,5 +27,5 @@ export interface SessionSummary { id: string; name: string; updated: string; res
 /** How many images may generate at once; 1 unless the user's machine has memory for several models. */
 export const maxConcurrency = 8;
 /** `active` lists every run executing now, in the order they started. */
-export interface QueueState { active: { sessionId: string; runId: string; stage: string; startedAt: number; progress?: { completed: number; total: number } }[]; paused: boolean; issue?: { code?: string; message: string; notice?: Message } }
+export interface QueueState { active: { sessionId: string; runId: string; stage: string; startedAt: number; elapsedMs?: number; progress?: { completed: number; total: number } }[]; paused: boolean; issue?: { code?: string; message: string; notice?: Message } }
 export const initialDraft = (): Draft => ({ mode: 'generate', text: '', modelIds: ['flux2-klein-4b-4bit'], width: 1024, height: 1024, parameters: {}, references: [] });

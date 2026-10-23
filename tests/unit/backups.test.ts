@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import { once } from 'node:events';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -32,11 +33,13 @@ it('settles sent captures when closing, and reports a capture it could not keep'
   try {
     const issues: BackupIssue[] = []; const script = new URL('../../src/main/core/backup-worker.ts', import.meta.url);
     const backup = new Backup(join(root, 'backups.sqlite3'), script, issue => issues.push(issue));
+    await once(backup['worker'], 'online');
     backup.capture(join(root, 'config.json'), Buffer.from('{}')); await backup.close();
     const db = new DatabaseSync(join(root, 'backups.sqlite3'));
     try { expect(db.prepare('SELECT path FROM backups').all()).toEqual([{ path: join(root, 'config.json') }]); } finally { db.close(); }
     await mkdir(join(root, 'blocked.sqlite3'));
     const blocked = new Backup(join(root, 'blocked.sqlite3'), script, issue => issues.push(issue));
+    await once(blocked['worker'], 'online');
     blocked.capture(join(root, 'config.json'), Buffer.from('{}')); await blocked.close();
     expect(issues).toEqual([{ kind: 'capture', diagnostic: expect.any(String) }]);
   } finally { await rm(root, { recursive: true, force: true }); }

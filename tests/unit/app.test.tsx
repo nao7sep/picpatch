@@ -394,3 +394,105 @@ it('refuses files outside the composer and anything that is not a file, opening 
   expect(zone.classList.contains('dropping')).toBe(false);
   expect(fake.calls('import')).toEqual([]);
 });
+
+it('settles only submission-owned text and target while retaining every newer composer control', async () => {
+  let finish!: (value: ReturnType<typeof run>[]) => void;
+  const initial = session({ runs: [run('original')] });
+  initial.draft.references = [{ id: 'Person', role: 'subject', images: ['photo'] }];
+  initial.assets = [{ id: 'photo', name: 'photo.png', file: 'x', bytes: 1, sha256: 'x' }];
+  const fake = await start(fakeBridge(initial, { submit: () => new Promise(resolve => { finish = resolve; }) }));
+  fireEvent.change(field(), { target: { value: 'First instruction' } });
+  fireEvent.click(send());
+  await waitFor(() => expect(fake.calls('submit')).toHaveLength(1));
+  fireEvent.change(field(), { target: { value: 'Next instruction' } });
+  fireEvent.click(screen.getAllByRole('button', { name: 'Image options' })[0]!);
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Seed' }), { target: { value: '42' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Steps' }), { target: { value: '8' } });
+  fireEvent.click(screen.getByTitle('Image size'));
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Width' }), { target: { value: '832' } });
+  fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Width' }), { key: 'Escape' });
+  fireEvent.click(screen.getByRole('button', { name: 'Subject Person' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Reference group name' }), { target: { value: 'Changed reference' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit this result' }));
+  fireEvent.click(screen.getByTitle('Models'));
+  fireEvent.click(screen.getByRole('button', { name: 'Show more models' }));
+  fireEvent.click(screen.getByRole('radio', { name: /Stable Diffusion 1.5/ }));
+  fireEvent.keyDown(screen.getByRole('dialog', { name: 'Models' }), { key: 'Escape' });
+  const snapshot = fake.calls('submit')[0] as { draft: typeof fake.session.draft };
+  await act(async () => finish([run('new', { draft: snapshot.draft, status: 'queued', output: undefined })]));
+  await waitFor(() => expect(fake.session.draft).toMatchObject({ text: 'Next instruction', source: 'original', seed: 42, width: 832, modelIds: ['sd15'], references: [{ id: 'Changed reference', images: ['photo'] }], parameters: { steps: 8 } }));
+});
+
+it('delivers cancellation immediately while import is held and captures the clicked session', async () => {
+  let finish!: (assets: unknown[]) => void;
+  const fake = await start(fakeBridge(session({ runs: [run('pending', { status: 'queued', output: undefined })] }), { import: () => new Promise(resolve => { finish = resolve; }) }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add images' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Reference photos' }));
+  await waitFor(() => expect(fake.calls('import')).toHaveLength(1));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(fake.calls('cancel')).toEqual([{ id: fake.session.id, runId: 'pending' }]));
+  await act(async () => finish([]));
+});
+
+it('keeps compare enabled with a single model and allows selecting a second model', async () => {
+  const fake = await start();
+  fireEvent.click(screen.getByTitle('Models'));
+  const compare = screen.getByRole('checkbox', { name: 'Compare several models' });
+  fireEvent.click(compare);
+  expect((compare as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Show more models' }));
+  const sd = screen.getAllByRole('checkbox').find(input => input.closest('label')?.textContent?.includes('Stable Diffusion 1.5'))!;
+  fireEvent.click(sd);
+  await waitFor(() => expect(fake.session.draft.modelIds).toHaveLength(2));
+  fireEvent.click(sd);
+  await waitFor(() => expect(fake.session.draft.modelIds).toHaveLength(1));
+  expect((compare as HTMLInputElement).checked).toBe(true);
+});
+
+it('shows partial photo imports and failed reference saves inside the open dialog', async () => {
+  const initial = session(); initial.draft.references = [{ id: 'Person', role: 'subject', images: [] }];
+  const fake = await start(fakeBridge(initial, { import: () => ({ assets: [{ id: 'photo', name: 'good.png', file: 'x', bytes: 1, sha256: 'x' }], failures: [{ path: '/bad.png', notice: { key: 'error.input' } }] }) }));
+  fireEvent.click(screen.getByRole('button', { name: 'Subject Person' }));
+  const dialog = screen.getByRole('dialog', { name: 'Reference group' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Add photos' }));
+  await waitFor(() => expect(within(dialog).getByRole('alert')).toBeTruthy());
+  expect(within(dialog).getByRole('img', { name: 'good.png' })).toBeTruthy();
+  expect(fake.session.draft.references[0]!.images).toEqual(['photo']);
+  fake.handlers.draft = () => { throw { notice: { key: 'error.storage' } }; };
+  fireEvent.change(within(dialog).getByRole('textbox', { name: 'Reference group name' }), { target: { value: 'Edited' } });
+  await waitFor(() => expect(within(dialog).getAllByRole('alert')).toHaveLength(2));
+  expect((within(dialog).getByRole('textbox', { name: 'Reference group name' }) as HTMLInputElement).value).toBe('Edited');
+});
+
+it.each(['target', 'preceding'])('keeps late photos owned by their original group after removing the %s group', async removed => {
+  const initial = session();
+  initial.draft.references = [{ id: 'First', role: 'subject', images: [] }, { id: 'Second', role: 'subject', images: [] }];
+  const target = removed === 'target' ? 'First' : 'Second';
+  let finish!: (assets: typeof initial.assets) => void;
+  const fake = await start(fakeBridge(initial, { import: () => new Promise(resolve => { finish = resolve; }) }));
+  fireEvent.click(screen.getByRole('button', { name: `Subject ${target}` }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add photos' }));
+  await waitFor(() => expect(fake.calls('import')).toHaveLength(1));
+  fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Remove First' }));
+  const asset = { id: 'late-photo', name: 'photo.png', file: 'x', bytes: 1, sha256: 'x' };
+  // The import owner has persisted its successful asset before returning it to the renderer.
+  fake.session = { ...fake.session, assets: [asset] };
+  await act(async () => finish([asset]));
+  await waitFor(() => expect(fake.session.draft.references).toEqual([{ id: 'Second', role: 'subject', images: removed === 'target' ? [] : ['late-photo'] }]));
+  expect(fake.session.assets).toEqual([asset]);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('removes the deleted session from the view while explaining retained cleanup files', async () => {
+  const replacement = session({ id: '22222222-2222-4222-8222-222222222222', name: 'Remaining session' });
+  const fake = await start(fakeBridge(session(), { delete: () => {
+    fake.session = replacement;
+    return { removed: true, cleanup: { key: 'ui.session_cleanup_pending', values: { path: '/retained-session' } } };
+  } }));
+  fireEvent.keyDown(screen.getByRole('listbox', { name: 'Sessions' }), { key: 'Delete' });
+  await screen.findByRole('button', { name: 'Remaining session' });
+  expect(screen.queryByRole('button', { name: 'Mountain poster' })).toBeNull();
+  expect((await screen.findByRole('alert')).textContent).toContain('Retained location: /retained-session');
+});

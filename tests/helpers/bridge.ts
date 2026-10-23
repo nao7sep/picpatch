@@ -40,7 +40,8 @@ export function fakeBridge(initial: Session = session(), overrides: Record<strin
   };
   const call = vi.fn(async (action: string, payload?: unknown) => {
     const handler = handlers[action];
-    return handler ? handler(payload) : undefined;
+    const result = handler ? await handler(payload) : undefined;
+    return action === 'import' && Array.isArray(result) ? { assets: result, failures: [] } : result;
   });
   const bridge: Bridge = {
     call,

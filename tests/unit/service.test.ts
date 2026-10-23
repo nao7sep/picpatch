@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, expect, it } from 'vitest';
-import { listModels, PicPatchSdkError } from 'picpatchsdk';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { listModels, PicPatchSdkError, verifyModel, type ModelManifest, type ModelVerificationOptions } from 'picpatchsdk';
 import { Application, downloadableModel, exportDefaultPath, pythonToolDirectories } from '../../src/main/core/service.ts';
 import { initialDraft, type Session } from '../../src/shared/session.ts';
 let root: string;
@@ -47,16 +48,23 @@ it('runs one resource operation at a time, holds image work back meanwhile, and 
 });
 it('owns each model operation end to end: progress, one correlated result, and a cancel that leaves image work alone', async () => {
   const pushed: string[] = [];
-  const app = await Application.open({ root, config: join(root, 'config.json'), sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') }, scope => pushed.push(scope ?? 'changed'));
+  const diagnostics: { event?: { name: string } }[] = [];
+  const app = await Application.open({ root, config: join(root, 'config.json'), sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') }, scope => pushed.push(scope ?? 'changed'), undefined, (_level, _message, details) => diagnostics.push(details));
   const session = await app.sessions.create();
   app.queue.state.paused = true; await app.queue.submit(session.id, session.draft, 1);
-  const manage = (app as unknown as { manage: <T>(target: { action: string; modelId?: string }, work: (call: { signal: AbortSignal; onEvent: (event: object) => void }) => Promise<T>) => Promise<T> }).manage.bind(app);
+  const manage = (app as unknown as { manage: <T>(target: { action: string; modelId?: string }, work: (call: ModelVerificationOptions & { signal: AbortSignal }) => Promise<T>) => Promise<T> }).manage.bind(app);
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
+  const bytes = Buffer.from('model verification fixture');
+  await writeFile(join(root, 'weights.bin'), bytes);
+  const manifest: ModelManifest = { version: 1, model: 'fixture', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [{ path: 'weights.bin', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }] };
   const first = manage({ action: 'download', modelId: 'flux2-klein-4b-4bit' }, async call => {
-    call.onEvent({ name: 'operation.progress', level: 'debug', message: 'Operation progress.', progress: { completed: 1, total: 4 } });
+    // Public verification exercises the SDK's actual progress dispatch and production debug filtering.
+    await expect(verifyModel(root, manifest, call)).resolves.toHaveProperty('status', 'matches-manifest');
     await new Promise<void>((resolve, reject) => { call.signal.addEventListener('abort', () => reject(new PicPatchSdkError('CANCELLED', 'Stopped.')), { once: true }); held.then(resolve); });
   });
-  expect(app.managedState.active).toMatchObject({ id: 1, action: 'download', modelId: 'flux2-klein-4b-4bit', progress: { completed: 1, total: 4 } });
+  await vi.waitFor(() => expect(app.managedState.active).toMatchObject({ id: 1, action: 'download', modelId: 'flux2-klein-4b-4bit', progress: { completed: 1, total: 1 } }));
+  expect(diagnostics.some(record => record.event?.name === 'operation.stage')).toBe(true);
+  expect(diagnostics.some(record => record.event?.name === 'operation.progress')).toBe(false);
   expect(app.managedState.last).toBeUndefined();
   app.cancelManaged(); await expect(first).rejects.toThrow('Stopped.');
   expect(app.managedState).toEqual({ last: { id: 1, action: 'download', modelId: 'flux2-klein-4b-4bit', status: 'cancelled' } });

@@ -1,9 +1,19 @@
-import type { ModelCapabilities } from 'picpatchsdk/types';
+import type { ImageSize, ModelCapabilities, OutpaintCanvas } from 'picpatchsdk/types';
 import type { Draft, Run, Session } from './session.ts';
 
 /** The visible inputs choose the operation; command text is never interpreted or rewritten. */
 export function imageCommand(draft: Draft): Draft {
   return { ...draft, mode: draft.source || draft.references.length || draft.mask || draft.outpaint ? 'edit' : 'generate' };
+}
+
+/** Expansion owns its output size; composited masks preserve the oriented source size chosen by the SDK. */
+export function commandGeometry(draft: Draft, maskMode: ModelCapabilities['maskMode'] | undefined): { size?: ImageSize; outpaint?: OutpaintCanvas } {
+  if (draft.mode === 'edit' && draft.outpaint) {
+    const size = { width: draft.outpaint.width, height: draft.outpaint.height };
+    return { size, outpaint: { size, left: draft.outpaint.left, top: draft.outpaint.top } };
+  }
+  if (draft.mode === 'edit' && draft.source && draft.mask && (maskMode === 'composite' || maskMode === 'latent-composite')) return {};
+  return { size: { width: draft.width, height: draft.height } };
 }
 
 export function targetImage(draft: Draft, source: string): Draft {

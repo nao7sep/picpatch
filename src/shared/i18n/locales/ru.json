@@ -101,7 +101,8 @@
   "ui.picpatch_could_not_finish_closing": "Не удалось завершить закрытие PicPatch.",
   "ui.enter_a_session_name": "Введите название сеанса.",
   "ui.delete_this_session_and_its_retained_images": "Удалить этот сеанс и сохранённые в нём изображения?",
-  "ui.exported_images_and_original_files_are_kept": "Экспортированные изображения и исходные файлы сохранятся.",
+  "ui.exported_images_and_original_files_are_kept": "Экспортированные изображения и исходные файлы сохранятся. История локальных резервных копий сохраняет текст сеанса и нарисованные маски.",
+  "ui.session_cleanup_pending": "Сеанс удалён из списка, но удалить его файлы не удалось. Расположение оставшихся файлов: {path}",
   "ui.keep_session": "Оставить сеанс",
   "ui.add_images": "Добавить изображения",
   "ui.wait_for_the_current_resource_operation": "Дождитесь завершения текущей операции с ресурсами.",
@@ -443,6 +444,7 @@
     "many": "{count} результатов",
     "other": "{count} результатов"
   },
+  "conversation.sourceSize": "Размер исходного изображения",
   "conversation.size": "{width}×{height}",
   "conversation.unavailable": "Недоступное изображение",
   "conversation.view": "Открыть {name}",

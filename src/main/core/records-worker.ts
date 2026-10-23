@@ -6,7 +6,8 @@ import { fallbackLog } from './fallback-log.ts';
 import { removeFiles, storeLargeText } from './record-files.ts';
 const { root, session } = workerData as { root: string; session: string };
 let database: DatabaseSync | undefined;
-parentPort!.on('message', record => {
+parentPort!.on('message', message => {
+  const record = message.record ?? message;
   if (record.flush) { parentPort!.postMessage({ flushed: true }); return; }
   const json = JSON.stringify(record);
   let stored = false;
@@ -34,5 +35,5 @@ parentPort!.on('message', record => {
       const directory = join(root, 'logs'); mkdirSync(directory, { recursive: true, mode: 0o700 });
       appendFileSync(fallbackLog(root, session), `${diagnostic}\n${json}\n`, { mode: 0o600 });
     } catch { process.stderr.write(`${diagnostic}\n${json}\n`); }
-  } finally { parentPort!.postMessage({ written: true, stored }); }
+  } finally { parentPort!.postMessage({ written: true, stored, id: message.id }); }
 });

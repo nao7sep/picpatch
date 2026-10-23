@@ -105,3 +105,17 @@ it('starts work without waiting for it and shows the result application state re
   view.rerender(<ManagementModal models={overview.models} initial="flux2-klein-4b-4bit" readiness={{}} managed={{ last: { id: 5, action: 'download', modelId: 'flux2-klein-4b-4bit', status: 'failed', notice: { key: 'error.storage' } } }} onClose={vi.fn()} />);
   expect(await screen.findByRole('alert')).toBeTruthy();
 });
+
+it('shows the selected readiness failure and preserves another model’s ready state', async () => {
+  const fake = fakeBridge(); window.picpatch = fake.bridge;
+  fake.handlers.engines = () => ({ python: { status: 'ready' }, native: { status: 'ready' } });
+  fake.handlers.models = () => ({ entries: [] });
+  const overview = fake.handlers.overview!(undefined) as Overview;
+  render(<ManagementModal models={overview.models} initial="flux2-klein-4b-4bit"
+    readiness={{ 'flux2-klein-4b-4bit': { status: 'failed', notice: { key: 'error.storage' } }, sd15: 'ready' }} managed={{}} onClose={vi.fn()} />);
+  expect((await screen.findByRole('alert')).textContent).toMatch(/files could not be read or saved/i);
+  expect((screen.getByRole('button', { name: 'Verify selected model' }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'sd15' } });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect((screen.getByRole('button', { name: 'Verify selected model' }) as HTMLButtonElement).disabled).toBe(false);
+});

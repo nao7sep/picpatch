@@ -107,7 +107,7 @@ export function ManagementModal({ models, initial, nativeExecutable, readiness, 
         </select>
       </label>
       <dl className="facts">
-        <div><dt>{t('management.state')}</dt><dd>{t(`model.${state ?? 'checking'}`)}</dd></div>
+        <div><dt>{t('management.state')}</dt><dd>{typeof state === 'object' ? <span className="field-error" role="alert">{say(state.notice)}</span> : t(`model.${state ?? 'checking'}`)}</dd></div>
         <div><dt>{engineName}</dt><dd>{engineStatus}</dd></div>
         {model?.acquisition === 'pinned' ? <div><dt>{t('management.downloadSize')}</dt><dd>{`${number(model.downloadBytes / 1e9, { maximumFractionDigits: 1 })} GB`}</dd></div> : null}
       </dl>

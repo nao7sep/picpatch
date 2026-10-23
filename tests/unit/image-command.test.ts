@@ -38,3 +38,16 @@ it('offers a mask only on an image that exists, for a model that takes masks', (
     'ui.masked_edits_preserve_normalized_pixels_outside_the_edited_region', 'ui.this_model_does_not_support_masks', 'ui.this_model_does_not_support_masks',
   ]);
 });
+
+it('keeps ordinary output preferences while deriving expansion and source-preserving mask geometry', async () => {
+  const { commandGeometry } = await import('../../src/shared/image-command.ts');
+  const draft = { ...initialDraft(), mode: 'edit' as const, source: 'source', width: 1024, height: 768 };
+  expect(commandGeometry(draft, 'composite')).toEqual({ size: { width: 1024, height: 768 } });
+  expect(commandGeometry({ ...draft, mask: 'mask' }, 'native')).toEqual({ size: { width: 1024, height: 768 } });
+  for (const mode of ['composite', 'latent-composite'] as const) expect(commandGeometry({ ...draft, mask: 'mask' }, mode)).toEqual({});
+  const expanded = { ...draft, outpaint: { width: 1280, height: 1024, left: 128, top: 128 } };
+  const geometry = commandGeometry(expanded, 'composite');
+  expect(geometry).toEqual({ size: { width: 1280, height: 1024 }, outpaint: { size: { width: 1280, height: 1024 }, left: 128, top: 128 } });
+  expect(geometry.outpaint?.size).toBe(geometry.size);
+  expect(commandGeometry(draft, 'composite')).toEqual({ size: { width: 1024, height: 768 } });
+});

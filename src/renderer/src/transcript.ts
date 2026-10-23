@@ -19,9 +19,16 @@ export function commandTurns(runs: readonly Run[]): Turn[] {
 
 export const pending = (run: Run) => run.status === 'queued' || run.status === 'running';
 
+const numbers = new WeakMap<readonly Run[], Map<string, number>>();
+
 /** Results are numbered by their place in the session, so a number never changes once shown. */
 export function imageNumber(session: Session, runId: string): number {
-  return session.runs.findIndex(run => run.id === runId) + 1;
+  let index = numbers.get(session.runs);
+  if (!index) {
+    index = new Map(session.runs.map((run, position) => [run.id, position + 1]));
+    numbers.set(session.runs, index);
+  }
+  return index.get(runId) ?? 0;
 }
 
 /** What an image key names in this session: an imported file or a numbered result. */

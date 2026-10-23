@@ -101,7 +101,8 @@
   "ui.picpatch_could_not_finish_closing": "PicPatch 未能完成关闭。",
   "ui.enter_a_session_name": "请输入会话名称。",
   "ui.delete_this_session_and_its_retained_images": "要删除此会话及其保留的图像吗？",
-  "ui.exported_images_and_original_files_are_kept": "已导出的图像和原始文件会保留。",
+  "ui.exported_images_and_original_files_are_kept": "已导出的图像和原始文件会保留。本地备份历史记录会保留会话文本和绘制的蒙版。",
+  "ui.session_cleanup_pending": "会话已从列表中移除，但无法删除其文件。文件保留位置：{path}",
   "ui.keep_session": "保留会话",
   "ui.add_images": "添加图像",
   "ui.wait_for_the_current_resource_operation": "请等待当前资源操作完成。",
@@ -425,6 +426,7 @@
   "conversation.results": {
     "other": "{count} 个结果"
   },
+  "conversation.sourceSize": "原图尺寸",
   "conversation.size": "{width}×{height}",
   "conversation.unavailable": "不可用的图像",
   "conversation.view": "查看{name}",

@@ -32,7 +32,9 @@ export function SetupModal({ models, initial, readiness, managed, onClose, onUse
   const opened = useRef(last?.id ?? 0);
   const failed = last && last.id > opened.current && (last.status === 'failed' || last.status === 'refused') ? last : undefined;
   const model = models.find(item => item.id === choice);
-  const ready = readiness?.[choice] === 'ready';
+  const state = readiness?.[choice];
+  const readinessFailure = typeof state === 'object' ? state.notice : undefined;
+  const ready = state === 'ready';
   const hasEngine = engineReady(model, engines === 'failed' ? undefined : engines);
 
   const inspect = useCallback(async (modelId: string) => {
@@ -91,7 +93,8 @@ export function SetupModal({ models, initial, readiness, managed, onClose, onUse
         <li className={ready ? 'done' : undefined}>
           <div className="step-text">
             <span className="step-title">{t('setup.prepare')}</span>
-            <span className="field-help">{ready ? t('status.ready') : model?.acquisition === 'pinned' ? t('setup.prepareDetail') : t('setup.registerDetail')}</span>
+            {readinessFailure ? <span className="field-error" role="alert">{say(readinessFailure)}</span>
+              : <span className="field-help">{ready ? t('status.ready') : model?.acquisition === 'pinned' ? t('setup.prepareDetail') : t('setup.registerDetail')}</span>}
           </div>
           {prepareStep ?? <button type="button" className="button" disabled={busy || !hasEngine || ready} onClick={prepare}>{model?.acquisition === 'pinned' ? t('ui.download') : t('setup.register')}</button>}
         </li>

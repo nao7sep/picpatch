@@ -1,10 +1,10 @@
 // The open session: a header with its name, then the transcript. Each turn is the
 // command as it was sent (text first, then the images it used) and its results,
 // each with its own actions. Authored text is rendered literally.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Draft, QueueState, Run, Session } from '../../../shared/session.ts';
-import { hasImage } from '../../../shared/image-command.ts';
-import { modelLabel } from '../models.ts';
+import { commandGeometry, hasImage } from '../../../shared/image-command.ts';
+import { modelCapabilities, modelLabel } from '../models.ts';
 import { imageUrl } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
 import { commandTurns, imageLabel, imageNumber, pending, type Turn } from '../transcript.ts';
@@ -31,12 +31,12 @@ export interface ConversationProps {
 export function Conversation(props: ConversationProps) {
   const { t } = useI18n();
   const { session } = props;
-  const turns = commandTurns(session.runs);
+  const turns = useMemo(() => commandTurns(session.runs), [session.runs]);
   const scroller = useRef<HTMLDivElement>(null);
   const column = useRef<HTMLDivElement>(null);
   // Whether the reader is at the end; results load after layout, so the end moves.
   const pinned = useRef(true);
-  const outputs: ViewItem[] = session.runs.filter(run => run.output).map(run => ({ key: run.id, run: run.id }));
+  const outputs = useMemo<ViewItem[]>(() => session.runs.filter(run => run.output).map(run => ({ key: run.id, run: run.id })), [session.runs]);
   const view = (key: string) => props.onView(outputs, outputs.findIndex(item => item.key === key));
 
   useLayoutEffect(() => {
@@ -58,7 +58,7 @@ export function Conversation(props: ConversationProps) {
           <span className="title-text">{session.name}</span>
           <PencilIcon />
         </button>
-        <span className="head-meta">{t('conversation.count', { count: session.runs.filter(run => run.output).length })}</span>
+        <span className="head-meta">{t('conversation.count', { count: outputs.length })}</span>
         <button
           type="button" className="icon-button" aria-pressed={props.optionsPane} onClick={props.onToggleOptions}
           aria-label={t('conversation.options')} title={t('conversation.options')}
@@ -141,10 +141,10 @@ function InputThumb({ session, imageKey, label, onOpen }: { session: Session; im
 /** The settings that shaped the command, as quiet marks under it. */
 function CommandFacts({ draft, count }: { draft: Draft; count: number }) {
   const { t } = useI18n();
-  const size = draft.outpaint ?? draft;
+  const size = commandGeometry(draft, modelCapabilities(draft.modelIds[0] ?? '')?.maskMode).size;
   const facts: { icon?: React.ReactNode; text: string }[] = [
     { text: draft.modelIds.map(modelLabel).join(', ') },
-    { text: t('conversation.size', { width: String(size.width), height: String(size.height) }) },
+    { text: size ? t('conversation.size', { width: String(size.width), height: String(size.height) }) : t('conversation.sourceSize') },
   ];
   if (draft.mask) facts.push({ icon: <BrushIcon />, text: t('conversation.masked') });
   if (draft.outpaint) facts.push({ icon: <CanvasIcon />, text: t('conversation.expanded') });
@@ -208,21 +208,25 @@ function SavedFlash({ count }: { count: number }) {
 function Developing({ run, queue, caption, onCancel }: { run: Run; queue: QueueState; caption: string; onCancel: () => void }) {
   const { t, term } = useI18n();
   const active = queue.active.find(item => item.runId === run.id);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => performance.now());
+  const anchor = useRef({ startedAt: active?.startedAt, elapsed: active?.elapsedMs ?? 0, at: performance.now() });
+  if (anchor.current.startedAt !== active?.startedAt || anchor.current.elapsed !== (active?.elapsedMs ?? 0)) {
+    anchor.current = { startedAt: active?.startedAt, elapsed: active?.elapsedMs ?? 0, at: performance.now() };
+  }
   useEffect(() => {
     if (!active) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const timer = setInterval(() => setNow(performance.now()), 1000);
     return () => clearInterval(timer);
   }, [active]);
-  const size = run.draft.outpaint ?? run.draft;
+  const size = commandGeometry(run.draft, modelCapabilities(run.modelId)?.maskMode).size;
   const progress = active?.progress;
   return (
     <div className="result-pending" aria-live="polite">
-      <div className={`developing${active ? ' active' : ''}`} style={{ aspectRatio: `${size.width} / ${size.height}` }}>
+      <div className={`developing${active ? ' active' : ''}`} style={size ? { aspectRatio: `${size.width} / ${size.height}` } : { minHeight: 96 }}>
         {active && <div className="developing-sheen" aria-hidden="true" />}
         <div className="developing-label">
           <span>{active ? term('stage', active.stage) : queue.paused ? t('conversation.paused') : t('status.queued')}</span>
-          {active && <span className="developing-time">{elapsed(now - active.startedAt)}</span>}
+          {active && <span className="developing-time">{elapsed(anchor.current.elapsed + Math.max(0, now - anchor.current.at))}</span>}
         </div>
         {active && (
           <div className="developing-progress" role="progressbar" aria-label={caption} aria-valuemin={0} aria-valuemax={progress?.total} aria-valuenow={progress?.completed}>

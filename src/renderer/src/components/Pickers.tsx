@@ -14,10 +14,11 @@ export function ModelPicker({ draft, models, hidden = 0, readiness, onDraft, onS
   draft: Draft; models: readonly CatalogModel[]; hidden?: number; readiness: Readiness | undefined;
   onDraft: (draft: Draft) => void; onSetup: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, errorText } = useI18n();
   const [more, setMore] = useState(false);
-  const comparing = draft.modelIds.length > 1;
-  const state = (id: string) => readiness?.[id] ?? 'missing';
+  const [compareEnabled, setCompareEnabled] = useState(draft.modelIds.length > 1);
+  const comparing = compareEnabled || draft.modelIds.length > 1;
+  const state = (id: string) => { const value = readiness?.[id] ?? 'missing'; return typeof value === 'string' ? value : value.status; };
   const order = (a: CatalogModel, b: CatalogModel) => tierOrder[a.profile.tier] - tierOrder[b.profile.tier] || a.profile.name.localeCompare(b.profile.name) || a.id.localeCompare(b.id);
   const rows = modelRows(models, draft.modelIds, state).map(entry => entry.model);
   const ready = rows.filter(model => state(model.id) === 'ready').sort(order);
@@ -49,7 +50,7 @@ export function ModelPicker({ draft, models, hidden = 0, readiness, onDraft, onS
           {summary.purposes && <span className="model-line">{summary.purposes}</span>}
           <span className="model-line">{summary.facts}</span>
         </span>
-        <span className={`picker-state ${state(model.id)}`}>{t(`model.${readiness ? state(model.id) : 'checking'}`)}</span>
+        <span className={`picker-state ${state(model.id)}`}>{typeof readiness?.[model.id] === 'object' ? errorText(readiness[model.id]) : t(`model.${readiness ? state(model.id) : 'checking'}`)}</span>
       </label>
     );
   };
@@ -64,7 +65,7 @@ export function ModelPicker({ draft, models, hidden = 0, readiness, onDraft, onS
       {close => (
         <div className="picker model-picker">
           <label className="check">
-            <input type="checkbox" checked={comparing} onChange={event => onDraft({ ...draft, modelIds: event.target.checked ? draft.modelIds.slice(0, 1) : draft.modelIds.slice(-1) })} />
+            <input type="checkbox" checked={comparing} onChange={event => { setCompareEnabled(event.target.checked); if (!event.target.checked) onDraft({ ...draft, modelIds: draft.modelIds.slice(-1) }); }} />
             <span>{t('model.compare')}</span>
           </label>
           <fieldset className="picker-list" role={comparing ? 'group' : 'radiogroup'} aria-label={t('ui.models')}>
