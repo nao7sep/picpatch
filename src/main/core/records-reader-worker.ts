@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { recordsQuery, recordId, recordsPageSize } from '../../shared/records.ts';
+import { restoreLargeText } from './record-files.ts';
 const { root, session } = workerData as { root: string; session: string };
 const path = join(root, 'records.sqlite3');
 let database: DatabaseSync | undefined;
@@ -29,7 +30,7 @@ parentPort!.on('message', ({ id, action, payload }) => {
     } else if (database && selected) {
       const row = database.prepare('SELECT session,json FROM records WHERE id = ?').get(selected);
       // Keep the stored event intact; session is database attribution, not an event override.
-      value = row ? JSON.stringify({ session: row.session, event: JSON.parse(row.json as string) }, null, 2) : null;
+      value = row ? JSON.stringify({ session: row.session, event: restoreLargeText(root, JSON.parse(row.json as string)) }, null, 2) : null;
     }
     parentPort!.postMessage({ id, value });
   } catch (error) { parentPort!.postMessage({ id, error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : { message: String(error) } }); }

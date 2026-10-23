@@ -69,6 +69,24 @@ it('reads bounded historical pages, filters and full selected details without ch
     expect(await reader.detail(999)).toBe(null);
   } finally { await reader.close(); await rm(root, { recursive: true, force: true }); }
 });
+it('stores a large diagnostic as a file beside its record and shows the record whole', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'picpatch-records-files-'));
+  const worker = new Worker(new URL('../../src/main/core/records-worker.ts', import.meta.url), { workerData: { root, session: 'current' } });
+  const reader = new RecordsReader(root, 'current', new URL('../../src/main/core/records-reader-worker.ts', import.meta.url));
+  const output = `Traceback (most recent call last):\n${'  File "worker.py", line 1, in run\n'.repeat(3000)}RuntimeError: out of memory\n`;
+  const event = { time: '2026-10-19T00:00:01Z', level: 'error', message: 'Image attempt ended without a result.', error: { details: { diagnostic: { phase: 'worker', output } } } };
+  try {
+    await new Promise<void>((resolve, reject) => { worker.on('error', reject); worker.on('message', message => { if (message.written) resolve(); }); worker.postMessage(event); });
+    const [file] = await readdir(join(root, 'record-files'));
+    expect(await readFile(join(root, 'record-files', file!), 'utf8')).toBe(output);
+    const db = new DatabaseSync(join(root, 'records.sqlite3'));
+    try {
+      const row = db.prepare('SELECT id,json FROM records').get()!;
+      expect(JSON.parse(row.json as string).error.details.diagnostic.output).toEqual({ $file: `record-files/${file}` });
+      expect(JSON.parse((await reader.detail(row.id as number))!).event).toEqual(event);
+    } finally { db.close(); }
+  } finally { await worker.terminate(); await reader.close(); await rm(root, { recursive: true, force: true }); }
+});
 it('rejects corrupt history without claiming an empty successful page', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-corrupt-'));
   const reader = new RecordsReader(root, 'current', new URL('../../src/main/core/records-reader-worker.ts', import.meta.url));

@@ -3,12 +3,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, appendFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { fallbackLog } from './fallback-log.ts';
+import { removeFiles, storeLargeText } from './record-files.ts';
 const { root, session } = workerData as { root: string; session: string };
 let database: DatabaseSync | undefined;
 parentPort!.on('message', record => {
   if (record.flush) { parentPort!.postMessage({ flushed: true }); return; }
   const json = JSON.stringify(record);
   let stored = false;
+  let files: string[] = [];
   try {
     if (!database) {
       // The handle is kept only once the schema exists, so a failed setup is retried by the next write.
@@ -20,9 +22,13 @@ parentPort!.on('message', record => {
       } catch (error) { opened.close(); throw error; }
       database = opened;
     }
-    database.prepare('INSERT INTO records(session,time,level,message,json) VALUES(?,?,?,?,?)').run(session, record.time, record.level, record.message, json);
+    const separated = storeLargeText(root, record);
+    files = separated.files;
+    database.prepare('INSERT INTO records(session,time,level,message,json) VALUES(?,?,?,?,?)').run(session, record.time, record.level, record.message, JSON.stringify(separated.record));
     stored = true;
   } catch (error) {
+    // The fallback log keeps the whole record, so files written for a row that was never stored are removed.
+    removeFiles(root, files);
     const diagnostic = JSON.stringify({ time: new Date().toISOString(), level: 'error', message: 'Records database write failed.', error: String(error) });
     try {
       const directory = join(root, 'logs'); mkdirSync(directory, { recursive: true, mode: 0o700 });
