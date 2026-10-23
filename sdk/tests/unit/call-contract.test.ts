@@ -63,11 +63,13 @@ it('keeps an engine that is not there distinct from a missing file', () => {
 
 it('publishes by rename on a volume without hard links, and still never replaces a file', async () => {
   vi.spyOn(storage, 'link').mockRejectedValue(Object.assign(new Error('Operation not supported'), { code: 'ENOTSUP' }));
-  const staged = join(directory, 'staged.png'); const target = join(directory, 'target.png');
+  const workspace = join(directory, 'private');
+  await mkdir(workspace, { mode: 0o700 });
+  const staged = join(workspace, 'staged.png'); const target = join(directory, 'target.png');
   await writeFile(staged, 'complete');
   await publishFile(staged, target);
   expect(await readFile(target, 'utf8')).toBe('complete');
-  expect(await readdir(directory)).toEqual(['target.png']);
+  expect(await readdir(directory)).toEqual(['private', 'target.png']);
   await writeFile(staged, 'second');
   await expect(publishFile(staged, target)).rejects.toMatchObject({ code: 'EEXIST' });
   expect(await readFile(target, 'utf8')).toBe('complete');

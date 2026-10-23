@@ -46,7 +46,7 @@ export function sidecarPath(image: string): string {
 }
 
 /** Called only after PNG publication; settlement must never disguise a saved image. */
-export async function publishSidecar(record: ArtifactRecord, path: string, destination: string, directory: string): Promise<SidecarOutcome> {
+export async function publishSidecar(record: ArtifactRecord, path: string, destination: string, directory: string, parentIdentity?: string): Promise<SidecarOutcome> {
   return storageScope(AbortSignal.timeout(30_000), async () => {
   let publishing = false;
   try {
@@ -56,7 +56,7 @@ export async function publishSidecar(record: ArtifactRecord, path: string, desti
     finally { await file.close(); }
     // Each file publishes exclusively. The pair is deliberately not called atomic.
     publishing = true;
-    await publishFile(staging, destination);
+    await publishFile(staging, destination, parentIdentity);
     return { status: 'saved', path };
   } catch (cause) {
     // OUTPUT_IO classification can only select these filesystem causes.

@@ -6,7 +6,7 @@ import { PicPatchSdkError } from '../errors.ts';
 import type { ArtifactRecord } from '../contracts.generated.ts';
 import { checkArtifactRecord, validateArtifactRecord } from './records.ts';
 import type { CallOptions } from '../types.ts';
-import { inspectImage } from './fingerprint.ts';
+import { inspectImageMetadata } from './fingerprint.ts';
 import { snapshotImage } from './validation.ts';
 import { inspectDestination } from './output.ts';
 import { publishComplete } from './publication.ts';
@@ -44,14 +44,15 @@ export function saveArtifact(imagePath: string, outputPath: string, input: Artif
         try {
           const complete = join(directory, 'complete.png');
           await snapshotImage(imagePath, complete, signal, false, { bytes: record.bytes, sha256: record.sha256 }, undefined, 0o666);
-          const { metadata } = await inspectImage(complete, signal, true);
+          // The private copy's encoded bytes are verified; decode and geometry still need checking.
+          const metadata = await inspectImageMetadata(complete, signal, true);
           // The record's size is the image as displayed; an edit keeps its source's stored orientation.
           const size = metadata.autoOrient ?? metadata;
           if (metadata.format !== 'png' || (metadata.pages ?? 1) !== 1 || size.width !== record.image.size.width || size.height !== record.image.size.height) throw new PicPatchSdkError('INVALID_IMAGE', 'Image dimensions do not match the record.', { subject: imagePath });
           checkSignal(signal);
-          await publishComplete(complete, destination.path, directory, signal);
+          await publishComplete(complete, destination.path, directory, signal, destination.identity);
           saved = { status: 'completed', image: { path: outputPath, mimeType: 'image/png', size: { ...record.image.size } }, record };
-          if (operation.sidecar === true) saved.sidecar = await publishSidecar(record, sidecarPath(outputPath), sidecarPath(destination.path), directory);
+          if (operation.sidecar === true) saved.sidecar = await publishSidecar(record, sidecarPath(outputPath), sidecarPath(destination.path), directory, destination.identity);
           return saved;
         } catch (cause) {
           retain = cause instanceof PicPatchSdkError && cause.details.recoveryDirectory !== undefined;

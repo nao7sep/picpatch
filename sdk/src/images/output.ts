@@ -20,7 +20,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   readonly directory: string;
   readonly workerRequest: T & Pick<ImageRequest, 'size'>;
   private readonly request: T;
-  private readonly destination: string;
+  private readonly destination: PlannedDestination;
   private retain = false;
   private readonly geometry: InputGeometry[] = [];
   private readonly fingerprints: ArtifactRecord['fingerprints'] = [];
@@ -28,7 +28,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   /** The private snapshot of an edit's source image, whose metadata its output carries. */
   private source: string | undefined;
   private maskMode: EditResult['maskMode'];
-  private constructor(directory: string, destination: string, request: T) {
+  private constructor(directory: string, destination: PlannedDestination, request: T) {
     storageRecovery(directory);
     this.directory = directory; this.destination = destination; this.request = request;
     this.workerRequest = { ...structuredClone(request), outputPath: join(directory, 'worker.png') };
@@ -49,7 +49,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     const parent = dirname(destination);
     try {
       const directory = await mkdtemp(join(parent, '.picpatch-'));
-      return new ImageWorkspace(directory, destination, structuredClone(request));
+      return new ImageWorkspace(directory, location, structuredClone(request));
     } catch (cause) { throw new PicPatchSdkError('OUTPUT_IO', 'Could not create private output storage.', { cause }); }
   }
 
@@ -143,13 +143,13 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
     if (this.outpaint) saved.outpaint = structuredClone(this.outpaint);
     const record = await createArtifactRecord(this.request, saved, complete, this.fingerprints);
     const published: ImageResult = { ...saved, status: 'completed', record };
-    try { await publishComplete(complete, this.destination, this.directory, signal); }
+    try { await publishComplete(complete, this.destination.path, this.directory, signal, this.destination.identity); }
     catch (cause) {
       if (cause instanceof PicPatchSdkError && cause.details.recoveryDirectory) this.retain = true;
       throw cause;
     }
     // Publication wins later cancellation. Sidecar failure cannot undo the image.
-    if (this.request.sidecar === true) published.sidecar = await publishSidecar(record, sidecarPath(this.request.outputPath), sidecarPath(this.destination), this.directory);
+    if (this.request.sidecar === true) published.sidecar = await publishSidecar(record, sidecarPath(this.request.outputPath), sidecarPath(this.destination.path), this.directory, this.destination.identity);
     return published;
   }
 

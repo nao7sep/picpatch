@@ -22,12 +22,7 @@ export async function inspectImage(path: string, signal?: AbortSignal, decode = 
       checkSignal(signal); hash.update(chunk); bytes += chunk.length;
     }
     checkSignal(signal);
-    let metadata;
-    try {
-      metadata = await storageWait(() => sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).metadata(), path);
-      if (decode) await storageWait(() => pipeline(sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).raw(), new Writable({ write(_chunk, _encoding, done) { done(); } }), { signal }), path);
-    }
-    catch (cause) { throw new PicPatchSdkError('INVALID_IMAGE', 'Image headers could not be decoded.', { cause, subject: path }); }
+    const metadata = await inspectImageMetadata(path, signal, decode);
     const after = await stat(path, { bigint: true });
     if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || BigInt(bytes) !== before.size) throw new PicPatchSdkError('INPUTS_CHANGED', 'Image changed while planning.', { subject: path });
     checkSignal(signal);
@@ -37,4 +32,18 @@ export async function inspectImage(path: string, signal?: AbortSignal, decode = 
     if (cause instanceof PicPatchSdkError) throw cause;
     throw new PicPatchSdkError('IMAGE_IO', 'Could not inspect the image.', { cause, subject: path });
   } finally { await file?.close(); }
+}
+
+/** Read image metadata and optionally decode every pixel, without hashing encoded bytes. */
+export async function inspectImageMetadata(path: string, signal?: AbortSignal, decode = false) {
+  absolutePath(path); checkSignal(signal);
+  try {
+    const metadata = await storageWait(() => sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).metadata(), path);
+    if (decode) await storageWait(() => pipeline(sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).raw(), new Writable({ write(_chunk, _encoding, done) { done(); } }), { signal }), path);
+    checkSignal(signal);
+    return metadata;
+  } catch (cause) {
+    checkSignal(signal);
+    throw new PicPatchSdkError('INVALID_IMAGE', 'Image headers could not be decoded.', { cause, subject: path });
+  }
 }
