@@ -44,6 +44,10 @@ export async function inspectImageMetadata(path: string, signal?: AbortSignal, d
     return metadata;
   } catch (cause) {
     checkSignal(signal);
+    if (cause instanceof PicPatchSdkError) throw cause;
+    // The decoder reports a file it cannot read in prose, so a file that cannot be read now is a read failure, not bad content.
+    const unreadable = typeof (cause as NodeJS.ErrnoException).code === 'string' ? cause : await stat(path).then(() => undefined, (error: unknown) => error);
+    if (unreadable) throw new PicPatchSdkError('IMAGE_IO', 'Could not read the image.', { cause: unreadable, subject: path });
     throw new PicPatchSdkError('INVALID_IMAGE', 'Image headers could not be decoded.', { cause, subject: path });
   }
 }

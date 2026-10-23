@@ -127,3 +127,17 @@ test('a stopped optional directory flush preserves the confirmed saved image and
     expect(saved).toMatchObject({ status: 'completed', record: { sha256: record.sha256 } });
   } finally { release(); }
 });
+
+test('a private copy that cannot be read fails the save as I/O, not as a mismatched artifact', async () => {
+  const fingerprint = await import('../../src/images/fingerprint.ts');
+  const original = fingerprint.inspectImageMetadata;
+  const spy = vi.spyOn(fingerprint, 'inspectImageMetadata').mockImplementation(async (path, signal, decode) => { await fs.rm(path); return original(path, signal, decode); });
+  try {
+    const record: ArtifactRecord = JSON.parse(await fs.readFile(new URL('../fixtures/artifacts/current.json', import.meta.url), 'utf8'));
+    const bytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } }).png().toBuffer();
+    const source = join(root, 'source.png'); await fs.writeFile(source, bytes);
+    record.bytes = bytes.length; record.sha256 = createHash('sha256').update(bytes).digest('hex');
+    await expect(saveArtifact(source, join(root, 'saved.png'), record)).rejects.toMatchObject({ code: 'FILE_NOT_FOUND', kind: 'unavailable' });
+    expect(spy).toHaveBeenCalled();
+  } finally { spy.mockRestore(); }
+});

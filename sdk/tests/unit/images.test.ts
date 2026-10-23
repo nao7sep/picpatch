@@ -60,3 +60,12 @@ it('rejects an animated WebP rather than silently using the first frame', async 
   expect((await sharp(source).metadata()).pages).toBe(2);
   await expect(prepare(source)).rejects.toMatchObject({ code: 'INVALID_IMAGE' });
 });
+describe('image metadata inspection', () => {
+  it('reports a file it cannot read as an I/O failure and unreadable content as an invalid image', async () => {
+    const { inspectImageMetadata } = await import('../../src/images/fingerprint.ts');
+    await expect(inspectImageMetadata(join(directory, 'gone.png'), undefined, true)).rejects.toMatchObject({ code: 'FILE_NOT_FOUND', kind: 'unavailable' });
+    const garbage = join(directory, 'garbage.png'); await writeFile(garbage, 'not an image');
+    await expect(inspectImageMetadata(garbage, undefined, true)).rejects.toMatchObject({ code: 'INVALID_IMAGE' });
+    expect(await inspectImageMetadata(await image(), undefined, true)).toMatchObject({ format: 'png', width: 4, height: 3 });
+  });
+});
