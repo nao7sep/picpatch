@@ -31,8 +31,14 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
   const parameters = draft.parameters as Record<string, unknown>;
   const setParameter = (key: ParameterKey, value: string | number | undefined, save: 'later' | 'now' = 'later') => {
     const next = { ...draft.parameters } as Record<string, unknown>;
-    if (value === undefined || value === '') delete next[key]; else next[key] = value;
+    if (value === undefined || (value === '' && key !== 'negativePrompt')) delete next[key]; else next[key] = value;
     onDraft({ ...draft, parameters: next as SamplingParameters }, save);
+  };
+  const activateNegativePrompt = () => {
+    const descriptor = caps?.parameters?.negativePrompt;
+    const guidance = draft.parameters.guidance ?? caps?.parameters?.guidance?.default;
+    // An active blank field is an explicit empty prompt; Reset keeps omission distinct.
+    if (draft.parameters.negativePrompt === undefined && descriptor?.requiredForGuidanceAbove !== undefined && guidance !== undefined && guidance > descriptor.requiredForGuidanceAbove) setParameter('negativePrompt', '');
   };
   const shown = PARAMETERS.filter(key => descriptors[key] || parameters[key] !== undefined);
   const editing = Boolean(draft.source);
@@ -69,10 +75,11 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
               const value = parameters[key];
               const label = descriptor ? term('parameter', key) : t('parameter.unsupported', { name: term('parameter', key) });
               if (key === 'negativePrompt') return (
-                <label key={key} className="field compact">
+                <div key={key} className="field compact">
                   <span className="field-label">{label}</span>
-                  <textarea rows={3} value={typeof value === 'string' ? value : ''} onChange={event => setParameter(key, event.target.value)} />
-                </label>
+                  <textarea aria-label={label} rows={3} onFocus={activateNegativePrompt} value={typeof value === 'string' ? value : ''} onChange={event => setParameter(key, event.target.value)} />
+                  {value !== undefined && <button type="button" className="quiet-button" onClick={() => setParameter(key, undefined, 'now')}>{t('ui.default')}</button>}
+                </div>
               );
               if (descriptor?.values) return (
                 <label key={key} className="field compact">
