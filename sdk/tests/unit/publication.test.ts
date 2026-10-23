@@ -9,7 +9,7 @@ import { publishComplete, publishFile } from '../../src/images/publication.ts';
 import { storageScope } from '../../src/storage.ts';
 import type { ArtifactRecord } from '../../src/contracts.generated.ts';
 
-const controls = vi.hoisted(() => ({ flushEntered: undefined as (() => void) | undefined, flushRelease: undefined as Promise<void> | undefined, unsupported: false, entered: undefined as (() => void) | undefined, release: undefined as Promise<void> | undefined }));
+const controls = vi.hoisted(() => ({ flushEntered: undefined as (() => void) | undefined, flushRelease: undefined as Promise<void> | undefined, unsupported: false, failRename: false, entered: undefined as (() => void) | undefined, release: undefined as Promise<void> | undefined }));
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
@@ -19,6 +19,7 @@ vi.mock('node:fs/promises', async importOriginal => {
       return actual.link(...args);
     }),
     rename: vi.fn(async (...args: Parameters<typeof actual.rename>) => {
+      if (controls.failRename) { controls.failRename = false; throw Object.assign(new Error('I/O error.'), { code: 'EIO' }); }
       const entered = controls.entered;
       if (entered) { controls.entered = undefined; entered(); await controls.release; }
       return actual.rename(...args);
@@ -81,6 +82,15 @@ test('without hard links, the claim covers symlinked parents and case or Unicode
     await publishFile(await staged('distinct', 'DISTINCT'), join(root, 'other.png'));
   } finally { gate.release(); await pending; }
   expect(await fs.readFile(join(root, 'Caf\u00e9.png'), 'utf8')).toBe('FIRST');
+});
+
+test('a failed rename frees its name claim for a later attempt', async () => {
+  controls.unsupported = true; controls.failRename = true;
+  const first = await staged('first', 'FIRST'), second = await staged('second', 'SECOND');
+  const target = join(root, 'output.png');
+  await expect(publishFile(first, target)).rejects.toMatchObject({ code: 'EIO' });
+  await publishFile(second, target);
+  expect(await fs.readFile(target, 'utf8')).toBe('SECOND');
 });
 
 test('a caller that stops waiting keeps the name claimed until its rename settles', async () => {

@@ -57,6 +57,20 @@ it('keeps a published result when worker cleanup cannot be confirmed', async () 
   expect(queue.state.paused).toBe(true);
   await expect(queue.resume(session.id)).rejects.toThrow('termination is unconfirmed');
 });
+it('pauses without blocking further work when an idle worker close fails for another reason', async () => {
+  const sessions = new Sessions(root); const session = await sessions.create();
+  const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
+  const runner = Object.assign(async () => ({ outcome: { status: 'completed' as const, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record } }), {
+    release: vi.fn<() => Promise<void>>().mockRejectedValueOnce(new PicPatchSdkError('CLEANUP_FAILED', 'Private files remained.')).mockResolvedValue(undefined),
+  });
+  const queue = new Queue(sessions, runner);
+  await queue.submit(session.id, session.draft, 1); await queue.settled();
+  expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['completed']);
+  expect(queue.state).toMatchObject({ paused: true, issue: { code: 'CLEANUP_FAILED' } });
+  expect(() => queue.requireIdle('error.conflict')).not.toThrow();
+  await queue.resume(session.id); await queue.settled();
+  expect(queue.state.paused).toBe(false);
+});
 it('retains the actual output and pauses after a result metadata write fails', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
   const record = JSON.parse(await readFile(new URL('../fixtures/artifact.json', import.meta.url), 'utf8'));
