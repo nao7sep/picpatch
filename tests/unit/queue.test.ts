@@ -195,3 +195,20 @@ it('moves a session up when a command is submitted, and only then, as a chat lis
   const imaged = await sessions.get(session.id);
   expect(imaged.runs.at(-1)!.status).toBe('completed'); expect(imaged.updated).toBe(resubmitted);
 });
+
+it('retains the primary run failure while separately blocking admission after unconfirmed cleanup', async () => {
+  const sessions = new Sessions(root), session = await sessions.create();
+  const primary = new PicPatchSdkError('INVALID_REQUEST', 'Inference request failed.');
+  const teardown = new PicPatchSdkError('TERMINATION_FAILED', 'Worker termination could not be confirmed.');
+  const queue = new Queue(sessions, async (_session, _run, events) => {
+    events.onTeardownError(teardown);
+    throw primary;
+  });
+  await queue.submit(session.id, session.draft, 2); await queue.settled();
+  const saved = await sessions.get(session.id);
+  expect(saved.runs.map(run => run.status)).toEqual(['failed', 'queued']);
+  expect(saved.runs[0]!.issue).toMatchObject({ code: primary.code, message: primary.message });
+  expect(queue.state.issue).toMatchObject({ code: teardown.code });
+  await expect(queue.resume(session.id)).rejects.toThrow('termination is unconfirmed');
+  await expect(queue.submit(session.id, session.draft, 1)).rejects.toThrow('termination is unconfirmed');
+});

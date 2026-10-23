@@ -61,7 +61,10 @@ export class Application {
       const context = { sessionId, runId: attempt.id };
       let completion;
       try {
-        completion = await run(sessionId, attempt, { ...events, onEvent: event => { this.sdkEvents(context)(event); events.onEvent(event); } });
+        completion = await run(sessionId, attempt, { ...events, onEvent: event => { this.sdkEvents(context)(event); events.onEvent(event); }, onTeardownError: error => {
+          this.diagnostic('error', 'Image client teardown failed.', { ...context, error: errorRecord(error) });
+          events.onTeardownError(error);
+        } });
       } catch (error) {
         this.diagnostic(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Image attempt ended without a result.', { ...context, error: errorRecord(error) });
         throw error;

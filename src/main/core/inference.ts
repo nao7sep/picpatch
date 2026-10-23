@@ -1,7 +1,7 @@
 import packageInfo from '../../../package.json' with { type: 'json' };
 import { join } from 'node:path';
 import { createImageClient, openModel, listModels, inspectNativeEngine, PicPatchSdkError } from 'picpatchsdk';
-import type { EditInput, ReferenceGroup, ImageClient } from 'picpatchsdk';
+import type { EditInput, ReferenceGroup, ImageClient, ImageOutcome } from 'picpatchsdk';
 
 /** The SDK calls inference makes; tests substitute them. */
 export interface InferenceSdk { createImageClient: typeof createImageClient; openModel: typeof openModel; listModels: typeof listModels; inspectNativeEngine: typeof inspectNativeEngine }
@@ -21,6 +21,7 @@ export function inference(current: () => Sessions, settings: () => Settings, sdk
   const release = async () => { await Promise.all(warm.splice(0).map(client => client.editor.dispose())); };
   const evictBeyond = async (limit: number) => { while (warm.length && warm.length + busy > limit) await warm.shift()!.editor.dispose(); };
   const runner: Runner = async (sessionId, run, events) => {
+    const { onTeardownError, ...callOptions } = events;
     const sessions = current();
     const config = settings();
     const selected = sdk.listModels().find(model => model.id === run.modelId);
@@ -45,24 +46,28 @@ export function inference(current: () => Sessions, settings: () => Settings, sdk
     const draft = run.draft;
     // The session keeps the full record; Save image decides what a shared copy holds. No sidecar is written beside session outputs.
     const record = { includeInputs: true, caller: { name: 'picpatch', version: packageInfo.version } };
+    let outcome: ImageOutcome;
     try {
       const common = { outputPath: join(sessions.directory(sessionId), 'outputs', `${run.id}.png`), size: { width: draft.width, height: draft.height }, seed: run.seed, parameters: draft.parameters, record, ...(draft.control ? { control: { ...draft.control, image: await sessions.imagePath(sessionId, draft.control.image) } } : {}) };
       if (draft.mode === 'generate') {
         if (draft.source || draft.mask || draft.references.length || draft.outpaint) throw new PicPatchSdkError('INVALID_REQUEST', 'Switch to Edit to use source images, references or masks.');
-        const outcome = await editor.generate({ ...common, prompt: draft.text }, events);
-        await settle(key, editor); return { outcome };
+        outcome = await editor.generate({ ...common, prompt: draft.text }, callOptions);
+      } else {
+        const references = await Promise.all(draft.references.map(async group => ({ ...group, images: await Promise.all(group.images.map(image => sessions.imagePath(sessionId, image))) as ReferenceGroup['images'] })));
+        const request: EditInput = { ...common, instruction: draft.text, ...(draft.source ? { sourceImage: await sessions.imagePath(sessionId, draft.source) } : {}), ...(references.length ? { references: references as [ReferenceGroup, ...ReferenceGroup[]] } : {}), ...(draft.mask ? { maskImage: await sessions.imagePath(sessionId, draft.mask) } : {}), ...(draft.outpaint ? { outpaint: { size: { width: draft.outpaint.width, height: draft.outpaint.height }, left: draft.outpaint.left, top: draft.outpaint.top } } : {}) };
+        outcome = await editor.edit(request, callOptions);
       }
-      const references = await Promise.all(draft.references.map(async group => ({ ...group, images: await Promise.all(group.images.map(image => sessions.imagePath(sessionId, image))) as ReferenceGroup['images'] })));
-      const request: EditInput = { ...common, instruction: draft.text, ...(draft.source ? { sourceImage: await sessions.imagePath(sessionId, draft.source) } : {}), ...(references.length ? { references: references as [ReferenceGroup, ...ReferenceGroup[]] } : {}), ...(draft.mask ? { maskImage: await sessions.imagePath(sessionId, draft.mask) } : {}), ...(draft.outpaint ? { outpaint: { size: { width: draft.outpaint.width, height: draft.outpaint.height }, left: draft.outpaint.left, top: draft.outpaint.top } } : {}) };
-      const outcome = await editor.edit(request, events);
-      await settle(key, editor); return { outcome };
     } catch (error) {
       // A worker that failed or was cancelled is not trusted with the next run.
-      busy--; await editor.dispose();
+      busy--;
+      try { await editor.dispose(); } catch (cleanupError) { onTeardownError(cleanupError); }
       throw error;
     }
+    // Publication has settled. Eviction cannot replace its result or release active ownership again.
+    busy--; warm.push({ key, editor });
+    try { await evictBeyond(Math.max(1, settings().concurrency ?? 1)); } catch (error) { onTeardownError(error); }
+    return { outcome };
   };
-  const settle = async (key: string, editor: ImageClient) => { busy--; warm.push({ key, editor }); await evictBeyond(Math.max(1, settings().concurrency ?? 1)); };
   runner.release = release;
   return runner;
 }

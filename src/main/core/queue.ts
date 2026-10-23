@@ -7,7 +7,7 @@ export type { QueueState } from '../../shared/session.ts';
 import { Sessions, validateDraft } from './sessions.ts';
 import { afterCommand, commandTargetReady, imageCommand, recoverCommand } from '../../shared/image-command.ts';
 
-export type RunEvents = { signal: AbortSignal; onProgress: (event: ProgressEvent) => void; onEvent: (event: SdkEvent) => void };
+export type RunEvents = { signal: AbortSignal; onProgress: (event: ProgressEvent) => void; onEvent: (event: SdkEvent) => void; onTeardownError: (error: unknown) => void };
 export interface RunCompletion { outcome: ImageOutcome | ModelOpenRefusal }
 /** `release` closes any worker kept warm between runs; the queue calls it whenever it goes idle. */
 export type Runner = ((sessionId: string, run: Run, events: RunEvents) => Promise<RunCompletion>) & { release?: () => Promise<void> };
@@ -93,6 +93,11 @@ export class Queue {
       try {
         completion = await this.run(selected.sessionId, attempt, {
           signal,
+          onTeardownError: error => {
+            // Teardown has its own outcome; a published image or primary error remains the run's result.
+            if ((error as { code?: string }).code === 'TERMINATION_FAILED') this.terminationUnconfirmed = true;
+            this.state.paused = true; this.state.issue = queueIssue(error); this.changed();
+          },
           onEvent: event => { if (event.name === 'operation.stage') { if (active.stage !== event.stage) delete active.progress; active.stage = event.stage; this.changed('progress'); } },
           onProgress: event => { active.stage = event.stage; active.progress = { completed: event.completed, total: event.total }; this.changed('progress'); },
         });
