@@ -1,8 +1,8 @@
 import { isAbsolute } from 'node:path';
 import workerSchema from '../protocol/worker.schema.json' with { type: 'json' };
 import codes from '../protocol/error-codes.json' with { type: 'json' };
-import type { ErrorCode, ErrorDetails, ErrorEffect, ErrorKind, PicPatchSdkErrorData, WorkerDiagnostic } from './types.ts';
-export type { ErrorCode, ErrorDetails, ErrorEffect, ErrorKind, PicPatchSdkErrorData } from './types.ts';
+import type { ErrorCode, ErrorDetails, ErrorDiagnostic, ErrorEffect, ErrorKind, PicPatchSdkErrorData, SdkEvent, WorkerDiagnostic } from './types.ts';
+export type { ErrorCode, ErrorDetails, ErrorDiagnostic, ErrorEffect, ErrorKind, PicPatchSdkErrorData } from './types.ts';
 
 /** Shared with the worker; kind is never inferred from exception prose. */
 export const errorCodes = Object.freeze(codes) as Readonly<Record<ErrorCode, ErrorKind>>;
@@ -50,11 +50,31 @@ export function isPicPatchSdkError(value: unknown): value is PicPatchSdkErrorDat
     (item.details.recoveryDirectory === undefined || typeof item.details.recoveryDirectory === 'string') &&
     (item.details.diagnostic === undefined || validDiagnostic(item.details.diagnostic));
 }
-/** Unknown external failures keep their original local cause; no raw text enters events or transport. */
+/** Unknown external failures keep their original local cause; transport carries no raw cause text. */
 export function sdkError(cause: unknown): PicPatchSdkError {
   if (cause instanceof PicPatchSdkError) return cause;
   if (isPicPatchSdkError(cause)) return new PicPatchSdkError(cause.code, cause.message, { ...cause, cause: cause.cause });
   return new PicPatchSdkError('INTERNAL', 'An unclassified SDK failure occurred.', { cause });
+}
+/**
+ * The diagnostic representation a failure event carries. Transport through toJSON stays free of
+ * cause text; this is for the caller's own records. The SDK accepts no credentials (download URLs
+ * carrying them are refused), so there is nothing to mask.
+ */
+export function failureDiagnostic(error: PicPatchSdkError): NonNullable<SdkEvent['error']> {
+  const { cause: _transportCause, ...data } = error.toJSON();
+  return { ...data, name: error.name, ...(error.stack === undefined ? {} : { stack: error.stack }), ...(error.cause === undefined ? {} : { cause: causeDiagnostic(error.cause) }) };
+}
+function causeDiagnostic(value: unknown, seen = new Set<object>()): ErrorDiagnostic {
+  if (typeof value !== 'object' || value === null) return { name: 'Error', message: String(value) };
+  if (seen.has(value)) return { name: 'Error', message: '[circular cause]' };
+  seen.add(value);
+  const item = value as Record<string, unknown>;
+  const data: ErrorDiagnostic = { name: typeof item.name === 'string' ? item.name : 'Error', message: typeof item.message === 'string' ? item.message : String(value) };
+  for (const key of ['stack', 'code', 'syscall', 'path'] as const) if (typeof item[key] === 'string') data[key] = item[key];
+  if (typeof item.errno === 'string' || typeof item.errno === 'number') data.errno = item.errno;
+  if (item.cause !== undefined) data.cause = causeDiagnostic(item.cause, seen);
+  return data;
 }
 function safeCause(cause: unknown, seen = new Set<unknown>()): unknown {
   if (!cause || typeof cause !== 'object' || seen.has(cause) || seen.size >= 4) return { kind: 'Unknown' };

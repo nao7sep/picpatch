@@ -5,13 +5,12 @@ import { emitProgress } from '../../src/operations.ts';
 import { PicPatchSdkError } from '../../src/errors.ts';
 import { ProtocolSession } from '../../src/worker/protocol.ts';
 
-it('emits one invocation ID and one safe terminal error without serializing exception text or paths', async () => {
+it('emits one invocation ID and one terminal error naming what failed', async () => {
   const events: SdkEvent[] = [];
   await expect(inspectModel('/missing/private-sentinel', { onEvent: event => events.push(event) })).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
   expect(events.filter(event => event.name !== 'sdk.startup').map(event => event.stage)).toEqual(['started', 'inspecting', 'failed']);
   expect(new Set(events.map(event => event.operationId)).size).toBe(1);
-  expect(JSON.stringify(events)).not.toContain('private-sentinel');
-  expect(events.at(-1)?.error?.code).toBe('FILE_NOT_FOUND');
+  expect(events.at(-1)?.error).toMatchObject({ code: 'FILE_NOT_FOUND', subject: '/missing/private-sentinel', cause: { code: 'ENOENT', path: '/missing/private-sentinel' } });
 });
 it('routes progress and diagnostics from the same event owner without letting sink failures mask results', async () => {
   const stages: string[] = [];

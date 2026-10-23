@@ -46,8 +46,11 @@ export interface SdkEvent {
   level: 'debug' | 'info' | 'warn' | 'error';
   stage: string;
   message: string;
-  error?: { code: string; kind: ErrorKind; effect: ErrorEffect; causes: { kind: string; code?: string }[]; worker?: WorkerDiagnostic };
+  /** A failure's diagnostic representation: the error's fields with its message, stack and full cause chain. */
+  error?: Omit<PicPatchSdkErrorData, 'cause'> & { name: string; stack?: string; cause?: ErrorDiagnostic };
 }
+/** One error in a failure's cause chain, as plain data. */
+export interface ErrorDiagnostic { name: string; message: string; stack?: string; code?: string; errno?: number | string; syscall?: string; path?: string; cause?: ErrorDiagnostic }
 export interface ProgressEvent { type: 'progress'; stage: string; completed: number; total: number }
 export interface EventOptions {
   /** Include diagnostic progress counts in onEvent. Off by default; no environment is read. */

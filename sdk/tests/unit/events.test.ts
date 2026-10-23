@@ -79,3 +79,14 @@ it('emits startup once across repeated public editor calls and keeps nested oper
   await withDiagnostics('outer', { onEvent: (event: SdkEvent) => nested.push(event) }, options => withDiagnostics('inner', options, async () => 1), diagnosticLifetime());
   expect(nested.map(event => event.name)).toEqual(['sdk.startup', 'operation.started', 'operation.succeeded']);
 });
+it('a failure event carries the error with its message, stack and cause chain', async () => {
+  const { PicPatchSdkError } = await import('../../src/index.ts');
+  const cause = Object.assign(new Error('EACCES: permission denied, open \'/locked/out.png\''), { code: 'EACCES', errno: -13, syscall: 'open', path: '/locked/out.png' });
+  const events: SdkEvent[] = [];
+  const failing = withDiagnostics('save', { onEvent: (event: SdkEvent) => events.push(event) }, async () => { throw new PicPatchSdkError('OUTPUT_IO', 'Could not write the output.', { cause, effect: 'unknown' }); }, diagnosticLifetime());
+  await expect(failing).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+  const error = events.find(event => event.name === 'operation.failed')?.error;
+  expect(error).toMatchObject({ name: 'PicPatchSdkError', code: 'PERMISSION_DENIED', kind: 'unavailable', effect: 'unknown', message: 'Could not write the output.', subject: '/locked/out.png', stack: expect.stringContaining('Could not write the output.') });
+  expect(error?.cause).toMatchObject({ name: 'Error', message: cause.message, code: 'EACCES', errno: -13, syscall: 'open', path: '/locked/out.png', stack: expect.any(String) });
+  expect(JSON.parse(JSON.stringify(error))).toEqual(error);
+});

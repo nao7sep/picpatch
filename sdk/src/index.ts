@@ -5,7 +5,7 @@ export type { ImageResult, ImageOutcome, OperationRefusal, GenerateRequest, Gene
 export { refusalCodes } from './types.ts';
 export { validateEditRequest, validateGenerateRequest } from './validation.ts';
 export { PicPatchSdkError, isPicPatchSdkError, errorCodes } from './errors.ts';
-export type { PicPatchSdkErrorData, SdkErrorOptions, ErrorCode, ErrorKind, ErrorEffect, ErrorDetails } from './errors.ts';
+export type { PicPatchSdkErrorData, ErrorDiagnostic, SdkErrorOptions, ErrorCode, ErrorKind, ErrorEffect, ErrorDetails } from './errors.ts';
 
 export { inspectModel, discoverModels } from './models/inspection.ts';
 export type { ModelInspection, LocalModelFile, ModelIssue, ModelDiscovery, ModelDiscoveryFailure, ModelOperationOptions } from './models/types.ts';
