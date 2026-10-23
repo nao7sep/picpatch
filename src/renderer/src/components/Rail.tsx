@@ -107,7 +107,7 @@ export function Rail(props: RailProps) {
               onDoubleClick={() => { if (session.id === currentId) props.onRename(); }}
             >
               <span className="session-cover">
-                {session.cover ? <img src={imageUrl(session.id, session.cover, true)} alt="" draggable={false} /> : <ImageIcon />}
+                {session.cover ? <img loading="lazy" decoding="async" src={imageUrl(session.id, session.cover, true)} alt="" draggable={false} /> : <ImageIcon />}
                 {props.working.has(session.id) && <span className="session-working" aria-hidden="true" />}
               </span>
               <span className="session-text">
