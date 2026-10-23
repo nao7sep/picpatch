@@ -75,3 +75,8 @@ it('refuses matching bytes whose PNG headers are readable but pixels are truncat
   expect(await readFile(source)).toEqual(malformed);
   expect(await readdir(directory)).toEqual(['source.png']);
 });
+it('creates a missing output folder with its parents before saving', async () => {
+  const output = join(directory, 'new', 'deeper', 'saved.png');
+  expect(await saveArtifact(source, output, record)).toMatchObject({ status: 'completed', image: { path: output } });
+  expect(await readFile(output)).toEqual(bytes);
+});

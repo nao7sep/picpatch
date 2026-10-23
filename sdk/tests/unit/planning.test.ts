@@ -88,3 +88,26 @@ it('plans source-sized masks and canvas placement with the same geometry constra
     await expect(editor.plan({ instruction: 'A bowl.', sourceImage: source, outpaint: { size: { width: 32, height: 32 }, left: 0, top: 0 } })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   } finally { await editor.dispose(); }
 });
+it('plans a missing output folder without creating it, then creates it with its parents before writing', async () => {
+  const { editor } = setup();
+  const nested = join(directory, 'new', 'deeper');
+  try {
+    const plan = await editor.plan({ prompt: 'A bowl.', outputDirectory: nested });
+    if (plan.status !== 'completed') throw new Error(plan.code);
+    expect(await readdir(directory)).toEqual([]);
+    const saved = await editor.generate(plan);
+    if (saved.status !== 'completed') throw new Error(saved.code);
+    expect(await readdir(nested)).toEqual([saved.image.path.slice(nested.length + 1)]);
+  } finally { await editor.dispose(); }
+});
+it('refuses a plan whose existing output folder was replaced', async () => {
+  const { editor, render } = setup();
+  const folder = join(directory, 'out'); await mkdir(folder);
+  try {
+    const plan = await editor.plan({ prompt: 'A bowl.', outputDirectory: folder });
+    if (plan.status !== 'completed') throw new Error(plan.code);
+    await rm(folder, { recursive: true }); await mkdir(folder);
+    await expect(editor.generate(plan)).resolves.toMatchObject({ status: 'refused', code: 'DESTINATION_CHANGED' });
+    expect(render).not.toHaveBeenCalled();
+  } finally { await editor.dispose(); }
+});

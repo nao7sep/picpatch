@@ -8,7 +8,7 @@ import { prepareOutpaint } from './outpaint.ts';
 import { createArtifactRecord, publishSidecar, sidecarPath } from './sidecar.ts';
 import { finishImage, sourceMetadata } from './metadata.ts';
 import { basename, dirname, join } from 'node:path';
-import { lstat, mkdtemp, realpath, rm, stat } from '../storage.ts';
+import { lstat, mkdir, mkdtemp, realpath, rm, stat } from '../storage.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import type { ImageRequest, InputGeometry, ModelCapabilities } from '../types.ts';
 import type { EditResult } from '../contracts.generated.ts';
@@ -38,13 +38,9 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   }
 
   static async create<T extends ImageRequest>(request: T, signal?: AbortSignal, plan?: ImagePlan): Promise<ImageWorkspace<T>> {
-    let location;
-    try { location = await inspectDestination(request, signal); }
-    catch (cause) {
-      if (plan && cause instanceof PicPatchSdkError && cause.code === 'FILE_NOT_FOUND') throw new PicPatchSdkError('DESTINATION_CHANGED', 'The planned output directory is missing.', { subject: request.outputPath });
-      throw cause;
-    }
-    if (plan && (location.path !== plan.destination.path || location.identity !== plan.destination.identity)) throw new PicPatchSdkError('DESTINATION_CHANGED', 'The planned output directory changed.', { subject: request.outputPath });
+    const location = await inspectDestination(request, signal, true);
+    // A folder the plan found missing is accepted whoever created it; one it found is checked to be the same folder.
+    if (plan && (location.path !== plan.destination.path || (plan.destination.identity !== undefined && location.identity !== plan.destination.identity))) throw new PicPatchSdkError('DESTINATION_CHANGED', 'The planned output directory changed.', { subject: request.outputPath });
     const destination = location.path;
     const parent = dirname(destination);
     try {
@@ -159,31 +155,48 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   }
 }
 
-export interface PlannedDestination { path: string; identity: string }
-/** Read-only preflight; exclusive publication remains the authority over racing writers. */
-export async function inspectDestination(request: Pick<ImageRequest, 'outputPath'>, signal?: AbortSignal): Promise<PlannedDestination> {
+/** `identity` is absent when the output folder does not exist yet and will be created. */
+export interface PlannedDestination { path: string; identity?: string }
+/** The canonical form of a path whose trailing folders may not exist yet. */
+async function canonical(path: string): Promise<{ path: string; exists: boolean }> {
+  try { return { path: await realpath(path), exists: true }; }
+  catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== 'ENOENT' || dirname(path) === path) throw cause;
+    return { path: join((await canonical(dirname(path))).path, basename(path)), exists: false };
+  }
+}
+/**
+ * Checks the destination. With `create`, as a verb about to write, a missing output folder is made
+ * with its parents first; without it, as planning, nothing is created and a missing folder is reported
+ * as one to create. Exclusive publication remains the authority over racing writers.
+ */
+export async function inspectDestination(request: Pick<ImageRequest, 'outputPath'>, signal?: AbortSignal, create = false): Promise<PlannedDestination> {
   checkCancellation(signal);
-  let parent: string;
-  try { parent = await realpath(dirname(request.outputPath)); }
-  catch (cause) { throw new PicPatchSdkError('OUTPUT_IO', 'Output directory must already exist and be accessible.', { cause, subject: dirname(request.outputPath) }); }
-  const destination = join(parent, basename(request.outputPath));
-  for (const path of [destination]) {
-    try {
-      await lstat(path);
-      throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output already exists; choose a new path.', { subject: path });
-    } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') {
-        if (cause instanceof PicPatchSdkError) throw cause;
-        throw new PicPatchSdkError('OUTPUT_IO', 'Could not inspect the output destination.', { cause, subject: path });
-      }
+  const folder = dirname(request.outputPath);
+  if (create) {
+    try { await mkdir(folder, { recursive: true }); }
+    catch (cause) { throw new PicPatchSdkError('OUTPUT_IO', 'Could not create the output folder.', { cause, subject: folder }); }
+  }
+  let parent: { path: string; exists: boolean };
+  try { parent = await canonical(folder); }
+  catch (cause) { throw new PicPatchSdkError('OUTPUT_IO', 'The output folder is not accessible.', { cause, subject: folder }); }
+  const destination = join(parent.path, basename(request.outputPath));
+  if (!parent.exists) return { path: destination };
+  try {
+    await lstat(destination);
+    throw new PicPatchSdkError('OUTPUT_CONFLICT', 'Output already exists; choose a new path.', { subject: destination });
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') {
+      if (cause instanceof PicPatchSdkError) throw cause;
+      throw new PicPatchSdkError('OUTPUT_IO', 'Could not inspect the output destination.', { cause, subject: destination });
     }
   }
   try {
-    const info = await stat(parent, { bigint: true });
+    const info = await stat(parent.path, { bigint: true });
     if (!info.isDirectory()) throw new PicPatchSdkError('INVALID_REQUEST', 'Output parent must be a directory.');
     return { path: destination, identity: `${info.dev}:${info.ino}` };
   } catch (cause) {
     if (cause instanceof PicPatchSdkError) throw cause;
-    throw new PicPatchSdkError('OUTPUT_IO', 'Could not inspect the output directory.', { cause, subject: parent });
+    throw new PicPatchSdkError('OUTPUT_IO', 'Could not inspect the output folder.', { cause, subject: parent.path });
   }
 }

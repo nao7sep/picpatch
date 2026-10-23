@@ -37,7 +37,7 @@ export function saveArtifact(imagePath: string, outputPath: string, input: Artif
     let failure: unknown;
     try {
       return await withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Artifact saving timed out.', async signal => {
-        const destination = await inspectDestination({ outputPath }, signal);
+        const destination = await inspectDestination({ outputPath }, signal, true);
         const directory = await mkdtemp(join(dirname(destination.path), '.picpatch-'));
         storageRecovery(directory);
         let retain = false;
