@@ -75,9 +75,12 @@ export class Queue {
   /** A warm worker is closed once nothing is running; an unconfirmed close blocks further work. */
   private idle(): void {
     if (!this.run.release) return;
-    this.releasing = this.releasing.then(() => this.run.release!()).catch(error => {
-      this.terminationUnconfirmed = true; this.state.paused = true; this.state.issue = queueIssue(error); this.changed();
-    });
+    this.releasing = this.releasing.then(() => this.run.release!()).catch(error => this.halt(error));
+  }
+  /** Teardown trouble has its own outcome: it pauses the queue, and an unconfirmed stop blocks further work. */
+  private halt(error: unknown): void {
+    if ((error as { code?: string }).code === 'TERMINATION_FAILED') this.terminationUnconfirmed = true;
+    this.state.paused = true; this.state.issue = queueIssue(error); this.changed();
   }
   private async execute(selected: { sessionId: string; runId: string }, signal: AbortSignal, active: QueueState['active'][number]): Promise<void> {
     try {
@@ -93,11 +96,8 @@ export class Queue {
       try {
         completion = await this.run(selected.sessionId, attempt, {
           signal,
-          onTeardownError: error => {
-            // Teardown has its own outcome; a published image or primary error remains the run's result.
-            if ((error as { code?: string }).code === 'TERMINATION_FAILED') this.terminationUnconfirmed = true;
-            this.state.paused = true; this.state.issue = queueIssue(error); this.changed();
-          },
+          // A published image or primary error remains the run's result.
+          onTeardownError: error => this.halt(error),
           onEvent: event => { if (event.name === 'operation.stage') { if (active.stage !== event.stage) delete active.progress; active.stage = event.stage; this.changed('progress'); } },
           onProgress: event => { active.stage = event.stage; active.progress = { completed: event.completed, total: event.total }; this.changed('progress'); },
         });
