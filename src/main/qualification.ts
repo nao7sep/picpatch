@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { modalLayoutProblems } from './qualification-layout.ts';
 import { isAbsolute } from 'node:path';
 import type { Application } from './core/service.ts';
 /** Explicit automated package qualification; never reached during ordinary launch. */
@@ -59,15 +60,7 @@ export async function qualifyLocalization(window: import('electron').BrowserWind
           await wait(() => front(), 'Modal did not open: ${surface}');
           const dialog = front();
           if (${surface === 'manage'}) { const select = dialog.querySelector('select'); const native = [...select.options].find(option => option.value.includes('sdxl')); if (native) { select.value = native.value; select.dispatchEvent(new Event('change', { bubbles: true })); } }
-          for (const tab of dialog.querySelectorAll('[role="tab"]')) { tab.focus(); tab.click(); await settle(); }
-          await settle();
-          const failures = [];
-          const bands = ['.modal-head', '.modal-body', '.modal-foot'].map(selector => dialog.querySelector(selector)?.getBoundingClientRect()).filter(Boolean);
-          for (let i = 1; i < bands.length; i++) if (bands[i - 1].bottom > bands[i].top + 2) failures.push('bands overlap');
-          if (bands.at(-1).bottom > innerHeight + 1) failures.push('footer left viewport');
-          if (dialog.scrollWidth > dialog.clientWidth + 2) failures.push('horizontal overflow');
-          failures.push(...clipped(dialog).map(text => 'clipped ' + text));
-          if (!dialog.contains(document.activeElement)) failures.push('focus outside modal');
+          const failures = await (${modalLayoutProblems.toString()})(dialog, settle, innerHeight);
           dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
           await wait(() => !document.contains(dialog), 'Modal did not close: ${surface}');
           if (failures.length) throw new Error(${JSON.stringify(where + ':' + surface)} + ': ' + failures.join('; '));`);
