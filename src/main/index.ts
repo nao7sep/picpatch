@@ -243,7 +243,7 @@ async function dispatch(action: string, payload: any) {
     case 'openProjectLink': { if (payload.destination !== 'repository' && payload.destination !== 'issues') throw new Error('Unknown project link.'); await shell.openExternal(about[payload.destination as 'repository' | 'issues']); return; }
     case 'openLogs': try { await logs?.open(); } catch (error) { records?.write('error', 'Logs window could not open.', { error: errorRecord(error) }); throw new UiError('logs.openFailed'); } return;
     case 'listening': rendererReady = true; return;
-    case 'renderer-error': records?.write('error', 'Renderer error.', { error: typeof payload.message === 'string' ? payload.message.slice(0, 2000) : 'unknown', stack: typeof payload.stack === 'string' ? payload.stack.slice(0, 8000) : undefined }); return;
+    case 'renderer-error': records?.write('error', 'Renderer error.', { error: typeof payload.message === 'string' ? payload.message : 'unknown', stack: typeof payload.stack === 'string' ? payload.stack : undefined }); return;
     case 'ready': rendererReady = true; if (smoke) await finishSmoke(); return;
     case 'paneState': return paneState;
     case 'savePane': await storePane({ railWidth: payload.railWidth, optionsPane: payload.optionsPane }); return;
