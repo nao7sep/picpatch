@@ -32,10 +32,10 @@ it('does not await blocked caller logging and reports cancellation as cancellati
   await expect(prepareModel(listModels()[0]!.id, {}, { signal: AbortSignal.abort(), onEvent: event => events.push(event) })).rejects.toMatchObject({ code: 'CANCELLED' });
   expect(events.filter(e => e.name !== 'sdk.startup').map(e => e.stage)).toEqual(['started', 'cancelled']);
 });
-it('rejects malformed worker diagnostics instead of forwarding arbitrary private fields', () => {
+it('rejects malformed worker diagnostics instead of forwarding unknown fields', () => {
   const session = new ProtocolSession();
   session.send({ version: 1, id: 1, type: 'hello' });
-  expect(() => session.receive(JSON.stringify({ version: 1, id: 1, type: 'error', error: { code: 'RUNTIME_FAILURE', kind: 'unavailable', effect: 'none', details: { diagnostic: { phase: 'loading', causes: [{ kind: 'Exception', message: 'private sentinel' }] } }, message: 'Failed' } }))).toThrow(expect.objectContaining({ code: 'PROTOCOL_ERROR' }));
+  expect(() => session.receive(JSON.stringify({ version: 1, id: 1, type: 'error', error: { code: 'RUNTIME_FAILURE', kind: 'unavailable', effect: 'none', details: { diagnostic: { phase: 'loading', causes: [{ kind: 'Exception', locals: 'private sentinel' }] } }, message: 'Failed' } }))).toThrow(expect.objectContaining({ code: 'PROTOCOL_ERROR' }));
 });
 
 it('contains rejected progress hooks and reports them once through the separate event hook', async () => {

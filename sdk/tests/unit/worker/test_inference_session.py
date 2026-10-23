@@ -40,7 +40,7 @@ def test_cancel_ack_keeps_active_until_producer_settles(verb):
     assert session.handle({'version': 1, 'id': 6, 'type': 'shutdown'})['type'] == 'shutdownAck'
 
 
-def test_runtime_error_does_not_echo_private_details():
+def test_runtime_error_keeps_library_text_out_of_the_authored_message():
     class Backend:
         def edit(self, *args):
             raise RuntimeError('secret /private/path')
@@ -51,11 +51,13 @@ def test_runtime_error_does_not_echo_private_details():
     session.handle({'version': 1, 'id': 2, 'type': 'edit', 'request': {
         'model': 'test', 'instruction': 'edit', 'sourceImage': '/in.png', 'outputPath': '/out.png'}})
     session.close()
-    assert replies[0]['error']['code'] == 'RUNTIME_FAILURE'
-    assert 'secret' not in str(replies)
+    error = replies[0]['error']
+    assert error['code'] == 'RUNTIME_FAILURE'
+    assert 'secret' not in error['message']
+    assert error['details']['diagnostic']['causes'][0]['message'] == 'secret /private/path'
 
 
-def test_loading_failure_preserves_safe_causal_structure():
+def test_loading_failure_carries_the_cause_chain_and_traceback():
     class Backend:
         def edit(self, request, cancel, progress):
             progress({'type': 'progress', 'verb': 'edit', 'stage': 'loading', 'message': 'Loading.'})
@@ -72,15 +74,22 @@ def test_loading_failure_preserves_safe_causal_structure():
         'model': 'test', 'instruction': 'edit', 'sourceImage': '/in.png', 'outputPath': '/out.png'}})
     session.close()
     error = replies[-1]['error']
-    assert error['details']['diagnostic'] == {'phase': 'loading', 'causes': [{'kind': 'RuntimeError'}, {'kind': 'FileNotFoundError', 'errno': 2}]}
-    assert 'sentinel' not in str(replies) and '/private' not in str(replies)
+    diagnostic = error['details']['diagnostic']
+    assert diagnostic['phase'] == 'loading'
+    assert diagnostic['causes'] == [
+        {'kind': 'RuntimeError', 'type': 'RuntimeError', 'message': 'private prompt sentinel'},
+        {'kind': 'FileNotFoundError', 'type': 'FileNotFoundError', 'errno': 2, 'message': "[Errno 2] private prompt sentinel: '/private/source'"}]
+    assert 'raise RuntimeError' in diagnostic['traceback'] and 'FileNotFoundError' in diagnostic['traceback']
+    assert 'sentinel' not in error['message']
     protocol.validate(replies[-1], 'Response')
 
 
-def test_diagnostics_bound_cycles_and_do_not_use_custom_exception_names():
+def test_diagnostics_bound_cycles_and_classify_custom_exceptions_generically():
     from picpatch_worker_core.session import diagnostic
     class PrivateSentinel(Exception):
         pass
     error = PrivateSentinel('secret')
     error.__cause__ = error
-    assert diagnostic(error, 'saving') == {'phase': 'saving', 'causes': [{'kind': 'Exception'}]}
+    result = diagnostic(error, 'saving')
+    assert result['causes'] == [{'kind': 'Exception', 'type': 'test_diagnostics_bound_cycles_and_classify_custom_exceptions_generically.<locals>.PrivateSentinel', 'message': 'secret'}]
+    assert len(result['traceback']) <= 16000

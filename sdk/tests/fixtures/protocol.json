@@ -314,7 +314,7 @@
     }
   },
   {
-    "name": "private worker diagnostic fields rejected",
+    "name": "unknown worker diagnostic fields rejected",
     "kind": "Response",
     "valid": false,
     "message": {
@@ -332,9 +332,40 @@
             "causes": [
               {
                 "kind": "Exception",
-                "message": "private sentinel"
+                "locals": {
+                  "prompt": "private sentinel"
+                }
               }
             ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "worker diagnostic carries exception text and traceback",
+    "kind": "Response",
+    "valid": true,
+    "message": {
+      "version": 1,
+      "id": 2,
+      "type": "error",
+      "error": {
+        "code": "RUNTIME_FAILURE",
+        "message": "Editing failed.",
+        "kind": "unavailable",
+        "effect": "none",
+        "details": {
+          "diagnostic": {
+            "phase": "loading",
+            "causes": [
+              {
+                "kind": "RuntimeError",
+                "type": "RuntimeError",
+                "message": "Model weights are truncated."
+              }
+            ],
+            "traceback": "Traceback (most recent call last):\n  File \"worker.py\", line 1, in load\nRuntimeError: Model weights are truncated.\n"
           }
         }
       }

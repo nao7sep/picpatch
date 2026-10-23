@@ -1,12 +1,12 @@
 import { spawn } from 'node:child_process';
 import { PicPatchSdkError } from '../../errors.ts';
 import { checkSignal } from '../../operations.ts';
-import { ownedSpawn, signalOwned, toolEnvironment } from '../../platform.ts';
+import { ownedSpawn, signalOwned, streamTail, toolEnvironment } from '../../platform.ts';
 import type { WorkerTimeouts } from '../../worker/process.ts';
 
 /**
  * sd-cli's step line, "|====>   | 3/20 - 1.23s/it" redrawn with carriage returns. Only the counts are read; loading
- * progress (MB/s) is not a step. Nothing else of the output is kept, since inference output may contain private text.
+ * progress (MB/s) is not a step. Nothing else of the standard output is kept.
  */
 const STEP = /(\d+)\/(\d+) - [\d.]+(?:s\/it|it\/s)/;
 export function stepParser(onSteps: (completed: number, total: number) => void): (chunk: Buffer) => void {
@@ -67,14 +67,15 @@ export class NativeProcess {
         // Capture only bounded help/version output. Inference output may contain private text.
         const steps = onSteps && stepParser(onSteps);
         child.stdout.on('data', (chunk: Buffer) => { steps?.(chunk); if (capture && output.length < 8192) output = Buffer.concat([output, chunk.subarray(0, 8192 - output.length)]); });
-        child.stderr.resume();
+        const errors = streamTail(child.stderr);
         child.once('close', (code, signal) => {
           closed = true; clearTimeout(deadline); clearTimeout(escalation); clearTimeout(termination);
           combined.removeEventListener('abort', abort);
           if (failure) reject(failure);
           else if (code !== 0) {
             const error = new PicPatchSdkError('WORKER_EXITED', 'Native runtime did not complete successfully.');
-            error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}) };
+            const errorOutput = errors();
+            error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}), ...(errorOutput ? { output: errorOutput } : {}) };
             reject(error);
           }
           else resolve(output.toString('utf8'));

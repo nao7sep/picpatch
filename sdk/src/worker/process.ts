@@ -2,7 +2,7 @@ import type { LocalModel } from '../contracts.generated.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { ProtocolSession, type WorkerRequest, type WorkerResponse } from './protocol.ts';
 import { PicPatchSdkError } from '../errors.ts';
-import { ownedSpawn, signalOwned } from '../platform.ts';
+import { ownedSpawn, signalOwned, streamTail } from '../platform.ts';
 import type { ProgressEvent } from '../contracts.generated.ts';
 
 export interface WorkerLaunch {
@@ -60,12 +60,14 @@ export class WorkerProcess {
     if (this.closing) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Worker is closed.'));
     try {
       this.child = this.spawn(this.launch);
+      const errors = streamTail(this.child.stderr);
       this.child.once('error', cause => this.fail(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Could not run the worker. Check the prepared Python interpreter and packaged worker resources.', { cause })));
       this.child.once('exit', (code, signal) => {
         if (!this.failure && !this.shutdownAck) {
           const starting = [...this.pending.values()].some(pending => pending.request.type === 'hello');
           const error = new PicPatchSdkError('WORKER_EXITED', starting ? 'Worker exited before its handshake. Check the prepared Python dependencies and packaged worker resources.' : 'Worker exited unexpectedly.');
-          error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}) };
+          const output = errors();
+          error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}), ...(output ? { output } : {}) };
           this.fail(error);
         }
       });
@@ -80,8 +82,6 @@ export class WorkerProcess {
       this.child.stdin.on('error', cause => this.fail(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Worker input failed.', { cause })));
       this.child.stdout.on('error', cause => this.fail(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Worker output failed.', { cause })));
       this.child.stderr.on('error', cause => this.fail(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Worker diagnostics failed.', { cause })));
-      // Drain diagnostics without retaining private data or writing to the caller's streams.
-      this.child.stderr.resume();
       this.child.stdout.on('data', (chunk: Buffer) => this.read(chunk));
       this.child.stdout.once('end', () => {
         try {

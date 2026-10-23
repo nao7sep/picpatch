@@ -89,10 +89,12 @@ function validDiagnostic(value: unknown): value is WorkerDiagnostic {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const item = value as WorkerDiagnostic;
   const schema = workerSchema.definitions.Diagnostic.properties;
-  return Object.keys(item).every(key => ['phase', 'causes', 'reason', 'exitCode', 'signal'].includes(key)) &&
+  const text = (value: unknown, limit: number) => value === undefined || typeof value === 'string' && value.length <= limit;
+  return Object.keys(item).every(key => ['phase', 'causes', 'reason', 'traceback', 'exitCode', 'signal', 'output'].includes(key)) &&
     schema.phase.enum.includes(item.phase) && Array.isArray(item.causes) && item.causes.length >= 1 && item.causes.length <= 4 &&
-    item.causes.every(cause => !!cause && typeof cause === 'object' && Object.keys(cause).every(key => key === 'kind' || key === 'errno') &&
-      schema.causes.items.properties.kind.enum.includes(cause.kind) && (cause.errno === undefined || Number.isInteger(cause.errno) && cause.errno >= 0 && cause.errno <= 4095)) &&
-    (item.reason === undefined || schema.reason.enum.includes(item.reason)) &&
+    item.causes.every(cause => !!cause && typeof cause === 'object' && Object.keys(cause).every(key => ['kind', 'errno', 'type', 'message'].includes(key)) &&
+      schema.causes.items.properties.kind.enum.includes(cause.kind) && (cause.errno === undefined || Number.isInteger(cause.errno) && cause.errno >= 0 && cause.errno <= 4095) &&
+      text(cause.type, 200) && text(cause.message, 2000)) &&
+    (item.reason === undefined || schema.reason.enum.includes(item.reason)) && text(item.traceback, 16_000) && text(item.output, 8192) &&
     (item.exitCode === undefined || Number.isInteger(item.exitCode)) && (item.signal === undefined || typeof item.signal === 'string');
 }

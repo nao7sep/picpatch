@@ -1,11 +1,20 @@
 """One active inference thread; the protocol reader remains responsive to cancellation."""
 from threading import Event, RLock, Thread
+from traceback import format_exception
 from .protocol import Protocol, ProtocolError
 from .errors import Cancelled, BackendUnavailable, InvalidEditInput
 
 
+def _text(value, limit):
+    try:
+        return str(value)[:limit]
+    except Exception:
+        return object.__repr__(value)[:limit]
+
+
 def diagnostic(error, phase):
-    """Allowlisted causal structure only: library text and frame locals can contain inputs."""
+    """The failure's diagnostic representation for the caller's records: each cause's type, message
+    and errno, and the traceback without frame locals. The authored protocol message stays free of it."""
     causes = []
     seen = set()
     current = error
@@ -14,12 +23,12 @@ def diagnostic(error, phase):
     while current is not None and id(current) not in seen and len(causes) < 4:
         seen.add(id(current))
         kind = next((item.__name__ for item in kinds if isinstance(current, item)), 'Exception')
-        cause = {'kind': kind}
+        cause = {'kind': kind, 'type': _text(type(current).__qualname__, 200), 'message': _text(current, 2000)}
         if isinstance(current, OSError) and type(current.errno) is int and 0 <= current.errno <= 4095:
             cause['errno'] = current.errno
         causes.append(cause)
         current = current.__cause__ or (None if current.__suppress_context__ else current.__context__)
-    result = {'phase': phase, 'causes': causes}
+    result = {'phase': phase, 'causes': causes, 'traceback': ''.join(format_exception(error))[-16000:]}
     if isinstance(error, BackendUnavailable) and error.reason in {'missing-package', 'unsupported-version', 'missing-directory'}:
         result['reason'] = error.reason
     return result
@@ -104,7 +113,7 @@ class Session:
             result = operation(request['request'], self.cancel, progress)
             response = {**envelope, 'type': 'result', 'result': result}
         except Exception as error:
-            # Authored protocol messages never echo prompts, private paths or library errors.
+            # Authored protocol messages never echo prompts, private paths or library errors; the diagnostic carries them.
             if isinstance(error, Cancelled):
                 code, message = 'CANCELLED', 'Image operation was cancelled.'
             elif isinstance(error, BackendUnavailable):
