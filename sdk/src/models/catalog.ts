@@ -31,18 +31,11 @@ function buildCatalog(): ModelCatalogEntry[] {
   });
   return [...pinned, ...externalModels(), ...nativeModels()];
 }
-function deepFreeze<T>(value: T): T {
-  if (value && typeof value === 'object') {
-    for (const item of Object.values(value)) deepFreeze(item);
-    Object.freeze(value);
-  }
-  return value;
-}
+// Built once; callers only ever receive copies, so the private entries and the shared definitions they reference stay unchanged.
 let catalog: { entries: ModelCatalogEntry[]; byId: Map<string, ModelCatalogEntry> } | undefined;
 function modelCatalog() {
   if (!catalog) {
-    // Detach shared definition/profile/host values before freezing the private snapshot.
-    const entries = deepFreeze(structuredClone(buildCatalog()));
+    const entries = buildCatalog();
     catalog = { entries, byId: new Map(entries.map(entry => [entry.id, entry])) };
   }
   return catalog;
