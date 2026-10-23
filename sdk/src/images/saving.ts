@@ -50,9 +50,9 @@ export function saveArtifact(imagePath: string, outputPath: string, input: Artif
           const size = metadata.autoOrient ?? metadata;
           if (metadata.format !== 'png' || (metadata.pages ?? 1) !== 1 || size.width !== record.image.size.width || size.height !== record.image.size.height) throw new PicPatchSdkError('INVALID_IMAGE', 'Image dimensions do not match the record.', { subject: imagePath });
           checkSignal(signal);
-          await publishComplete(complete, destination.path, directory, signal, destination.identity);
+          await publishComplete(complete, destination.path, directory, signal);
           saved = { status: 'completed', image: { path: outputPath, mimeType: 'image/png', size: { ...record.image.size } }, record };
-          if (operation.sidecar === true) saved.sidecar = await publishSidecar(record, sidecarPath(outputPath), sidecarPath(destination.path), directory, destination.identity);
+          if (operation.sidecar === true) saved.sidecar = await publishSidecar(record, sidecarPath(outputPath), sidecarPath(destination.path), directory);
           return saved;
         } catch (cause) {
           retain = cause instanceof PicPatchSdkError && cause.details.recoveryDirectory !== undefined;
