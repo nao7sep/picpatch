@@ -2,8 +2,7 @@ import type { LocalModel } from '../contracts.generated.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { ProtocolSession, type WorkerRequest, type WorkerResponse } from './protocol.ts';
 import { PicPatchSdkError } from '../errors.ts';
-import { ownedSpawn, signalOwned } from '../platform.ts';
-import { processDiagnostics } from '../process-diagnostics.ts';
+import { ownedSpawn, signalOwned, streamText } from '../platform.ts';
 import type { ProgressEvent } from '../contracts.generated.ts';
 
 export interface WorkerLaunch {
@@ -40,11 +39,9 @@ export class WorkerProcess {
   private shutdownAck = false;
   private closed = false;
   private failure: unknown;
-  private diagnosticFailure: PicPatchSdkError | undefined;
   private terminationUnconfirmed = false;
   get restartable(): boolean { return !!this.failure && this.closed && !this.terminationUnconfirmed; }
   private stopping: Promise<void> | undefined;
-  private diagnosticsDone: Promise<void> = Promise.resolve();
   private readonly closeWait = Promise.withResolvers<void>();
   private readonly decoder = new TextDecoder('utf-8', { fatal: true });
   private remainder = '';
@@ -63,38 +60,24 @@ export class WorkerProcess {
     if (this.closing) return Promise.reject(new PicPatchSdkError('DISPOSED', 'Worker is closed.'));
     try {
       this.child = this.spawn(this.launch);
-      const errors = processDiagnostics(this.child.stderr, cause => this.failDiagnostics(cause));
+      const errors = streamText(this.child.stderr);
       this.child.once('error', cause => this.fail(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Could not run the worker. Check the prepared Python interpreter and packaged worker resources.', { cause })));
-      let exitFailure: PicPatchSdkError | undefined;
       this.child.once('exit', (code, signal) => {
-        if (this.failure || this.shutdownAck) return;
-        const starting = [...this.pending.values()].some(pending => pending.request.type === 'hello');
-        exitFailure = new PicPatchSdkError('WORKER_EXITED', starting ? 'Worker exited before its handshake. Check the prepared Python dependencies and packaged worker resources.' : 'Worker exited unexpectedly.');
-        exitFailure.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}) };
-        // Descendants can retain the pipes after their parent exits. Stop the owned group
-        // now, but defer its full diagnostic text and rejection until pipe closure.
-        this.fail(exitFailure);
+        if (!this.failure && !this.shutdownAck) {
+          const starting = [...this.pending.values()].some(pending => pending.request.type === 'hello');
+          const error = new PicPatchSdkError('WORKER_EXITED', starting ? 'Worker exited before its handshake. Check the prepared Python dependencies and packaged worker resources.' : 'Worker exited unexpectedly.');
+          const output = errors();
+          error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}), ...(output ? { output } : {}) };
+          this.fail(error);
+        }
       });
       this.child.once('close', (code, signal) => {
         this.closed = true;
-        for (const pending of this.pending.values()) clearTimeout(pending.timer);
-        // Child closure includes pipe EOF; only then read and remove its diagnostic spool.
+        // Closure, not a successful signal, proves the owned worker has stopped.
         this.closeWait.resolve();
-        this.diagnosticsDone = (async () => {
-          try {
-            const unexpected = !this.failure && (!this.shutdownAck || this.remainder.length > 0 || code !== 0 || signal !== null);
-            const output = await errors.finish(!!exitFailure || unexpected);
-            if (exitFailure && output) exitFailure.details.diagnostic!.output = output;
-            if (unexpected && !this.failure) {
-              const starting = [...this.pending.values()].some(pending => pending.request.type === 'hello');
-              const error = new PicPatchSdkError('WORKER_EXITED', starting ? 'Worker exited before its handshake. Check the prepared Python dependencies and packaged worker resources.' : 'Worker exited unexpectedly.');
-              error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}), ...(output ? { output } : {}) };
-              this.fail(error);
-            }
-          } catch (cause) {
-            this.failDiagnostics(cause);
-          }
-        })();
+        if (!this.failure && (!this.shutdownAck || this.remainder.length || code !== 0 || signal !== null)) {
+          this.fail(new PicPatchSdkError('WORKER_EXITED', 'Worker exited before completing the session.'));
+        }
       });
       this.child.stdin.on('error', cause => this.fail(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Worker input failed.', { cause })));
       this.child.stdout.on('error', cause => this.fail(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Worker output failed.', { cause })));
@@ -217,19 +200,11 @@ export class WorkerProcess {
 
   abortStartup(): void { this.fail(new PicPatchSdkError('CANCELLED', 'The operation was cancelled.')); }
 
-  private failDiagnostics(cause: unknown): void {
-    if (this.diagnosticFailure?.cause === cause) return;
-    const error = new PicPatchSdkError('WORKER_UNAVAILABLE', 'Worker diagnostic capture or cleanup failed.', { cause: this.failure ? new AggregateError([this.failure, cause], 'Process failure and diagnostic storage failure.', { cause }) : cause });
-    this.diagnosticFailure = error;
-    if (this.failure) this.failure = error;
-    else this.fail(error);
-  }
-
   private fail(error: unknown): void {
     if (this.failure) return;
     this.failure = error;
     for (const pending of this.pending.values()) clearTimeout(pending.timer);
-    void this.stop().then(() => this.rejectPending(this.failure), terminationError => this.rejectPending(terminationError));
+    void this.stop().then(() => this.rejectPending(error), terminationError => this.rejectPending(terminationError));
   }
   private rejectPending(error: unknown): void {
     for (const pending of this.pending.values()) pending.reject(error);
@@ -250,8 +225,7 @@ export class WorkerProcess {
   private stop(): Promise<void> {
     if (this.stopping) return this.stopping;
     this.stopping = (async () => {
-      if (!this.child) return;
-      if (this.closed) { await this.diagnosticsDone; return; }
+      if (!this.child || this.closed) return;
       let signalError: unknown;
       // An exiting process can reject a signal before Node reports its close event.
       // Keep ownership until close or the termination deadline, even if signalling fails.
@@ -265,7 +239,6 @@ export class WorkerProcess {
         })]);
       } catch (error) { this.terminationUnconfirmed = true; throw error; }
       finally { clearTimeout(forceTimer); clearTimeout(deadline); }
-      await this.diagnosticsDone;
     })();
     return this.stopping;
   }
@@ -273,11 +246,10 @@ export class WorkerProcess {
   async dispose(): Promise<void> {
     this.closing = true;
     if (!this.child) return;
-    if (this.failure) { await this.stop(); if (this.diagnosticFailure) throw this.diagnosticFailure; return; }
+    if (this.failure) { await this.stop(); return; }
     if (this.pending.size) {
       this.fail(new PicPatchSdkError('CANCELLED', 'Image client was disposed.'));
       await this.stop();
-      if (this.diagnosticFailure) throw this.diagnosticFailure;
       return;
     }
     const response = await this.request({ version: 1, id: this.nextId++, type: 'shutdown' }, this.timeouts.shutdownMs);
@@ -288,8 +260,6 @@ export class WorkerProcess {
       await Promise.race([this.closeWait.promise, new Promise<void>(resolve => {
         timer = setTimeout(() => { this.fail(new PicPatchSdkError('TIMEOUT', 'Worker did not exit after shutdown.')); resolve(); }, this.timeouts.shutdownMs);
       })]);
-      clearTimeout(timer);
-      await this.diagnosticsDone;
       if (this.failure) { await this.stop(); throw this.failure; }
     } finally { clearTimeout(timer); }
   }
