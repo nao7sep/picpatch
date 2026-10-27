@@ -50,6 +50,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 $runtimeHelper = Join-Path $scriptDir "launcher-runtime.mjs"
 $outDir = "dist"
+$candidate = "dist-candidate"
 
 try {
     Set-Utf8Console
@@ -70,16 +71,12 @@ try {
         Invoke-Native -FilePath "node" -ArgumentList @("node_modules/electron/install.js")
     }
 
-    # Windows locks the packaged executable while it runs, so replacement must
-    # happen before cleaning the package directory.
-    Write-Step "Replacing any existing PicPatch runtime"
-    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "stop")
-
-    # Remove stale output so a build that fails to emit a file can't be masked by
-    # a leftover artifact from a previous run.
-    Write-Step "Cleaning previous build"
+    # Build and package into clean output so a build that fails to emit a file
+    # can't be masked by a leftover artifact from a previous run. The packaged app
+    # in dist stays runnable until a new package replaces it.
+    Write-Step "Cleaning previous build output"
     if (Test-Path "out") { Remove-Item -Recurse -Force "out" }
-    if (Test-Path $outDir) { Remove-Item -Recurse -Force $outDir }
+    if (Test-Path $candidate) { Remove-Item -Recurse -Force $candidate }
 
     # The release build type-checks the shipped sources (main/preload + renderer);
     # the dev server skips this entirely. Tests are checked separately and are not
@@ -100,11 +97,17 @@ try {
     # installer. This is what gives the app its own identity (correct name)
     # instead of running under the generic Electron runtime.
     Write-Step "Packaging the app bundle"
-    Invoke-Native -FilePath "node_modules/.bin/electron-builder.cmd" -ArgumentList @("--dir")
+    Invoke-Native -FilePath "node_modules/.bin/electron-builder.cmd" -ArgumentList @("--dir", "--config.directories.output=$candidate")
 
-    if (-not (Test-Path $exePath)) {
-        throw "Packaging did not produce $appName.exe under $outDir/win-unpacked/."
+    if (-not (Test-Path "$candidate/win-unpacked/$appName.exe" -PathType Leaf)) {
+        throw "Packaging did not produce $appName.exe under $candidate/win-unpacked/."
     }
+
+    # Windows locks the packaged executable while it runs, so the running app
+    # closes before its package is replaced.
+    Write-Step "Replacing the previous package"
+    Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "stop")
+    Invoke-Native -FilePath "node" -ArgumentList @((Join-Path $scriptDir "publish-package.mjs"), $candidate, $outDir)
 
     Write-Step "Launching the packaged app"
     Invoke-Native -FilePath "node" -ArgumentList @($runtimeHelper, "launch-exe", $exePath)

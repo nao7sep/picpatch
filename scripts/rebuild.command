@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUNTIME_HELPER="$SCRIPT_DIR/launcher-runtime.mjs"
 OUT_DIR="dist"
+CANDIDATE="dist-candidate"
 
 log_step() {
   printf '\n==> %s\n' "$1"
@@ -51,10 +52,11 @@ if [[ ! -f node_modules/electron/path.txt ]]; then
   node node_modules/electron/install.js
 fi
 
-# Remove stale output so a build that fails to emit a file can't be masked by a
-# leftover artifact from a previous run.
-log_step "Cleaning previous build"
-rm -rf out "$OUT_DIR"
+# Build and package into clean output so a build that fails to emit a file can't
+# be masked by a leftover artifact from a previous run. The packaged app in dist
+# stays runnable until a new package replaces it.
+log_step "Cleaning previous build output"
+rm -rf out "$CANDIDATE"
 
 # The release build type-checks the shipped sources (main/preload + renderer);
 # the dev server skips this entirely. Tests are checked separately and are not
@@ -76,14 +78,17 @@ node_modules/.bin/electron-vite build
 # the app its own identity, so the dock and menu show "PicPatch" rather than the
 # generic "Electron".
 log_step "Packaging the app bundle"
-node_modules/.bin/electron-builder --dir --mac --arm64
+node_modules/.bin/electron-builder --dir --mac --arm64 --config.directories.output="$CANDIDATE"
 
-APP_BUNDLE="$(find "$OUT_DIR" -maxdepth 2 -name "$APP_NAME.app" -type d 2>/dev/null | head -1 || true)"
+APP_BUNDLE="$(find "$CANDIDATE" -maxdepth 2 -name "$APP_NAME.app" -type d 2>/dev/null | head -1 || true)"
 if [[ -z "$APP_BUNDLE" ]]; then
-  echo "Packaging did not produce $APP_NAME.app under $OUT_DIR/." >&2
+  echo "Packaging did not produce $APP_NAME.app under $CANDIDATE/." >&2
   exit 1
 fi
 
-log_step "Launching the packaged app"
+log_step "Replacing the previous package"
 node "$RUNTIME_HELPER" stop
-node "$RUNTIME_HELPER" launch-bundle "$APP_BUNDLE"
+node "$SCRIPT_DIR/publish-package.mjs" "$CANDIDATE" "$OUT_DIR"
+
+log_step "Launching the packaged app"
+node "$RUNTIME_HELPER" launch-bundle "$OUT_DIR/${APP_BUNDLE#"$CANDIDATE"/}"
