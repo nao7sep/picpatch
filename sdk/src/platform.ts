@@ -55,12 +55,6 @@ export async function syncFile(path: string): Promise<void> {
   const handle = await open(path, process.platform === 'win32' ? 'r+' : 'r');
   try { await handle.sync(); } finally { await handle.close(); }
 }
-/** Flushes a directory entry. Windows cannot open a directory for flushing; its rename is already durable on NTFS. */
-export async function syncDirectory(path: string): Promise<void> {
-  if (process.platform === 'win32') return;
-  const handle = await open(path, 'r');
-  try { await handle.sync(); } finally { await handle.close(); }
-}
 /**
  * A second name for a large file without copying it where possible: a symbolic link; on Windows, where
  * that needs administrator rights or Developer Mode, a hard link, and a copy only across volumes.

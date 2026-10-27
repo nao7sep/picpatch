@@ -1,6 +1,6 @@
 import { basename, dirname } from 'node:path';
 import { link, lstat, rename, stat, storageWait, withoutStorageScope } from '../storage.ts';
-import { syncDirectory, syncFile } from '../platform.ts';
+import { syncFile } from '../platform.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { checkSignal } from '../operations.ts';
 
@@ -14,7 +14,6 @@ const claimed = new Set<string>();
  * it is confirmed free, so a reader still never sees a partial file. This process claims the name
  * first, so its own publishers never race; the remaining gap is another program taking the same
  * name between the check and the rename. A file is never copied into place.
- * The folder is then flushed so the new name survives a crash; a flush the volume refuses does not undo publication.
  */
 export async function publishFile(staged: string, destination: string): Promise<void> {
   try { await link(staged, destination); }
@@ -35,8 +34,6 @@ export async function publishFile(staged: string, destination: string): Promise<
       if (renaming) renaming.then(release, release); else release();
     }
   }
-  try { await syncDirectory(dirname(destination)); }
-  catch { /* The file is already published under its name. */ }
 }
 function taken(): Error { return Object.assign(new Error('Destination exists.'), { code: 'EEXIST' }); }
 

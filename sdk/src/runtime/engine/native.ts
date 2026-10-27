@@ -15,7 +15,7 @@ type NativeEngineOptions = NativeEngineSettings & CallOptions;
 type NativeInspectionOptions = NativeInspectionSettings & CallOptions;
 
 import { nativeReleaseFor, nativeRevision, type NativeRelease } from './native-release.ts';
-import { archiveTool, currentHost, hostId, syncDirectory, syncFile, toolEnvironment } from '../../platform.ts';
+import { archiveTool, currentHost, hostId, syncFile, toolEnvironment } from '../../platform.ts';
 export type { NativeEngineInspection, NativeEngineInstallation, ReadyNativeEngine } from './types.ts';
 const missing = (cause: unknown) => ['ENOENT', 'ENOTDIR'].includes((cause as NodeJS.ErrnoException)?.code ?? '');
 function nativeLocation(options: NativeInspectionOptions, keys: string[]): { root: string; nativeExecutable?: string } {
@@ -149,7 +149,6 @@ async function install(options: NativeEngineOptions): Promise<NativeEngineInstal
         throw cause;
       }
       if (probeCommit(output) !== nativeRevision.slice(0, 7)) throw new PicPatchSdkError('ENGINE_INCOMPATIBLE', 'Native engine probe did not match the pinned release.');
-      await syncDirectory(extracted);
       operationStage(options, 'publishing', 'Publishing the verified native engine.');
       checkSignal(signal); publicationAttempted = true;
       try { await publishInstallation(extracted, installation(directory, pinned), process.platform, rename); }
@@ -158,7 +157,6 @@ async function install(options: NativeEngineOptions): Promise<NativeEngineInstal
         const winner = await inspect(directory, signal);
         if (winner.status !== 'ready') throw new PicPatchSdkError('ENGINE_INCOMPATIBLE', 'A conflicting native installation was preserved.');
       }
-      await syncDirectory(parent);
       completed = { status: 'ready', code: 'ENGINE_READY', message: 'The native engine is ready.', engineDirectory: directory, nativeExecutable: join(installation(directory, pinned), pinned.executable), revision: nativeRevision, origin: 'installed' };
       await storageCleanup(() => rm(staging, { recursive: true, force: true }));
       return completed;

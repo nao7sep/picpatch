@@ -15,7 +15,7 @@ import { prepareExternalModel } from './external.ts';
 import { downloadFile } from '../runtime/download.ts';
 import { validateModelManifest, verifyModelOperation as verifyModel } from './verification.ts';
 import type { ModelOperationOptions } from './types.ts';
-import { syncDirectory, syncFile } from '../platform.ts';
+import { syncFile } from '../platform.ts';
 
 /** prepareModel's own arguments; call options are passed apart from them. */
 export interface PrepareModelSettings {
@@ -139,10 +139,6 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
           await syncFile(path);
         }
         await verified(staging);
-        // Sync nested directories before making the complete bundle visible.
-        const directories = new Set(entry.manifest.components.map(c => dirname(join(staging, c.path))));
-        for (const path of directories) await syncDirectory(path);
-        await syncDirectory(staging);
         checkSignal(signal);
         try { await rename(staging, directory); }
         catch (cause) {
@@ -154,8 +150,6 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
           return committed;
         }
         committed = result('download');
-        try { await syncDirectory(parent); }
-        catch { committed.cleanupWarning = { directory, message: 'Model is published, but directory durability could not be confirmed.' }; }
         return committed;
       } catch (cause) { failure = cause; throw cause; }
       finally {

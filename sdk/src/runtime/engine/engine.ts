@@ -14,7 +14,7 @@ import type { CallOptions } from '../../types.ts';
 type EngineOptions = EngineSettings & CallOptions;
 const engineKeys = ['profile', 'runtime', 'engineDirectory'];
 const installKeys = [...engineKeys, 'uvExecutable', 'cacheDirectory', 'pythonDirectory', 'toolDirectories', 'offline'];
-import { supportsRuntime, syncDirectory, toolEnvironment, venvPython } from '../../platform.ts';
+import { supportsRuntime, toolEnvironment, venvPython } from '../../platform.ts';
 
 const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException)?.code ?? '');
 function validate(options: EngineOptions, install: boolean): string {
@@ -142,7 +142,6 @@ export function installEngine(settings: InstallEngineSettings, options: CallOpti
         checkSignal(signal);
         publicationAttempted = true;
         await rename(temporary, join(readyDirectory, `${definition.identity.id}.json`));
-        await syncDirectory(readyDirectory);
         completed = { ...result, origin: 'installed' };
         return completed;
       } catch (cause) {
