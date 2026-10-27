@@ -6,12 +6,12 @@ import { DatabaseSync } from 'node:sqlite';
 const launch = randomUUID();
 let db: DatabaseSync | undefined;
 let pending = Promise.resolve();
-type Capture = { id?: number; database: string; path: string; bytes: Uint8Array };
+type Capture = { database: string; path: string; bytes: Uint8Array };
 parentPort!.on('message', (message: Capture | { flush: string }) => {
   if ('flush' in message) { void pending.then(() => parentPort!.postMessage({ flushed: message.flush })); return; }
   pending = pending.then(async () => {
-    try { await capture(message); parentPort!.postMessage({ written: true, id: message.id }); }
-    catch (error) { parentPort!.postMessage({ written: true, id: message.id, issue: error instanceof Error ? error.stack ?? error.message : String(error) }); }
+    try { await capture(message); parentPort!.postMessage({ written: true }); }
+    catch (error) { parentPort!.postMessage({ written: true, issue: error instanceof Error ? error.stack ?? error.message : String(error) }); }
   });
 });
 /** Every capture arrives as the exact bytes just written: settings, a session document or a painted mask. */

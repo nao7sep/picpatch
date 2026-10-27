@@ -74,16 +74,6 @@ export function App() {
   const closingRef = useRef(false);
   const closeFocus = useRef<HTMLElement | null>(null);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
-  const acceptedRendererWork = useRef(new Set<Promise<void>>());
-  const failedMaskSave = useRef<{ error: unknown } | undefined>(undefined);
-  const acceptMaskSave = useCallback((task: Promise<void>) => {
-    acceptedRendererWork.current.add(task);
-    void task.then(() => {
-      acceptedRendererWork.current.delete(task); failedMaskSave.current = undefined;
-    }, error => {
-      acceptedRendererWork.current.delete(task); failedMaskSave.current = { error };
-    });
-  }, []);
   const settingsGuard = useRef<SettingsGuard>(null);
   /** Whether the front modal holds an unsaved edit (a painted mask, a typed name) that quitting would discard. */
   const modalDraft = useRef(false);
@@ -103,6 +93,8 @@ export function App() {
     chain.current = next.then(() => clear(key), error => show(key, error));
     return chain.current;
   }, [clear, show]);
+  /** A modal's own save reports in the modal; joining the chain lets quit wait for it with the imports. */
+  const issued = useCallback(<T,>(work: Promise<T>) => { chain.current = Promise.all([chain.current, work.catch(() => {})]); return work; }, []);
 
   const applyLocale = useCallback(async (locale: LocaleState) => {
     const changed = await useLocale(locale);
@@ -387,11 +379,10 @@ export function App() {
       if (settingsGuard.current) return settingsGuard.current.approveQuit();
       return !modalDraft.current || await confirm('quit');
     }
-    // An accepted mask save may still be encoding before its final draft reaches the writer.
-    // Observe the same work on Retry; neither caller timeout nor a failure replays its effects.
-    await Promise.allSettled([...acceptedRendererWork.current]);
+    // Capture the draft first: an open picker in the command chain must not delay it.
     await writer.flush(); await settingsGuard.current?.settleSave();
-    if (failedMaskSave.current) throw failedMaskSave.current.error;
+    // Imports, exports and mask saves already issued finish before quitting; a finished mask save updates the draft.
+    await chain.current; await writer.flush();
   };
   // The bridge offers no unsubscribe, so the listener is registered once per page.
   const listening = useRef(false);
@@ -493,7 +484,7 @@ export function App() {
       case 'export': return <ExportModal sessionId={owner.id} runId={spec.runId} label={imageLabel(owner, spec.runId, t)} initialSidecar={spec.sidecar} onClose={pop} onSave={async (sidecar, includeInputs) => {
         try {
           await writer.flush();
-          const result = await api.exportImage(owner.id, spec.runId, sidecar, includeInputs);
+          const result = await issued(api.exportImage(owner.id, spec.runId, sidecar, includeInputs));
           if (!result || closingRef.current) return undefined;
           if (result.status === 'refused') return result.code === 'OUTPUT_CONFLICT' ? t('export.exists') : describeError(result);
           // A save that finishes after its dialog was dismissed must not close what is now in front.
@@ -509,11 +500,11 @@ export function App() {
         if (!current.source || !canPaintMask(owner, current, model?.capabilities.maskMode)) return null;
         return <MaskModal source={imageUrl(owner.id, current.source)} mask={current.mask ? imageUrl(owner.id, current.mask) : undefined}
           note={t(maskNote(model?.capabilities.maskMode))}
-          onClose={() => { failedMaskSave.current = undefined; pop(); }} onAccepted={acceptMaskSave} confirmDiscard={() => confirm()} onDirty={markDraft}
+          onClose={pop} confirmDiscard={() => confirm()} onDirty={markDraft}
           onDone={async bytes => {
             try {
               if (!bytes) { const next = { ...draftRef.current! }; delete next.mask; updateDraft(next); pop(); return undefined; }
-              const asset = await api.saveMask(owner.id, bytes);
+              const asset = await issued(api.saveMask(owner.id, bytes));
               addAssets([asset]); updateDraft({ ...draftRef.current!, mask: asset.id }); pop(); return undefined;
             } catch (error) { return describeError(error); }
           }} />;

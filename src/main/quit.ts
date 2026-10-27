@@ -5,8 +5,7 @@ export function quitFlow(port: {
   drafts(): Promise<boolean>;
   saveFailure(error: unknown): Promise<number | undefined>;
   work(): Promise<boolean>;
-  settle?(): Promise<void>;
-  finish(abandon?: boolean): Promise<void>;
+  finish(): Promise<void>;
   failed(error: unknown): Promise<void>;
   interrupt(): void;
   shutdownSave(): Promise<void>;
@@ -34,17 +33,7 @@ export function quitFlow(port: {
           }
           if (shutdown || !await port.work() || shutdown) return;
           if (!await port.drafts() || shutdown) return;
-          let abandon = false;
-          for (;;) {
-            try { await port.settle?.(); break; }
-            catch (error) {
-              if (shutdown) return;
-              const answer = await port.saveFailure(error);
-              if (shutdown || answer === undefined || answer === 0) return;
-              if (answer === 2) { abandon = true; break; }
-            }
-          }
-          if (!shutdown) await port.finish(abandon);
+          await port.finish();
         } catch (error) { if (!shutdown) await port.failed(error); }
         finally { if (!shutdown) port.freeze(false); }
       })().finally(() => { attempt = undefined; });

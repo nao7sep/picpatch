@@ -1,4 +1,3 @@
-import { Settlement } from './settlement.ts';
 import { modelReadiness } from './model-readiness.ts';
 import { errorNotice, message, preference, UiError } from '../../shared/i18n/index.ts';
 import type { ManagedResult, ManagedState, ManagedTarget, ManagedOperation } from '../../shared/managed.ts';
@@ -52,7 +51,6 @@ export function exportDefaultPath(session: Session, runId: string, directory: st
 }
 export class Application {
   sessions: Sessions;
-  private effects = new Settlement();
   private lastReadiness: Readiness = {};
   queue: Queue;
   historyIssue?: string | { message: string; notice?: import('../../shared/i18n/index.ts').Message };
@@ -166,19 +164,16 @@ export class Application {
    * (the user keeps the original) and generated results (saved with Save image when wanted) are transient work.
    */
   async importImage(sessionId: string, path: string) { return this.sessions.importImage(sessionId, path); }
-  importImages(sessionId: string, paths: string[]) {
-    return this.effects.track(async () => {
-      const assets: import('../../shared/session.ts').Asset[] = [];
-      const failures: { path: string; notice: import('../../shared/i18n/index.ts').Message }[] = [];
-      for (const path of paths) {
-        try { assets.push(await this.sessions.importImage(sessionId, path)); }
-        catch (error) { failures.push({ path, notice: errorNotice(error) }); }
-      }
-      return { assets, failures };
-    });
+  async importImages(sessionId: string, paths: string[]) {
+    const assets: import('../../shared/session.ts').Asset[] = [];
+    const failures: { path: string; notice: import('../../shared/i18n/index.ts').Message }[] = [];
+    for (const path of paths) {
+      try { assets.push(await this.sessions.importImage(sessionId, path)); }
+      catch (error) { failures.push({ path, notice: errorNotice(error) }); }
+    }
+    return { assets, failures };
   }
-  async settled(): Promise<void> { await this.effects.settled(); await this.sessions.settled(); await this.settingsTail; }
-  async settleForQuit(): Promise<void> { await Promise.all([this.stopManaged(), this.queue.stop()]); await this.settled(); }
+  async settled(): Promise<void> { await this.sessions.settled(); await this.settingsTail; }
 
   async mask(sessionId: string, bytes: Uint8Array) {
     // Authored mask pixels belong to the GUI; the SDK validates their image semantics on execution.
@@ -187,10 +182,7 @@ export class Application {
     this.backup(await this.sessions.imagePath(sessionId, asset.id), Buffer.from(bytes)); return asset;
   }
   async remove(sessionId: string) { if (this.queue.busy(sessionId)) throw new UiError('error.cancel_this_sessions_work_before_deleting_it'); return this.sessions.remove(sessionId); }
-  export(sessionId: string, runId: string, destination: string, sidecar: boolean, includeInputs: boolean) {
-    return this.effects.track(() => this.exportImage(sessionId, runId, destination, sidecar, includeInputs));
-  }
-  private async exportImage(sessionId: string, runId: string, destination: string, sidecar: boolean, includeInputs: boolean) {
+  async export(sessionId: string, runId: string, destination: string, sidecar: boolean, includeInputs: boolean) {
     const session = await this.sessions.get(sessionId); const run = session.runs.find(r => r.id === runId);
     if (!run?.record || !run.output) throw new UiError('error.select_a_completed_image');
     // The SDK leaves the inputs out of the saved copy when the user did not choose to share them.
@@ -254,7 +246,7 @@ export class Application {
     const selected = new Sessions(directory, (path, bytes) => this.backup(path, bytes), true);
     if ((await selected.list()).unavailable) throw new UiError('error.storage');
     await this.updateSettings(value => { value.sessionsDirectory = directory; });
-    const previous = this.sessions; this.queue.use(selected); this.sessions = selected; await previous.close();
+    const previous = this.sessions; this.queue.use(selected); this.sessions = selected; await previous.settled();
   }
 }
 

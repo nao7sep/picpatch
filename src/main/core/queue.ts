@@ -139,7 +139,6 @@ export class Queue {
         }
         value.draft = recoverCommand(value.draft, value.runs);
       });
-      if (outcome.status === 'completed') await this.sessions.retireOutput(selected.sessionId, selected.runId);
     } catch (error) {
       // A result may already exist. Never replay a failed metadata write or uncertain process outcome.
       this.state.paused = true; this.state.issue = queueIssue(error);

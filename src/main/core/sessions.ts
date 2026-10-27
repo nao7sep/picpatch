@@ -1,6 +1,3 @@
-import { PendingResults } from './pending-results.ts';
-import { Settlement } from './settlement.ts';
-import { sessionEncoder } from './session-encoder.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { UiError } from '../../shared/i18n/index.ts';
 import { recoverCommand } from '../../shared/image-command.ts';
@@ -12,7 +9,7 @@ import { validateArtifactRecord } from 'picpatchsdk';
 import sharp from 'sharp';
 import { controlKinds, initialDraft } from '../../shared/session.ts';
 import type { Session, SessionSummary, Draft, Asset } from '../../shared/session.ts';
-import { writeBytes, syncDirectory } from './files.ts';
+import { writeJson } from './files.ts';
 
 const removing = /^[a-f0-9-]{36}\.removing-[a-f0-9-]{36}$/;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -70,8 +67,6 @@ async function checkImage(path: string): Promise<void> {
 /** Single GUI process owns this collection; outside concurrent editing is not supported. */
 export class Sessions {
   readonly root: string;
-  private effects = new Settlement();
-  private results = new PendingResults(key => this.directory(key));
   private tail: Promise<unknown> = Promise.resolve();
   /** Full sessions the user opened or work touched; the collection listing keeps only summaries. */
   private loaded = new Map<string, Session>();
@@ -95,7 +90,7 @@ export class Sessions {
     catch (error) { if (!this.existingCollection) throw error; const code = (error as { code?: unknown }).code; return { sessions: [], failures: [], unavailable: { path: this.root, ...(typeof code === 'string' ? { code } : {}) } }; }
     const sessions: SessionSummary[] = [], failures: { id: string; message: string }[] = [];
     for (const entry of entries) {
-      if (entry.isDirectory() && removing.test(entry.name)) { try { await this.effects.track(() => rm(join(this.root, entry.name), { recursive: true, force: true })); } catch (error) { failures.push({ id: entry.name, message: new UiError('ui.session_cleanup_pending', { path: join(this.root, entry.name) }, { cause: error }).message }); } continue; }
+      if (entry.isDirectory() && removing.test(entry.name)) { try { await rm(join(this.root, entry.name), { recursive: true, force: true }); } catch (error) { failures.push({ id: entry.name, message: new UiError('ui.session_cleanup_pending', { path: join(this.root, entry.name) }, { cause: error }).message }); } continue; }
       if (!uuid.test(entry.name) || !entry.isDirectory()) continue;
       try {
         let summary = this.summaries.get(entry.name);
@@ -116,7 +111,6 @@ export class Sessions {
     if ((await lstat(directory)).isSymbolicLink()) throw new UiError('error.linked_sessions_are_not_supported');
     const session = validateSession(JSON.parse(await readFile(join(directory, 'session.json'), 'utf8')));
     if (session.id !== key) throw new UiError('error.session_identity_does_not_match_its_directory');
-    await this.results.recover(session);
     return session;
   }
   /** The cached session itself; callers only read it. */
@@ -131,11 +125,6 @@ export class Sessions {
     const newer = this.loaded.get(key); if (newer) return newer;
     this.loaded.set(key, session); return session;
   }
-  stagedOutput(key: string, runId: string): Promise<string> { id(runId); return this.results.staged(key, runId); }
-  completeOutput(key: string, runId: string, record: import('picpatchsdk').ArtifactRecord): Promise<void> {
-    return this.effects.track(() => this.results.publish(key, runId, record));
-  }
-  async retireOutput(key: string, runId: string): Promise<void> { await this.results.retire(key, runId); }
   async create(name = 'Untitled session', draft = initialDraft()): Promise<Session> {
     return this.serial(async () => {
       const key = randomUUID(); const now = new Date().toISOString();
@@ -148,7 +137,7 @@ export class Sessions {
   private async publish(session: Session, historyChanged = true): Promise<void> {
     const valid = session;
     const path = join(this.directory(session.id), 'session.json');
-    const bytes = await writeBytes(path, await sessionEncoder.encode(valid));
+    const bytes = await writeJson(path, valid);
     this.loaded.set(session.id, valid);
     if (historyChanged || !this.summaries.has(session.id)) this.summaries.set(session.id, summarize(valid));
     try { this.saved(path, bytes); } catch { /* Backup history cannot fail a primary save. */ }
@@ -185,7 +174,7 @@ export class Sessions {
     if (part.startsWith(`..${sep}`) || part === '..' || isAbsolute(part)) throw new UiError('error.image_escapes_its_session');
     return path;
   }
-  importImage(key: string, source: string): Promise<Asset> { const release = this.pin(key); return this.effects.track(() => this.copyImage(key, source)).finally(release); }
+  importImage(key: string, source: string): Promise<Asset> { const release = this.pin(key); return this.copyImage(key, source).finally(release); }
   private async copyImage(key: string, source: string): Promise<Asset> {
     if (!isAbsolute(source)) throw new UiError('error.select_an_absolute_image_path');
     await this.read(key);
@@ -207,7 +196,6 @@ export class Sessions {
       await checkImage(temporary);
       // A copy keeps the original's modified time.
       await rename(temporary, path);
-      if (process.platform !== 'win32') await syncDirectory(join(this.directory(key), 'assets'));
       asset = { id: assetId, name: basename(source), file, bytes, sha256: hash.digest('hex') };
     } finally { await input.close(); await rm(temporary, { force: true }); }
     // A failed metadata save leaves the copied image intact for inspection.
@@ -215,7 +203,7 @@ export class Sessions {
     return asset;
   }
   /** An image the app made, such as a painted mask, joins the session from memory, checked like an import. */
-  addImage(key: string, name: string, bytes: Uint8Array): Promise<Asset> { const release = this.pin(key); return this.effects.track(() => this.writeImage(key, name, bytes)).finally(release); }
+  addImage(key: string, name: string, bytes: Uint8Array): Promise<Asset> { const release = this.pin(key); return this.writeImage(key, name, bytes).finally(release); }
   private async writeImage(key: string, name: string, bytes: Uint8Array): Promise<Asset> {
     await this.read(key);
     const assetId = randomUUID(); const file = `assets/${assetId}`; const path = join(this.directory(key), file); const temporary = `${path}.tmp`;
@@ -224,7 +212,6 @@ export class Sessions {
       try { await output.writeFile(bytes); await output.sync(); } finally { await output.close(); }
       await checkImage(temporary);
       await rename(temporary, path);
-      if (process.platform !== 'win32') await syncDirectory(join(this.directory(key), 'assets'));
     } finally { await rm(temporary, { force: true }); }
     const asset: Asset = { id: assetId, name, file, bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') };
     // A failed metadata save leaves the image intact for inspection.
@@ -232,8 +219,7 @@ export class Sessions {
     return asset;
   }
   /** Removal hides the session at once; deleting its files runs outside the save lock, and a later listing retries leftovers. */
-  remove(key: string): Promise<{ cleanup?: import('../../shared/i18n/index.ts').Message }> { return this.effects.track(() => this.removeFiles(key)); }
-  private async removeFiles(key: string): Promise<{ cleanup?: import('../../shared/i18n/index.ts').Message }> {
+  async remove(key: string): Promise<{ cleanup?: import('../../shared/i18n/index.ts').Message }> {
     const hidden = await this.serial(async () => {
       await this.read(key); const hidden = join(this.root, `${key}.removing-${randomUUID()}`);
       await rename(this.directory(key), hidden); this.loaded.delete(key); this.summaries.delete(key); return hidden;
@@ -241,6 +227,5 @@ export class Sessions {
     try { await rm(hidden, { recursive: true, force: true }); } catch { return { cleanup: { key: 'ui.session_cleanup_pending', values: { path: hidden } } }; }
     return {};
   }
-  async settled(): Promise<void> { await this.effects.settled(); await this.tail; }
-  async close(): Promise<void> { await this.settled(); }
+  async settled(): Promise<void> { await this.tail; }
 }

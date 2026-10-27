@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,19 +6,14 @@ import sharp from 'sharp';
 import { Application } from '../../src/main/core/service.ts';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-it('keeps successful files before and after a bad native-picker selection and joins batch settlement', async () => {
+it('keeps successful files before and after a bad native-picker selection', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-batch-')); roots.push(root);
   const app = await Application.open({ root, config: join(root, 'config.json'), sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
   const session = await app.create('Batch');
   const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: 'red' } }).png().toBuffer();
   const first = join(root, 'first.png'), bad = join(root, 'bad.png'), last = join(root, 'last.png');
   await Promise.all([writeFile(first, bytes), writeFile(bad, 'not an image'), writeFile(last, bytes)]);
-  const original = app.sessions.importImage.bind(app.sessions); let release!: () => void;
-  const held = new Promise<void>(resolve => { release = resolve; });
-  vi.spyOn(app.sessions, 'importImage').mockImplementation(async (key, path) => { if (path === first) await held; return original(key, path); });
-  const batch = app.importImages(session.id, [first, bad, last]);
-  const settled = vi.fn(); const wait = app.settled().then(settled); await Promise.resolve(); expect(settled).not.toHaveBeenCalled();
-  release(); const result = await batch; await wait;
+  const result = await app.importImages(session.id, [first, bad, last]);
   expect(result.assets.map(asset => asset.name)).toEqual(['first.png', 'last.png']); expect(result.failures.map(failure => failure.path)).toEqual([bad]);
   expect((await app.sessions.get(session.id)).assets).toEqual(result.assets);
   expect(await readFile(first)).toEqual(bytes); expect(await readFile(last)).toEqual(bytes); expect(await readFile(bad, 'utf8')).toBe('not an image');

@@ -35,6 +35,6 @@ it('applies host defaults only to a newly created session while retaining a save
     expect((await app.sessions.get(saved.id)).draft).toEqual(authored);
     const reopened = new Sessions(paths.sessions);
     try { expect((await reopened.get(saved.id)).draft).toEqual(authored); }
-    finally { await reopened.close(); }
-  } finally { await app.sessions.close(); await rm(root, { recursive: true, force: true }); }
+    finally { await reopened.settled(); }
+  } finally { await app.sessions.settled(); await rm(root, { recursive: true, force: true }); }
 });

@@ -1,5 +1,4 @@
 import { readSettingsSync, type Settings } from './core/settings.ts';
-import { observe } from './core/settlement.ts';
 import { pickBundleComponent, pickPaths } from './native-pickers.ts';
 import { startupFailureWindow } from './startup-failure.ts';
 import { menuTemplate } from './menu-template.ts';
@@ -99,6 +98,7 @@ async function ask(options: { message: Message; detail?: Message; buttons: Messa
 const editorAvailable = () => rendererReady && !!window && !window.isDestroyed() && !window.webContents.isDestroyed();
 /** A step stuck in native I/O would hold Electron's own exit, so the bounded teardown ends with SIGKILL instead. */
 const forceExit = () => process.kill(process.pid, 'SIGKILL');
+const delay = (milliseconds: number) => new Promise<'late'>(resolve => setTimeout(() => resolve('late'), milliseconds));
 const lifetime = quitFlow({
   freeze: value => { closing = value; command(value ? 'beginClose' : 'endClose'); },
   flush: async () => { if (editorAvailable()) await requests.request({ kind: 'flush' }, 5000); },
@@ -112,15 +112,20 @@ const lifetime = quitFlow({
     if (service.queue.busy() && (await ask({ duringClose: true, message: message('ui.cancel_the_remaining_work_and_quit'), buttons: [message('ui.keep_working'), message('ui.cancel_work_and_quit')] })).response !== 1) return false;
     return true;
   },
-  settle: () => observe(service.settleForQuit(), 5000),
-  finish: async (abandon = false) => {
-    logs?.close();
+  finish: async () => {
+    await service.stopManaged();
+    await service.queue.stop();
+    if (quitting) return;
+    // Saves already accepted settle before teardown, within a bound a stalled volume cannot extend.
+    const late = await Promise.race([service.settled().then(() => 'settled' as const), delay(5000)]) === 'late';
+    if (late) records?.write('warn', 'Session saves did not settle before quitting.');
+    await backup?.close();
+    logs?.close(); await recordsReader?.close();
     records?.write('info', 'PicPatch closed normally.');
-    let late = abandon;
-    try { const results = await observe(Promise.allSettled([backup?.close(), recordsReader?.close(), records?.close()]), 2000); late ||= results.some(result => result.status === 'rejected' || result.value === false); }
-    catch { late = true; }
+    const recordsLate = await Promise.race([records?.close().then(() => 'closed' as const), delay(2000)]) === 'late';
     quitting = true;
-    if (late) forceExit(); else app.quit();
+    // Electron's own exit waits on Node cleanup, which a step still stuck in native I/O would hold forever.
+    if (late || recordsLate) forceExit(); else app.quit();
   },
   failed: async error => {
     records?.write('error', 'Closing did not complete.', { error: errorRecord(error) });

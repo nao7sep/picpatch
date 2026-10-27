@@ -1,7 +1,6 @@
 import { Worker } from 'node:worker_threads';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { totalmem } from 'node:os';
 import { fallbackLog } from './fallback-log.ts';
 export interface AppRecord { time: string; level: 'debug' | 'info' | 'warn' | 'error'; message: string; [key: string]: unknown }
 export function errorRecord(error: unknown): unknown {
@@ -14,108 +13,58 @@ export function errorRecord(error: unknown): unknown {
   }
   return describe(error);
 }
-type PendingRecord = { id: number; line: string; bytes: number; notify: boolean };
-/** Diagnostics have one bounded admission budget, including worker writes and fallback I/O. */
+/** Diagnostics never delay session saves or inference. One thread owns all record I/O while it runs. */
 export class Records {
   private worker: Worker;
-  private queue: PendingRecord[] = [];
-  private active?: PendingRecord;
-  private bytes = 0;
+  /** Records sent but not yet acknowledged; a failed writer hands them to the fallback log. */
+  private unacknowledged = new Map<number, { record: AppRecord; notify: boolean }>();
   private sequence = 0;
   private failed = false;
-  private closed = false;
-  private terminating = false;
-  private overloaded = false;
-  private closing?: Promise<boolean>;
-  private idle?: () => void;
-  private watchdog?: ReturnType<typeof setTimeout>;
-  // Small relative to host RAM; a stalled optional sink must not retain unlimited diagnostics.
-  private readonly budget = Math.min(32 * 1024 * 1024, Math.floor(totalmem() / 1024));
+  private closing = false;
   readonly session = new Date().toISOString();
+  private fallbackTail: Promise<void> = Promise.resolve();
   constructor(private root: string, script: string | URL, private changed: () => void = () => {}) {
     this.worker = new Worker(script, { workerData: { root, session: this.session } });
     this.worker.on('message', message => {
-      if (!this.failed && message.written && this.active && this.active.id === message.id) {
-        if (message.stored && this.active.notify) this.changed();
-        this.complete();
-      }
+      if (!message.written) return;
+      const entry = this.unacknowledged.get(message.id); this.unacknowledged.delete(message.id);
+      if (message.stored && entry?.notify) this.changed();
     });
     this.worker.on('error', error => this.workerFailed(error));
-    this.worker.on('exit', code => { if (!this.terminating) this.workerFailed(new Error(`Records writer exited (${code}).`)); });
+    this.worker.on('exit', code => { if (!this.closing) this.workerFailed(new Error(`Records writer exited (${code}).`)); });
   }
-  write(level: AppRecord['level'], message: string, details: Record<string, unknown> = {}) {
-    this.admit(level, message, details, true);
-  }
-  /** Retain the failed read for inspection without its own ACK restarting that read. */
-  readFailed(error: unknown) { this.admit('error', 'Records could not be read.', { error: errorRecord(error) }, false); }
-  private admit(level: AppRecord['level'], message: string, details: Record<string, unknown>, notify: boolean) {
-    if (this.closed) return;
-    let line: string;
-    try { line = JSON.stringify({ ...details, time: new Date().toISOString(), level, message }) + '\n'; }
-    catch (error) { process.stderr.write(`PicPatch record could not be serialized: ${String(error)}\n`); return; }
-    const bytes = Buffer.byteLength(line);
-    if (this.queue.length + Number(!!this.active) >= 256 || this.bytes + bytes > this.budget) {
-      if (!this.overloaded) process.stderr.write('PicPatch records unavailable: diagnostic buffer full; recent records may be omitted.\n');
-      this.overloaded = true; return;
-    }
-    this.overloaded = false; this.bytes += bytes;
-    this.queue.push({ id: ++this.sequence, line, bytes, notify }); this.pump();
-  }
-  private pump() {
-    if (this.active) return;
-    this.active = this.queue.shift();
-    if (!this.active) { this.idle?.(); return; }
-    if (this.failed) { this.fallback(this.active); return; }
-    try {
-      this.worker.postMessage({ id: this.active.id, record: JSON.parse(this.active.line) });
-      this.watchdog = setTimeout(() => this.workerFailed(new Error('Records writer stopped acknowledging writes.')), 2000);
-      this.watchdog.unref();
-    } catch (error) { this.workerFailed(error); }
+  write(level: AppRecord['level'], message: string, details: Record<string, unknown> = {}) { this.send({ ...details, time: new Date().toISOString(), level, message }, true); }
+  /** Retain the failed read for inspection without its own acknowledgement restarting that read. */
+  readFailed(error: unknown) { this.send({ error: errorRecord(error), time: new Date().toISOString(), level: 'error', message: 'Records could not be read.' }, false); }
+  private send(record: AppRecord, notify: boolean) {
+    if (this.failed) { this.fallback(record); return; }
+    const id = ++this.sequence;
+    try { this.worker.postMessage({ id, record }); this.unacknowledged.set(id, { record, notify }); }
+    catch { this.fallback(record); }
   }
   private workerFailed(error: unknown) {
     if (this.failed) return;
-    this.failed = true; clearTimeout(this.watchdog);
+    this.failed = true;
     process.stderr.write(`PicPatch records worker failed: ${String(error)}\n`);
-    // An unknown ACK may duplicate a stored record. Optional diagnostics do not promise exactly-once delivery.
-    if (this.active) this.fallback(this.active);
-    void this.worker.terminate().catch(error => process.stderr.write(`PicPatch records worker termination failed: ${String(error)}\n`));
+    // A record the writer stored without acknowledging may be duplicated; optional diagnostics are not exactly-once.
+    for (const { record } of this.unacknowledged.values()) this.fallback(record);
+    this.unacknowledged.clear();
   }
-  private fallback(entry: PendingRecord) {
-    void (async () => {
-      try {
-        await mkdir(join(this.root, 'logs'), { recursive: true, mode: 0o700 });
-        await appendFile(fallbackLog(this.root, this.session), entry.line, { mode: 0o600 });
-      } catch { process.stderr.write(entry.line); }
-      finally { this.complete(); }
-    })();
+  /** Without a working writer, records go to the launch's fallback log in order, and to stderr only when that fails. */
+  private fallback(record: AppRecord) {
+    const line = JSON.stringify(record) + '\n', path = fallbackLog(this.root, this.session);
+    this.fallbackTail = this.fallbackTail
+      .then(async () => { await mkdir(join(this.root, 'logs'), { recursive: true, mode: 0o700 }); await appendFile(path, line, { mode: 0o600 }); })
+      .catch(() => { process.stderr.write(line); });
   }
-  private complete() {
-    clearTimeout(this.watchdog);
-    if (this.active) this.bytes -= this.active.bytes;
-    this.active = undefined; this.pump();
-  }
-  close(): Promise<boolean> {
-    return this.closing ??= this.finish();
-  }
-  private async finish() {
-    this.closed = true;
-    const deadline = performance.now() + 500;
+  async close(): Promise<void> {
     await new Promise<void>(resolve => {
-      const timer = setTimeout(resolve, 500);
-      this.idle = () => { clearTimeout(timer); resolve(); };
-      if (!this.active) this.idle();
+      const done = (message: any) => { if (message.flushed) { clearTimeout(timer); this.worker.off('message', done); resolve(); } };
+      const timer = setTimeout(() => { this.worker.off('message', done); resolve(); }, 500);
+      this.worker.on('message', done);
+      try { this.worker.postMessage({ flush: true }); } catch { clearTimeout(timer); resolve(); }
     });
-    clearTimeout(this.watchdog);
-    this.queue = []; this.bytes = this.active?.bytes ?? 0;
-    // Termination and a stalled fallback remain best effort after the single total flush bound.
-    this.terminating = true;
-    const terminated = await new Promise<boolean>(resolve => {
-      const timer = setTimeout(() => resolve(false), Math.max(0, deadline - performance.now()));
-      void this.worker.terminate().then(() => { clearTimeout(timer); resolve(true); }, error => {
-        process.stderr.write(`PicPatch records worker termination failed: ${String(error)}\n`);
-        clearTimeout(timer); resolve(false);
-      });
-    });
-    return terminated && performance.now() < deadline && !(this.failed && this.active);
+    this.closing = true;
+    await this.worker.terminate(); await this.fallbackTail;
   }
 }

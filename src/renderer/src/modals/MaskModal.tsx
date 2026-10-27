@@ -7,32 +7,33 @@ import { BrushIcon, EraserIcon, RedoIcon, UndoIcon } from '../components/icons.t
 import { useI18n } from '../i18n.tsx';
 import { isComposing } from '../ime.ts';
 import { Modal } from './Modal.tsx';
-import { api } from '../api.ts';
-import { MaskWorker } from '../mask/client.ts';
-import type { MaskCommand } from '../mask/editor.ts';
 
-export function MaskModal({ source, mask, note, onClose, onDone, onAccepted, confirmDiscard, onDirty }: {
+/** Undo snapshots are whole canvases; keep their total bounded, but always one. */
+const HISTORY_BYTES = 64 * 1024 * 1024;
+const PAINT = '#f2a65a';
+
+export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard, onDirty }: {
   source: string; mask: string | undefined; note: string;
   onClose: () => void; onDone: (bytes: Uint8Array | null) => Promise<string | undefined>; confirmDiscard: () => Promise<boolean>; onDirty: (dirty: boolean) => void;
-  onAccepted?: (task: Promise<void>) => void;
 }) {
   const { t } = useI18n();
-  const frame = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
-  const owner = useRef<MaskWorker | undefined>(undefined);
-  const [size, setSize] = useState<{ width: number; height: number }>();
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
-  const [ready, setReady] = useState(false);
+  const [size, setSize] = useState<{ width: number; height: number }>();
   const [brush, setBrush] = useState(48);
   const [erase, setErase] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [failure, setFailure] = useState<string>();
   const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
-  const [history, setHistory] = useState({ undo: false, redo: false });
+  const history = useRef<{ undo: ImageData[]; redo: ImageData[] }>({ undo: [], redo: [] });
+  const [, setRevision] = useState(0);
+  const last = useRef<{ x: number; y: number } | undefined>(undefined);
   const drawing = useRef(false);
+  const context = () => canvas.current!.getContext('2d', { willReadFrequently: true })!;
   useEffect(() => { onDirty(dirty); }, [dirty, onDirty]);
 
+  // Image, overlay and pointer mapping share one fit of the image inside the stage.
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) => {
       if (entry) setStageSize({ width: entry.contentRect.width, height: entry.contentRect.height });
@@ -41,109 +42,71 @@ export function MaskModal({ source, mask, note, onClose, onDone, onAccepted, con
     return () => observer.disconnect();
   }, []);
 
+  // Load the image's size, then any saved mask as the painted overlay (its white becomes paint).
   useEffect(() => {
-    let alive = true;
-    setSize(undefined); setReady(false);
     const image = new Image();
-    image.onload = () => { if (alive) setSize({ width: image.naturalWidth, height: image.naturalHeight }); };
-    image.onerror = () => { if (alive) setFailure(t('mask.unavailable')); };
+    image.onload = () => setSize({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => setFailure(t('mask.unavailable'));
     image.src = source;
-    return () => { alive = false; image.onload = image.onerror = null; };
   }, [source, t]);
-
   useEffect(() => {
-    if (!size) return;
-    let alive = true;
-    const canvas = document.createElement('canvas');
-    canvas.width = size.width; canvas.height = size.height;
-    canvas.tabIndex = 0; canvas.setAttribute('aria-label', t('mask.canvas'));
-    frame.current!.append(canvas);
-    let worker: MaskWorker;
-    try { worker = new MaskWorker(new Worker(new URL('../mask/worker.ts', import.meta.url), { type: 'module' })); }
-    catch (error) {
-      const value = error instanceof Error ? error : new Error(String(error));
-      canvas.remove(); setFailure(t('mask.unavailable'));
-      void api.reportError({ message: value.message, stack: value.stack });
-      return;
-    }
-    owner.current = worker;
-    setReady(false); setHistory({ undo: false, redo: false });
-    const initialize = async () => {
-      let bitmap: ImageBitmap | undefined;
-      if (mask) {
-        // Browser image decoding stays asynchronous; only the decoded bitmap is
-        // transferred. No full-resolution pixels are read on the UI thread.
-        const image = new Image(); image.crossOrigin = 'anonymous';
-        await new Promise<void>((resolve, reject) => {
-          image.onload = () => resolve(); image.onerror = () => reject(new Error('Could not load mask'));
-          image.src = mask;
-        });
-        bitmap = await createImageBitmap(image);
-      }
-      if (!alive) { bitmap?.close(); return; }
-      try {
-        const offscreen = canvas.transferControlToOffscreen();
-        await worker.run({ kind: 'init', canvas: offscreen, ...(bitmap ? { mask: bitmap } : {}) }, [offscreen, ...(bitmap ? [bitmap] : [])]);
-      } catch (error) { bitmap?.close(); throw error; }
-      if (alive) setReady(true);
+    if (!size || !mask) return;
+    const image = new Image(); image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      const ctx = context(); ctx.drawImage(image, 0, 0, size.width, size.height);
+      const pixels = ctx.getImageData(0, 0, size.width, size.height);
+      for (let i = 0; i < pixels.data.length; i += 4) { const alpha = pixels.data[i]!; pixels.data[i] = 0xf2; pixels.data[i + 1] = 0xa6; pixels.data[i + 2] = 0x5a; pixels.data[i + 3] = alpha; }
+      ctx.putImageData(pixels, 0, 0);
     };
-    void initialize().catch(error => {
-      void api.reportError({ message: error.message, stack: error.stack });
-      if (alive) setFailure(t('mask.unavailable'));
-    });
-    return () => {
-      alive = false; drawing.current = false;
-      if (owner.current === worker) owner.current = undefined;
-      canvas.remove();
-      // A reply, including an asynchronous encode reply, proves settlement.
-      void worker.close();
-    };
-  }, [size, mask, t]);
+    image.src = mask;
+  }, [size, mask]);
 
-  const command = (value: MaskCommand) => {
-    if (!ready || savingRef.current || !owner.current) return;
-    const worker = owner.current;
-    void worker.run(value).then(result => {
-      if (owner.current === worker) setHistory({ undo: result.undo, redo: result.redo });
-    }).catch(error => {
-      if (owner.current === worker) { setFailure(t('mask.unavailable')); setReady(false); }
-      void api.reportError({ message: error.message, stack: error.stack });
-    });
+  const snapshot = () => context().getImageData(0, 0, size!.width, size!.height);
+  const remember = () => {
+    const { undo } = history.current;
+    undo.push(snapshot()); history.current.redo = [];
+    while (undo.length > 1 && undo.length * size!.width * size!.height * 4 > HISTORY_BYTES) undo.shift();
+    setRevision(value => value + 1);
   };
-  const step = (kind: 'undo' | 'redo') => {
-    if (!history[kind] || savingRef.current) return;
-    command({ kind }); setDirty(true);
+  const step = (from: 'undo' | 'redo') => {
+    const stack = history.current[from], other = history.current[from === 'undo' ? 'redo' : 'undo'];
+    const previous = stack.pop(); if (!previous) return;
+    other.push(snapshot()); context().putImageData(previous, 0, 0); setDirty(true); setRevision(value => value + 1);
   };
-  const stroke = (event: React.PointerEvent<HTMLDivElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    command({ kind: 'stroke', point: imagePoint({ x: event.clientX, y: event.clientY }, bounds, size!), width: brush * size!.width / bounds.width, erase });
-    setDirty(true);
+  const stroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const ctx = context();
+    const point = imagePoint({ x: event.clientX, y: event.clientY }, event.currentTarget.getBoundingClientRect(), size!);
+    const scale = size!.width / event.currentTarget.getBoundingClientRect().width;
+    ctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = PAINT; ctx.fillStyle = PAINT; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = brush * scale;
+    ctx.beginPath(); ctx.moveTo(last.current?.x ?? point.x, last.current?.y ?? point.y); ctx.lineTo(point.x, point.y); ctx.stroke();
+    ctx.beginPath(); ctx.arc(point.x, point.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fill();
+    last.current = point; setDirty(true);
   };
-  const close = async () => { if (savingRef.current) return; if (!dirty || await confirmDiscard()) onClose(); };
-  const done = () => {
-    if (!ready || savingRef.current || !owner.current) return;
+
+  const close = async () => { if (saving) return; if (!dirty || await confirmDiscard()) onClose(); };
+  const done = async () => {
+    if (!size || saving) return;
     if (!dirty) { onClose(); return; }
-    savingRef.current = true; setSaving(true); setFailure(undefined);
-    const worker = owner.current;
-    const accepted = Promise.withResolvers<void>();
-    // Quit must see the accepted save before encoding begins, including the
-    // interval before any bytes have reached the main process's save owner.
-    onAccepted?.(accepted.promise);
-    let saveProblem: string | undefined;
-    const presented = accepted.promise.catch(error => {
-      if (saveProblem) setFailure(saveProblem);
-      else {
-        const value = error instanceof Error ? error : new Error(String(error));
-        void api.reportError({ message: value.message, stack: value.stack });
-        setFailure(t('ui.could_not_encode_mask'));
-      }
-    }).finally(() => { savingRef.current = false; setSaving(false); });
-    void (async () => {
-      const result = await worker.run({ kind: 'encode' });
-      saveProblem = await onDone(result.bytes!);
-      if (saveProblem) throw new Error(saveProblem);
-    })().then(accepted.resolve, accepted.reject);
-    return presented;
+    setSaving(true); setFailure(undefined);
+    const pixels = snapshot();
+    let painted = false;
+    const out = new ImageData(size.width, size.height);
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      const value = pixels.data[i + 3]!; if (value) painted = true;
+      out.data[i] = out.data[i + 1] = out.data[i + 2] = value; out.data[i + 3] = 255;
+    }
+    let bytes: Uint8Array | null = null;
+    if (painted) {
+      const output = document.createElement('canvas'); output.width = size.width; output.height = size.height;
+      output.getContext('2d')!.putImageData(out, 0, 0);
+      const blob = await new Promise<Blob | null>(resolve => output.toBlob(resolve, 'image/png'));
+      if (!blob) { setFailure(t('ui.could_not_encode_mask')); setSaving(false); return; }
+      bytes = new Uint8Array(await blob.arrayBuffer());
+    }
+    const problem = await onDone(bytes);
+    setSaving(false);
+    if (problem) setFailure(problem);
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -158,7 +121,7 @@ export function MaskModal({ source, mask, note, onClose, onDone, onAccepted, con
       <span className="foot-note">{note}</span>
       <span className="spacer" />
       <button type="button" className="button" disabled={saving} onClick={() => void close()}>{t('ui.cancel')}</button>
-      <button type="button" className="button primary" disabled={!ready || saving} onClick={() => void done()}>{t('ui.done')}</button>
+      <button type="button" className="button primary" disabled={!size || saving} onClick={() => void done()}>{t('ui.done')}</button>
     </>}>
       <div className="mask-editor" onKeyDown={onKeyDown}>
         <div className="mask-tools">
@@ -167,23 +130,21 @@ export function MaskModal({ source, mask, note, onClose, onDone, onAccepted, con
             <label className={erase ? 'on' : undefined}><input type="radio" name="mask-tool" checked={erase} onChange={() => setErase(true)} /><EraserIcon /><span>{t('mask.erase')}</span></label>
           </div>
           <label className="mask-brush"><span>{t('ui.brush_size')}</span><input type="range" min={4} max={200} value={brush} onChange={event => setBrush(Number(event.target.value))} /></label>
-          <button type="button" className="icon-button" disabled={!ready || saving || !history.undo} onClick={() => step('undo')} aria-label={t('ui.undo_stroke')} title={t('ui.undo_stroke')}><UndoIcon /></button>
-          <button type="button" className="icon-button" disabled={!ready || saving || !history.redo} onClick={() => step('redo')} aria-label={t('ui.redo_stroke')} title={t('ui.redo_stroke')}><RedoIcon /></button>
-          <button type="button" className="button compact" disabled={!ready || saving} onClick={() => { command({ kind: 'clear' }); setDirty(true); }}>{t('ui.clear_mask')}</button>
+          <button type="button" className="icon-button" disabled={!history.current.undo.length} onClick={() => step('undo')} aria-label={t('ui.undo_stroke')} title={t('ui.undo_stroke')}><UndoIcon /></button>
+          <button type="button" className="icon-button" disabled={!history.current.redo.length} onClick={() => step('redo')} aria-label={t('ui.redo_stroke')} title={t('ui.redo_stroke')}><RedoIcon /></button>
+          <button type="button" className="button compact" disabled={!size} onClick={() => { remember(); context().clearRect(0, 0, size!.width, size!.height); setDirty(true); }}>{t('ui.clear_mask')}</button>
         </div>
         <div className="mask-stage" ref={stage}>
           {size ? (
-            <div className="mask-frame" ref={frame} style={fitImage(size, stageSize)}
-              onPointerDown={event => {
-                if (event.button !== 0 || !ready || savingRef.current) return;
-                event.currentTarget.setPointerCapture(event.pointerId);
-                command({ kind: 'begin' }); drawing.current = true; stroke(event);
-              }}
-              onPointerMove={event => { if (drawing.current) stroke(event); }}
-              onPointerUp={() => { if (drawing.current) command({ kind: 'end' }); drawing.current = false; }}
-              onPointerCancel={() => { if (drawing.current) command({ kind: 'end' }); drawing.current = false; }}
-            >
+            <div className="mask-frame" style={fitImage(size, stageSize)}>
               <img src={source} alt="" draggable={false} />
+              <canvas
+                ref={canvas} width={size.width} height={size.height} tabIndex={0} aria-label={t('mask.canvas')}
+                onPointerDown={event => { if (event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); remember(); drawing.current = true; last.current = undefined; stroke(event); }}
+                onPointerMove={event => { if (drawing.current) stroke(event); }}
+                onPointerUp={() => { drawing.current = false; }}
+                onPointerCancel={() => { drawing.current = false; }}
+              />
             </div>
           ) : <p className="mask-problem">{failure ?? t('mask.loading')}</p>}
         </div>
