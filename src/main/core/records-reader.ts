@@ -13,7 +13,6 @@ export class RecordsReader {
     if (worker) void worker.terminate();
   }
   private request(action: string, payload: unknown): Promise<any> {
-    if (this.pending.size >= 8) return Promise.reject(new Error('Too many pending records reads.'));
     if (!this.worker) {
       const worker = this.worker = new Worker(this.script, { workerData: { root: this.root, session: this.session } });
       worker.on('message', reply => {
