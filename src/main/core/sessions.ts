@@ -191,8 +191,6 @@ export class Sessions {
         await output.utimes(Number(before.atimeNs) / 1e9, Number(before.mtimeNs) / 1e9);
         await output.sync();
       } finally { await output.close(); }
-      const after = await input.stat({ bigint: true });
-      if (before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new UiError('error.source_image_changed_while_copying');
       await checkImage(temporary);
       // A copy keeps the original's modified time.
       await rename(temporary, path);

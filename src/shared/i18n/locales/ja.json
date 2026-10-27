@@ -251,7 +251,6 @@
   "error.image_escapes_its_session": "画像のパスがセッションの保存範囲外を指しています。",
   "error.select_an_absolute_image_path": "画像を絶対パスで指定してください。",
   "error.select_a_regular_image_file": "通常の画像ファイルを選択してください。",
-  "error.source_image_changed_while_copying": "コピー中に元画像が変更されました。",
   "error.stored_resource_paths_must_be_absolute": "保存するリソースのパスは絶対パスで指定してください。",
   "error.invalid_mask_image": "マスク画像が無効です。",
   "error.cancel_this_sessions_work_before_deleting_it": "このセッションを削除する前に、その処理をキャンセルしてください。",

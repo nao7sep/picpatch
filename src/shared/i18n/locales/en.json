@@ -250,7 +250,6 @@
   "error.image_escapes_its_session": "The image path points outside its session folder.",
   "error.select_an_absolute_image_path": "Select an absolute image path.",
   "error.select_a_regular_image_file": "Select a regular image file.",
-  "error.source_image_changed_while_copying": "Source image changed while copying.",
   "error.stored_resource_paths_must_be_absolute": "Stored resource paths must be absolute.",
   "error.invalid_mask_image": "Invalid mask image.",
   "error.cancel_this_sessions_work_before_deleting_it": "Cancel this session’s work before deleting it.",

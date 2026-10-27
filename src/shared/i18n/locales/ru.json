@@ -251,7 +251,6 @@
   "error.image_escapes_its_session": "Путь к изображению выходит за пределы папки сеанса.",
   "error.select_an_absolute_image_path": "Укажите абсолютный путь к изображению.",
   "error.select_a_regular_image_file": "Выберите обычный файл изображения.",
-  "error.source_image_changed_while_copying": "Исходное изображение изменилось во время копирования.",
   "error.stored_resource_paths_must_be_absolute": "Сохранённые пути к ресурсам должны быть абсолютными.",
   "error.invalid_mask_image": "Некорректное изображение маски.",
   "error.cancel_this_sessions_work_before_deleting_it": "Отмените задания этого сеанса, прежде чем удалять его.",

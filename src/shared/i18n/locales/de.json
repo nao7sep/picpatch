@@ -251,7 +251,6 @@
   "error.image_escapes_its_session": "Das Bild liegt außerhalb des Sitzungsordners.",
   "error.select_an_absolute_image_path": "Wählen Sie einen absoluten Bildpfad.",
   "error.select_a_regular_image_file": "Wählen Sie eine reguläre Bilddatei.",
-  "error.source_image_changed_while_copying": "Das Ausgangsbild wurde während des Kopierens geändert.",
   "error.stored_resource_paths_must_be_absolute": "Gespeicherte Ressourcenpfade müssen absolut sein.",
   "error.invalid_mask_image": "Ungültiges Maskenbild.",
   "error.cancel_this_sessions_work_before_deleting_it": "Brechen Sie die Vorgänge dieser Sitzung ab, bevor Sie sie löschen.",

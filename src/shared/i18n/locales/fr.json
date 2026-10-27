@@ -251,7 +251,6 @@
   "error.image_escapes_its_session": "L’image se trouve hors du dossier de sa session.",
   "error.select_an_absolute_image_path": "Sélectionnez un chemin d’image absolu.",
   "error.select_a_regular_image_file": "Sélectionnez un fichier image ordinaire.",
-  "error.source_image_changed_while_copying": "L’image source a changé pendant la copie.",
   "error.stored_resource_paths_must_be_absolute": "Les chemins de ressources enregistrés doivent être absolus.",
   "error.invalid_mask_image": "Image de masque invalide.",
   "error.cancel_this_sessions_work_before_deleting_it": "Annulez les travaux de cette session avant de la supprimer.",

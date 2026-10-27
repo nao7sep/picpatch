@@ -251,7 +251,6 @@
   "error.image_escapes_its_session": "图像路径位于所属会话的目录之外。",
   "error.select_an_absolute_image_path": "请选择图像的绝对路径。",
   "error.select_a_regular_image_file": "请选择常规图像文件。",
-  "error.source_image_changed_while_copying": "复制过程中，原图发生了变化。",
   "error.stored_resource_paths_must_be_absolute": "保存的资源路径必须为绝对路径。",
   "error.invalid_mask_image": "蒙版图像无效。",
   "error.cancel_this_sessions_work_before_deleting_it": "请先取消此会话的任务，再删除会话。",

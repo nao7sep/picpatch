@@ -251,7 +251,6 @@
   "error.image_escapes_its_session": "Il percorso dell'immagine esce dalla cartella della sessione.",
   "error.select_an_absolute_image_path": "Seleziona un percorso assoluto per l'immagine.",
   "error.select_a_regular_image_file": "Seleziona un file immagine regolare.",
-  "error.source_image_changed_while_copying": "L'immagine di partenza è cambiata durante la copia.",
   "error.stored_resource_paths_must_be_absolute": "I percorsi delle risorse salvati devono essere assoluti.",
   "error.invalid_mask_image": "Immagine della maschera non valida.",
   "error.cancel_this_sessions_work_before_deleting_it": "Annulla il lavoro di questa sessione prima di eliminarla.",

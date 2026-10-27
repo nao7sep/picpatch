@@ -251,7 +251,6 @@
   "error.image_escapes_its_session": "A imagem está fora da pasta da sessão.",
   "error.select_an_absolute_image_path": "Selecione um caminho absoluto de imagem.",
   "error.select_a_regular_image_file": "Selecione um arquivo de imagem comum.",
-  "error.source_image_changed_while_copying": "A imagem de origem mudou durante a cópia.",
   "error.stored_resource_paths_must_be_absolute": "Os caminhos de recursos armazenados devem ser absolutos.",
   "error.invalid_mask_image": "Imagem de máscara inválida.",
   "error.cancel_this_sessions_work_before_deleting_it": "Cancele o trabalho desta sessão antes de apagá-la.",
