@@ -15,8 +15,8 @@ export interface Run {
   status: 'queued' | 'running' | 'completed' | 'refused' | 'failed' | 'cancelled' | 'interrupted';
   created: string; started?: string; ended?: string; output?: string; record?: ArtifactRecord;
   notices?: (string | { notice?: import('./i18n/index.ts').Message; code?: string })[];
-  /** Why a run was refused, failed, cancelled or interrupted; effect records uncertainty about execution. */
-  issue?: { code: string; message: string; effect?: 'none' | 'unknown' };
+  /** Why a run was refused, failed, cancelled or interrupted, by code; the app's own words come from the code. effect records uncertainty about execution. */
+  issue?: { code: string; effect?: 'none' | 'unknown' };
 }
 export interface Session {
   version: 1; id: string; name: string; created: string; updated: string;

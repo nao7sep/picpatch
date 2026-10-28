@@ -132,7 +132,7 @@ export class Sessions {
     const cached = this.loaded.get(key); if (cached) return cached;
     const session = await this.parse(key);
     // Reopening never schedules inference. Queued work requires an explicit resume.
-    for (const run of session.runs) if (run.status === 'running') { run.status = 'interrupted'; run.issue = { code: 'INTERRUPTED', message: 'The app closed before this attempt settled.', effect: 'unknown' }; }
+    for (const run of session.runs) if (run.status === 'running') { run.status = 'interrupted'; run.issue = { code: 'INTERRUPTED', effect: 'unknown' }; }
     session.draft = recoverCommand(session.draft, session.runs);
     this.loaded.set(key, session); return session;
   }

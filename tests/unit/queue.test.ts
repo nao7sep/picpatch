@@ -224,7 +224,7 @@ it('retains the primary run failure while separately blocking admission after un
   await queue.submit(session.id, session.draft, 2); await queue.settled();
   const saved = await sessions.get(session.id);
   expect(saved.runs.map(run => run.status)).toEqual(['failed', 'queued']);
-  expect(saved.runs[0]!.issue).toMatchObject({ code: primary.code, message: primary.message });
+  expect(saved.runs[0]!.issue).toEqual({ code: primary.code, effect: primary.effect });
   expect(queue.state.issue).toMatchObject({ code: teardown.code });
   await expect(queue.resume(session.id)).rejects.toThrow('termination is unconfirmed');
   await expect(queue.submit(session.id, session.draft, 1)).rejects.toThrow('termination is unconfirmed');

@@ -115,11 +115,11 @@ export class Queue {
           onProgress: event => { active.stage = event.stage; active.progress = { completed: event.completed, total: event.total }; progressChanged(); },
         });
       } catch (error) {
-        const cause = error as { code?: string; kind?: string; effect?: 'none' | 'unknown'; message?: string };
+        const cause = error as { code?: string; kind?: string; effect?: 'none' | 'unknown' };
         await this.sessions.update(selected.sessionId, value => {
           const run = value.runs.find(r => r.id === selected.runId)!;
           run.status = cause.kind === 'cancelled' ? 'cancelled' : 'failed'; run.ended = new Date().toISOString();
-          run.issue = { code: cause.code ?? 'APP_RUN_FAILED', message: cause.message ?? 'Could not complete the attempt.', effect: cause.effect ?? 'unknown' };
+          run.issue = { code: cause.code ?? 'APP_RUN_FAILED', effect: cause.effect ?? 'unknown' };
           value.draft = recoverCommand(value.draft, value.runs);
         });
         if (cause.code === 'TERMINATION_FAILED') this.terminationUnconfirmed = true;
@@ -129,7 +129,7 @@ export class Queue {
       const outcome = completion.outcome;
       await this.sessions.update(selected.sessionId, value => {
         const run = value.runs.find(r => r.id === selected.runId)!; run.ended = new Date().toISOString();
-        if (outcome.status === 'refused') { run.status = 'refused'; run.issue = { code: outcome.code, message: outcome.message }; }
+        if (outcome.status === 'refused') { run.status = 'refused'; run.issue = { code: outcome.code }; }
         else {
           run.status = 'completed'; run.output = `outputs/${run.id}.png`; run.record = outcome.record;
           const notices: NonNullable<Run['notices']> = [];
