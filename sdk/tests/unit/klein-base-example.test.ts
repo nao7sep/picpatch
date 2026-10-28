@@ -12,7 +12,7 @@ afterEach(async () => {
   vi.restoreAllMocks(); vi.resetAllMocks(); vi.resetModules();
   if (directory) await rm(directory, { recursive: true, force: true });
 });
-it('allows two hours for each worker and whole call, retaining progress and disposal', async () => {
+it('allows two hours for each inference call, retaining progress and disposal', async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-base-example-'));
   const configuration = join(directory, 'configuration.json');
   await writeFile(configuration, JSON.stringify({ timeouts: { startupMs: 1234 } }));
@@ -27,7 +27,7 @@ it('allows two hours for each worker and whole call, retaining progress and disp
   };
   vi.mocked(createImageClient).mockReturnValue(client);
   await import('../../examples/klein-base.ts');
-  expect(createImageClient).toHaveBeenCalledWith({ timeouts: { startupMs: 1234, generateMs: 7_200_000, editMs: 7_200_000 } });
+  expect(createImageClient).toHaveBeenCalledWith({ timeouts: { startupMs: 1234 } });
   expect(client.generate).toHaveBeenCalledOnce(); expect(client.edit).toHaveBeenCalledOnce();
   expect(client.generate.mock.calls[0]?.[1]).toMatchObject({ timeoutMs: 7_200_000, onProgress: expect.any(Function) });
   expect(client.edit.mock.calls[0]?.[1]).toMatchObject({ timeoutMs: 7_200_000, onProgress: expect.any(Function) });
