@@ -13,16 +13,17 @@ it('stores structured events and falls back to a session file when the database 
     for (const fallback of [false, true]) {
       const directory = join(root, String(fallback)); await mkdir(directory);
       if (fallback) await mkdir(join(directory, 'records.sqlite3'));
-      const worker = new Worker(new URL('../../src/main/core/records-worker.ts', import.meta.url), { workerData: { root: directory, session: '2026-10-19T00:00:00Z' } });
-      const event = { time: '2026-10-19T00:00:01Z', level: 'info', message: 'Attempt completed.', runId: 'fixture' };
-      try {
-        await new Promise<void>((resolve, reject) => { worker.on('error', reject); worker.on('message', message => { if (message.written) resolve(); }); worker.postMessage(event); });
-        if (fallback) { expect(await readdir(join(directory, 'logs'))).toEqual(['20261019-000000-utc.log']); expect(await readFile(join(directory, 'logs', '20261019-000000-utc.log'), 'utf8')).toContain(JSON.stringify(event)); }
-        else { const db = new DatabaseSync(join(directory, 'records.sqlite3')); try { expect(JSON.parse(db.prepare('SELECT json FROM records').get()!.json as string)).toEqual(event); } finally { db.close(); } }
-      } finally { await worker.terminate(); }
+      const records = new Records(directory, new URL('../../src/main/core/records-worker.ts', import.meta.url));
+      const event = { level: 'info', message: 'Attempt completed.', runId: 'fixture' };
+      records.write('info', 'Attempt completed.', { runId: 'fixture' }); await records.close();
+      if (fallback) {
+        const lines = (await readFile(fallbackLog(directory, records.session), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+        expect(lines).toMatchObject([{ level: 'error', message: 'Records database write failed.', error: expect.any(String) }, event]);
+      }
+      else { const db = new DatabaseSync(join(directory, 'records.sqlite3')); try { expect(JSON.parse(db.prepare('SELECT json FROM records').get()!.json as string)).toMatchObject(event); } finally { db.close(); } }
     }
   } finally { await rm(root, { recursive: true, force: true }); }
-}, 15_000);
+});
 it('names the fallback log to the second and keeps records there once the writer thread has failed', async () => {
   expect(fallbackLog('/root', '2026-10-19T03:15:42.123Z')).toBe(join('/root', 'logs', '20261019-031542-utc.log'));
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-failed-'));

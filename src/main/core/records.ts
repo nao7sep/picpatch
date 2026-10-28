@@ -13,7 +13,7 @@ export function errorRecord(error: unknown): unknown {
   }
   return describe(error);
 }
-/** Diagnostics never delay session saves or inference. One thread owns all record I/O while it runs. */
+/** Diagnostics never delay session saves or inference. One thread owns the records database; main owns the fallback log. */
 export class Records {
   private worker: Worker;
   /** Records sent but not yet acknowledged; a failed writer hands them to the fallback log. */
@@ -27,8 +27,11 @@ export class Records {
     this.worker = new Worker(script, { workerData: { root, session: this.session } });
     this.worker.on('message', message => {
       if (!message.written) return;
-      const entry = this.unacknowledged.get(message.id); this.unacknowledged.delete(message.id);
-      if (message.stored && entry?.notify) this.changed();
+      const entry = this.unacknowledged.get(message.id)!; this.unacknowledged.delete(message.id);
+      if (message.stored) { if (entry.notify) this.changed(); return; }
+      // A record the database refused goes to the fallback log after the reason, in the same order as every other line.
+      this.fallback({ time: new Date().toISOString(), level: 'error', message: 'Records database write failed.', error: message.failure });
+      this.fallback(entry.record);
     });
     this.worker.on('error', error => this.workerFailed(error));
     this.worker.on('exit', code => { if (!this.closing) this.workerFailed(new Error(`Records writer exited (${code}).`)); });
