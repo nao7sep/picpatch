@@ -58,8 +58,10 @@ function Records({ api }: { api: LogsBridge }) {
   const [width, setWidth] = useState<number>(LIST_MIN);
   const [drag, setDrag] = useState<number | null>(null);
   const [keyed, setKeyed] = useState<number | null>(null);
-  // listRevision changes only when the list restarts (a filter change), so loading an older page never discards new records.
-  const queryRevision = useRef(0), detailRevision = useRef(0), listRevision = useRef(0);
+  // IPC cannot be cancelled, so a result checks the token it was asked under. The list token changes only when the list
+  // restarts (a filter change), so an older page and the newest records join the same list; the detail token changes
+  // when another record is chosen or the list restarts.
+  const listToken = useRef(0), detailToken = useRef(0);
   const list = useRef<HTMLDivElement>(null), shell = useRef<HTMLDivElement>(null);
   const [shellWidth, setShellWidth] = useState(1100);
 
@@ -78,16 +80,16 @@ function Records({ api }: { api: LogsBridge }) {
   }, [api]);
 
   const load = useCallback(async (next: RecordsQuery, before?: number) => {
-    const revision = ++queryRevision.current;
     setPending(true); setFailed(false);
-    if (before === undefined) { setChanged(false); ++listRevision.current; ++detailRevision.current; setSelected(undefined); setDetail(undefined); setRows([]); }
+    if (before === undefined) { setChanged(false); ++listToken.current; ++detailToken.current; setSelected(undefined); setDetail(undefined); setRows([]); }
+    const token = listToken.current;
     try {
       const page = await api.query({ ...next, ...(before === undefined ? {} : { before }) });
-      if (revision !== queryRevision.current) return;
+      if (token !== listToken.current) return;
       setRows(existing => before === undefined ? page.records : [...existing, ...page.records.filter(row => !existing.some(item => item.id === row.id))]);
       setMore(page.more);
-    } catch { if (revision === queryRevision.current) setFailed(true); }
-    finally { if (revision === queryRevision.current) setPending(false); }
+    } catch { if (token === listToken.current) setFailed(true); }
+    finally { if (token === listToken.current) setPending(false); }
   }, [api]);
 
   useEffect(() => { void load(query); }, [load, query]);
@@ -95,16 +97,16 @@ function Records({ api }: { api: LogsBridge }) {
   const queryRef = useRef(query); queryRef.current = query;
   const rowsRef = useRef(rows); rowsRef.current = rows;
   const addNewest = useCallback(async () => {
-    const revision = listRevision.current;
+    const token = listToken.current;
     try {
       const page = await api.query(queryRef.current);
-      if (revision !== listRevision.current) return;
+      if (token !== listToken.current) return;
       setChanged(false);
       const newest = rowsRef.current[0]?.id ?? 0, added = page.records.filter(row => row.id > newest);
       // A full page of new records may leave a gap before the loaded ones, so the list restarts from this page.
       if (added.length >= recordsPageSize) { setRows(page.records); setMore(page.more); }
       else if (added.length) setRows(existing => [...added.filter(row => row.id > (existing[0]?.id ?? 0)), ...existing]);
-    } catch { if (revision === listRevision.current) setFailed(true); }
+    } catch { if (token === listToken.current) setFailed(true); }
   }, [api]);
   const atTop = () => (list.current?.scrollTop ?? 0) <= 8;
   // A read that failed is retried when the next record arrives, or when a filter changes.
@@ -122,9 +124,9 @@ function Records({ api }: { api: LogsBridge }) {
 
   const choose = async (id: number) => {
     setSelected(id); setDetail(undefined);
-    const revision = ++detailRevision.current;
-    try { const text = await api.detail(id); if (revision === detailRevision.current) setDetail(text); }
-    catch { if (revision === detailRevision.current) { setDetail(null); setFailed(true); } }
+    const token = ++detailToken.current;
+    try { const text = await api.detail(id); if (token === detailToken.current) setDetail(text); }
+    catch { if (token === detailToken.current) { setDetail(null); setFailed(true); } }
   };
 
   const loadOlder = () => { if (!pending && !failed && more && rows.length) void load(query, rows.at(-1)!.id); };
