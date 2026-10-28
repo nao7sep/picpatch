@@ -9,10 +9,9 @@ if (!configuration || !destination) throw new Error('Supply a prepared configura
 const options = JSON.parse(await readFile(resolve(configuration), 'utf8')) as ImageClientOptions;
 const output = resolve(destination);
 await mkdir(output, { recursive: true });
-// Full-resolution Base inference can exceed the SDK's ordinary operation deadline.
+// Full-resolution Base inference can exceed the worker's ordinary inference deadline; timeoutMs replaces it per call.
 const timeoutMs = 7_200_000;
-// Worker budgets bound each inference command; timeoutMs below bounds the whole SDK call.
-const editor = createImageClient({ ...options, timeouts: { ...options.timeouts, generateMs: timeoutMs, editMs: timeoutMs } });
+const editor = createImageClient(options);
 const started = performance.now();
 const onProgress = (event: { stage: string; completed?: number; total?: number }) => {
   console.log(((performance.now() - started) / 1000).toFixed(3), event.stage, event.completed ?? '', event.total ?? '');
