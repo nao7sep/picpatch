@@ -13,7 +13,7 @@ import type { LocalModel } from '../contracts.generated.ts';
 import { catalogModel, type CatalogModel } from './catalog.ts';
 import { prepareExternalModel } from './external.ts';
 import { downloadFile } from '../runtime/download.ts';
-import { validateModelManifest, verifyModelOperation as verifyModel } from './verification.ts';
+import { validateModelManifest, verifyBundle } from './verification.ts';
 import type { ModelOperationOptions } from './types.ts';
 import { syncFile } from '../platform.ts';
 
@@ -113,7 +113,7 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
     return await withDeadline(options.signal, budget, 'Model preparation timed out.', async signal => {
       const operation = { ...options, signal };
       const verified = async (path: string) => {
-        const result = await verifyModel(path, entry.manifest, { signal, timeoutMs: budget, onProgress: event => emitProgress(operation, event) });
+        const result = await verifyBundle(path, entry.manifest, { signal, onProgress: event => emitProgress(operation, event) });
         if (result.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_MISMATCH', 'Model files do not match the catalog. Existing files were preserved; choose a complete bundle or a new cache location.');
       };
       const result = (origin: PreparedModel['origin']): PreparedModel => ({ version: 1, model: { variant: entry.variant, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });

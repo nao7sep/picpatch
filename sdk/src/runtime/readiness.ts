@@ -6,7 +6,7 @@ import type { CallOptions } from '../types.ts';
 import { stat } from '../storage.ts';
 import { join } from 'node:path';
 import type { LocalModel, ModelCapabilities } from '../contracts.generated.ts';
-import { validateLocalModel, verifyModelOperation as verifyModel } from '../models/verification.ts';
+import { validateLocalModel, verifyBundle } from '../models/verification.ts';
 import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline, withSettings } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { WorkerProcess } from '../worker/process.ts';
@@ -52,7 +52,7 @@ async function inspectReadinessOperation(executable: string, input: LocalModel, 
     let integrity: ModelReadiness['integrity'] = 'not-verified';
     if (options.verify && files === 'present') {
       const { verify: _verify, load: _load, ...verification } = operation;
-      integrity = (await verifyModel(model.directory, model.manifest, { ...verification, timeoutMs: budget })).status;
+      integrity = (await verifyBundle(model.directory, model.manifest, verification)).status;
     }
     if (options.verify && files === 'incomplete') integrity = 'invalid';
     if (files === 'incomplete' || integrity === 'invalid') return { files, integrity, runtime: { status: 'not-checked' }, capabilities: [] };

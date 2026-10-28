@@ -41,14 +41,13 @@ it('runs submissions in order and snapshots request/options before any callback 
   try { await first; await second; expect(seen.map(r => 'prompt' in r ? r.prompt : '')).toEqual(['first', 'second']); expect(seen[1]!.parameters).toEqual({ steps: 2 }); }
   finally { await editor.dispose(); }
 });
-it('settles cancelled and expired waiters promptly without letting later work overtake active work', async () => {
+it('settles cancelled waiters promptly without letting later work overtake active work', async () => {
   const { editor, entered, release, seen } = setup();
   const first = editor.generate(request('first')); await entered.promise;
   const cancel = new AbortController();
   const waiting = editor.generate(request('cancelled'), { signal: cancel.signal });
   const caught = expect(waiting).rejects.toMatchObject({ code: 'CANCELLED', kind: 'cancelled', effect: 'none' });
   cancel.abort(); await caught;
-  await expect(editor.generate(request('expired'), { timeoutMs: 10 })).rejects.toMatchObject({ code: 'TIMEOUT', effect: 'none' });
   const last = editor.generate(request('last'));
   expect(seen).toEqual([]); expect(await readdir(directory)).toEqual([]);
   release.resolve();

@@ -7,7 +7,7 @@ import type { LocalLora } from '../../contracts.generated.ts';
 import { PicPatchSdkError } from '../../errors.ts';
 import { checkSignal, emitProgress } from '../../operations.ts';
 import { safetensorsHeader } from '../../models/safetensors.ts';
-import { validateModelManifest, verifyModelOperation as verifyModel } from '../../models/verification.ts';
+import { validateModelManifest, verifyBundle } from '../../models/verification.ts';
 import type { PreparedModel, PrepareModelOptions } from '../../models/preparation.ts';
 
 export function validateMfluxLoras(loras: unknown): asserts loras is [LocalLora, ...LocalLora[]] {
@@ -49,7 +49,7 @@ export async function attachMfluxLoras(prepared: PreparedModel, loras: [LocalLor
   const manifest = validateModelManifest({ ...model.manifest, source: { repository: 'local', revision }, components });
   // The base was just verified by its preparation owner; verify only auxiliary files here.
   const auxiliary = validateModelManifest({ ...manifest, components: components.filter(component => loras.some(lora => lora.path === component.path)) });
-  const verification = await verifyModel(model.directory, auxiliary, { ...(options.signal ? { signal: options.signal } : {}), ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}), onProgress: event => emitProgress(options, event) });
+  const verification = await verifyBundle(model.directory, auxiliary, { ...(options.signal ? { signal: options.signal } : {}), onProgress: event => emitProgress(options, event) });
   if (verification.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_CHANGED', 'Prepared model or LoRA files changed.');
   return { ...prepared, integrity: 'locally-fingerprinted', model: { ...model, manifest, loras: structuredClone(loras) } };
 }

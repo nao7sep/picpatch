@@ -118,7 +118,7 @@ export class NativeBackend implements EditBackend {
     const verb = 'prompt' in request ? 'generate' : 'edit';
     const stage = verb === 'generate' ? 'generating' : 'editing';
     emitProgress(options, { type: 'progress', verb, stage, message: 'Running native image inference.' });
-    await this.process.run(args, directory, verb === 'generate' ? this.timeouts.generateMs ?? this.timeouts.editMs : this.timeouts.editMs, options.signal, false,
+    await this.process.run(args, directory, options.timeoutMs ?? (verb === 'generate' ? this.timeouts.generateMs ?? this.timeouts.editMs : this.timeouts.editMs), options.signal, false,
       (completed, total) => emitProgress(options, { type: 'progress', verb, stage, completed, total, message: 'Native inference step.' }));
     emitProgress(options, { type: 'progress', verb, stage: 'saving', message: 'Validating native image output.' });
     return { model: request.model, modelRevision: this.model.manifest.source.revision, runtime: { name: 'stable-diffusion.cpp', version: nativeRevision },

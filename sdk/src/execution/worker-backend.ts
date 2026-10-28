@@ -36,13 +36,13 @@ export class ProcessEditor implements EditBackend {
     if (this.disposed) throw new PicPatchSdkError('DISPOSED', 'Image client has been disposed.');
     if (this.busy) throw new PicPatchSdkError('INTERNAL', 'An operation is already active on this image client.');
     validateOperation(options);
-    const { signal, ...progressOptions } = options;
+    const { signal, timeoutMs, ...progressOptions } = options;
     if (signal?.aborted) throw new PicPatchSdkError('CANCELLED', 'The operation was cancelled.');
     this.busy = true;
     try {
       await this.validate(request, options);
       const onProgress = (event: ProgressEvent) => emitProgress(progressOptions, event);
-      const response = 'prompt' in request ? await this.worker.generate(request, onProgress, signal) : await this.worker.edit(request, onProgress, signal);
+      const response = 'prompt' in request ? await this.worker.generate(request, onProgress, signal, timeoutMs) : await this.worker.edit(request, onProgress, signal, timeoutMs);
       if (response.type === 'error') throw responseError(response);
       if (response.type !== 'result') throw new PicPatchSdkError('PROTOCOL_ERROR', 'Worker returned no image result.');
       return response.result;

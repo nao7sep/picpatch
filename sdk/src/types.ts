@@ -71,7 +71,10 @@ export interface CallOptions extends EventOptions {
   timeoutMs?: number;
   onProgress?: (event: ProgressEvent) => void;
 }
-/** Image client calls take the call options alone; the total budget includes time waiting on the client. */
+/**
+ * Image client calls take the call options alone. timeoutMs bounds the inference the worker or native process runs,
+ * in place of the client's edit or generate timeout; model startup keeps its own bound.
+ */
 export type OperationOptions = CallOptions;
 
 /** Every refusal code a verb may return, as data. */

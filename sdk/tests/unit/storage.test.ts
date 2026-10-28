@@ -29,17 +29,17 @@ it('bounds a stalled publication, retains owned files, and never resumes sidecar
   };
   const editor = new ImageClientImpl({ validate: async () => ({ model: 'fixture', textToImage: true, instructionEditing: true, referenceRoles: [], maskMode: 'none' }), generate: render, edit: render, dispose: async () => {} }, {}, 'fixture');
   try {
-    // Expire at the publication boundary, not while image encoding happens to be slow.
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const outcome = expect(editor.generate({ prompt: 'Bowl', outputPath: path, sidecar: true }, { timeoutMs: 100 })).rejects.toMatchObject({ code: 'TIMEOUT', effect: 'unknown', details: { recoveryDirectory: expect.any(String) } });
+    // Stop at the publication boundary, not while image encoding happens to be slow.
+    const caller = new AbortController();
+    const outcome = expect(editor.generate({ prompt: 'Bowl', outputPath: path, sidecar: true }, { signal: caller.signal })).rejects.toMatchObject({ code: 'CANCELLED', effect: 'unknown', details: { recoveryDirectory: expect.any(String) } });
     await publicationStarted.promise;
-    await vi.advanceTimersByTimeAsync(100); await outcome; vi.useRealTimers();
+    caller.abort(); await outcome;
     expect(publish).toBeDefined(); expect((await fs.readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(true);
     await publish!(); pending.resolve();
     await new Promise(resolve => setTimeout(resolve, 10));
     expect((await sharp(path).metadata()).format).toBe('png');
     expect(await fs.readdir(directory)).not.toContain('image-picpatchsdk.json');
-  } finally { vi.useRealTimers(); await editor.dispose(); }
+  } finally { await editor.dispose(); }
 });
 
 it('propagates a nested stalled read to the owner of private writes', async () => {

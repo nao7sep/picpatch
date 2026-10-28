@@ -23,7 +23,7 @@ const spawnWorker: SpawnWorker = launch => spawn(launch.executable, launch.args,
 interface Pending {
   resolve: (response: WorkerResponse) => void;
   reject: (error: unknown) => void;
-  timer: ReturnType<typeof setTimeout>;
+  timer: ReturnType<typeof setTimeout> | undefined;
   onProgress?: (event: ProgressEvent) => void;
   request: WorkerRequest;
 }
@@ -144,12 +144,13 @@ export class WorkerProcess {
     }
   }
 
-  private request(request: WorkerRequest, timeout: number, onProgress?: (event: ProgressEvent) => void, timeoutError?: Error): Promise<WorkerResponse> {
+  /** A request without its own timeout is bounded by a clock its caller holds. */
+  private request(request: WorkerRequest, timeout?: number, onProgress?: (event: ProgressEvent) => void): Promise<WorkerResponse> {
     if (this.failure) return Promise.reject(this.failure);
     const deferred = Promise.withResolvers<WorkerResponse>();
     try {
       const frame = this.protocol.send(request);
-      const timer = setTimeout(() => this.fail(timeoutError ?? new PicPatchSdkError('TIMEOUT', `Worker ${request.type} timed out.`)), timeout);
+      const timer = timeout === undefined ? undefined : setTimeout(() => this.fail(new PicPatchSdkError('TIMEOUT', `Worker ${request.type} timed out.`)), timeout);
       this.pending.set(request.id, { ...deferred, timer, request, ...(onProgress ? { onProgress } : {}) });
       this.child!.stdin.write(frame, error => { if (error) this.fail(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Could not send a worker request.', { cause: error })); });
     } catch (error) {
@@ -159,24 +160,25 @@ export class WorkerProcess {
     return deferred.promise;
   }
 
-  async edit(request: Extract<WorkerRequest, { type: 'edit' }>['request'], onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal): Promise<WorkerResponse> {
-    return this.execute({ version: 1, id: this.nextId++, type: 'edit', request }, onProgress, signal);
+  async edit(request: Extract<WorkerRequest, { type: 'edit' }>['request'], onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal, timeoutMs?: number): Promise<WorkerResponse> {
+    return this.execute({ version: 1, id: this.nextId++, type: 'edit', request }, onProgress, signal, timeoutMs);
   }
 
-  generate(request: Extract<WorkerRequest, { type: 'generate' }>['request'], onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal): Promise<WorkerResponse> {
-    return this.execute({ version: 1, id: this.nextId++, type: 'generate', request }, onProgress, signal);
+  generate(request: Extract<WorkerRequest, { type: 'generate' }>['request'], onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal, timeoutMs?: number): Promise<WorkerResponse> {
+    return this.execute({ version: 1, id: this.nextId++, type: 'generate', request }, onProgress, signal, timeoutMs);
   }
 
-  private async execute(request: Extract<WorkerRequest, { type: 'edit' | 'generate' }>, onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal): Promise<WorkerResponse> {
+  /** timeoutMs, when the caller gives one, replaces the edit or generate timeout for this operation. */
+  private async execute(request: Extract<WorkerRequest, { type: 'edit' | 'generate' }>, onProgress?: (event: ProgressEvent) => void, signal?: AbortSignal, timeoutMs?: number): Promise<WorkerResponse> {
     const id = request.id;
-    const timeout = request.type === 'generate' ? this.timeouts.generateMs ?? this.timeouts.editMs : this.timeouts.editMs;
+    const timeout = timeoutMs ?? (request.type === 'generate' ? this.timeouts.generateMs ?? this.timeouts.editMs : this.timeouts.editMs);
     const result = this.request(request, timeout, onProgress);
     let cancellation: Promise<WorkerResponse> | undefined;
     let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
     const abort = () => {
       if (cancellation || !this.pending.has(id)) return;
-      cancellation = this.request({ version: 1, id: this.nextId++, type: 'cancel', targetId: id }, this.timeouts.cancellationMs, undefined, new PicPatchSdkError('CANCELLED', 'The operation was cancelled.'));
-      // The acknowledgement alone does not settle the edit or release the worker.
+      cancellation = this.request({ version: 1, id: this.nextId++, type: 'cancel', targetId: id });
+      // One clock covers the acknowledgement and the edit settling, since the acknowledgement alone releases nothing.
       cancellationTimer = setTimeout(() => this.fail(new PicPatchSdkError('CANCELLED', 'The operation was cancelled.')), this.timeouts.cancellationMs);
       void cancellation.catch(() => {});
     };
@@ -252,14 +254,16 @@ export class WorkerProcess {
       await this.stop();
       return;
     }
-    const response = await this.request({ version: 1, id: this.nextId++, type: 'shutdown' }, this.timeouts.shutdownMs);
-    if (response.type !== 'shutdownAck') { this.fail(new PicPatchSdkError('PROTOCOL_ERROR', 'Worker rejected shutdown.')); await this.stop(); throw this.failure; }
-    this.child.stdin.end();
+    // One clock covers the acknowledgement and the exit that follows it.
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<void>(resolve => {
+      timer = setTimeout(() => { this.fail(new PicPatchSdkError('TIMEOUT', 'Worker did not exit after shutdown.')); resolve(); }, this.timeouts.shutdownMs);
+    });
     try {
-      await Promise.race([this.closeWait.promise, new Promise<void>(resolve => {
-        timer = setTimeout(() => { this.fail(new PicPatchSdkError('TIMEOUT', 'Worker did not exit after shutdown.')); resolve(); }, this.timeouts.shutdownMs);
-      })]);
+      const response = await this.request({ version: 1, id: this.nextId++, type: 'shutdown' });
+      if (response.type !== 'shutdownAck') { this.fail(new PicPatchSdkError('PROTOCOL_ERROR', 'Worker rejected shutdown.')); await this.stop(); throw this.failure; }
+      this.child.stdin.end();
+      await Promise.race([this.closeWait.promise, expired]);
       if (this.failure) { await this.stop(); throw this.failure; }
     } finally { clearTimeout(timer); }
   }

@@ -76,30 +76,19 @@ export class ImageClientImpl implements ImageClient {
   private submit(verb: 'edit' | 'generate', resolve: () => ImageRequest, options: OperationOptions, plan?: ImagePlan): Promise<ImageOutcome> {
     if (this.lifetime.signal.aborted) return this.rejectCall(verb, options, new PicPatchSdkError('DISPOSED', 'Image client has been disposed.'));
     let request: ImageRequest;
-    let budget: number;
     try {
       request = structuredClone(resolve());
       validateOperation(options);
-      budget = timeBudget(options.timeoutMs, 1_800_000);
     } catch (error) { return this.rejectCall(verb, options, error); }
-    const callerSignal = options.signal;
-    const deadline = new AbortController();
-    const signal = AbortSignal.any([this.lifetime.signal, deadline.signal, ...(options.signal ? [options.signal] : [])]);
+    // The caller's timeoutMs reaches the worker or native process that runs the inference, which holds the one deadline.
+    const signal = AbortSignal.any([this.lifetime.signal, ...(options.signal ? [options.signal] : [])]);
     const captured = { ...options, signal };
-    const timer = setTimeout(() => deadline.abort(), budget);
     const previous = this.tail;
     const operation = Promise.resolve().then(() => withDiagnostics(verb, captured, async scoped => {
-      try {
-        await waitForTurn(previous, signal);
-        checkCancellation(signal);
-        return await storageScope(signal, () => this.run(request, signal, scoped, plan));
-      } catch (error) {
-        if (deadline.signal.aborted && (error instanceof PicPatchSdkError && error.kind === 'cancelled') && !this.lifetime.signal.aborted && !callerSignal?.aborted) {
-          throw new PicPatchSdkError('TIMEOUT', 'Image operation timed out.', { cause: error, effect: error.effect, details: error.details, ...(error.subject ? { subject: error.subject } : {}) });
-        }
-        throw error;
-      }
-    }, this.diagnostics)).finally(() => clearTimeout(timer));
+      await waitForTurn(previous, signal);
+      checkCancellation(signal);
+      return await storageScope(signal, () => this.run(request, signal, scoped, plan));
+    }, this.diagnostics));
     // A cancelled waiter settles promptly, but cannot let later calls overtake its predecessor.
     this.tail = Promise.allSettled([previous, operation]).then(() => {});
     return operation;
