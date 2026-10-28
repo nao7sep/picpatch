@@ -4,7 +4,7 @@ import { contractValidator } from '../contracts.ts';
 import type { ArtifactRecord } from '../contracts.generated.ts';
 import { withDiagnostics } from '../diagnostics.ts';
 import { PicPatchSdkError } from '../errors.ts';
-import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from '../operations.ts';
+import { absolutePath, checkSignal, validateOperation } from '../operations.ts';
 import type { CallOptions, Refusal } from '../types.ts';
 import { inspectImage } from './fingerprint.ts';
 import { newerVersion, versionRefusal } from '../versions.ts';
@@ -29,25 +29,24 @@ export function validateArtifactRecord(value: unknown): ArtifactRecordResult {
 export function readArtifactRecord(path: string, options: ArtifactReadOptions = {}): Promise<ArtifactRecordResult> {
   return withDiagnostics('readArtifactRecord', options, async operation => {
     absolutePath(path); validateOperation(operation);
-    return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 30_000), 'Artifact record read timed out.', async signal => {
+    const signal = operation.signal;
+    checkSignal(signal);
+    let file;
+    try {
+      file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+      if (!(await file.stat()).isFile()) throw new PicPatchSdkError('INVALID_REQUEST', 'Artifact records must be regular files.', { subject: path });
       checkSignal(signal);
-      let file;
-      try {
-        file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
-        if (!(await file.stat()).isFile()) throw new PicPatchSdkError('INVALID_REQUEST', 'Artifact records must be regular files.', { subject: path });
-        checkSignal(signal);
-        const bytes = await file.readFile({ encoding: 'utf8', signal });
-        let value: unknown;
-        try { value = JSON.parse(bytes); } catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid artifact record JSON.', { cause, subject: path }); }
-        checkSignal(signal);
-        const result = validateArtifactRecord(value);
-        return result.status === 'refused' ? { ...result, subject: path } : result;
-      } catch (cause) {
-        checkSignal(signal);
-        if (cause instanceof PicPatchSdkError) throw cause;
-        throw new PicPatchSdkError('RECORD_IO', 'Could not read the artifact record.', { cause, subject: path });
-      } finally { await file?.close(); }
-    });
+      const bytes = await file.readFile({ encoding: 'utf8', signal });
+      let value: unknown;
+      try { value = JSON.parse(bytes); } catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid artifact record JSON.', { cause, subject: path }); }
+      checkSignal(signal);
+      const result = validateArtifactRecord(value);
+      return result.status === 'refused' ? { ...result, subject: path } : result;
+    } catch (cause) {
+      checkSignal(signal);
+      if (cause instanceof PicPatchSdkError) throw cause;
+      throw new PicPatchSdkError('RECORD_IO', 'Could not read the artifact record.', { cause, subject: path });
+    } finally { await file?.close(); }
   });
 }
 /** Confirms correspondence with file bytes and decoded dimensions, never creator authenticity. */
@@ -57,16 +56,16 @@ export function verifyArtifact(imagePath: string, input: ArtifactRecord, options
     const valid = validateArtifactRecord(input);
     if (valid.status === 'refused') return valid;
     const { record } = valid;
-    return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Artifact verification timed out.', async signal => {
-      try {
-        const { fingerprint, metadata } = await inspectImage(imagePath, signal, true);
-        // The record's size is the image as displayed; an edit keeps its source's stored orientation.
-        const size = metadata.autoOrient ?? metadata;
-        if (metadata.format === 'png' && (metadata.pages ?? 1) === 1 && size.width === record.image.size.width && size.height === record.image.size.height && fingerprint.bytes === record.bytes && fingerprint.sha256 === record.sha256) return { status: 'completed', imagePath, record };
-      } catch (cause) {
-        if (!(cause instanceof PicPatchSdkError) || !['INVALID_IMAGE', 'INPUTS_CHANGED'].includes(cause.code)) throw cause;
-      }
-      return { status: 'refused', code: 'ARTIFACT_MISMATCH', message: 'The image does not match this record.', subject: imagePath, details: {} };
-    });
+    const signal = operation.signal;
+    checkSignal(signal);
+    try {
+      const { fingerprint, metadata } = await inspectImage(imagePath, signal, true);
+      // The record's size is the image as displayed; an edit keeps its source's stored orientation.
+      const size = metadata.autoOrient ?? metadata;
+      if (metadata.format === 'png' && (metadata.pages ?? 1) === 1 && size.width === record.image.size.width && size.height === record.image.size.height && fingerprint.bytes === record.bytes && fingerprint.sha256 === record.sha256) return { status: 'completed', imagePath, record };
+    } catch (cause) {
+      if (!(cause instanceof PicPatchSdkError) || !['INVALID_IMAGE', 'INPUTS_CHANGED'].includes(cause.code)) throw cause;
+    }
+    return { status: 'refused', code: 'ARTIFACT_MISMATCH', message: 'The image does not match this record.', subject: imagePath, details: {} };
   });
 }

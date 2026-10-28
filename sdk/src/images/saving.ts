@@ -1,7 +1,7 @@
 import { basename, join } from 'node:path';
-import { mkdtemp, rm, storageCleanup, storageRecovery, storageStalled } from '../storage.ts';
+import { mkdtemp, rm } from '../storage.ts';
 import { withDiagnostics } from '../diagnostics.ts';
-import { absolutePath, checkSignal, timeBudget, withDeadline, withSettings } from '../operations.ts';
+import { absolutePath, checkSignal, withSettings } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import type { ArtifactRecord } from '../contracts.generated.ts';
 import { checkArtifactRecord, validateArtifactRecord } from './records.ts';
@@ -36,41 +36,39 @@ export function saveArtifact(imagePath: string, outputPath: string, input: Artif
     let saved: SavedArtifact | undefined;
     let failure: unknown;
     try {
-      return await withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Artifact saving timed out.', async signal => {
-        const destination = await inspectDestination({ outputPath }, signal, true);
-        const directory = await mkdtemp(join(dirname(destination.path), '.picpatch-'));
-        storageRecovery(directory);
-        let retain = false;
-        try {
-          const complete = join(directory, 'complete.png');
-          await snapshotImage(imagePath, complete, signal, false, { bytes: record.bytes, sha256: record.sha256 }, undefined, 0o666);
-          // The private copy's encoded bytes are verified; decode and geometry still need checking.
-          const metadata = await inspectImageMetadata(complete, signal, true);
-          // The record's size is the image as displayed; an edit keeps its source's stored orientation.
-          const size = metadata.autoOrient ?? metadata;
-          if (metadata.format !== 'png' || (metadata.pages ?? 1) !== 1 || size.width !== record.image.size.width || size.height !== record.image.size.height) throw new PicPatchSdkError('INVALID_IMAGE', 'Image dimensions do not match the record.', { subject: imagePath });
-          checkSignal(signal);
-          await publishComplete(complete, destination.path, directory, signal);
-          saved = { status: 'completed', image: { path: outputPath, mimeType: 'image/png', size: { ...record.image.size } }, record };
-          if (operation.sidecar === true) saved.sidecar = await publishSidecar(record, sidecarPath(outputPath), sidecarPath(destination.path), directory);
-          return saved;
-        } catch (cause) {
-          retain = cause instanceof PicPatchSdkError && cause.details.recoveryDirectory !== undefined;
-          failure = cause;
-          throw cause;
-        } finally {
-          if (storageStalled()) retain = true;
-          if (!retain) {
-            try { await storageCleanup(() => rm(directory, { recursive: true, force: true })); }
-            catch {
-              retain = true;
-              // The primary failure keeps its code; private files that remain are named in details.
-              if (!saved && failure instanceof PicPatchSdkError) failure.details.recoveryDirectory = directory;
-            }
+      const signal = operation.signal;
+      checkSignal(signal);
+      const destination = await inspectDestination({ outputPath }, signal, true);
+      const directory = await mkdtemp(join(dirname(destination.path), '.picpatch-'));
+      let retain = false;
+      try {
+        const complete = join(directory, 'complete.png');
+        await snapshotImage(imagePath, complete, signal, false, { bytes: record.bytes, sha256: record.sha256 }, undefined, 0o666);
+        // The private copy's encoded bytes are verified; decode and geometry still need checking.
+        const metadata = await inspectImageMetadata(complete, signal, true);
+        // The record's size is the image as displayed; an edit keeps its source's stored orientation.
+        const size = metadata.autoOrient ?? metadata;
+        if (metadata.format !== 'png' || (metadata.pages ?? 1) !== 1 || size.width !== record.image.size.width || size.height !== record.image.size.height) throw new PicPatchSdkError('INVALID_IMAGE', 'Image dimensions do not match the record.', { subject: imagePath });
+        checkSignal(signal);
+        await publishComplete(complete, destination.path, directory, signal);
+        saved = { status: 'completed', image: { path: outputPath, mimeType: 'image/png', size: { ...record.image.size } }, record };
+        if (operation.sidecar === true) saved.sidecar = await publishSidecar(record, sidecarPath(outputPath), sidecarPath(destination.path), directory);
+        return saved;
+      } catch (cause) {
+        retain = cause instanceof PicPatchSdkError && cause.details.recoveryDirectory !== undefined;
+        failure = cause;
+        throw cause;
+      } finally {
+        if (!retain) {
+          try { await rm(directory, { recursive: true, force: true }); }
+          catch {
+            retain = true;
+            // The primary failure keeps its code; private files that remain are named in details.
+            if (!saved && failure instanceof PicPatchSdkError) failure.details.recoveryDirectory = directory;
           }
-          if (saved && retain) saved.cleanupWarning = { directory, message: 'Image was saved; private files were retained.' };
         }
-      });
+        if (saved && retain) saved.cleanupWarning = { directory, message: 'Image was saved; private files were retained.' };
+      }
     } catch (cause) {
       if (saved) return saved; // Confirmed publication wins later cancellation.
       if (cause instanceof PicPatchSdkError && ['OUTPUT_CONFLICT', 'INPUTS_CHANGED', 'INVALID_IMAGE'].includes(cause.code)) return {

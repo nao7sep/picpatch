@@ -1,7 +1,7 @@
 import { join } from 'node:path';
-import { lstat, realpath, opendir, mkdtemp, rename, rm, storageRecovery } from '../storage.ts';
+import { lstat, realpath, opendir, mkdtemp, rename, rm } from '../storage.ts';
 import { withDiagnostics } from '../diagnostics.ts';
-import { checkSignal, timeBudget, withDeadline, withSettings } from '../operations.ts';
+import { checkSignal, withSettings } from '../operations.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { resolveStoragePaths } from '../paths.ts';
 import { checkProfile } from '../profile.ts';
@@ -63,33 +63,32 @@ export function removeModel(modelId: string, name: string, settings: ModelStoreS
     const root = managedRoot(operation);
     let removed: RemoveModelResult | undefined;
     try {
-      return await withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Model removal timed out.', async signal => {
-        const directory = join(root, modelId, name);
-        let parent: string, before;
-        try { parent = await parentDirectory(root, modelId); before = await lstat(join(parent, name), { bigint: true }); }
-        catch (cause) { if (absent(cause)) return { status: 'missing' as const, modelId, name, directory }; throw cause; }
-        if (!before.isDirectory() || before.isSymbolicLink()) throw new PicPatchSdkError('INVALID_REQUEST', 'Only managed directories can be removed.', { subject: directory });
+      const signal = operation.signal;
+      checkSignal(signal);
+      const directory = join(root, modelId, name);
+      let parent: string, before;
+      try { parent = await parentDirectory(root, modelId); before = await lstat(join(parent, name), { bigint: true }); }
+      catch (cause) { if (absent(cause)) return { status: 'missing' as const, modelId, name, directory }; throw cause; }
+      if (!before.isDirectory() || before.isSymbolicLink()) throw new PicPatchSdkError('INVALID_REQUEST', 'Only managed directories can be removed.', { subject: directory });
+      checkSignal(signal);
+      const recovery = await mkdtemp(join(parent, '.remove-'));
+      try {
+        // Detach the selected directory before deletion; never delete a replacement installed at its old name.
+        const detached = join(recovery, 'model');
+        await rename(join(parent, name), detached);
+        const actual = await lstat(detached, { bigint: true });
+        if (actual.dev !== before.dev || actual.ino !== before.ino) throw new PicPatchSdkError('MODEL_CHANGED', 'Model directory changed before removal.', { subject: directory });
         checkSignal(signal);
-        const recovery = await mkdtemp(join(parent, '.remove-'));
-        storageRecovery(recovery);
-        try {
-          // Detach the selected directory before deletion; never delete a replacement installed at its old name.
-          const detached = join(recovery, 'model');
-          await rename(join(parent, name), detached);
-          const actual = await lstat(detached, { bigint: true });
-          if (actual.dev !== before.dev || actual.ino !== before.ino) throw new PicPatchSdkError('MODEL_CHANGED', 'Model directory changed before removal.', { subject: directory });
-          checkSignal(signal);
-          await rm(recovery, { recursive: true, force: true });
-          removed = { status: 'removed', modelId, name, directory };
-          return removed;
-        } catch (cause) {
-          if (cause instanceof PicPatchSdkError) {
-            cause.effect = 'unknown'; cause.details.recoveryDirectory = recovery;
-            throw cause;
-          }
-          throw new PicPatchSdkError('MODEL_REMOVAL_INCOMPLETE', 'Model removal was not completed; inspect retained files.', { cause, effect: 'unknown', subject: directory, details: { recoveryDirectory: recovery } });
+        await rm(recovery, { recursive: true, force: true });
+        removed = { status: 'removed', modelId, name, directory };
+        return removed;
+      } catch (cause) {
+        if (cause instanceof PicPatchSdkError) {
+          cause.effect = 'unknown'; cause.details.recoveryDirectory = recovery;
+          throw cause;
         }
-      });
+        throw new PicPatchSdkError('MODEL_REMOVAL_INCOMPLETE', 'Model removal was not completed; inspect retained files.', { cause, effect: 'unknown', subject: directory, details: { recoveryDirectory: recovery } });
+      }
     } catch (cause) {
       if (removed) return removed;
       if (cause instanceof PicPatchSdkError) throw cause;

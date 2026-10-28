@@ -1,4 +1,3 @@
-import { storageWait } from '../storage.ts';
 import { pipeline } from 'node:stream/promises';
 import { Writable } from 'node:stream';
 import { createHash } from 'node:crypto';
@@ -38,8 +37,8 @@ export async function inspectImage(path: string, signal?: AbortSignal, decode = 
 export async function inspectImageMetadata(path: string, signal?: AbortSignal, decode = false) {
   absolutePath(path); checkSignal(signal);
   try {
-    const metadata = await storageWait(() => sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).metadata(), path);
-    if (decode) await storageWait(() => pipeline(sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).raw(), new Writable({ write(_chunk, _encoding, done) { done(); } }), { signal }), path);
+    const metadata = await sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).metadata();
+    if (decode) await pipeline(sharp(path, { failOn: 'warning', limitInputPixels: false, sequentialRead: true }).raw(), new Writable({ write(_chunk, _encoding, done) { done(); } }), { signal });
     checkSignal(signal);
     return metadata;
   } catch (cause) {

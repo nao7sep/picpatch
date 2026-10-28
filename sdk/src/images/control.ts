@@ -1,4 +1,3 @@
-import { storageWait } from '../storage.ts';
 import type { ImageFingerprint } from './fingerprint.ts';
 import { unlink } from '../storage.ts';
 import { join } from 'node:path';
@@ -12,7 +11,7 @@ export async function prepareControl(image: string, directory: string, size: Ima
   const snapshot = join(directory, 'control.tmp'); const target = join(directory, 'control.png');
   await snapshotImage(image, snapshot, signal, false, expected, measured);
   try {
-    const metadata = await storageWait(() => sharp(snapshot, { limitInputPixels: false, sequentialRead: true }).metadata(), snapshot);
+    const metadata = await sharp(snapshot, { limitInputPixels: false, sequentialRead: true }).metadata();
     if (metadata.format !== 'png' || metadata.hasAlpha) throw new PicPatchSdkError('INVALID_IMAGE', 'Control maps must be opaque PNG images.');
     // Normalize grayscale maps to RGB as required by the three-channel ControlNet hint encoder.
     const prepared = await normalizeImage(snapshot, target, false, signal, true);

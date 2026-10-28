@@ -4,34 +4,19 @@ import { discoverModels, inspectModel } from '../../src/models/inspection.ts';
 
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, realpath: vi.fn(actual.realpath), lstat: vi.fn(actual.lstat) };
+  return { ...actual, realpath: vi.fn(actual.realpath) };
 });
 
-afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
-it.each([inspectModel, (path: string, options: Parameters<typeof inspectModel>[1]) => discoverModels([path], options)])('bounds the caller wait while retaining ownership and starting no later storage work', async operation => {
-  vi.useFakeTimers();
+afterEach(() => { vi.restoreAllMocks(); });
+it('awaits a pending local read to its end and then reports caller cancellation', async () => {
   let release!: (path: string) => void;
-  const read = vi.spyOn(fs, 'realpath').mockImplementation(() => new Promise<string>(resolve => { release = resolve; }));
-  const nextRead = vi.spyOn(fs, 'lstat');
-  let settled = false;
-  const result = operation('/selected', { timeoutMs: 10 }).finally(() => { settled = true; });
-  const assertion = expect(result).rejects.toMatchObject({ code: 'TIMEOUT' });
-  await vi.advanceTimersByTimeAsync(10);
-  expect(read).toHaveBeenCalledOnce(); expect(settled).toBe(true);
-  release('/selected');
-  await assertion;
-  expect(nextRead).not.toHaveBeenCalled();
-  expect(vi.getTimerCount()).toBe(0);
-});
-it('reports caller cancellation when cancellation and deadline both occur during a read', async () => {
-  vi.useFakeTimers();
-  let release!: (path: string) => void;
-  vi.spyOn(fs, 'realpath').mockImplementation(() => new Promise<string>(resolve => { release = resolve; }));
+  const entered = Promise.withResolvers<void>();
+  vi.spyOn(fs, 'realpath').mockImplementation(() => { entered.resolve(); return new Promise<string>(resolve => { release = resolve; }); });
   const controller = new AbortController();
-  const result = inspectModel('/selected', { timeoutMs: 10, signal: controller.signal });
-  const assertion = expect(result).rejects.toMatchObject({ code: 'CANCELLED' });
-  controller.abort(); await vi.advanceTimersByTimeAsync(10); release('/selected');
-  await assertion;
+  const result = inspectModel('/selected', { signal: controller.signal });
+  await entered.promise;
+  controller.abort(); release('/selected');
+  await expect(result).rejects.toMatchObject({ code: 'CANCELLED' });
 });
 it.each([0, -1, 1.5, NaN, Infinity])('rejects invalid budgets before filesystem access: %s', async timeoutMs => {
   const read = vi.spyOn(fs, 'realpath');

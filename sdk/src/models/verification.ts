@@ -10,7 +10,7 @@ import { parser } from 'stream-json';
 import { pipeline } from 'node:stream/promises';
 import { contractValidator } from '../contracts.ts';
 import { PicPatchSdkError } from '../errors.ts';
-import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
+import { absolutePath, checkSignal, emitProgress, validateOperation } from '../operations.ts';
 import type { LocalModel } from '../contracts.generated.ts';
 import type { ModelComponent, ModelManifest, ModelOperationOptions, ModelVerificationOptions, ModelVerification, VerifiedComponent } from './types.ts';
 
@@ -167,10 +167,9 @@ async function verifyComponent(root: string, component: ModelComponent, manifest
 export async function verifyModelOperation(path: string, input: ModelManifest, options: ModelVerificationOptions = {}): Promise<ModelVerification> {
   absolutePath(path); validateOperation(options, ['timeoutMs']); const manifest = validateModelManifest(input);
   checkSignal(options.signal);
-  const budget = timeBudget(options.timeoutMs, 600_000);
-  return withDeadline(options.signal, budget, 'Model verification timed out.', signal => verifyBundle(path, manifest, { ...options, signal }));
+  return verifyBundle(path, manifest, options);
 }
-/** Verification inside an operation that already holds its deadline, with a manifest it has validated. */
+/** Verification inside another operation, with a manifest it has validated. */
 export async function verifyBundle(path: string, manifest: ModelManifest, operation: ModelVerificationOptions): Promise<ModelVerification> {
   try {
     const root = await realpath(path);

@@ -1,5 +1,4 @@
 import { checkSignal } from '../operations.ts';
-import { storageWait } from '../storage.ts';
 import { createHash } from 'node:crypto';
 import { Transform } from 'node:stream';
 import type { ImageFingerprint } from './fingerprint.ts';
@@ -68,7 +67,7 @@ export async function normalizeImage(snapshot: string, target: string, mask = fa
   checkCancellation(signal);
   try {
     const image = sharp(snapshot, { failOn: 'warning', limitInputPixels: false, sequentialRead: true });
-    const metadata = await storageWait(() => image.metadata(), snapshot);
+    const metadata = await image.metadata();
     validateImageMetadata(metadata, mask, pngOnly);
     if (mask && policy) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This geometry policy does not support masks.');
     const geometry = inputGeometry(metadata.width, metadata.height, metadata.orientation, policy);
@@ -81,7 +80,7 @@ export async function normalizeImage(snapshot: string, target: string, mask = fa
       transform.extract({ ...crop, width: preparedSize.width, height: preparedSize.height });
     }
     transform.toColourspace(mask ? 'b-w' : 'srgb');
-    const info = await storageWait(() => transform.png().timeout({ seconds: 60 }).toFile(target), target, true);
+    const info = await transform.png().timeout({ seconds: 60 }).toFile(target);
     await chmod(target, 0o600);
     checkCancellation(signal);
     if (info.width !== geometry.preparedSize.width || info.height !== geometry.preparedSize.height) throw new PicPatchSdkError('INVALID_IMAGE', 'Prepared dimensions do not match the model geometry.');

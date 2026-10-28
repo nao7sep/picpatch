@@ -7,7 +7,7 @@
 import { crc32 } from 'node:zlib';
 import { join } from 'node:path';
 import sharp, { type Sharp } from './sharp.ts';
-import { readFile, storageWait, writeFile } from '../storage.ts';
+import { readFile, writeFile } from '../storage.ts';
 
 interface Chunk { type: string; data: Buffer }
 /** The metadata an edit carries from its source image into its output. */
@@ -77,7 +77,7 @@ function physical(density: number): Chunk {
 }
 /** Reads what an edit's output carries from its source, from the operation's private snapshot of it. */
 export async function sourceMetadata(snapshot: string): Promise<SourceMetadata> {
-  const metadata = await storageWait(() => sharp(snapshot, { limitInputPixels: false }).metadata(), snapshot);
+  const metadata = await sharp(snapshot, { limitInputPixels: false }).metadata();
   const format = metadata.format ?? '';
   const base = { format, orientation: metadata.orientation ?? 1, ...(metadata.icc ? { icc: metadata.icc } : {}) };
   if (format === 'png') {
@@ -118,7 +118,7 @@ export async function finishImage(upright: string, target: string, directory: st
     await writeFile(profile, source!.icc!, { flag: 'wx', mode: 0o600 });
     image = image.withIccProfile(profile);
   }
-  const encoded = pngChunks(await storageWait(() => image.png().timeout({ seconds: 60 }).toBuffer(), upright));
+  const encoded = pngChunks(await image.png().timeout({ seconds: 60 }).toBuffer());
   const own = encoded.filter(chunk => pixelChunks.has(chunk.type) && chunk.type !== 'IHDR');
   // A PNG source brings its own colour chunks; another format's profile is the one the conversion attached.
   const profile = convert && source!.format !== 'png' ? encoded.filter(chunk => chunk.type === 'iCCP') : [];

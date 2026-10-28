@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { release } from 'node:os';
 import { dirname, join } from 'node:path';
-import { chmod, lstat, mkdir, mkdtemp, open, readdir, rename, rm, storageCleanup, storageRecovery, storageStalled } from '../../storage.ts';
+import { chmod, lstat, mkdir, mkdtemp, open, readdir, rename, rm } from '../../storage.ts';
 import { PicPatchSdkError } from '../../errors.ts';
 import { operationStage, withDiagnostics } from '../../diagnostics.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline, withSettings } from '../../operations.ts';
@@ -110,7 +110,6 @@ async function install(options: NativeEngineOptions): Promise<NativeEngineInstal
     const parent = join(directory, 'native');
     await mkdir(parent, { recursive: true, mode: 0o700 });
     const staging = await mkdtemp(join(parent, '.install-'));
-    storageRecovery(staging);
     let publicationAttempted = false;
     try {
       const archive = join(staging, 'runtime.zip');
@@ -158,15 +157,15 @@ async function install(options: NativeEngineOptions): Promise<NativeEngineInstal
         if (winner.status !== 'ready') throw new PicPatchSdkError('ENGINE_INCOMPATIBLE', 'A conflicting native installation was preserved.');
       }
       completed = { status: 'ready', code: 'ENGINE_READY', message: 'The native engine is ready.', engineDirectory: directory, nativeExecutable: join(installation(directory, pinned), pinned.executable), revision: nativeRevision, origin: 'installed' };
-      await storageCleanup(() => rm(staging, { recursive: true, force: true }));
+      await rm(staging, { recursive: true, force: true });
       return completed;
     } catch (cause) {
       if (completed) { completed.cleanupWarning = { directory: staging, message: 'Native engine is ready; staging cleanup failed.' }; return completed; }
       const error = cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('ENGINE_IO', 'Native engine installation failed.', { cause });
-      if (storageStalled() || publicationAttempted || error.code === 'TERMINATION_FAILED') { error.effect = 'unknown'; error.details.recoveryDirectory = staging; }
+      if (publicationAttempted || error.code === 'TERMINATION_FAILED') { error.effect = 'unknown'; error.details.recoveryDirectory = staging; }
       else {
         // The primary failure keeps its code; staging that remains is named in details.
-        try { await storageCleanup(() => rm(staging, { recursive: true, force: true })); }
+        try { await rm(staging, { recursive: true, force: true }); }
         catch { error.details.recoveryDirectory = staging; }
       }
       throw error;

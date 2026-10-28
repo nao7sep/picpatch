@@ -1,4 +1,3 @@
-import { withoutStorageScope } from './storage.ts';
 import packageInfo from '../package.json' with { type: 'json' };
 import { randomUUID } from 'node:crypto';
 import { PicPatchSdkError, failureDiagnostic, sdkError } from './errors.ts';
@@ -65,7 +64,7 @@ export async function withDiagnostics<O extends EventOptions, T>(verb: string, o
   }
   deliver(operation, { name: 'operation.started', level: 'info', stage: 'started', message: 'Operation started.' });
   try {
-    const result = await withoutStorageScope(() => action(operation));
+    const result = await action(operation);
     const refused = result !== null && typeof result === 'object' && 'status' in result && result.status === 'refused';
     const refusal: SdkEvent['refusal'] = refused && 'code' in result && typeof result.code === 'string' ? { code: result.code as NonNullable<SdkEvent['refusal']>['code'] } : undefined;
     deliver(operation, { ...(refusal ? { refusal } : {}), name: refused ? 'operation.refused' : 'operation.succeeded', level: 'info', stage: refused ? 'refused' : 'succeeded', message: refused ? 'Operation refused.' : 'Operation completed.' });

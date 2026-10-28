@@ -1,4 +1,3 @@
-import { storageWait } from '../storage.ts';
 import sharp from './sharp.ts';
 import { chmod } from '../storage.ts';
 import { join } from 'node:path';
@@ -13,11 +12,11 @@ export async function prepareOutpaint(source: { path: string; width: number; hei
   const sourceImage = join(directory, 'canvas.png');
   const maskImage = join(directory, 'canvas-mask.png');
   try {
-    await storageWait(() => sharp(source.path, { limitInputPixels: false }).extend({ ...margins, background: { r: 127, g: 127, b: 127, alpha: 1 } }).png().timeout({ seconds: 60 }).toFile(sourceImage), sourceImage, true);
+    await sharp(source.path, { limitInputPixels: false }).extend({ ...margins, background: { r: 127, g: 127, b: 127, alpha: 1 } }).png().timeout({ seconds: 60 }).toFile(sourceImage);
     await chmod(sourceImage, 0o600);
     checkCancellation(signal);
-    await storageWait(() => sharp({ create: { width: source.width, height: source.height, channels: 3, background: 'black' }, limitInputPixels: false })
-      .extend({ ...margins, background: 'white' }).toColourspace('b-w').png().timeout({ seconds: 60 }).toFile(maskImage), maskImage, true);
+    await sharp({ create: { width: source.width, height: source.height, channels: 3, background: 'black' }, limitInputPixels: false })
+      .extend({ ...margins, background: 'white' }).toColourspace('b-w').png().timeout({ seconds: 60 }).toFile(maskImage);
     await chmod(maskImage, 0o600);
     checkCancellation(signal);
     return { sourceImage, maskImage };

@@ -1,5 +1,5 @@
 import { basename, dirname } from 'node:path';
-import { link, lstat, rename, stat, storageWait, withoutStorageScope } from '../storage.ts';
+import { link, lstat, rename, stat } from '../storage.ts';
 import { syncFile } from '../platform.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { checkSignal } from '../operations.ts';
@@ -23,16 +23,11 @@ export async function publishFile(staged: string, destination: string): Promise<
     const key = `${parent.dev}:${parent.ino}/${basename(destination).normalize('NFC').toLowerCase()}`;
     if (claimed.has(key)) throw taken();
     claimed.add(key);
-    let renaming: Promise<void> | undefined;
     try {
       try { await lstat(destination); throw taken(); }
       catch (probe) { if ((probe as NodeJS.ErrnoException).code !== 'ENOENT') throw probe; }
-      // The rename itself runs unscoped so the claim lasts until it settles, even after the caller stops waiting.
-      await storageWait(() => (renaming = withoutStorageScope(() => rename(staged, destination))), destination, true);
-    } finally {
-      const release = () => { claimed.delete(key); };
-      if (renaming) renaming.then(release, release); else release();
-    }
+      await rename(staged, destination);
+    } finally { claimed.delete(key); }
   }
 }
 function taken(): Error { return Object.assign(new Error('Destination exists.'), { code: 'EEXIST' }); }

@@ -1,5 +1,4 @@
 import { publishComplete } from './publication.ts';
-import { storageRecovery, storageCleanup } from '../storage.ts';
 import type { ArtifactRecord } from '../contracts.generated.ts';
 import type { ImageResult } from '../types.ts';
 import type { ImagePlan } from './planning.ts';
@@ -29,7 +28,6 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
   private source: string | undefined;
   private maskMode: EditResult['maskMode'];
   private constructor(directory: string, destination: string, request: T) {
-    storageRecovery(directory);
     this.directory = directory; this.destination = destination; this.request = request;
     this.workerRequest = { ...structuredClone(request), outputPath: join(directory, 'worker.png') };
     // Record content and sidecar publication belong to this process, never to an inference runtime.
@@ -154,7 +152,7 @@ export class ImageWorkspace<T extends ImageRequest = ImageRequest> {
 
   preserve(): void { this.retain = true; }
   async cleanup(): Promise<void> {
-    if (!this.retain) await storageCleanup(() => rm(this.directory, { recursive: true, force: true }));
+    if (!this.retain) await rm(this.directory, { recursive: true, force: true });
   }
 }
 

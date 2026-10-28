@@ -1,4 +1,3 @@
-import { storageCleanup, storageStalled } from '../../storage.ts';
 import { checkProfile } from '../../profile.ts';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from '../../storage.ts';
@@ -147,16 +146,16 @@ export function installEngine(settings: InstallEngineSettings, options: CallOpti
       } catch (cause) {
         // Unconfirmed termination/publication must never trigger deletion of an environment still in use.
         let leftover = false;
-        if (!storageStalled() && !publicationAttempted && !(cause instanceof PicPatchSdkError && cause.code === 'TERMINATION_FAILED')) {
+        if (!publicationAttempted && !(cause instanceof PicPatchSdkError && cause.code === 'TERMINATION_FAILED')) {
           try {
-            await storageCleanup(async () => { await rm(temporary, { force: true });
-              if (owned) await rm(installation, { recursive: true, force: true }); });
+            await rm(temporary, { force: true });
+            if (owned) await rm(installation, { recursive: true, force: true });
           } catch { leftover = true; }
         }
         // The primary failure keeps its code; private files that remain are named in details.
         const error = cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('ENGINE_IO', 'Could not prepare or publish the engine.', { cause });
         if (leftover) error.details.recoveryDirectory = installation;
-        if (storageStalled() || publicationAttempted || error.code === 'TERMINATION_FAILED') { error.details.recoveryDirectory = installation; error.effect = 'unknown'; }
+        if (publicationAttempted || error.code === 'TERMINATION_FAILED') { error.details.recoveryDirectory = installation; error.effect = 'unknown'; }
         throw error;
       }
     }).catch(error => { if (completed) return completed; throw error; });

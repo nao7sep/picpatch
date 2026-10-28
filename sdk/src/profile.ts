@@ -5,7 +5,7 @@ import { PicPatchSdkError } from './errors.ts';
 import { withDiagnostics } from './diagnostics.ts';
 import { newerVersion, versionRefusal } from './versions.ts';
 import type { CallOptions, Refusal } from './types.ts';
-import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline } from './operations.ts';
+import { absolutePath, checkSignal, timeBudget, validateOperation } from './operations.ts';
 import { workerTimeouts } from './worker/process.ts';
 import type { WorkerTimeouts } from './types.ts';
 
@@ -51,25 +51,24 @@ export function profileDefaults(profile: PicPatchProfile | undefined, explicit: 
 export function readProfile(path: string, options: ProfileReadOptions = {}): Promise<ProfileReadResult> {
   return withDiagnostics('readProfile', options, async operation => {
     absolutePath(path); validateOperation(operation);
-    return withDeadline(operation.signal, timeBudget(operation.timeoutMs, 30_000), 'Profile read timed out.', async signal => {
+    const signal = operation.signal;
+    checkSignal(signal);
+    let file;
+    try {
+      file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+      if (!(await file.stat()).isFile()) throw new PicPatchSdkError('INVALID_REQUEST', 'Profiles must be regular files.', { subject: path });
       checkSignal(signal);
-      let file;
-      try {
-        file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
-        if (!(await file.stat()).isFile()) throw new PicPatchSdkError('INVALID_REQUEST', 'Profiles must be regular files.', { subject: path });
-        checkSignal(signal);
-        const bytes = await file.readFile({ encoding: 'utf8', signal });
-        checkSignal(signal);
-        let value: unknown;
-        try { value = JSON.parse(bytes); }
-        catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Profile contains invalid JSON.', { cause, subject: path }); }
-        const result = validateProfile(value);
-        return result.status === 'refused' ? { ...result, subject: path } : result;
-      } catch (cause) {
-        checkSignal(signal);
-        if (cause instanceof PicPatchSdkError) throw cause;
-        throw new PicPatchSdkError('PROFILE_IO', 'Could not read the profile.', { cause, subject: path });
-      } finally { await file?.close(); }
-    });
+      const bytes = await file.readFile({ encoding: 'utf8', signal });
+      checkSignal(signal);
+      let value: unknown;
+      try { value = JSON.parse(bytes); }
+      catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Profile contains invalid JSON.', { cause, subject: path }); }
+      const result = validateProfile(value);
+      return result.status === 'refused' ? { ...result, subject: path } : result;
+    } catch (cause) {
+      checkSignal(signal);
+      if (cause instanceof PicPatchSdkError) throw cause;
+      throw new PicPatchSdkError('PROFILE_IO', 'Could not read the profile.', { cause, subject: path });
+    } finally { await file?.close(); }
   });
 }

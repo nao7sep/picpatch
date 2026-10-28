@@ -1,4 +1,3 @@
-import { storageScope, storageCancellation } from './storage.ts';
 import type { CallOptions } from './types.ts';
 import { diagnosticProgress, progressHookFailed } from './diagnostics.ts';
 import { isAbsolute } from 'node:path';
@@ -8,7 +7,7 @@ export function absolutePath(path: unknown): asserts path is string {
   if (typeof path !== 'string' || !isAbsolute(path) || path.includes('\0')) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply an absolute filesystem path.');
 }
 export function checkSignal(signal?: AbortSignal): void {
-  if (signal?.aborted) throw storageCancellation() ?? new PicPatchSdkError('CANCELLED', 'The operation was cancelled.');
+  if (signal?.aborted) throw new PicPatchSdkError('CANCELLED', 'The operation was cancelled.');
 }
 /** Every verb accepts the same call options; a verb's own settings are named beside them, and any other key is refused. */
 export function validateOperation(options: unknown, extraKeys: string[] = []): void {
@@ -49,7 +48,7 @@ export async function withDeadline<T>(signal: AbortSignal | undefined, milliseco
   const combined = AbortSignal.any([deadline.signal, ...(signal ? [signal] : [])]);
   const timer = setTimeout(() => deadline.abort(), milliseconds);
   try {
-    const result = await storageScope(combined, () => action(combined));
+    const result = await action(combined);
     checkSignal(combined);
     return result;
   } catch (cause) {

@@ -1,6 +1,6 @@
 import { withDiagnostics } from '../diagnostics.ts';
 import { resolveStoragePaths } from '../paths.ts';
-import { absolutePath, checkSignal, emitProgress, timeBudget, validateOperation, withDeadline } from '../operations.ts';
+import { absolutePath, checkSignal, emitProgress, validateOperation } from '../operations.ts';
 import { lstat, stat, realpath, opendir } from '../storage.ts';
 import { basename, extname, isAbsolute, join, normalize, relative, sep } from 'node:path';
 import { PicPatchSdkError, sdkError } from '../errors.ts';
@@ -72,10 +72,7 @@ async function inspect(path: string, options: ModelOperationOptions, verb: 'insp
 /** Read-only inventory. Does not parse configurations, load weights, or start a worker. */
 async function inspectModelOperation(path: string, options: ModelOperationOptions = {}): Promise<ModelInspection> {
   validatePath(path); validateOptions(options); check(options);
-  return withDeadline(options.signal, timeBudget(options.timeoutMs, 60_000), 'Model inspection timed out.', signal => {
-    const operation = { ...options, signal };
-    return boundary(() => inspect(normalize(path), operation, 'inspectModel'), operation);
-  });
+  return boundary(() => inspect(normalize(path), options, 'inspectModel'), options);
 }
 
 /** Search selected roots, or the configured model directory; never scan home. */
@@ -86,68 +83,66 @@ async function discoverModelsOperation(roots?: string[], options: ModelOperation
   for (const root of roots) validatePath(root);
   validateOptions(options); check(options);
   const selected = roots.map(root => normalize(root));
-  return withDeadline(options.signal, timeBudget(options.timeoutMs, 60_000), 'Model discovery timed out.', signal => {
-    const operation = { ...options, signal };
-    return boundary(async () => {
-      const models: ModelInspection[] = []; const failures: NonNullable<ModelDiscovery['failures']> = []; const visited = new Set<string>();
-      const pending = [...selected].reverse();
-      while (pending.length) {
-        check(operation);
-        const path = pending.pop()!;
-        try {
-        let resolved: string;
-        try { resolved = await realpath(path); }
-        catch (cause) {
-          // An absent default cache is empty; explicit or broken linked roots still fail.
-          if (defaultRoot && path === selected[0] && missing(cause)) {
-            try { await lstat(path); }
-            catch (entryError) { if (missing(entryError)) { check(operation); return { models: [] }; } throw entryError; }
-          }
-          throw cause;
-        }
-        if (visited.has(resolved)) continue;
-        check(operation);
-        visited.add(resolved);
-        progress(path, 'discoverModels', operation);
-        const info = await stat(path);
-        check(operation);
-        if (info.isFile()) {
-          if (kind(path)) models.push(await inspect(path, operation, 'discoverModels'));
-          continue;
-        }
-        if (!info.isDirectory()) throw new PicPatchSdkError('INVALID_REQUEST', 'Select regular model files or directories.');
-        const children: string[] = []; let candidate = false;
-        const directory = await opendir(path);
-        for await (const entry of directory) {
-          check(operation);
-          if (entry.name === '.git') continue;
-          if (entry.isDirectory()) children.push(join(path, entry.name));
-          else if (kind(entry.name)) candidate = true;
-        }
-        // Component exports such as MFLUX bundles need not contain a root config.
-        // Recognize their layout only for grouping, never as architecture/readiness evidence.
-        const names = new Set(children.map(child => basename(child)));
-        candidate ||= (names.has('transformer') || names.has('unet')) && names.has('text_encoder');
-        if (candidate) {
-          models.push(await inspect(path, operation, 'discoverModels'));
-          // The whole candidate is one model bundle, not one model per component.
-        } else pending.push(...children.sort().reverse());
-        } catch (cause) {
-          check(operation);
-          const error = sdkError(cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('MODEL_IO', 'Could not inspect this model location.', { cause, subject: path }));
-          failures.push({ path, error: error.toJSON() });
-        }
-      }
+  const operation = options;
+  return boundary(async () => {
+    const models: ModelInspection[] = []; const failures: NonNullable<ModelDiscovery['failures']> = []; const visited = new Set<string>();
+    const pending = [...selected].reverse();
+    while (pending.length) {
       check(operation);
-      // Overlapping explicit roots must not return a component twice.
-      const bundles = models.filter(model => !models.some(other => {
-        if (other === model) return false;
-        const child = relative(other.resolvedPath, model.resolvedPath);
-        return child !== '' && child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
-      }));
-      return { models: bundles.sort((a, b) => a.path.localeCompare(b.path)), ...(failures.length ? { failures } : {}) };
-    }, operation);
-  });
+      const path = pending.pop()!;
+      try {
+      let resolved: string;
+      try { resolved = await realpath(path); }
+      catch (cause) {
+        // An absent default cache is empty; explicit or broken linked roots still fail.
+        if (defaultRoot && path === selected[0] && missing(cause)) {
+          try { await lstat(path); }
+          catch (entryError) { if (missing(entryError)) { check(operation); return { models: [] }; } throw entryError; }
+        }
+        throw cause;
+      }
+      if (visited.has(resolved)) continue;
+      check(operation);
+      visited.add(resolved);
+      progress(path, 'discoverModels', operation);
+      const info = await stat(path);
+      check(operation);
+      if (info.isFile()) {
+        if (kind(path)) models.push(await inspect(path, operation, 'discoverModels'));
+        continue;
+      }
+      if (!info.isDirectory()) throw new PicPatchSdkError('INVALID_REQUEST', 'Select regular model files or directories.');
+      const children: string[] = []; let candidate = false;
+      const directory = await opendir(path);
+      for await (const entry of directory) {
+        check(operation);
+        if (entry.name === '.git') continue;
+        if (entry.isDirectory()) children.push(join(path, entry.name));
+        else if (kind(entry.name)) candidate = true;
+      }
+      // Component exports such as MFLUX bundles need not contain a root config.
+      // Recognize their layout only for grouping, never as architecture/readiness evidence.
+      const names = new Set(children.map(child => basename(child)));
+      candidate ||= (names.has('transformer') || names.has('unet')) && names.has('text_encoder');
+      if (candidate) {
+        models.push(await inspect(path, operation, 'discoverModels'));
+        // The whole candidate is one model bundle, not one model per component.
+      } else pending.push(...children.sort().reverse());
+      } catch (cause) {
+        check(operation);
+        const error = sdkError(cause instanceof PicPatchSdkError ? cause : new PicPatchSdkError('MODEL_IO', 'Could not inspect this model location.', { cause, subject: path }));
+        failures.push({ path, error: error.toJSON() });
+      }
+    }
+    check(operation);
+    // Overlapping explicit roots must not return a component twice.
+    const bundles = models.filter(model => !models.some(other => {
+      if (other === model) return false;
+      const child = relative(other.resolvedPath, model.resolvedPath);
+      return child !== '' && child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
+    }));
+    return { models: bundles.sort((a, b) => a.path.localeCompare(b.path)), ...(failures.length ? { failures } : {}) };
+  }, operation);
 }
 
 export function inspectModel(path: string, options: ModelOperationOptions = {}): Promise<ModelInspection> {

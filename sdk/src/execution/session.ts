@@ -1,7 +1,6 @@
-import { storageScope, storageStalled } from '../storage.ts';
 import { planImage, type ImagePlan, type GenerateImagePlan, type EditImagePlan } from '../images/planning.ts';
 import { resolveGenerateRequest, resolveEditRequest, type GenerateInput, type ImageDefaults, type EditInput } from '../defaults.ts';
-import { emitProgress, validateOperation, timeBudget, withDeadline } from '../operations.ts';
+import { emitProgress, validateOperation } from '../operations.ts';
 import { diagnosticLifetime, withDiagnostics, type RuntimeConfiguration } from '../diagnostics.ts';
 import type { ImageClient } from '../client.ts';
 import type { EditBackend } from './backend.ts';
@@ -46,13 +45,12 @@ export class ImageClientImpl implements ImageClient {
         ? resolveGenerateRequest(input, this.defaults, this.model) : resolveEditRequest(input as EditInput, this.defaults, this.model));
     } catch (error) { return this.rejectCall('plan', options, error); }
     const captured = { ...options, signal: AbortSignal.any([this.lifetime.signal, ...(options.signal ? [options.signal] : [])]) };
-    const pending = Promise.resolve().then(() => withDiagnostics('plan', captured, operation => withDeadline(operation.signal, timeBudget(operation.timeoutMs, 60_000), 'Image planning timed out.', async signal => {
+    const pending = Promise.resolve().then(() => withDiagnostics('plan', captured, async operation => {
       try {
         if (!this.backend.describe) throw new PicPatchSdkError('UNSUPPORTED_CAPABILITY', 'This backend cannot plan without a registered model.');
-        const result = await planImage(request, this.backend.describe(request), signal);
-        return result;
+        return await planImage(request, this.backend.describe(request), operation.signal);
       } catch (error) { const refused = refusal(error); if (refused) return refused; throw error; }
-    }), this.diagnostics));
+    }, this.diagnostics));
     const accepted = pending.then(result => { if (result.status === 'completed') { Object.freeze(result); this.plans.add(result); } return result; });
     this.tail = Promise.allSettled([this.tail, accepted]).then(() => {});
     return accepted;
@@ -87,7 +85,7 @@ export class ImageClientImpl implements ImageClient {
     const operation = Promise.resolve().then(() => withDiagnostics(verb, captured, async scoped => {
       await waitForTurn(previous, signal);
       checkCancellation(signal);
-      return await storageScope(signal, () => this.run(request, signal, scoped, plan));
+      return await this.run(request, signal, scoped, plan);
     }, this.diagnostics));
     // A cancelled waiter settles promptly, but cannot let later calls overtake its predecessor.
     this.tail = Promise.allSettled([previous, operation]).then(() => {});
@@ -117,10 +115,6 @@ export class ImageClientImpl implements ImageClient {
         error.details.recoveryDirectory = workspace.directory;
         error.effect = 'unknown';
       }
-    }
-    if (storageStalled() && workspace) {
-      workspace.preserve();
-      if (result) result.cleanupWarning = { directory: workspace.directory, message: 'Image was saved; private files were retained because storage work may still settle.' };
     }
     let leftover = false;
     try { await workspace?.cleanup(); }

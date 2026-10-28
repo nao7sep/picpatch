@@ -1,4 +1,3 @@
-import { storageScope, storageSignal, storageWait } from '../storage.ts';
 import packageInfo from '../../package.json' with { type: 'json' };
 import { contractValidator } from '../contracts.ts';
 import { PicPatchSdkError } from '../errors.ts';
@@ -14,7 +13,7 @@ import type { ImageRequest } from '../types.ts';
 export async function createArtifactRecord(request: ImageRequest, result: EditResult, complete: string, fingerprints: ArtifactRecord['fingerprints']): Promise<ArtifactRecord> {
     const hash = createHash('sha256');
     let bytes = 0;
-    await storageWait(async () => { for await (const chunk of createReadStream(complete, { signal: storageSignal() })) { hash.update(chunk); bytes += chunk.length; } }, complete);
+    for await (const chunk of createReadStream(complete)) { hash.update(chunk); bytes += chunk.length; }
     const inputsIncluded = request.record?.includeInputs === true;
     const caller = request.record?.caller;
     const { negativePrompt, ...parameters } = result.effectiveParameters;
@@ -47,7 +46,6 @@ export function sidecarPath(image: string): string {
 
 /** Called only after PNG publication; settlement must never disguise a saved image. */
 export async function publishSidecar(record: ArtifactRecord, path: string, destination: string, directory: string): Promise<SidecarOutcome> {
-  return storageScope(AbortSignal.timeout(30_000), async () => {
   let publishing = false;
   try {
     const staging = join(directory, 'sidecar.json');
@@ -60,8 +58,7 @@ export async function publishSidecar(record: ArtifactRecord, path: string, desti
     return { status: 'saved', path };
   } catch (cause) {
     // OUTPUT_IO classification can only select these filesystem causes.
-    const code = (cause instanceof PicPatchSdkError && cause.kind === 'cancelled' ? 'TIMEOUT' : (cause as NodeJS.ErrnoException).code === 'EEXIST' ? 'OUTPUT_CONFLICT' : new PicPatchSdkError('OUTPUT_IO', 'Sidecar write failed.', { cause }).code) as Extract<SidecarOutcome, { status: 'failed' }>['code'];
+    const code = ((cause as NodeJS.ErrnoException).code === 'EEXIST' ? 'OUTPUT_CONFLICT' : new PicPatchSdkError('OUTPUT_IO', 'Sidecar write failed.', { cause }).code) as Extract<SidecarOutcome, { status: 'failed' }>['code'];
     return { status: 'failed', path, code, effect: publishing && code !== 'OUTPUT_CONFLICT' ? 'unknown' : 'none', message: 'Image was saved, but its metadata sidecar could not be saved.' };
   }
-  });
 }

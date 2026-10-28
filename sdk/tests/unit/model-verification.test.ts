@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import { validateModelManifest, verifyModel, type ModelManifest, type ModelComponent } from '../../src/index.ts';
 let directory: string;
 let manifest: ModelManifest;
@@ -70,10 +70,6 @@ it('preserves filesystem failures instead of claiming missing models', async () 
   await expect(verifyModel(join(directory, 'missing'), manifest)).rejects.toMatchObject({ code: 'FILE_NOT_FOUND', cause: { code: 'ENOENT' } });
 });
 
-it('distinguishes an expired verification budget from caller cancellation', async () => {
-  vi.useFakeTimers();
-  try {
-    await expect(verifyModel(directory, manifest, { timeoutMs: 10, onProgress: () => { vi.advanceTimersByTime(10); } })).rejects.toMatchObject({ code: 'TIMEOUT' });
-  } finally { vi.useRealTimers(); }
+it('refuses an invalid time budget', async () => {
   await expect(verifyModel(directory, manifest, { timeoutMs: 0 })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });

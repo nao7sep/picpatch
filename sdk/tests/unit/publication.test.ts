@@ -6,7 +6,6 @@ import sharp from 'sharp';
 import { saveArtifact } from '../../src/index.ts';
 import { dirname, join } from 'node:path';
 import { publishComplete, publishFile } from '../../src/images/publication.ts';
-import { storageScope } from '../../src/storage.ts';
 import type { ArtifactRecord } from '../../src/contracts.generated.ts';
 
 const controls = vi.hoisted(() => ({ unsupported: false, failRename: false, entered: undefined as (() => void) | undefined, release: undefined as Promise<void> | undefined }));
@@ -83,21 +82,17 @@ test('a failed rename frees its name claim for a later attempt', async () => {
   expect(await fs.readFile(target, 'utf8')).toBe('SECOND');
 });
 
-test('a caller that stops waiting keeps the name claimed until its rename settles', async () => {
+test('a publisher keeps the name claimed until its rename settles', async () => {
   controls.unsupported = true;
   const first = await staged('first', 'FIRST'), second = await staged('second', 'SECOND');
   const target = join(root, 'output.png');
-  const controller = new AbortController();
   const gate = heldRename();
-  const pending = storageScope(controller.signal, () => publishFile(first, target));
-  const rejected = expect(pending).rejects.toMatchObject({ code: 'CANCELLED', effect: 'unknown' });
+  const pending = publishFile(first, target);
   await gate.entered;
-  controller.abort();
-  await rejected;
   try { await expect(publishFile(second, target)).rejects.toMatchObject({ code: 'EEXIST' }); }
   finally { gate.release(); }
-  // The released rename lands on its own; wait for it, checking first whether it already has.
-  while (await fs.readFile(target, 'utf8').catch(() => undefined) !== 'FIRST') await new Promise(resolve => setImmediate(resolve));
+  await pending;
+  expect(await fs.readFile(target, 'utf8')).toBe('FIRST');
   await expect(publishFile(second, target)).rejects.toMatchObject({ code: 'EEXIST' });
 });
 

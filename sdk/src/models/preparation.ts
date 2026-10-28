@@ -1,4 +1,3 @@
-import { storageCleanup, storageRecovery, storageStalled } from '../storage.ts';
 import type { ModelRegistration } from './opening.ts';
 import { checkProfile, type PicPatchProfile } from '../profile.ts';
 import { attachMfluxLoras, validateMfluxLoras } from '../backends/mflux/loras.ts';
@@ -82,16 +81,13 @@ async function prepareModelOperation(id: string, options: PrepareModelOptions = 
     validateMfluxLoras(options.loras);
     const loras = structuredClone(options.loras);
     const { loras: _selected, ...baseOptions } = options;
-    return withDeadline(options.signal, timeBudget(options.timeoutMs, 3_600_000), 'Model and LoRA preparation timed out.', async signal => {
-      const operation = { ...baseOptions, signal };
-      const prepared = entry.acquisition === 'pinned' ? await prepareCatalogModel(entry, operation) : await prepareExternalModel(entry, operation);
-      try { return await attachMfluxLoras(prepared, loras, operation); }
-      catch (cause) {
-        checkSignal(signal);
-        if (cause instanceof PicPatchSdkError) throw cause;
-        throw new PicPatchSdkError('MODEL_IO', 'Could not prepare local LoRA weights.', { cause });
-      }
-    });
+    const prepared = entry.acquisition === 'pinned' ? await prepareCatalogModel(entry, baseOptions) : await prepareExternalModel(entry, baseOptions);
+    try { return await attachMfluxLoras(prepared, loras, baseOptions); }
+    catch (cause) {
+      checkSignal(options.signal);
+      if (cause instanceof PicPatchSdkError) throw cause;
+      throw new PicPatchSdkError('MODEL_IO', 'Could not prepare local LoRA weights.', { cause });
+    }
   }
   return entry.acquisition === 'pinned' ? prepareCatalogModel(entry, options) : prepareExternalModel(entry, options);
 }
@@ -126,7 +122,6 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
       await privateDirectory(parent);
       checkSignal(signal);
       const staging = await mkdtemp(join(parent, '.prepare-'));
-      storageRecovery(staging);
       let failure: unknown;
       try {
         for (const component of entry.manifest.components) {
@@ -153,7 +148,7 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
         return committed;
       } catch (cause) { failure = cause; throw cause; }
       finally {
-        try { if (!storageStalled()) await storageCleanup(() => rm(staging, { recursive: true, force: true })); }
+        try { await rm(staging, { recursive: true, force: true }); }
         catch (cause) {
           if (committed) committed.cleanupWarning = { directory: staging, message: 'Model is prepared; staging cleanup failed.' };
           // The primary failure keeps its code; staging that remains is named in details.

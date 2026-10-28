@@ -64,7 +64,8 @@ export interface EventOptions {
 }
 /**
  * The call options every verb accepts. A verb with nothing to report through a hook never calls it;
- * timeoutMs is the call's whole budget. Settings a verb needs beyond these sit beside them.
+ * timeoutMs is the call's whole budget where the verb reaches a network provider or starts a process; a verb whose work
+ * is local files alone has no deadline and ignores it. Settings a verb needs beyond these sit beside them.
  */
 export interface CallOptions extends EventOptions {
   signal?: AbortSignal;

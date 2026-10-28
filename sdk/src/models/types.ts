@@ -25,7 +25,7 @@ export interface ModelIssue {
   effect: 'none';
 }
 
-/** timeoutMs defaults to one minute for inspection and discovery, ten for verification. */
+/** Inspection, discovery and verification read local files alone, with no deadline. */
 export type ModelOperationOptions = CallOptions;
 export interface ModelDiscovery {
   models: ModelInspection[];

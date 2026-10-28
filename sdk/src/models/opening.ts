@@ -6,7 +6,7 @@ import { withDiagnostics } from '../diagnostics.ts';
 import type { CallOptions, ModelPresenceIssue } from '../types.ts';
 import { newerVersion, versionRefusal } from '../versions.ts';
 import { PicPatchSdkError, sdkError } from '../errors.ts';
-import { absolutePath, checkSignal, timeBudget, validateOperation, withDeadline, withSettings } from '../operations.ts';
+import { absolutePath, checkSignal, validateOperation, withSettings } from '../operations.ts';
 import type { PicPatchProfile } from '../profile.ts';
 import { catalogModel, listModels } from './catalog.ts';
 import { validateLocalModel } from './verification.ts';
@@ -59,11 +59,12 @@ async function presence(registration: ModelRegistration, signal?: AbortSignal): 
   checkSignal(signal);
   return issues.length ? { status: 'refused', code: 'MODEL_INCOMPLETE', message: 'The model bundle is incomplete; existing files were preserved.', subject: model.directory, details: { issues } } : { ...registration, status: 'completed', integrity: 'presence-only', compatibility: 'unknown' };
 }
-async function boundary<T>(options: ModelOpenOptions, action: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function boundary<T>(options: ModelOpenOptions, action: (signal?: AbortSignal) => Promise<T>): Promise<T> {
   validateOperation(options, ['profile', 'modelsDirectory', 'directory']);
   if (options.directory !== undefined) absolutePath(options.directory);
   root(options);
-  try { return await withDeadline(options.signal, timeBudget(options.timeoutMs, 60_000), 'Model opening timed out.', action); }
+  checkSignal(options.signal);
+  try { return await action(options.signal); }
   catch (cause) { if (cause instanceof PicPatchSdkError) throw cause; throw new PicPatchSdkError('MODEL_IO', 'Could not open model files.', { cause }); }
 }
 function select(input: string | ModelRegistration, options: ModelOpenOptions): ModelRegistration | ModelOpenRefusal {
