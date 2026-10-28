@@ -7,11 +7,7 @@ import { Thumbnails } from '../../src/main/core/thumbnails.ts';
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'picpatch-thumbs-')); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
-it('resizes the shortest edge for cropped previews, reuses results and evicts the oldest path', async () => {
-  const paths = await Promise.all([0, 1].map(async index => { const path = join(root, `${index}.png`); await sharp({ create: { width: 2000, height: 1000, channels: 3, background: '#808080' } }).png().toFile(path); return path; }));
-  const thumbnails = new Thumbnails(256, 1);
-  const first = thumbnails.get(paths[0]!); const repeated = thumbnails.get(paths[0]!);
-  expect(await repeated).toBe(await first);
-  expect(await sharp(await first).metadata()).toMatchObject({ format: 'webp', width: 512, height: 256 });
-  await thumbnails.get(paths[1]!); expect(await thumbnails.get(paths[0]!)).not.toBe(await first);
+it('resizes the shortest edge for cropped previews', async () => {
+  const path = join(root, 'wide.png'); await sharp({ create: { width: 2000, height: 1000, channels: 3, background: '#808080' } }).png().toFile(path);
+  expect(await sharp(await new Thumbnails(256).get(path)).metadata()).toMatchObject({ format: 'webp', width: 512, height: 256 });
 });

@@ -21,14 +21,14 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-it('decodes one path at a time, and a repeated request finds the finished thumbnail', async () => {
-  const thumbnails = new Thumbnails(256, 2);
-  const first = thumbnails.get('first'); const second = thumbnails.get('second'); const repeated = thumbnails.get('first');
+it('decodes one path at a time', async () => {
+  const thumbnails = new Thumbnails(256);
+  const first = thumbnails.get('first'); const second = thumbnails.get('second');
   await started(1);
   decoding[0]!.resolve(Buffer.from('first thumbnail'));
-  const made = await first; expect(decoding).toHaveLength(1);
+  await first; expect(decoding).toHaveLength(1);
   await started(2);
-  decoding[1]!.resolve(Buffer.from('second thumbnail')); await second;
-  expect(await repeated).toBe(made);
+  decoding[1]!.resolve(Buffer.from('second thumbnail'));
+  expect(await second).toEqual(Buffer.from('second thumbnail'));
   expect(readFile).toHaveBeenCalledTimes(2);
 });

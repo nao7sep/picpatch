@@ -179,7 +179,7 @@ async function start() {
   protocol.handle('picpatch-image', async request => {
     try {
       const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1));
-      // Session images never change after they are written, so a thumbnail is cached by path.
+      // Session images never change after they are written, so the window may keep a thumbnail for as long as it is open.
       if (url.searchParams.get('size') === String(thumbnailSize)) return new Response(new Uint8Array(await thumbnails.get(path)), { headers: { 'Content-Type': 'image/webp', 'Cache-Control': 'max-age=31536000, immutable', 'Access-Control-Allow-Origin': '*' } });
       const response = await net.fetch(pathToFileURL(path).href); const headers = new Headers(response.headers); headers.set('Access-Control-Allow-Origin', '*'); return new Response(response.body, { status: response.status, headers });
     }
