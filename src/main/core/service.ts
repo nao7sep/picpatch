@@ -190,8 +190,8 @@ export class Application {
     if (result.status === 'completed' && result.sidecar?.status === 'failed') this.diagnostic('warn', 'Image saved; its settings sidecar could not be saved.', { sessionId, runId, sidecar: result.sidecar });
     return result;
   }
-  /** Model presence and shared engine dependency-import probes do not load weights; the signal bounds stalled probes. */
-  async readiness() { return this.lastReadiness = await modelReadiness(this.settings, { signal: AbortSignal.timeout(120_000), onEvent: this.sdkEvents({ action: 'readiness' }) }); }
+  /** Model presence and shared engine dependency-import probes do not load weights; each SDK verb bounds its own subprocesses. */
+  async readiness() { return this.lastReadiness = await modelReadiness(this.settings, { onEvent: this.sdkEvents({ action: 'readiness' }) }); }
   create(name: string) { return this.sessions.create(name, freshDraft(listModels(), this.lastReadiness)); }
   async models() { return inspectModels({ profile: this.settings.profile }, { onEvent: this.sdkEvents({ action: 'models' }) }); }
   prepare(modelId: string, directory?: string, checkpoint?: string, download = false, components: Pick<PrepareModelSettings, 'vae' | 'clipL' | 'clipG' | 't5' | 'photoMaker' | 'ipAdapter' | 'clipVision' | 'controlNet' | 'loras'> = {}) {
