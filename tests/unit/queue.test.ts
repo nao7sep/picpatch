@@ -93,9 +93,9 @@ it('keeps diagnostic events separate from stage and progress display', async () 
     const event = { type: 'event' as const, operationId: 'fixture', verb: 'generate', time: new Date().toISOString(), level: 'info' as const, message: 'Stage changed.' };
     events.onProgress({ type: 'progress', stage: 'generating', completed: 2, total: 4 });
     events.onEvent({ ...event, name: 'hook.failed', stage: 'hook-failed' });
-    expect(queue.state.active[0]).toMatchObject({ stage: 'generating', progress: { completed: 2, total: 4 } });
+    expect(queue.state.active).toMatchObject({ stage: 'generating', progress: { completed: 2, total: 4 } });
     events.onEvent({ ...event, name: 'operation.stage', stage: 'saving' });
-    expect(queue.state.active[0]?.stage).toBe('saving'); expect(queue.state.active[0]?.progress).toBeUndefined();
+    expect(queue.state.active?.stage).toBe('saving'); expect(queue.state.active?.progress).toBeUndefined();
     return { outcome: refusal };
   });
   await queue.submit(session.id, session.draft, 1); await queue.settled();
@@ -128,14 +128,14 @@ it('branches from the explicit source and restores the target without replaying 
   expect(reopened.draft.source).toBe(third!.id);
   expect(reopened.runs[1]!.id).toBe(second!.id);
   const idle = new Queue(new Sessions(root), async () => { throw new Error('Must not replay'); });
-  await idle.settled(); expect(idle.state.active).toEqual([]);
+  await idle.settled(); expect(idle.state.active).toBeUndefined();
 });
 it('skips a listed run that is no longer queued instead of pausing, and resume never re-lists the active run', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; }); const seen: string[] = [];
   const queue = new Queue(sessions, async (_session, run) => { seen.push(run.id); await held; return { outcome: refusal }; });
   const [first, second] = await queue.submit(session.id, session.draft, 2);
-  await until(() => expect(queue.state.active[0]?.runId).toBe(first!.id));
+  await until(() => expect(queue.state.active?.runId).toBe(first!.id));
   await sessions.update(session.id, value => { value.runs.find(run => run.id === second!.id)!.status = 'cancelled'; });
   await queue.resume(session.id); release(); await queue.settled();
   expect(seen).toEqual([first!.id]); expect(queue.state.paused).toBe(false); expect(queue.state.issue).toBeUndefined();
@@ -149,7 +149,7 @@ it('keeps a structured pause reason and blocks resource changes until a stray wo
   expect(() => queue.use(new Sessions(root))).toThrow('termination is unconfirmed');
   expect(run).toBeDefined();
 });
-it('gives a free slot to the open session first, then to the oldest queued run', async () => {
+it('runs the open session’s oldest queued run next, then the oldest queued run anywhere, then to the oldest queued run', async () => {
   const sessions = new Sessions(root); const a = await sessions.create(), b = await sessions.create();
   const heavy = heavyRunner(); const queue = new Queue(sessions, heavy.runner);
   const [a1, a2] = await queue.submit(a.id, a.draft, 2);
@@ -163,31 +163,17 @@ it('gives a free slot to the open session first, then to the oldest queued run',
   await until(() => expect(heavy.open()).toEqual([a3!.id])); heavy.finish();
   await queue.settled(); expect(heavy.started).toEqual([a1!.id, b1!.id, a2!.id, a3!.id]); expect(heavy.peak).toBe(1);
 });
-it('runs up to the concurrency limit, starts more when it rises and cancels one run without touching the others', async () => {
+it('runs one image at a time, cancels a queued run without touching the running one and stops everything on quit', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
-  let limit = 2; const heavy = heavyRunner(); const queue = new Queue(sessions, heavy.runner, () => {}, () => limit);
+  const heavy = heavyRunner(); const queue = new Queue(sessions, heavy.runner);
   const runs = await queue.submit(session.id, session.draft, 4);
-  await until(() => expect(heavy.open()).toHaveLength(2)); expect(queue.state.active.map(item => item.runId)).toEqual(runs.slice(0, 2).map(run => run.id));
-  limit = 3; queue.wake();
-  await until(() => expect(heavy.open()).toHaveLength(3));
+  await until(() => expect(heavy.open()).toEqual([runs[0]!.id])); expect(queue.state.active?.runId).toBe(runs[0]!.id);
   await queue.cancel(session.id, runs[1]!.id);
-  await until(() => expect(heavy.open()).toEqual([runs[0]!.id, runs[2]!.id, runs[3]!.id]));
-  for (const run of [runs[0]!, runs[2]!, runs[3]!]) heavy.finish(run.id);
-  await queue.settled(); expect(heavy.peak).toBe(3);
-  expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['refused', 'cancelled', 'refused', 'refused']);
-});
-it('lets running work finish when the limit drops and stops everything on quit', async () => {
-  const sessions = new Sessions(root); const session = await sessions.create();
-  let limit = 2; const heavy = heavyRunner(); const queue = new Queue(sessions, heavy.runner, () => {}, () => limit);
-  const runs = await queue.submit(session.id, session.draft, 3);
-  await until(() => expect(heavy.open()).toHaveLength(2));
-  limit = 1; heavy.finish(runs[0]!.id);
-  // A settled run leaves the active list in the same step that fills free slots, so nothing more starts after it.
-  await until(() => expect(queue.state.active.map(item => item.runId)).toEqual([runs[1]!.id]));
-  expect(heavy.started).toHaveLength(2); expect(heavy.open()).toEqual([runs[1]!.id]);
-  heavy.finish(runs[1]!.id); await until(() => expect(heavy.open()).toEqual([runs[2]!.id]));
-  await queue.stop(); expect(queue.state.active).toEqual([]);
-  expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['refused', 'refused', 'cancelled']);
+  expect(heavy.open()).toEqual([runs[0]!.id]);
+  heavy.finish(); await until(() => expect(heavy.open()).toEqual([runs[2]!.id]));
+  await queue.stop(); expect(queue.state.active).toBeUndefined();
+  expect(heavy.started).toEqual([runs[0]!.id, runs[2]!.id]); expect(heavy.peak).toBe(1);
+  expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['refused', 'cancelled', 'cancelled', 'queued']);
 });
 it('moves a session up when a command is submitted, and only then, as a chat list does', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();

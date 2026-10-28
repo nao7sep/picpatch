@@ -14,8 +14,8 @@ export interface RailProps {
   sessions: readonly SessionSummary[];
   failures: number;
   currentId: string | undefined;
-  /** Sessions with a run executing now. */
-  working: ReadonlySet<string>;
+  /** The session whose run is executing now. */
+  working: string | undefined;
   width: number;
   optionsPane: boolean;
   /** The display zone dates are shown in. */
@@ -108,12 +108,12 @@ export function Rail(props: RailProps) {
             >
               <span className="session-cover">
                 {session.cover ? <img loading="lazy" decoding="async" src={imageUrl(session.id, session.cover, true)} alt="" draggable={false} /> : <ImageIcon />}
-                {props.working.has(session.id) && <span className="session-working" aria-hidden="true" />}
+                {props.working === session.id && <span className="session-working" aria-hidden="true" />}
               </span>
               <span className="session-text">
                 <span className="session-title">{session.name}</span>
                 <span className="session-meta">
-                  {props.working.has(session.id) ? t('rail.working') : (session.results ? t('rail.meta', { when: relativeTime(session.updated, props.timeZone), count: session.results }) : relativeTime(session.updated, props.timeZone))}
+                  {props.working === session.id ? t('rail.working') : (session.results ? t('rail.meta', { when: relativeTime(session.updated, props.timeZone), count: session.results }) : relativeTime(session.updated, props.timeZone))}
                 </span>
               </span>
             </div>

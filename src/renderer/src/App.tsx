@@ -422,7 +422,7 @@ export function App() {
           <>
             <div className="shell" inert={closing} style={{ minWidth: minimum(pane.optionsPane).width, minHeight: minimum(pane.optionsPane).height }}>
               <Rail
-                sessions={overview.sessions} failures={overview.failures.length} currentId={session.id} working={new Set(overview.queue.active.map(item => item.sessionId))}
+                sessions={overview.sessions} failures={overview.failures.length} currentId={session.id} working={overview.queue.active?.sessionId}
                 width={pane.railWidth} optionsPane={pane.optionsPane} timeZone={displayTimeZone(overview.settings.timeZone)} onWidth={setRailWidth}
                 onOpen={id => void open(id)} onNew={() => void newSession()} onRename={() => push({ kind: 'rename' })} onDelete={() => void deleteSession()}
                 onMenu={dispatch}
@@ -546,7 +546,7 @@ function StageNotices({ notices, onDismiss, queue, session, onResume, history, o
   const say = (value: Message) => t(value.key, value.values);
   // A failure stays until dismissed or the next operation; success and cancellation need no standing notice.
   const failed = !active && last && (last.status === 'failed' || last.status === 'refused') && last.id !== managedDismissed ? last : undefined;
-  const waiting = queue.paused || (session.runs.some(run => run.status === 'queued') && !queue.active.length);
+  const waiting = queue.paused || (session.runs.some(run => run.status === 'queued') && !queue.active);
   return (
     <div className="stage-notices">
       {waiting && (

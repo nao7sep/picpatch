@@ -13,7 +13,7 @@ it('uses monotonic progress anchors while the wall clock moves both directions',
   const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
   const current = session({ runs: [run('running', { status: 'running', output: undefined })] });
   const active = { runId: 'running', sessionId: current.id, stage: 'generating', startedAt: 1_000_000, elapsedMs: 5000 };
-  const props = { session: current, queue: { paused: false, active: [active] }, target: undefined, optionsPane: false, saved: undefined, onRename() {}, onToggleOptions() {}, onEditThis() {}, onReuse() {}, onView() {}, onSave() {}, onCancel() {} };
+  const props = { session: current, queue: { paused: false, active }, target: undefined, optionsPane: false, saved: undefined, onRename() {}, onToggleOptions() {}, onEditThis() {}, onReuse() {}, onView() {}, onSave() {}, onCancel() {} };
   const view = render(<Conversation {...props} />);
   expect(screen.getByText('0:05')).toBeTruthy();
   clock.mockReturnValue(9_000_000); monotonic += 1000;
@@ -22,7 +22,7 @@ it('uses monotonic progress anchors while the wall clock moves both directions',
   clock.mockReturnValue(0); monotonic += 1000;
   await act(() => vi.advanceTimersByTimeAsync(1000));
   expect(screen.getByText('0:07')).toBeTruthy();
-  view.rerender(<Conversation {...props} queue={{ paused: false, active: [{ ...active, elapsedMs: 8000 }] }} />);
+  view.rerender(<Conversation {...props} queue={{ paused: false, active: { ...active, elapsedMs: 8000 } }} />);
   expect(screen.getByText('0:08')).toBeTruthy();
 });
 
@@ -30,7 +30,7 @@ it('describes masked composite output by source size rather than the inactive ge
   setCatalog(models as never);
   const draft = { ...session().draft, mode: 'edit' as const, source: 'input', mask: 'mask', width: 832, height: 1216 };
   const current = session({ runs: [run('queued', { draft, status: 'queued', output: undefined })] });
-  render(<Conversation session={current} queue={{ paused: false, active: [] }} target={undefined} optionsPane={false} saved={undefined} onRename={() => {}} onToggleOptions={() => {}} onEditThis={() => {}} onReuse={() => {}} onView={() => {}} onSave={() => {}} onCancel={() => {}} />);
+  render(<Conversation session={current} queue={{ paused: false }} target={undefined} optionsPane={false} saved={undefined} onRename={() => {}} onToggleOptions={() => {}} onEditThis={() => {}} onReuse={() => {}} onView={() => {}} onSave={() => {}} onCancel={() => {}} />);
   expect(screen.getByText('Source image size')).toBeTruthy();
   expect(document.querySelector<HTMLElement>('.developing')!.style.aspectRatio).toBe('');
 });

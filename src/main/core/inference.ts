@@ -12,15 +12,16 @@ import type { Sessions } from './sessions.ts';
 
 /**
  * All image generation, validation and publication belong to the public SDK.
- * Each queue slot runs on its own image client. A finished client stays warm for the next run of the same model and
- * resources, so its worker process and imports start once; clients never outnumber the concurrency limit, any failure
- * or cancellation closes the client it used, and the queue releases the warm ones when it goes idle.
+ * The queue runs one image at a time, each on the image client for its model and resources. A finished client stays
+ * warm, so a comparison across models does not reload on every switch; loaded clients never outnumber Models kept
+ * loaded, the least recently used is closed first, any failure or cancellation closes the client it used, and the
+ * queue releases the warm ones when it goes idle.
  */
 export function inference(current: () => Sessions, settings: () => Settings, sdk: InferenceSdk = { createImageClient, prepareImageClient }): Runner {
   const warm: { key: string; editor: ImageClient }[] = [];
-  let busy = 0;
   const release = async () => { await Promise.all(warm.splice(0).map(client => client.editor.dispose())); };
-  const evictBeyond = async (limit: number) => { while (warm.length && warm.length + busy > limit) await warm.shift()!.editor.dispose(); };
+  const kept = () => settings().modelsKeptLoaded ?? 1;
+  const evictBeyond = async (limit: number) => { while (warm.length > limit) await warm.shift()!.editor.dispose(); };
   const runner: Runner = async (sessionId, run, events) => {
     const { onTeardownError, ...callOptions } = events;
     const sessions = current();
@@ -30,12 +31,10 @@ export function inference(current: () => Sessions, settings: () => Settings, sdk
     const prepared = await sdk.prepareImageClient(run.modelId, { profile: config.profile, ...(registration ? { registration } : {}) }, { signal: events.signal, onEvent: events.onEvent });
     if (prepared.status === 'refused') return { outcome: prepared };
     const key = JSON.stringify(prepared.options);
-    const limit = Math.max(1, config.concurrency ?? 1);
     const index = warm.findIndex(client => client.key === key);
     let editor: ImageClient;
     if (index >= 0) editor = warm.splice(index, 1)[0]!.editor;
-    else { await evictBeyond(limit - 1); editor = sdk.createImageClient(prepared.options); }
-    busy++;
+    else { await evictBeyond(kept() - 1); editor = sdk.createImageClient(prepared.options); }
     const draft = run.draft;
     // The session keeps the full record; Save image decides what a shared copy holds. No sidecar is written beside session outputs.
     const record = { includeInputs: true, caller: { name: 'picpatch', version: packageInfo.version } };
@@ -54,13 +53,12 @@ export function inference(current: () => Sessions, settings: () => Settings, sdk
       outcome = draft.mode === 'generate' ? await editor.generate({ ...common, prompt: draft.text }, callOptions) : await editor.edit({ ...common, instruction: draft.text }, callOptions);
     } catch (error) {
       // A worker that failed or was cancelled is not trusted with the next run.
-      busy--;
       try { await editor.dispose(); } catch (cleanupError) { onTeardownError(cleanupError); }
       throw error;
     }
     // Publication has settled. Eviction cannot replace its result or release active ownership again.
-    busy--; warm.push({ key, editor });
-    try { await evictBeyond(Math.max(1, settings().concurrency ?? 1)); } catch (error) { onTeardownError(error); }
+    warm.push({ key, editor });
+    try { await evictBeyond(kept()); } catch (error) { onTeardownError(error); }
     return { outcome };
   };
   runner.release = release;

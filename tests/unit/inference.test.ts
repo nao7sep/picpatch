@@ -36,7 +36,7 @@ function fakeSdk() {
   } as unknown as InferenceSdk;
   return { sdk, clients };
 }
-it('reuses a warm client for the same model, never keeps more clients than the limit and closes them on release', async () => {
+it('reuses a warm client for the same model, keeps no more than Models kept loaded, closes the least recently used first and closes all on release', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
   const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {} };
   const { sdk, clients } = fakeSdk(); const run = inference(() => sessions, () => settings, sdk);
@@ -46,9 +46,9 @@ it('reuses a warm client for the same model, never keeps more clients than the l
   expect(clients).toHaveLength(1);
   await attempt('b');
   expect(clients.map(client => [client.model, client.disposed])).toEqual([['a', true], ['b', false]]);
-  settings.concurrency = 2;
-  await Promise.all([attempt('a'), attempt('b')]);
-  expect(clients.filter(client => !client.disposed)).toHaveLength(2);
+  settings.modelsKeptLoaded = 2;
+  await attempt('a'); await attempt('b'); await attempt('c');
+  expect(clients.map(client => [client.model, client.disposed])).toEqual([['a', true], ['b', false], ['a', true], ['c', false]]);
   await run.release!(); expect(clients.every(client => client.disposed)).toBe(true);
 });
 
@@ -74,9 +74,9 @@ it('runs with the SDK’s own preparation and refusal, and keeps the record with
 });
 
 
-it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output and provenance when lowering concurrency evicts a client with %s', async code => {
+it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output and provenance when lowering Models kept loaded evicts a client with %s', async code => {
   const sessions = new Sessions(root), session = await sessions.create();
-  const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {}, concurrency: 2 };
+  const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {}, modelsKeptLoaded: 2 };
   const records: ArtifactRecord[] = [];
   const teardown = new PicPatchSdkError(code, 'Worker teardown failed.');
   const held: (() => void)[] = [];
@@ -94,33 +94,35 @@ it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output an
     };
   }) as never;
   const runner = inference(() => sessions, () => settings, sdk);
-  const queue = new Queue(sessions, runner, () => {}, () => settings.concurrency!);
-  const runs = await queue.submit(session.id, { ...session.draft, modelIds: ['a'] }, 3);
-  await until(() => expect(held.filter(Boolean)).toHaveLength(2));
-  settings.concurrency = 1;
-  held[0]!();
-  await until(async () => expect((await sessions.get(session.id)).runs[0]!.status).toBe('completed'));
+  const queue = new Queue(sessions, runner);
+  const runs = await queue.submit(session.id, { ...session.draft, modelIds: ['a', 'b'] }, 2);
+  await until(() => expect(held[0]).toBeDefined()); held[0]!();
+  await until(() => expect(held[1]).toBeDefined());
+  // Lowered while the second model runs: publishing its result closes the first, whose close fails.
+  settings.modelsKeptLoaded = 1; held[1]!();
+  await until(async () => expect((await sessions.get(session.id)).runs[1]!.status).toBe('completed'));
+  await queue.settled();
   expect(queue.state.issue).toMatchObject({ code });
   expect(disposals[0]).toHaveBeenCalledOnce();
-  held[1]!(); await queue.settled();
   const saved = await sessions.get(session.id);
-  expect(saved.runs.map(run => run.status)).toEqual(['completed', 'completed', 'queued']);
-  expect(saved.runs[0]!.record).toEqual(records[0]);
-  const published = await readFile(join(sessions.directory(session.id), saved.runs[0]!.output!));
-  expect(createHash('sha256').update(published).digest('hex')).toBe(records[0]!.sha256);
+  expect(saved.runs.map(run => run.status)).toEqual(['completed', 'completed', 'queued', 'queued']);
+  expect(saved.runs[1]!.record).toEqual(records[1]);
+  const published = await readFile(join(sessions.directory(session.id), saved.runs[1]!.output!));
+  expect(createHash('sha256').update(published).digest('hex')).toBe(records[1]!.sha256);
   expect(await sharp(published).metadata()).toMatchObject({ format: 'png', width: 1, height: 1 });
   if (code === 'TERMINATION_FAILED') {
     await expect(queue.resume(session.id)).rejects.toThrow('termination is unconfirmed');
     await expect(queue.submit(session.id, session.draft, 1)).rejects.toThrow('termination is unconfirmed');
     expect(() => queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_collections')).toThrow('termination is unconfirmed');
   } else {
-    // A confirmed close may resume; failed clients are never reused.
-    const third = queue.resume(session.id);
-    await until(() => expect(queue.state.active[0]?.runId).toBe(runs[2]!.id));
-    await until(() => expect(held[2]).toBeDefined());
-    held[2]!(); await third; await queue.settled();
-    expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['completed', 'completed', 'completed']);
-    expect(disposals).toHaveLength(3);
+    // A confirmed close may resume; a closed client is never reused.
+    const rest = queue.resume(session.id);
+    await until(() => expect(queue.state.active?.runId).toBe(runs[2]!.id));
+    await until(() => expect(held[2]).toBeDefined()); held[2]!();
+    await until(() => expect(held[3]).toBeDefined()); held[3]!();
+    await rest; await queue.settled();
+    expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['completed', 'completed', 'completed', 'completed']);
+    expect(disposals).toHaveLength(4);
     expect(disposals.every(dispose => dispose.mock.calls.length === 1)).toBe(true);
   }
 });
@@ -142,32 +144,6 @@ it('preserves the primary operation failure and reports a subsequent disposal fa
   expect(create).toHaveBeenCalledTimes(2);
   expect(dispose).toHaveBeenCalledTimes(2);
 });
-
-it('releases active ownership once after eviction fails, so later model switches still evict warm clients', async () => {
-  const sessions = new Sessions(root), session = await sessions.create();
-  const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {}, concurrency: 2 };
-  const { sdk } = fakeSdk();
-  const held: (() => void)[] = [], disposals: ReturnType<typeof vi.fn>[] = [];
-  sdk.createImageClient = (() => {
-    const index = disposals.length;
-    const dispose = vi.fn(async () => { if (index === 0) throw new PicPatchSdkError('TIMEOUT', 'Shutdown timed out.'); });
-    disposals.push(dispose);
-    return { generate: async () => { await new Promise<void>(resolve => { held[index] = resolve; }); return { status: 'refused', code: 'OUTPUT_CONFLICT', message: 'Already exists.', subject: '/out.png', details: {} }; }, dispose };
-  }) as never;
-  const run = inference(() => sessions, () => settings, sdk), onTeardownError = vi.fn();
-  const attempt = (modelId: string) => run(session.id, { id: crypto.randomUUID(), modelId, seed: 1, draft: session.draft, status: 'running', created: '' }, { signal: new AbortController().signal, onEvent: () => {}, onProgress: () => {}, onTeardownError });
-  const first = attempt('a'), second = attempt('a');
-  await until(() => expect(held.filter(Boolean)).toHaveLength(2));
-  settings.concurrency = 1; held[0]!(); await first;
-  held[1]!(); await second;
-  expect(onTeardownError).toHaveBeenCalledOnce();
-  const third = attempt('b');
-  await until(() => expect(held[2]).toBeDefined());
-  expect(disposals[0]).toHaveBeenCalledOnce();
-  expect(disposals[1]).toHaveBeenCalledOnce();
-  held[2]!(); await third; await run.release!();
-});
-
 
 it.each(['generate', 'edit'] as const)('keeps app teardown reporting outside the SDK %s options contract', async mode => {
   const sessions = new Sessions(root), session = await sessions.create();

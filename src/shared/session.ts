@@ -24,8 +24,8 @@ export interface Session {
 }
 /** cover is the latest completed result, shown as the session's picture. */
 export interface SessionSummary { id: string; name: string; updated: string; results: number; cover?: string }
-/** How many images may generate at once; 1 unless the user's machine has memory for several models. */
-export const maxConcurrency = 8;
-/** `active` lists every run executing now, in the order they started. */
-export interface QueueState { active: { sessionId: string; runId: string; stage: string; startedAt: number; elapsedMs?: number; progress?: { completed: number; total: number } }[]; paused: boolean; issue?: { code?: string; message: string; notice?: Message } }
+/** How many models may stay loaded between runs; 1 unless the user's machine has memory for several. */
+export const maxModelsKeptLoaded = 8;
+/** `active` is the run executing now. */
+export interface QueueState { active?: { sessionId: string; runId: string; stage: string; startedAt: number; elapsedMs?: number; progress?: { completed: number; total: number } }; paused: boolean; issue?: { code?: string; message: string; notice?: Message } }
 export const initialDraft = (): Draft => ({ mode: 'generate', text: '', modelIds: ['flux2-klein-4b-4bit'], width: 1024, height: 1024, parameters: {}, references: [] });

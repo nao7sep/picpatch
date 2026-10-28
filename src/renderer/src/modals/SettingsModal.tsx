@@ -3,7 +3,7 @@
 import { useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { defaultFont } from '../../../shared/appearance.ts';
 import { languages, type Language } from '../../../shared/i18n/index.ts';
-import { maxConcurrency } from '../../../shared/session.ts';
+import { maxModelsKeptLoaded } from '../../../shared/session.ts';
 import { systemTimeZone } from '../../../shared/time-zone.ts';
 import { api, type Overview, type Preferences } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
@@ -12,7 +12,7 @@ import { Modal } from './Modal.tsx';
 export interface SettingsGuard { approveQuit: () => Promise<boolean>; settleSave: () => Promise<void> }
 
 const PATHS = ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const;
-type Form = { theme: 'system' | 'light' | 'dark'; language: 'system' | Language; timeZone: string; uiFont: string; concurrency: number } & Record<typeof PATHS[number], string>;
+type Form = { theme: 'system' | 'light' | 'dark'; language: 'system' | Language; timeZone: string; uiFont: string; modelsKeptLoaded: number } & Record<typeof PATHS[number], string>;
 
 const absolute = (value: string) => !value || (/Win/.test(navigator.platform) ? /^(?:[a-z]:[\\/]|\\\\)/i.test(value) : value.startsWith('/'));
 
@@ -21,7 +21,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
 }) {
   const { t, errorText, number } = useI18n();
   const initial = useRef<Form>({
-    theme: overview.settings.theme ?? 'system', language: overview.settings.language ?? 'system', timeZone: overview.settings.timeZone ?? 'system', uiFont: overview.settings.uiFont ?? '', concurrency: overview.settings.concurrency ?? 1,
+    theme: overview.settings.theme ?? 'system', language: overview.settings.language ?? 'system', timeZone: overview.settings.timeZone ?? 'system', uiFont: overview.settings.uiFont ?? '', modelsKeptLoaded: overview.settings.modelsKeptLoaded ?? 1,
     engineDirectory: overview.settings.profile.engineDirectory ?? '', modelsDirectory: overview.settings.profile.modelsDirectory ?? '', nativeExecutable: overview.settings.profile.nativeExecutable ?? '',
   });
   const [form, setForm] = useState<Form>(initial.current);
@@ -55,7 +55,7 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
     if (submitted.theme !== 'system') value.theme = submitted.theme;
     if (submitted.timeZone !== 'system') value.timeZone = submitted.timeZone;
     if (submitted.uiFont.trim()) value.uiFont = submitted.uiFont;
-    if (submitted.concurrency !== 1) value.concurrency = submitted.concurrency;
+    if (submitted.modelsKeptLoaded !== 1) value.modelsKeptLoaded = submitted.modelsKeptLoaded;
     const attempt = async () => {
       setSaving(true); setFailure(undefined);
       try {
@@ -153,11 +153,11 @@ export function SettingsModal({ overview, guard, onClose, onSaved, confirmDiscar
             ))}
             {invalid.length > 0 && <p className="field-error">{t('error.stored_resource_paths_must_be_absolute')}</p>}
             <label className="field">
-              <span className="field-label">{t('settings.concurrency')}</span>
-              <select value={form.concurrency} onChange={event => set('concurrency', Number(event.target.value))}>
-                {Array.from({ length: maxConcurrency }, (_, index) => index + 1).map(count => <option key={count} value={count}>{number(count)}</option>)}
+              <span className="field-label">{t('settings.modelsKeptLoaded')}</span>
+              <select value={form.modelsKeptLoaded} onChange={event => set('modelsKeptLoaded', Number(event.target.value))}>
+                {Array.from({ length: maxModelsKeptLoaded }, (_, index) => index + 1).map(count => <option key={count} value={count}>{number(count)}</option>)}
               </select>
-              <span className="field-help">{t('settings.concurrencyHelp')}</span>
+              <span className="field-help">{t('settings.modelsKeptLoadedHelp')}</span>
             </label>
             <div className="field">
               <span className="field-label">{t('ui.sessions_2')}</span>

@@ -108,7 +108,7 @@ it('generates, edits with references, branches and reopens through the real rend
     for (const run of reopened.runs) expect(await sharp(await app.sessions.imagePath(created.id, run.id)).metadata()).toHaveProperty('format', 'png');
     console.log(JSON.stringify({ session: app.sessions.directory(created.id), reopened: true }));
   } finally {
-    if (app.queue.busy()) { for (const active of [...app.queue.state.active]) await app.queue.cancel(active.sessionId, active.runId); await app.queue.settled(); }
+    if (app.queue.busy()) { const active = app.queue.state.active; if (active) await app.queue.cancel(active.sessionId, active.runId); await app.queue.settled(); }
     cleanup();
   }
 });

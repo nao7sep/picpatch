@@ -10,7 +10,7 @@ import type { AppPaths } from './paths.ts';
 import { Sessions } from './sessions.ts';
 import { Queue } from './queue.ts';
 import { inference } from './inference.ts';
-import { readSettings, saveSettings, usableProfile, validConcurrency } from './settings.ts';
+import { readSettings, saveSettings, usableProfile, validModelsKeptLoaded } from './settings.ts';
 import type { Runner } from './queue.ts';
 import { initialDraft } from '../../shared/session.ts';
 import type { Readiness } from '../../shared/readiness.ts';
@@ -85,7 +85,7 @@ export class Application {
   }
   private constructor(readonly paths: AppPaths, public settings: Settings, private changed: (scope?: 'progress' | 'managed') => void, private backup: (path: string, bytes: Buffer) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
     this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined);
-    this.queue = new Queue(this.sessions, this.runner(), changed, () => this.settings.concurrency ?? 1);
+    this.queue = new Queue(this.sessions, this.runner(), changed);
   }
   static async open(paths: AppPaths, changed: (scope?: 'progress' | 'managed') => void = () => {}, backup: (path: string, bytes: Buffer) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}, snapshot?: Settings): Promise<Application> {
     const settings = snapshot ?? await readSettings(paths.config);
@@ -204,11 +204,11 @@ export class Application {
   resourcesChanged(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }): boolean {
     return (['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const).some(key => (value[key] || undefined) !== this.settings.profile[key]);
   }
-  async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string; uiFont?: string; concurrency?: number; timeZone?: string }) {
+  async preferences(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string; theme?: 'light' | 'dark'; language?: string; uiFont?: string; modelsKeptLoaded?: number; timeZone?: string }) {
     if (this.resourcesChanged(value)) { this.requireNoResourceOperation(); this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_resource_settings'); }
     if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) throw new UiError('error.invalid_theme');
     if (value.timeZone !== undefined && !validTimeZone(value.timeZone)) throw new UiError('error.invalid_time_zone');
-    if (value.concurrency !== undefined && !validConcurrency(value.concurrency)) throw new UiError('error.invalid_concurrency');
+    if (value.modelsKeptLoaded !== undefined && !validModelsKeptLoaded(value.modelsKeptLoaded)) throw new UiError('error.invalid_models_kept_loaded');
     await this.updateSettings(next => {
       for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) {
         if (value[key]) next.profile[key] = value[key]; else delete next.profile[key];
@@ -217,10 +217,8 @@ export class Application {
       if (value.theme) next.theme = value.theme; else delete next.theme;
       if (value.timeZone) next.timeZone = value.timeZone; else delete next.timeZone;
       if (typeof value.uiFont === 'string' && value.uiFont.trim()) next.uiFont = value.uiFont; else delete next.uiFont;
-      if (value.concurrency !== undefined && value.concurrency !== 1) next.concurrency = value.concurrency; else delete next.concurrency;
+      if (value.modelsKeptLoaded !== undefined && value.modelsKeptLoaded !== 1) next.modelsKeptLoaded = value.modelsKeptLoaded; else delete next.modelsKeptLoaded;
     });
-    // A higher limit starts waiting work at once; a lower one lets running work finish.
-    this.queue.wake();
   }
   verify(modelId: string) {
     return this.manage({ action: 'verify', modelId }, async call => {

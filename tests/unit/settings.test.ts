@@ -47,7 +47,7 @@ it('stores the UI family verbatim and clears only that preference for an empty f
 it('saves appearance during work but refuses resource changes', async () => {
   const app = await Application.open({ root, config: join(root,'config.json'), sessions: join(root,'sessions'), state: join(root,'state.json'), backups: join(root,'backups.sqlite3') });
   await app.preferences({ modelsDirectory: join(root,'models') });
-  app.queue.state.active = [{ sessionId: 'session', runId: 'run', stage: 'preparing', startedAt: Date.now() }];
+  app.queue.state.active = { sessionId: 'session', runId: 'run', stage: 'preparing', startedAt: Date.now() };
   await app.preferences({ modelsDirectory: join(root,'models'), theme: 'dark', language: 'ja', uiFont: 'Arial' });
   expect(app.settings).toMatchObject({ theme: 'dark', language: 'ja', uiFont: 'Arial' });
   await expect(app.preferences({ modelsDirectory: join(root,'other') })).rejects.toThrow();
@@ -57,13 +57,13 @@ it('reads a missing or unknown theme as System', async () => {
   await writeFile(config, JSON.stringify({ version: 1, theme: 'sepia' })); expect((await readSettings(config)).theme).toBeUndefined();
   await writeFile(config, JSON.stringify({ version: 1 })); expect((await readSettings(config)).theme).toBeUndefined();
 });
-it('stores Images at once only when it differs from 1 and ignores an invalid stored value', async () => {
+it('stores Models kept loaded only when it differs from 1 and ignores an invalid stored value', async () => {
   const config = join(root, 'config.json');
   const app = await Application.open({ root, config, sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
-  await app.preferences({ concurrency: 3 }); expect(JSON.parse(await readFile(config, 'utf8')).concurrency).toBe(3);
-  await expect(app.preferences({ concurrency: 0 })).rejects.toThrow();
-  await app.preferences({}); expect(JSON.parse(await readFile(config, 'utf8')).concurrency).toBeUndefined();
-  await writeFile(config, JSON.stringify({ version: 1, concurrency: 99 })); expect((await readSettings(config)).concurrency).toBeUndefined();
+  await app.preferences({ modelsKeptLoaded: 3 }); expect(JSON.parse(await readFile(config, 'utf8')).modelsKeptLoaded).toBe(3);
+  await expect(app.preferences({ modelsKeptLoaded: 0 })).rejects.toThrow();
+  await app.preferences({}); expect(JSON.parse(await readFile(config, 'utf8')).modelsKeptLoaded).toBeUndefined();
+  await writeFile(config, JSON.stringify({ version: 1, modelsKeptLoaded: 99 })); expect((await readSettings(config)).modelsKeptLoaded).toBeUndefined();
 });
 it('stops startup on a newer resource profile, and keeps a newer registration as saved for its own model', async () => {
   const config = join(root, 'config.json');
@@ -110,11 +110,11 @@ it('captures missing settings synchronously without creating the file', async ()
 });
 it('uses the same validation for the synchronous startup snapshot and later asynchronous reads', async () => {
   const config = join(root, 'config.json');
-  await writeFile(config, JSON.stringify({ version: 1, language: 'ja', theme: 'dark', timeZone: 'Asia/Tokyo', concurrency: 99 }));
+  await writeFile(config, JSON.stringify({ version: 1, language: 'ja', theme: 'dark', timeZone: 'Asia/Tokyo', modelsKeptLoaded: 99 }));
   const captured = readSettingsSync(config);
   expect(captured).toEqual(await readSettings(config));
   expect(captured).toMatchObject({ language: 'ja', theme: 'dark', timeZone: 'Asia/Tokyo' });
-  expect(captured.concurrency).toBeUndefined();
+  expect(captured.modelsKeptLoaded).toBeUndefined();
   await writeFile(config, JSON.stringify({ version: 1, language: 'de' }));
   expect(captured.language).toBe('ja');
   expect((await readSettings(config)).language).toBe('de');

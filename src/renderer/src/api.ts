@@ -16,7 +16,7 @@ import type { ManagedState } from '../../shared/managed.ts';
 export type { Readiness };
 export interface LocaleState { language: Language; format: string; systemLanguage?: string; uiFont?: string }
 export interface ResourcePaths { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }
-export interface AppSettings { profile: ResourcePaths; uiFont?: string; theme?: 'light' | 'dark'; language?: Language; concurrency?: number; timeZone?: string }
+export interface AppSettings { profile: ResourcePaths; uiFont?: string; theme?: 'light' | 'dark'; language?: Language; modelsKeptLoaded?: number; timeZone?: string }
 export interface Overview {
   sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string }; models: CatalogModel[];
   /** Catalog models with no build for this computer, left out of models. */
@@ -34,7 +34,7 @@ export interface Engines { python: EngineInspection; native: NativeEngineInspect
 export type Inventory = ManagedModelInventory;
 export type ManagedEntry = Inventory['entries'][number];
 export interface Components { vae?: string; clipL?: string; clipG?: string; t5?: string; photoMaker?: string; ipAdapter?: string; clipVision?: string; controlNet?: { path: string; kind: string }; loras?: { path: string; scale?: number }[] }
-export type Preferences = ResourcePaths & { theme?: 'light' | 'dark'; language?: Language; uiFont?: string; concurrency?: number; timeZone?: string };
+export type Preferences = ResourcePaths & { theme?: 'light' | 'dark'; language?: Language; uiFont?: string; modelsKeptLoaded?: number; timeZone?: string };
 
 const call = <T>(action: string, payload?: unknown): Promise<T> => window.picpatch.call(action, payload);
 
@@ -57,7 +57,7 @@ export const api = {
   create: () => call<Session>('create'),
   get: (id: string) => call<Session>('get', { id }),
   saveDraft: (id: string, draft: Draft) => call<void>('draft', { id, draft }),
-  /** The open session's queued runs take the next free slot. */
+  /** The open session's queued runs go next. */
   focus: (id: string) => call<void>('focus', { id }),
   rename: (id: string, name: string) => call<Session>('rename', { id, name }),
   remove: (id: string) => call<boolean | { removed: true; cleanup?: Message }>('delete', { id }),

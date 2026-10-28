@@ -13,27 +13,27 @@ export interface RunCompletion { outcome: ImageOutcome | ModelOpenRefusal }
 /** `release` closes any worker kept warm between runs; the queue calls it whenever it goes idle. */
 export type Runner = ((sessionId: string, run: Run, events: RunEvents) => Promise<RunCompletion>) & { release?: () => Promise<void> };
 /**
- * One app queue, with no coordination of other processes or apps. Up to `limit()` runs execute at once
- * (default 1). A free slot takes the oldest queued run of the open session, otherwise the oldest queued run.
+ * One app queue, with no coordination of other processes or apps. One run executes at a time: the graphics processor
+ * was observed near full use while one image generates, so running images side by side would not finish sooner.
+ * The next run is the oldest queued run of the open session, otherwise the oldest queued run.
  */
 export class Queue {
   private pending: { sessionId: string; runId: string }[] = [];
-  private running = new Map<string, { controller: AbortController; task: Promise<void> }>();
+  private running: { runId: string; controller: AbortController; task: Promise<void>; started: number } | undefined;
   private terminationUnconfirmed = false;
   private releasing: Promise<void> = Promise.resolve();
   private releasingCount = 0;
   private focused: string | undefined;
-  private starts = new Map<string, number>();
   snapshot(): QueueState {
-    const now = performance.now();
-    return structuredClone({ ...this.state, active: this.state.active.map(item => ({ ...item, elapsedMs: Math.max(0, now - (this.starts.get(item.runId) ?? now)) })) });
+    const { running, state } = this;
+    return structuredClone(running && state.active ? { ...state, active: { ...state.active, elapsedMs: Math.max(0, performance.now() - running.started) } } : state);
   }
-  state: QueueState = { paused: false, active: [] };
-  /** `changed('progress')` reports only active runs' stage and progress, so listeners need not reload sessions. */
-  constructor(private sessions: Sessions, private run: Runner, private changed: (scope?: 'progress') => void = () => {}, private limit: () => number = () => 1) {}
+  state: QueueState = { paused: false };
+  /** `changed('progress')` reports only the active run's stage and progress, so listeners need not reload sessions. */
+  constructor(private sessions: Sessions, private run: Runner, private changed: (scope?: 'progress') => void = () => {}) {}
   /** One queue outlives collection switches so an unconfirmed worker stop keeps blocking new work. */
   use(sessions: Sessions): void { this.requireIdle('error.finish_or_cancel_queued_work_before_changing_collections'); this.sessions = sessions; this.focused = undefined; }
-  /** The session the user has open; its queued runs take the next free slot. */
+  /** The session the user has open; its queued runs go next. */
   focus(sessionId: string | undefined): void { this.focused = sessionId; }
   async submit(sessionId: string, draft: Draft, samples: number): Promise<Run[]> {
     if (this.terminationUnconfirmed) throw new UiError('error.worker_termination_is_unconfirmed_restart_picpatch_before_starting_more_work');
@@ -57,30 +57,29 @@ export class Queue {
   async resume(sessionId: string): Promise<void> {
     if (this.terminationUnconfirmed) throw new UiError('error.worker_termination_is_unconfirmed_restart_picpatch_before_starting_more_work');
     const session = await this.sessions.get(sessionId);
-    const waiting = (runId: string) => this.running.has(runId) || this.pending.some(item => item.sessionId === sessionId && item.runId === runId);
+    const waiting = (runId: string) => this.running?.runId === runId || this.pending.some(item => item.sessionId === sessionId && item.runId === runId);
     for (const run of session.runs) if (run.status === 'queued' && !waiting(run.id)) this.pending.push({ sessionId, runId: run.id });
     this.state.paused = false; delete this.state.issue; this.wake();
   }
-  /** Fills free slots; called after every change that can free or add work, including a new limit. */
+  /** Starts the next run when none is running; called after every change that can finish or add work. */
   wake(): void {
-    while (!this.state.paused && !this.terminationUnconfirmed && this.pending.length && this.running.size < Math.max(1, this.limit())) {
-      const index = Math.max(0, this.pending.findIndex(item => item.sessionId === this.focused));
-      this.launch(this.pending.splice(index, 1)[0]!);
-    }
-    if (!this.running.size) this.idle();
+    if (this.running) return;
+    if (this.state.paused || this.terminationUnconfirmed || !this.pending.length) { this.idle(); return; }
+    const index = Math.max(0, this.pending.findIndex(item => item.sessionId === this.focused));
+    this.launch(this.pending.splice(index, 1)[0]!);
   }
   private launch(selected: { sessionId: string; runId: string }): void {
     const controller = new AbortController();
     const unpin = this.sessions.pin(selected.sessionId);
-    const active = { ...selected, stage: 'preparing', startedAt: Date.now(), elapsedMs: 0 } as QueueState['active'][number];
-    this.starts.set(selected.runId, performance.now());
-    this.state.active.push(active); this.changed();
+    const active: NonNullable<QueueState['active']> = { ...selected, stage: 'preparing', startedAt: Date.now(), elapsedMs: 0 };
+    this.state.active = active;
+    const started = performance.now();
     const task = this.execute(selected, controller.signal, active).finally(() => {
-      unpin(); this.starts.delete(selected.runId);
-      this.running.delete(selected.runId); this.state.active = this.state.active.filter(item => item !== active);
+      unpin(); this.running = undefined; delete this.state.active;
       this.changed(); this.wake();
     });
-    this.running.set(selected.runId, { controller, task });
+    this.running = { runId: selected.runId, controller, task, started };
+    this.changed();
   }
   /** A warm worker is closed once nothing is running; an unconfirmed close blocks further work. */
   private idle(): void {
@@ -93,7 +92,7 @@ export class Queue {
     if ((error as { code?: string }).code === 'TERMINATION_FAILED') this.terminationUnconfirmed = true;
     this.state.paused = true; this.state.issue = queueIssue(error); this.changed();
   }
-  private async execute(selected: { sessionId: string; runId: string }, signal: AbortSignal, active: QueueState['active'][number]): Promise<void> {
+  private async execute(selected: { sessionId: string; runId: string }, signal: AbortSignal, active: NonNullable<QueueState['active']>): Promise<void> {
     const started = performance.now();
     const progressChanged = () => { active.elapsedMs = performance.now() - started; this.changed('progress'); };
     try {
@@ -145,8 +144,7 @@ export class Queue {
     }
   }
   async cancel(sessionId: string, runId: string): Promise<void> {
-    const running = this.running.get(runId);
-    if (running) { running.controller.abort(); return; }
+    if (this.running?.runId === runId) { this.running.controller.abort(); return; }
     this.pending = this.pending.filter(item => item.sessionId !== sessionId || item.runId !== runId);
     await this.sessions.update(sessionId, session => { const run = session.runs.find(r => r.id === runId); if (run?.status === 'queued') { run.status = 'cancelled'; run.ended = new Date().toISOString(); session.draft = recoverCommand(session.draft, session.runs); } });
     this.changed();
@@ -156,10 +154,10 @@ export class Queue {
     if (this.terminationUnconfirmed) throw new UiError('error.worker_termination_is_unconfirmed_restart_picpatch_before_starting_more_work');
     if (this.busy() || this.releasingCount) throw new UiError(reason);
   }
-  busy(sessionId?: string): boolean { return this.state.active.some(item => !sessionId || item.sessionId === sessionId) || this.pending.some(item => !sessionId || item.sessionId === sessionId); }
-  async stop(): Promise<void> { this.state.paused = true; for (const { controller } of this.running.values()) controller.abort(); await this.settled(); }
+  busy(sessionId?: string): boolean { return (!!this.state.active && (!sessionId || this.state.active.sessionId === sessionId)) || this.pending.some(item => !sessionId || item.sessionId === sessionId); }
+  async stop(): Promise<void> { this.state.paused = true; this.running?.controller.abort(); await this.settled(); }
   async settled(): Promise<void> {
-    while (this.running.size) await Promise.all([...this.running.values()].map(item => item.task));
+    while (this.running) await this.running.task;
     await this.releasing;
   }
 }
