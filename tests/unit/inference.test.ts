@@ -9,6 +9,7 @@ import { PicPatchSdkError, createImageClient, type EditInput, type ArtifactRecor
 import { Queue } from '../../src/main/core/queue.ts';
 import { Sessions } from '../../src/main/core/sessions.ts';
 import type { Settings } from '../../src/main/core/settings.ts';
+import { until } from '../helpers/until.ts';
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'picpatch-inference-')); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
@@ -94,10 +95,10 @@ it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output an
   const runner = inference(() => sessions, () => settings, sdk);
   const queue = new Queue(sessions, runner, () => {}, () => settings.concurrency!);
   const runs = await queue.submit(session.id, { ...session.draft, modelIds: ['a'] }, 3);
-  await vi.waitFor(() => expect(held.filter(Boolean)).toHaveLength(2));
+  await until(() => expect(held.filter(Boolean)).toHaveLength(2));
   settings.concurrency = 1;
   held[0]!();
-  await vi.waitFor(async () => expect((await sessions.get(session.id)).runs[0]!.status).toBe('completed'));
+  await until(async () => expect((await sessions.get(session.id)).runs[0]!.status).toBe('completed'));
   expect(queue.state.issue).toMatchObject({ code });
   expect(disposals[0]).toHaveBeenCalledOnce();
   held[1]!(); await queue.settled();
@@ -114,8 +115,8 @@ it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output an
   } else {
     // A confirmed close may resume; failed clients are never reused.
     const third = queue.resume(session.id);
-    await vi.waitFor(() => expect(queue.state.active[0]?.runId).toBe(runs[2]!.id));
-    await vi.waitFor(() => expect(held[2]).toBeDefined());
+    await until(() => expect(queue.state.active[0]?.runId).toBe(runs[2]!.id));
+    await until(() => expect(held[2]).toBeDefined());
     held[2]!(); await third; await queue.settled();
     expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['completed', 'completed', 'completed']);
     expect(disposals).toHaveLength(3);
@@ -155,12 +156,12 @@ it('releases active ownership once after eviction fails, so later model switches
   const run = inference(() => sessions, () => settings, sdk), onTeardownError = vi.fn();
   const attempt = (modelId: string) => run(session.id, { id: crypto.randomUUID(), modelId, seed: 1, draft: session.draft, status: 'running', created: '' }, { signal: new AbortController().signal, onEvent: () => {}, onProgress: () => {}, onTeardownError });
   const first = attempt('a'), second = attempt('a');
-  await vi.waitFor(() => expect(held.filter(Boolean)).toHaveLength(2));
+  await until(() => expect(held.filter(Boolean)).toHaveLength(2));
   settings.concurrency = 1; held[0]!(); await first;
   held[1]!(); await second;
   expect(onTeardownError).toHaveBeenCalledOnce();
   const third = attempt('b');
-  await vi.waitFor(() => expect(held[2]).toBeDefined());
+  await until(() => expect(held[2]).toBeDefined());
   expect(disposals[0]).toHaveBeenCalledOnce();
   expect(disposals[1]).toHaveBeenCalledOnce();
   held[2]!(); await third; await run.release!();

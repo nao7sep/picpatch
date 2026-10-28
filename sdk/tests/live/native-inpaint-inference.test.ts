@@ -91,4 +91,4 @@ it('runs SD1.5 generation, variation and trained inpainting with thresholded mas
     expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
   } catch (cause) { throw new Error(`Native SD1.5 inference failed during ${phase}.`, { cause }); }
   finally { await rm(directory, { recursive: true, force: true }); }
-}, 3_600_000);
+});

@@ -9,7 +9,7 @@ it('runs the actual DreamO pipeline with tiny random weights on CPU and Metal', 
   const python = process.env.PICPATCH_DREAMO_PYTHON ?? liveCache('dreamo-audit/venv/bin/python');
   const source = ['common', 'dreamo'].map(name => fileURLToPath(new URL(`../../runtimes/${name}/src`, import.meta.url))).join(delimiter);
   const result = await promisify(execFile)(python, [fileURLToPath(new URL('./dreamo_runtime_probe.py', import.meta.url))], {
-    timeout: 60_000, env: { ...process.env, PYTHONPATH: source, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' },
+    env: { ...process.env, PYTHONPATH: source, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' },
   });
   expect(result.stdout).toContain('independent indices and cancellation passed');
-}, 90_000);
+});

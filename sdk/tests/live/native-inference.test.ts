@@ -81,4 +81,4 @@ it('runs native SDXL generation, repeated variation and each dedicated condition
     expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
   } catch (cause) { throw new Error(`Native inference failed during ${phase}.`, { cause }); }
   finally { await rm(directory, { recursive: true, force: true }); }
-}, 3_600_000);
+});

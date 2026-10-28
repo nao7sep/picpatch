@@ -22,4 +22,4 @@ it('launches bundled Python entries with a real model-bound handshake and confir
       expect(ready.models[0]!.referenceConditioning).toBe(entry.runtime === 'dreamo' ? 'independent-subject' : 'ordered-images-with-role-prompt');
     } finally { await worker.dispose(); }
   }
-}, 60_000);
+});

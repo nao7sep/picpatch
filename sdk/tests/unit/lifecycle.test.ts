@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createImageClient, type EditRequest } from '../../src/index.ts';
 import { ProcessEditor } from '../../src/execution/worker-backend.ts';
 import { WorkerProcess, type WorkerTimeouts } from '../../src/worker/process.ts';
@@ -50,6 +50,8 @@ function setup() {
   const worker = new WorkerProcess({ executable: '/python', args: [], cwd: '/' }, timeouts, spawn);
   return { child, spawn, worker, editor: new ProcessEditor(worker) };
 }
+// The worker's deadlines run on a fake clock, so only a test that advances it can make one fire.
+beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
 afterEach(() => vi.useRealTimers());
 
 describe('owned worker lifecycle', () => {

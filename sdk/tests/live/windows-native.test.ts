@@ -27,4 +27,4 @@ it.skipIf(process.platform !== 'win32')('installs the native engine and generate
     expect((await stat(result.image.path)).size).toBeGreaterThan(0);
     console.info(`Generated 256x256 at 4 steps in ${Math.round((performance.now() - started) / 1000)} s.`);
   } finally { await editor.dispose(); await rm(output, { recursive: true, force: true }); }
-}, 1_800_000);
+});

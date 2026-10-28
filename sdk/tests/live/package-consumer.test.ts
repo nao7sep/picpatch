@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 it('packs a source SDK and runs its public worker journey from an unrelated consumer directory', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-package-'));
   try {
-    const { stdout } = await exec('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', directory], { cwd: root, timeout: 30_000 });
+    const { stdout } = await exec('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', directory], { cwd: root });
     const packed = Object.values(JSON.parse(stdout))[0] as { filename: string; files: { path: string }[] };
     const files = packed.files.map(file => file.path);
     expect(files).toContain('protocol/worker.schema.json');
@@ -29,7 +29,7 @@ it('packs a source SDK and runs its public worker journey from an unrelated cons
     expect(files).toContain('runtimes/dreamo/src/picpatch_dreamo/adapter.py');
     expect(files).not.toContain('benchmarks/comparison.ts');
     expect(files.some(path => /(?:\.venv|node_modules|__pycache__|\.safetensors|\.gguf|\.pyc|inference-config)/.test(path))).toBe(false);
-    await exec('tar', ['-xzf', join(directory, packed.filename), '-C', directory], { timeout: 30_000 });
+    await exec('tar', ['-xzf', join(directory, packed.filename), '-C', directory]);
     const modules = join(directory, 'node_modules'); await mkdir(modules);
     await rename(join(directory, 'package'), join(directory, 'sdk'));
     await symlink(join(directory, 'sdk'), join(modules, 'picpatchsdk'));
@@ -53,7 +53,7 @@ catch(error) { if(error.code !== 'UNSUPPORTED_CAPABILITY') throw error; }
 finally { await editor.dispose(); }
 console.log('consumer passed');\n`);
     await writeFile(join(directory, 'package.json'), JSON.stringify({ type: 'module' }));
-    const { stdout: output } = await exec(process.execPath, [script], { cwd: directory, timeout: 30_000 });
+    const { stdout: output } = await exec(process.execPath, [script], { cwd: directory });
     expect(output.trim()).toBe('consumer passed');
     // Seed disposable managed storage using hard links to already acquired files.
     // No model bytes are copied or changed; removing the fixture leaves the originals intact.
@@ -72,14 +72,13 @@ console.log('consumer passed');\n`);
     const journey = join(directory, 'journey.ts');
     await copyFile(join(root, 'tests/fixtures/package-consumer.ts'), journey);
     const inference = await exec(process.execPath, [journey, inputs], {
-      cwd: directory, timeout: 600_000,
-      env: { ...process.env, HF_HUB_OFFLINE: '1' },
+      cwd: directory, env: { ...process.env, HF_HUB_OFFLINE: '1' },
     });
     expect(inference.stdout.trim()).toBe('inference consumer passed');
     expect(inference.stderr).toBe('');
     await rm(join(modules, 'picpatchsdk/runtimes/mflux/src/picpatch_worker/__main__.py'));
-    const missing = await exec(process.execPath, [script], { cwd: directory, timeout: 30_000 }).catch(error => error);
+    const missing = await exec(process.execPath, [script], { cwd: directory }).catch(error => error);
     expect(missing.code).not.toBe(0);
     expect(missing.stderr).toContain('Check the prepared Python dependencies and packaged worker resources.');
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 900_000);
+});

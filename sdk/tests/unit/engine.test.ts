@@ -17,7 +17,7 @@ beforeEach(async () => {
   const fixture = await readFile(fileURLToPath(new URL('../fixtures/engine-tool.mjs', import.meta.url)), 'utf8');
   await writeFile(tool, `#!${process.execPath}\n${fixture}`, { mode: 0o755 });
 });
-afterEach(async () => { vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
+afterEach(async () => { vi.useRealTimers(); vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
 const options = () => ({ uvExecutable: tool, engineDirectory: join(directory, 'engine') });
 
 it('inspects absence without creating anything and rejects relative settings before work', async () => {
@@ -88,10 +88,22 @@ it('cancels before publication even when an event hook throws, leaving no ready 
   expect(await inspectEngine({ engineDirectory: options().engineDirectory })).toMatchObject({ status: 'missing' });
   expect(await readdir(join(options().engineDirectory, 'installations'))).toEqual([]);
 });
+/**
+ * Runs runCommand's own timers on a fake clock: once the command has written its pid file, the clock moves in steps,
+ * with real process I/O let through between them, until the call settles.
+ */
+async function pastDeadline(call: Promise<string>, pidPath: string): Promise<string> {
+  let settled = false; const result = call.finally(() => { settled = true; }); result.catch(() => {});
+  const turn = () => new Promise(resolve => setImmediate(resolve));
+  for (;;) { try { await readFile(pidPath, 'utf8').then(text => { if (!text.trim()) throw new Error('Empty.'); }); break; } catch { await turn(); } }
+  while (!settled) { await vi.advanceTimersByTimeAsync(20); await turn(); }
+  return result;
+}
 it('bounds a stalled subprocess, confirms its death and keeps errors off caller streams', async () => {
   const pidPath = join(directory, 'pid');
-  // A shell starts in milliseconds, so it has written its pid well inside the deadline even on a loaded machine.
-  await expect(runCommand('/bin/sh', ['-c', 'echo $$ > pid; exec sleep 60'], directory, {}, new AbortController().signal, 500)).rejects.toMatchObject({ code: 'TIMEOUT' });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  await expect(pastDeadline(runCommand('/bin/sh', ['-c', 'echo $$ > pid; exec sleep 60'], directory, {}, new AbortController().signal, 500), pidPath)).rejects.toMatchObject({ code: 'TIMEOUT' });
+  vi.useRealTimers();
   const pid = Number(await readFile(pidPath, 'utf8'));
   expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
 });
@@ -118,9 +130,11 @@ it('allows an explicit later call after installing a previously missing engine',
 
 it('terminates compiler descendants even after the installer parent closes its pipes', async () => {
   const pidPath = join(directory, 'compiler-pid');
-  // The compiler ignores SIGTERM and holds none of the installer's pipes; shells start fast enough to set this up inside the deadline.
+  // The compiler ignores SIGTERM and holds none of the installer's pipes.
   const parent = '(trap "" TERM; exec sleep 60) </dev/null >/dev/null 2>&1 & echo $! > compiler-pid; exec sleep 60';
-  await expect(runCommand('/bin/sh', ['-c', parent], directory, {}, new AbortController().signal, 500)).rejects.toMatchObject({ code: 'TIMEOUT' });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  await expect(pastDeadline(runCommand('/bin/sh', ['-c', parent], directory, {}, new AbortController().signal, 500), pidPath)).rejects.toMatchObject({ code: 'TIMEOUT' });
+  vi.useRealTimers();
   const pid = Number(await readFile(pidPath, 'utf8'));
   expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
 });

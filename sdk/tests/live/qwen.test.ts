@@ -99,7 +99,6 @@ with Image.open(output) as saved:
 assert sorted(p.suffix for p in root.iterdir()) == ['.png'] * 7
 mx.synchronize()
 mx.clear_cache()`;
-    await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { timeout: 30_000,
-      env: { ...process.env, PYTHONPATH: [worker, fileURLToPath(new URL('../../runtimes/common/src', import.meta.url))].join(':'), HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
+    await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { env: { ...process.env, PYTHONPATH: [worker, fileURLToPath(new URL('../../runtimes/common/src', import.meta.url))].join(':'), HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 45_000);
+});

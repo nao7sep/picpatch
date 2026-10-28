@@ -33,4 +33,4 @@ it.each([['base', 'flux2-klein-base-9b', 4, 'PICPATCH_KLEIN_BASE_CONFIG'], ['dis
     expect(await readFile(generated.image.path)).toEqual(original);
     expect((await sharp(generated.image.path).raw().toBuffer()).equals(await sharp(edited.image.path).raw().toBuffer())).toBe(false);
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});

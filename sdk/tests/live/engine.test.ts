@@ -35,7 +35,7 @@ it('installs independent locked environments, shares only complete readiness, an
     expect(await inspectEngine({ engineDirectory: options.engineDirectory })).toMatchObject({ status: 'ready' });
     expect(await installEngine(options)).toMatchObject({ origin: 'reused' });
     for (const engine of [first, second]) {
-      const check = await exec(engine.pythonExecutable, ['-I', '-c', 'import importlib.util, sys; assert sys.version_info[:3] == (3,15,0); assert importlib.util.find_spec("picpatch_worker") is None; print("ok")'], { timeout: 30_000 });
+      const check = await exec(engine.pythonExecutable, ['-I', '-c', 'import importlib.util, sys; assert sys.version_info[:3] == (3,15,0); assert importlib.util.find_spec("picpatch_worker") is None; print("ok")']);
       expect(check.stdout.trim()).toBe('ok');
       expect(await readFile(join(dirname(dirname(engine.pythonExecutable)), 'pyvenv.cfg'), 'utf8')).not.toContain('/opt/homebrew');
     }
@@ -52,4 +52,4 @@ it('installs independent locked environments, shares only complete readiness, an
       }
     } finally { await editor.dispose(); }
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});

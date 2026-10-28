@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import { App } from '../../src/renderer/src/App.tsx';
 import { DRAFT_DELAY } from '../../src/renderer/src/draft-writer.ts';
 import { fakeBridge, run, session } from '../helpers/bridge.ts';
@@ -44,7 +44,7 @@ it('keeps the workspace behind a recovery surface when a required read fails, an
 it('saves typing after a pause, runs on Enter but never during composition, and targets the new result', async () => {
   const fake = await start(fakeBridge(session(), { submit: ({ draft }: any) => [run('r1', { status: 'queued', output: undefined, draft })] }));
   fireEvent.change(field(), { target: { value: 'A red barn' } });
-  await waitFor(() => expect(fake.calls('draft').at(-1)).toMatchObject({ draft: { text: 'A red barn' } }), { timeout: DRAFT_DELAY * 4 });
+  await waitFor(() => expect(fake.calls('draft').at(-1)).toMatchObject({ draft: { text: 'A red barn' } }));
   fireEvent.keyDown(field(), { key: 'Enter', isComposing: true });
   expect(fake.calls('submit')).toHaveLength(0);
   fireEvent.keyDown(field(), { key: 'Enter' });
@@ -343,13 +343,16 @@ it('keeps a model operation visible after Managed tools closes, with its own Can
 // File delivery: what Electron's test surfaces reach. A real Finder drag is dogfooding's; these cover receipt and routing.
 const filesTransfer = (names: string[]) => ({ types: ['Files'], files: names.map(name => new File(['x'], name)), dropEffect: 'none' });
 it('reports a committed drop that imports nothing, leaves the draft as it was, and keeps the report until dismissed', async () => {
+  // Timers advance on their own, so rendering proceeds, and the test can also move past the draft delay at once.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+  onTestFinished(() => { vi.useRealTimers(); });
   const fake = await start(fakeBridge(session(), { import: () => { throw Object.assign(new Error('Select a regular image file.'), { notice: { key: 'error.select_a_regular_image_file' } }); } }));
   const before = structuredClone(fake.session.draft);
   fireEvent.drop(document.querySelector('[data-drop-receiver]')!, { dataTransfer: filesTransfer(['notes.txt']) });
   const alert = await screen.findByRole('alert');
   expect(alert.textContent).toContain('Select a regular image file.');
   expect(fake.session.draft).toEqual(before);
-  await new Promise(resolve => setTimeout(resolve, DRAFT_DELAY + 50));
+  await act(() => vi.advanceTimersByTimeAsync(DRAFT_DELAY + 50));
   expect(screen.getByRole('alert')).toBeTruthy();
   fireEvent.click(within(alert.closest('.notice') as HTMLElement).getByRole('button', { name: 'Clear message' }));
   expect(screen.queryByText('Select a regular image file.')).toBeNull();

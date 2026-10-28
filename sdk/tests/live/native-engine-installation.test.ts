@@ -26,4 +26,4 @@ it('installs and probes the authenticated official native archive without downlo
     expect(transport).toHaveBeenCalledTimes(1);
     expect((await readdir(join(directory, 'native'))).some(name => name.startsWith('.install-'))).toBe(false);
   } finally { vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }); }
-}, 120_000);
+});

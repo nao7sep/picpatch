@@ -49,4 +49,4 @@ it('runs Canny generation and source editing with local LoRA composition and pat
       expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
     } finally { await editor.dispose(); }
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});

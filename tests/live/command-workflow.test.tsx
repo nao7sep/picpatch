@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { mkdtemp, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { appLiveCache, liveCacheRoot } from '../helpers/live-cache.ts';
@@ -11,6 +11,8 @@ import type { AppPaths } from '../../src/main/core/paths.ts';
 import type { Bridge } from '../../src/shared/bridge.ts';
 import type { Session } from '../../src/shared/session.ts';
 import { App } from '../../src/renderer/src/App.tsx';
+// Tests carry no timeouts: waitFor waits until what it looks for appears.
+configure({ asyncUtilTimeout: 2 ** 31 - 1 });
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -57,10 +59,10 @@ it('generates, edits with references, branches and reopens through the real rend
   const field = () => screen.getByRole('textbox', { name: 'Command' }) as HTMLTextAreaElement;
   const command = async (text: string) => {
     fireEvent.change(field(), { target: { value: text } });
-    await waitFor(() => expect((screen.getByRole('button', { name: 'Run command' }) as HTMLButtonElement).disabled).toBe(false), { timeout: 10_000 });
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Run command' }) as HTMLButtonElement).disabled).toBe(false));
     const count = (await app.sessions.get(created.id)).runs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Run command' }));
-    await waitFor(async () => expect((await app.sessions.get(created.id)).runs.length).toBe(count + 1), { timeout: 10_000 });
+    await waitFor(async () => expect((await app.sessions.get(created.id)).runs.length).toBe(count + 1));
     await app.queue.settled();
     const saved = await app.sessions.get(created.id), run = saved.runs.at(-1)!;
     expect(run.status, JSON.stringify({ issue: run.issue, diagnostics })).toBe('completed');
@@ -71,18 +73,18 @@ it('generates, edits with references, branches and reopens through the real rend
     expect(run.record).toMatchObject({ seed: 42, inputsIncluded: true, caller: { name: 'picpatch' } });
     await expect(readFile(output.replace(/\.png$/, '-picpatchsdk.json'))).rejects.toMatchObject({ code: 'ENOENT' });
     await act(async () => change());
-    await waitFor(() => expect(screen.queryByText('The target image is not ready. Wait, select another image, or choose New image.')).toBeNull(), { timeout: 5000 });
+    await waitFor(() => expect(screen.queryByText('The target image is not ready. Wait, select another image, or choose New image.')).toBeNull());
     console.log(JSON.stringify({ stage: count + 1, output }));
     return run;
   };
   try {
     render(<App />);
-    await waitFor(() => expect(ready).toBe(true), { timeout: 10_000 });
+    await waitFor(() => expect(ready).toBe(true));
     fireEvent.click(within(await screen.findByRole('navigation', { name: 'Sessions' })).getByText('Offline command acceptance'));
     const original = await command('A studio photograph of a plain white ceramic teapot on a wooden table, soft daylight, neutral background.');
     fireEvent.click(screen.getByRole('button', { name: 'Add images' }));
     fireEvent.click(await screen.findByText('Reference photos'));
-    await waitFor(() => expect(document.querySelectorAll('.chip.group img')).toHaveLength(2), { timeout: 5000 });
+    await waitFor(() => expect(document.querySelectorAll('.chip.group img')).toHaveLength(2));
     const edited = await command('Keep the teapot and composition. Paint the teapot the blue of the first reference and its lid the yellow of the second reference.');
     expect(edited.parent).toBe(original.id); expect(edited.draft.references[0]!.images).toHaveLength(2);
     const firstResult = document.querySelectorAll('.print')[0] as HTMLElement;
@@ -96,7 +98,7 @@ it('generates, edits with references, branches and reopens through the real rend
     app = await Application.open(paths, () => change());
     ready = false;
     render(<App />);
-    await waitFor(() => expect(ready).toBe(true), { timeout: 10_000 });
+    await waitFor(() => expect(ready).toBe(true));
     fireEvent.click(within(await screen.findByRole('navigation', { name: 'Sessions' })).getByText('Offline command acceptance'));
     await waitFor(() => expect(field().value).toBe(before.draft.text));
     const reopened: Session = await app.sessions.get(created.id);
@@ -109,4 +111,4 @@ it('generates, edits with references, branches and reopens through the real rend
     if (app.queue.busy()) { for (const active of [...app.queue.state.active]) await app.queue.cancel(active.sessionId, active.runId); await app.queue.settled(); }
     cleanup();
   }
-}, 900_000);
+});

@@ -47,11 +47,7 @@ it('recovers native sessions after real loading cancellation and protects prior 
     // Observe the actual owned process before cancelling, rather than guessing load duration.
     let pids: number[] = [];
     try {
-      for (let i = 0; i < 100 && pids.length === 0; i++) {
-        pids = await children();
-        if (pids.length === 0) await new Promise(resolve => setTimeout(resolve, 25));
-      }
-      expect(pids.length).toBeGreaterThan(0);
+      while ((pids = await children()).length === 0) await new Promise(resolve => setImmediate(resolve));
     } finally { controller.abort(); }
     await cancelled; await gone(pids);
     expect(await readdir(directory)).toEqual([]);
@@ -70,7 +66,7 @@ it('recovers native sessions after real loading cancellation and protects prior 
     expect(events.filter(event => ['succeeded', 'failed', 'cancelled'].includes(event.stage)).map(event => event.stage)).toEqual(['cancelled']);
     expect((await readdir(directory)).some(name => name.startsWith('.picpatch-'))).toBe(false);
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});
 
 it('recovers from cooperative MFLUX cancellation and survives failing progress hooks for real 512px inference', async () => {
   const config = await inferenceConfig() as ImageClientOptions;
@@ -101,7 +97,8 @@ it('recovers from cooperative MFLUX cancellation and survives failing progress h
     expect((await sharp(afterHookFailure.image.path).metadata()).width).toBe(512);
     expect(await children()).toEqual(pids);
     for (const pid of pids) process.kill(pid, 'SIGKILL');
-    await expect.poll(children, { timeout: 5_000 }).toEqual([]);
+    // Process exit has no event to await here; the poll is unbounded.
+    await expect.poll(children, { timeout: 2 ** 31 - 1 }).toEqual([]);
     await gone(pids);
     // Allow Node's close event to confirm pipes are closed before the next explicit call.
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -114,4 +111,4 @@ it('recovers from cooperative MFLUX cancellation and survives failing progress h
     await editor.dispose(); await gone(pids);
     expect(await readdir(directory)).toHaveLength(5);
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});

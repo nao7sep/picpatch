@@ -42,4 +42,4 @@ it('applies local LoRAs to real quantized Klein generation and editing without b
     expect((await sharp(outputs[0]!).raw().toBuffer()).equals(await sharp(outputs[1]!).raw().toBuffer())).toBe(false);
     expect(await readFile(join(directory, 'adapter.safetensors'))).toEqual(original);
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});

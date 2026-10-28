@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { Sessions } from '../../src/main/core/sessions.ts';
 import { Queue } from '../../src/main/core/queue.ts';
 import { heavyRunner } from '../helpers/heavy-runner.ts';
+import { until } from '../helpers/until.ts';
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'picpatch-queue-')); });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
@@ -134,7 +135,7 @@ it('skips a listed run that is no longer queued instead of pausing, and resume n
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; }); const seen: string[] = [];
   const queue = new Queue(sessions, async (_session, run) => { seen.push(run.id); await held; return { outcome: refusal }; });
   const [first, second] = await queue.submit(session.id, session.draft, 2);
-  await vi.waitFor(() => expect(queue.state.active[0]?.runId).toBe(first!.id));
+  await until(() => expect(queue.state.active[0]?.runId).toBe(first!.id));
   await sessions.update(session.id, value => { value.runs.find(run => run.id === second!.id)!.status = 'cancelled'; });
   await queue.resume(session.id); release(); await queue.settled();
   expect(seen).toEqual([first!.id]); expect(queue.state.paused).toBe(false); expect(queue.state.issue).toBeUndefined();
@@ -154,23 +155,23 @@ it('gives a free slot to the open session first, then to the oldest queued run',
   const [a1, a2] = await queue.submit(a.id, a.draft, 2);
   const [b1] = await queue.submit(b.id, b.draft, 1);
   const [a3] = await queue.submit(a.id, { ...a.draft, text: 'later' }, 1);
-  await vi.waitFor(() => expect(heavy.open()).toEqual([a1!.id]));
+  await until(() => expect(heavy.open()).toEqual([a1!.id]));
   queue.focus(b.id); heavy.finish();
-  await vi.waitFor(() => expect(heavy.open()).toEqual([b1!.id]));
+  await until(() => expect(heavy.open()).toEqual([b1!.id]));
   queue.focus(undefined); heavy.finish();
-  await vi.waitFor(() => expect(heavy.open()).toEqual([a2!.id])); heavy.finish();
-  await vi.waitFor(() => expect(heavy.open()).toEqual([a3!.id])); heavy.finish();
+  await until(() => expect(heavy.open()).toEqual([a2!.id])); heavy.finish();
+  await until(() => expect(heavy.open()).toEqual([a3!.id])); heavy.finish();
   await queue.settled(); expect(heavy.started).toEqual([a1!.id, b1!.id, a2!.id, a3!.id]); expect(heavy.peak).toBe(1);
 });
 it('runs up to the concurrency limit, starts more when it rises and cancels one run without touching the others', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
   let limit = 2; const heavy = heavyRunner(); const queue = new Queue(sessions, heavy.runner, () => {}, () => limit);
   const runs = await queue.submit(session.id, session.draft, 4);
-  await vi.waitFor(() => expect(heavy.open()).toHaveLength(2)); expect(queue.state.active.map(item => item.runId)).toEqual(runs.slice(0, 2).map(run => run.id));
+  await until(() => expect(heavy.open()).toHaveLength(2)); expect(queue.state.active.map(item => item.runId)).toEqual(runs.slice(0, 2).map(run => run.id));
   limit = 3; queue.wake();
-  await vi.waitFor(() => expect(heavy.open()).toHaveLength(3));
+  await until(() => expect(heavy.open()).toHaveLength(3));
   await queue.cancel(session.id, runs[1]!.id);
-  await vi.waitFor(() => expect(heavy.open()).toEqual([runs[0]!.id, runs[2]!.id, runs[3]!.id]));
+  await until(() => expect(heavy.open()).toEqual([runs[0]!.id, runs[2]!.id, runs[3]!.id]));
   for (const run of [runs[0]!, runs[2]!, runs[3]!]) heavy.finish(run.id);
   await queue.settled(); expect(heavy.peak).toBe(3);
   expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['refused', 'cancelled', 'refused', 'refused']);
@@ -179,11 +180,12 @@ it('lets running work finish when the limit drops and stops everything on quit',
   const sessions = new Sessions(root); const session = await sessions.create();
   let limit = 2; const heavy = heavyRunner(); const queue = new Queue(sessions, heavy.runner, () => {}, () => limit);
   const runs = await queue.submit(session.id, session.draft, 3);
-  await vi.waitFor(() => expect(heavy.open()).toHaveLength(2));
+  await until(() => expect(heavy.open()).toHaveLength(2));
   limit = 1; heavy.finish(runs[0]!.id);
-  await vi.waitFor(() => expect(heavy.started).toHaveLength(2)); await new Promise(resolve => setTimeout(resolve, 20));
-  expect(heavy.open()).toEqual([runs[1]!.id]);
-  heavy.finish(runs[1]!.id); await vi.waitFor(() => expect(heavy.open()).toEqual([runs[2]!.id]));
+  // A settled run leaves the active list in the same step that fills free slots, so nothing more starts after it.
+  await until(() => expect(queue.state.active.map(item => item.runId)).toEqual([runs[1]!.id]));
+  expect(heavy.started).toHaveLength(2); expect(heavy.open()).toEqual([runs[1]!.id]);
+  heavy.finish(runs[1]!.id); await until(() => expect(heavy.open()).toEqual([runs[2]!.id]));
   await queue.stop(); expect(queue.state.active).toEqual([]);
   expect((await sessions.get(session.id)).runs.map(run => run.status)).toEqual(['refused', 'refused', 'cancelled']);
 });
@@ -193,7 +195,8 @@ it('moves a session up when a command is submitted, and only then, as a chat lis
   const completed = { status: 'completed' as const, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, references: [], effectiveParameters: {}, image: { path: '/fixture.png', mimeType: 'image/png' as const, size: { width: 1, height: 1 } }, record };
   let outcome: typeof completed | typeof refusal = refusal;
   const queue = new Queue(sessions, async () => ({ outcome })); queue.state.paused = true;
-  const tick = () => new Promise(resolve => setTimeout(resolve, 5));
+  // Saved times are to the millisecond, so each step waits for the clock to move on.
+  const tick = async () => { const now = Date.now(); await until(() => { if (Date.now() === now) throw new Error('Same millisecond.'); }); };
   await tick(); const [, cancelled] = await queue.submit(session.id, session.draft, 2);
   const submitted = (await sessions.get(session.id)).updated; expect(submitted > session.updated).toBe(true);
   // The refusal, the cancellation, a draft edit, a rename, an import and a mask keep the session where the command put it.

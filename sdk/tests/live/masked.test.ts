@@ -33,14 +33,13 @@ with Image.open(root / 'generated.png') as generated:
         raise AssertionError('Mismatched generation must be rejected')`;
     for (const mask of [[0, 0, 0], [255, 255, 255], [0, 128, 255]]) {
       await sharp(Buffer.from(mask), { raw: { width: 3, height: 1, channels: 1 } }).toColourspace('b-w').png().toFile(join(directory, 'mask.png'));
-      await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { timeout: 30_000,
-        env: { ...process.env, PYTHONPATH: [fileURLToPath(new URL('../../runtimes/mflux/src/', import.meta.url)), fileURLToPath(new URL('../../runtimes/common/src/', import.meta.url))].join(':') } });
+      await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { env: { ...process.env, PYTHONPATH: [fileURLToPath(new URL('../../runtimes/mflux/src/', import.meta.url)), fileURLToPath(new URL('../../runtimes/common/src/', import.meta.url))].join(':') } });
       const output = await sharp(join(directory, 'out.png')).ensureAlpha().raw().toBuffer();
       const expected = Buffer.from(source.map((value, index) => Math.round((value * (255 - mask[Math.floor(index / 4)]!) + generated[index]! * mask[Math.floor(index / 4)]!) / 255)));
       expect(output).toEqual(expected);
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 45_000);
+});
 
 it('uses installed Fill mask conditioning with white-to-edit polarity and aligned resizing', async () => {
     const config = await inferenceConfig() as { pythonExecutable: string };
@@ -68,7 +67,6 @@ for color in (0, 255):
     assert bool(mx.all(latent[..., 64:] == color / 255))
 mx.synchronize()
 mx.clear_cache()`;
-    await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { timeout: 30_000,
-      env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
+    await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 45_000);
+});

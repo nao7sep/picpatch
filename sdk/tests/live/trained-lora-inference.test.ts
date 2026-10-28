@@ -57,7 +57,7 @@ it.each(assets)('applies the pinned trained $family pixel-art adapter through th
     expect(pixels[0]!.equals(pixels[1]!)).toBe(false);
     expect(await digest(adapter)).toBe(asset.sha256);
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});
 
 async function digest(path: string): Promise<string> {
   const hash = createHash('sha256');

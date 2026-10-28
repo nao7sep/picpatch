@@ -65,7 +65,6 @@ with tempfile.TemporaryDirectory() as directory:
     else: raise AssertionError('Invalid dimensions passed load validation')
 print('verified')`;
   const result = await promisify(execFile)(config.pythonExecutable, ['-c', script], {
-    env: { ...process.env, PYTHONPATH: [fileURLToPath(new URL('../../runtimes/mflux/src', import.meta.url)), fileURLToPath(new URL('../../runtimes/common/src', import.meta.url))].join(':'), HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' }, timeout: 60_000,
-  });
+    env: { ...process.env, PYTHONPATH: [fileURLToPath(new URL('../../runtimes/mflux/src', import.meta.url)), fileURLToPath(new URL('../../runtimes/common/src', import.meta.url))].join(':'), HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' }, });
   expect(result.stdout.trim().endsWith('verified')).toBe(true);
-}, 60_000);
+});

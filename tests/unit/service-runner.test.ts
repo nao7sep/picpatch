@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PicPatchSdkError, verifyModel, type ModelManifest } from 'picpatchsdk';
 import type { Runner } from '../../src/main/core/queue.ts';
 import { Application } from '../../src/main/core/service.ts';
+import { until } from '../helpers/until.ts';
 
 const outbound = vi.hoisted(() => ({ runner: undefined as Runner | undefined }));
 vi.mock('../../src/main/core/inference.ts', () => ({ inference: () => outbound.runner }));
@@ -23,7 +24,7 @@ it('preserves the inference release hook through Application and waits for idle 
   outbound.runner = Object.assign(async () => ({ outcome: refused }), { release });
   const app = await Application.open(paths()), session = await app.sessions.create();
   await app.submit(session.id, { ...session.draft, text: 'A bowl' }, 1);
-  await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
+  await until(() => expect(release).toHaveBeenCalledOnce());
   let settled = false; const completion = app.queue.settled().then(() => { settled = true; });
   await Promise.resolve(); expect(settled).toBe(false);
   finish(); await completion;

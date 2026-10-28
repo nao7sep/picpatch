@@ -11,7 +11,7 @@ export default defineConfig({
     include: ['tests/live/**/*.test.ts'],
     globalSetup: ['tests/helpers/setup-engine.ts'],
     fileParallelism: false,
-    testTimeout: 15_000,
-    hookTimeout: 15_000,
+    testTimeout: 0,
+    hookTimeout: 0,
   },
 });

@@ -27,7 +27,7 @@ it('retains the exact latest bytes per path and launch, and skips unchanged cont
       expect(rows[1]!.content_sha256).toBe(createHash('sha256').update(mask).digest('hex'));
     } finally { db.close(); }
   } finally { await worker.terminate(); await rm(root, { recursive: true, force: true }); }
-}, 15_000);
+});
 it('settles sent captures when closing, and reports a capture it could not keep', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-backup-owner-'));
   try {

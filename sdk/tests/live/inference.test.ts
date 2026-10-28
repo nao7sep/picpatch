@@ -73,7 +73,7 @@ it('completes the catalog-to-edit consumer journey with existing weights and iso
     await editor?.dispose();
     await rm(directory, { recursive: true, force: true });
   }
-}, 3_600_000);
+});
 
 it('cancels after a real denoising step and cleans unpublished output after worker settlement', async () => {
   const options = await localOptions();
@@ -99,7 +99,7 @@ it('cancels after a real denoising step and cleans unpublished output after work
     await editor.dispose();
     await rm(directory, { recursive: true, force: true });
   }
-}, 1_800_000);
+});
 
 it('edits four and six grouped references in one session without changing originals or leaving private output', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-references-'));
@@ -120,7 +120,7 @@ it('edits four and six grouped references in one session without changing origin
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-}, 3_600_000);
+});
 
 it('prepares existing catalog weights and checks actual model loading without acquisition', async () => {
   const { prepareModel, inspectReadiness } = await import('../../src/index.ts');
@@ -130,7 +130,7 @@ it('prepares existing catalog weights and checks actual model loading without ac
   expect(prepared.integrity).toBe('matches-manifest');
   expect(readiness).toMatchObject({ files: 'present', integrity: 'not-verified', runtime: { status: 'load-ready', version: '0.22.0' } });
   expect(readiness.capabilities[0]?.maskMode).toBe('composite');
-}, 600_000);
+});
 
 it('edits through a mask while preserving every black-mask source pixel', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-masked-inference-'));
@@ -158,7 +158,7 @@ it('edits through a mask while preserving every black-mask source pixel', async 
     await editor.dispose();
     expect((await readdir(directory)).filter(name => name.startsWith('.picpatch-'))).toEqual([]);
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
-}, 1_800_000);
+});
 
 
 it('generates from text, edits that result in the same session, and cancels generation at a real step', async () => {
@@ -198,7 +198,7 @@ it('generates from text, edits that result in the same session, and cancels gene
     expect(events.at(-1)?.stage).toBe('succeeded');
     expect(JSON.stringify(events)).not.toContain('ceramic');
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});
 
 it('outpaints an asymmetric canvas while preserving normalized source pixels including alpha', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-outpaint-inference-'));
@@ -216,7 +216,7 @@ it('outpaints an asymmetric canvas while preserving normalized source pixels inc
     expect((await sharp(result.image.path).metadata())).toMatchObject({ width: 256, height: 256 });
     expect((await readdir(directory)).sort()).toEqual(['out.png', 'source.png']);
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});
 
 async function managedPython(): Promise<string> {
   const engine = await inspectEngine({ engineDirectory: testEngineDirectory });

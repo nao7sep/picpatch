@@ -18,8 +18,7 @@ for w, h in json.loads(sys.argv[1]):
     except ValueError:
         results.append(None)
 print(json.dumps(results))`;
-  const { stdout } = await promisify(execFile)(config.pythonExecutable, ['-c', script, JSON.stringify(sizes)], { timeout: 30_000,
-    env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
+  const { stdout } = await promisify(execFile)(config.pythonExecutable, ['-c', script, JSON.stringify(sizes)], { env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
   const expected = JSON.parse(stdout) as ([number, number] | null)[];
   sizes.forEach(([width, height], index) => {
     if (expected[index] === null) expect(() => inputGeometry(width!, height!, 1, 'klein-reference')).toThrow();
@@ -28,7 +27,7 @@ print(json.dumps(results))`;
       expect([geometry.preparedSize.width, geometry.preparedSize.height]).toEqual(expected[index]);
     }
   });
-}, 45_000);
+});
 
 it('uses installed Kontext resizing and distinct reference positions without loading weights', async () => {
   const { mkdtemp, rm } = await import('node:fs/promises');
@@ -55,7 +54,6 @@ assert bool(mx.all(latent == 1))
 assert ids.tolist() == [[[1.0, 0.0, 0.0], [1.0, 0.0, 1.0]]]
 mx.synchronize()
 mx.clear_cache()`;
-    await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { timeout: 30_000,
-      env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
+    await promisify(execFile)(config.pythonExecutable, ['-c', script, directory], { env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' } });
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 45_000);
+});

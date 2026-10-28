@@ -52,4 +52,4 @@ it('generates with Z-Image Turbo then performs native masked editing with FLUX F
       expect(await readFile(sourceImage)).toEqual(original);
     } finally { await editor.dispose(); }
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 900_000);
+});

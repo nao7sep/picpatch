@@ -26,7 +26,7 @@ it('accepts a local registration then returns a missing-runtime failure over rea
     const cacheDirectory = (await promisify(execFile)(uvExecutable, ['cache', 'dir'])).stdout.trim();
     await promisify(execFile)(uvExecutable, ['sync', '--project', 'runtimes/mflux', '--python', testPython,
       '--no-python-downloads', '--no-dev', '--no-install-project', '--locked', '--no-build', '--offline',
-      '--cache-dir', cacheDirectory], { env: { ...process.env, UV_PROJECT_ENVIRONMENT: runtimeDirectory }, timeout: 30_000 });
+      '--cache-dir', cacheDirectory], { env: { ...process.env, UV_PROJECT_ENVIRONMENT: runtimeDirectory } });
     const options: Omit<ImageClientOptions, 'engineDirectory'> & { pythonExecutable: string } = { pythonExecutable: join(runtimeDirectory, 'bin/python'),
       model: { variant: 'flux2-klein-4b', directory, manifest: {
         version: 1, model: 'test', source: { repository: 'test', revision: 'a'.repeat(40) },

@@ -25,7 +25,7 @@ it.each(['hidream-o1', 'hidream-o1-dev'])('prepares %s as one fingerprinted comb
     await tensorFile(join(directory, options.checkpoint), { ...shapes, [key]: [1] });
     await expect(prepareModel(variant, options)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   }
-}, 30_000); // Fingerprints the checkpoint once per mutated tensor, about 3 s alone.
+});
 it.each(['hidream-o1', 'hidream-o1-dev'])('advertises only the native %s generation and ordered-image contract', variant => {
   const caps = listModels().find(entry => entry.id === variant)!.capabilities;
   expect(() => validateGenerateRequest({ model: variant, prompt: 'A bowl', outputPath: '/out.png' }, caps)).not.toThrow();

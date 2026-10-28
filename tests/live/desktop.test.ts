@@ -16,7 +16,7 @@ const bundlePath = join(root, 'dist/mac-arm64', `${name}.app`);
 it('packages and starts the real renderer from outside the checkout without models or system Node', async () => {
   if (process.platform !== 'darwin' || process.arch !== 'arm64') throw new Error('The current desktop package qualification requires an Apple Silicon Mac.');
   // The same build rebuild performs: bundled tool, production bundle, then the .app only.
-  for (const [command, args] of [[process.execPath, ['scripts/prepare-tools.mjs']], [join(root, 'node_modules/.bin/electron-vite'), ['build']], [join(root, 'node_modules/.bin/electron-builder'), ['--dir', '--mac', '--arm64']]] as const) await execute(command, [...args], { cwd: root, timeout: 300_000, maxBuffer: 16 * 1024 * 1024 });
+  for (const [command, args] of [[process.execPath, ['scripts/prepare-tools.mjs']], [join(root, 'node_modules/.bin/electron-vite'), ['build']], [join(root, 'node_modules/.bin/electron-builder'), ['--dir', '--mac', '--arm64']]] as const) await execute(command, [...args], { cwd: root, maxBuffer: 16 * 1024 * 1024 });
   const home = await mkdtemp(join(tmpdir(), 'picpatch-desktop-'));
   try {
     const executable = join(bundlePath, 'Contents/MacOS', name);
@@ -34,7 +34,7 @@ it('packages and starts the real renderer from outside the checkout without mode
     const renditions = JSON.parse((await execute('/usr/bin/assetutil', ['--info', join(bundle, 'Resources/Assets.car')])).stdout);
     expect(renditions).toEqual(expect.arrayContaining([expect.objectContaining({ AssetType: 'IconImageStack', Name: info.CFBundleIconName })]));
     await execute('/usr/bin/codesign', ['--verify', '--deep', '--strict', join(bundle, '..')]);
-    await execute(executable, ['--smoke'], { cwd: tmpdir(), env: environment, timeout: 25_000 });
+    await execute(executable, ['--smoke'], { cwd: tmpdir(), env: environment });
     const { readdir } = await import('node:fs/promises');
     const sessions = await readdir(join(home, 'sessions'));
     expect(sessions).toHaveLength(1);
@@ -48,7 +48,7 @@ it('runs generation through the packaged application with existing model weights
   try {
     const executable = join(bundlePath, 'Contents/MacOS', name);
     const environment: NodeJS.ProcessEnv = { ...process.env, PICPATCH_DATA_DIR: home, PATH: '/usr/bin:/bin' }; delete environment.ELECTRON_RUN_AS_NODE;
-    await execute(executable, ['--smoke-inference', liveCache('native-inference-config.json')], { cwd: tmpdir(), env: environment, timeout: 310_000, maxBuffer: 1024 * 1024 });
+    await execute(executable, ['--smoke-inference', liveCache('native-inference-config.json')], { cwd: tmpdir(), env: environment, maxBuffer: 1024 * 1024 });
     const { readdir } = await import('node:fs/promises');
     const sessions = await readdir(join(home, 'sessions'));
     const completed = (await Promise.all(sessions.map(async id => JSON.parse(await readFile(join(home, 'sessions', id, 'session.json'), 'utf8'))))).find(session => session.runs.length);
@@ -59,7 +59,7 @@ it('runs generation through the packaged application with existing model weights
     expect(completed.runs[0].record).toHaveProperty('seed', 42);
     await expect(readFile(image.slice(0, -4) + '-picpatchsdk.json', 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   } finally { await rm(home, { recursive: true, force: true }); }
-}, 330_000);
+});
 
 it('localizes the real packaged renderer and checks constrained dialog layout in every language', async () => {
   const home = await mkdtemp(join(tmpdir(), 'picpatch-languages-'));
@@ -71,7 +71,7 @@ it('localizes the real packaged renderer and checks constrained dialog layout in
     const info = join(bundlePath, 'Contents/Info.plist');
     const tags = JSON.parse((await execute('/usr/bin/plutil', ['-extract', 'CFBundleLocalizations', 'json', '-o', '-', info])).stdout);
     expect(tags.sort()).toEqual(['en','de','es','fr','it','pt-BR','ru','ja','ko','zh-Hans'].sort());
-    await execute(executable, ['--smoke-localization'], { cwd: tmpdir(), env: environment, timeout: 255_000, maxBuffer: 1024 * 1024 });
+    await execute(executable, ['--smoke-localization'], { cwd: tmpdir(), env: environment, maxBuffer: 1024 * 1024 });
     expect(JSON.parse(await readFile(join(home, 'config.json'), 'utf8')).language).toBe('ko');
     expect(await nativeLanguage()).toBe(before);
   } finally { await rm(home, { recursive: true, force: true }); }

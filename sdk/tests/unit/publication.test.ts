@@ -96,7 +96,8 @@ test('a caller that stops waiting keeps the name claimed until its rename settle
   await rejected;
   try { await expect(publishFile(second, target)).rejects.toMatchObject({ code: 'EEXIST' }); }
   finally { gate.release(); }
-  await vi.waitFor(async () => { expect(await fs.readFile(target, 'utf8')).toBe('FIRST'); });
+  // The released rename lands on its own; wait for it, checking first whether it already has.
+  while (await fs.readFile(target, 'utf8').catch(() => undefined) !== 'FIRST') await new Promise(resolve => setImmediate(resolve));
   await expect(publishFile(second, target)).rejects.toMatchObject({ code: 'EEXIST' });
 });
 

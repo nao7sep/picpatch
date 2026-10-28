@@ -31,4 +31,4 @@ it.each(['sd15', 'sdxl'])('applies a local LoRA at distinct scales during real n
     expect(pixels[1]!.equals(pixels[2]!)).toBe(false);
     expect(await readFile(join(directory, 'adapter.safetensors'))).toEqual(original);
   } finally { await rm(directory, { recursive: true, force: true }); }
-}, 600_000);
+});

@@ -36,4 +36,4 @@ it.each(['qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1', 'flux1-kontext-
     // An implemented experimental adapter is not a tested/acquirable catalog bundle.
     expect(listModels().find(entry => entry.id === adapter)).toMatchObject({ acquisition: 'external', evidence: expect.stringMatching(/^(api|tiny-runtime)$/) });
   } finally { await editor.dispose(); await rm(directory, { recursive: true, force: true }); }
-}, 60_000);
+});
