@@ -76,35 +76,48 @@ export class Sessions {
   pin(key: string): () => void { this.pins.set(key, (this.pins.get(key) ?? 0) + 1); return () => { const n = this.pins.get(key)! - 1; if (n) this.pins.set(key, n); else this.pins.delete(key); this.evict(); }; }
   private evict() { for (const key of this.loaded.keys()) if (key !== this.focused && !this.pins.has(key)) this.loaded.delete(key); }
   private summaries = new Map<string, SessionSummary>();
+  /** Removal folders a previous launch could not delete, reported in every listing. */
+  private leftovers: { id: string; message: string }[] = [];
   constructor(root: string, private saved: (path: string, bytes: Buffer) => void = () => {}, private existingCollection = false) {
     if (!isAbsolute(root)) throw new UiError('error.session_collection_must_be_absolute');
     this.root = root;
+    // Swept once, first in the chain, so no removal of this collection can be under way.
+    this.tail = this.sweep();
+  }
+  private async sweep(): Promise<void> {
+    let entries;
+    // An unreadable collection is reported by listing it.
+    try { entries = await readdir(this.root, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !removing.test(entry.name)) continue;
+      try { await rm(join(this.root, entry.name), { recursive: true, force: true }); }
+      catch (error) { this.leftovers.push({ id: entry.name, message: new UiError('ui.session_cleanup_pending', { path: join(this.root, entry.name) }, { cause: error }).message }); }
+    }
   }
   directory(key: string): string { id(key); return join(this.root, key); }
   private serial<T>(work: () => Promise<T>): Promise<T> { const next = this.tail.then(work); this.tail = next.catch(() => {}); return next; }
   /** A chosen collection that is missing (an unplugged drive) is reported, never recreated. */
-  async list(): Promise<{ sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string } }> {
+  list(): Promise<{ sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string } }> {
+    return this.serial(() => this.listing());
+  }
+  private async listing(): Promise<{ sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string } }> {
     if (!this.existingCollection) await mkdir(this.root, { recursive: true, mode: 0o700 });
     let entries;
     try { entries = await readdir(this.root, { withFileTypes: true }); }
     catch (error) { if (!this.existingCollection) throw error; const code = (error as { code?: unknown }).code; return { sessions: [], failures: [], unavailable: { path: this.root, ...(typeof code === 'string' ? { code } : {}) } }; }
-    const sessions: SessionSummary[] = [], failures: { id: string; message: string }[] = [];
+    const sessions: SessionSummary[] = [], failures = [...this.leftovers];
     for (const entry of entries) {
-      if (entry.isDirectory() && removing.test(entry.name)) { try { await rm(join(this.root, entry.name), { recursive: true, force: true }); } catch (error) { failures.push({ id: entry.name, message: new UiError('ui.session_cleanup_pending', { path: join(this.root, entry.name) }, { cause: error }).message }); } continue; }
       if (!uuid.test(entry.name) || !entry.isDirectory()) continue;
       try {
         let summary = this.summaries.get(entry.name);
-        if (!summary) {
-          const read = summarize(this.loaded.get(entry.name) ?? await this.parse(entry.name));
-          // A save that finished during this read is newer than the file just read.
-          summary = this.summaries.get(entry.name) ?? read; this.summaries.set(entry.name, summary);
-        }
+        if (!summary) { summary = summarize(this.loaded.get(entry.name) ?? await this.parse(entry.name)); this.summaries.set(entry.name, summary); }
         sessions.push(summary);
       } catch (error) { failures.push({ id: entry.name, message: error instanceof Error ? error.message : 'Could not read session.' }); }
     }
     return { sessions: sessions.sort((a, b) => b.updated.localeCompare(a.updated)), failures };
   }
-  async get(key: string): Promise<Session> { return structuredClone(await this.read(key)); }
+  /** Reads take the chain's turn, so no save can finish during one. */
+  get(key: string): Promise<Session> { return this.serial(async () => structuredClone(await this.read(key))); }
   /** A session as saved, read and checked, without caching it. */
   private async parse(key: string): Promise<Session> {
     const directory = this.directory(key);
@@ -113,7 +126,7 @@ export class Sessions {
     if (session.id !== key) throw new UiError('error.session_identity_does_not_match_its_directory');
     return session;
   }
-  /** The cached session itself; callers only read it. */
+  /** The cached session itself, read in the chain's turn; callers only read it. */
   private async read(key: string): Promise<Session> {
     id(key);
     const cached = this.loaded.get(key); if (cached) return cached;
@@ -121,8 +134,6 @@ export class Sessions {
     // Reopening never schedules inference. Queued work requires an explicit resume.
     for (const run of session.runs) if (run.status === 'running') { run.status = 'interrupted'; run.issue = { code: 'INTERRUPTED', message: 'The app closed before this attempt settled.', effect: 'unknown' }; }
     session.draft = recoverCommand(session.draft, session.runs);
-    // A save that finished during this read is newer than the file just read.
-    const newer = this.loaded.get(key); if (newer) return newer;
     this.loaded.set(key, session); return session;
   }
   async create(name = 'Untitled session', draft = initialDraft()): Promise<Session> {
@@ -149,7 +160,7 @@ export class Sessions {
    */
   update(key: string, change: (session: Session) => void, submitted = false): Promise<Session> {
     return this.serial(async () => {
-      const session = await this.get(key); const before = JSON.stringify(session); change(session);
+      const session = structuredClone(await this.read(key)); const before = JSON.stringify(session); change(session);
       // A change that alters nothing is not written and does not reorder the collection.
       if (JSON.stringify(session) === before) return session;
       if (submitted) session.updated = new Date().toISOString();
@@ -177,7 +188,7 @@ export class Sessions {
   importImage(key: string, source: string): Promise<Asset> { const release = this.pin(key); return this.copyImage(key, source).finally(release); }
   private async copyImage(key: string, source: string): Promise<Asset> {
     if (!isAbsolute(source)) throw new UiError('error.select_an_absolute_image_path');
-    await this.read(key);
+    await this.get(key);
     const assetId = randomUUID(); const file = `assets/${assetId}`; const path = join(this.directory(key), file); const temporary = `${path}.tmp`;
     const input = await open(source, constants.O_RDONLY | constants.O_NONBLOCK);
     let asset: Asset;
@@ -203,7 +214,7 @@ export class Sessions {
   /** An image the app made, such as a painted mask, joins the session from memory, checked like an import. */
   addImage(key: string, name: string, bytes: Uint8Array): Promise<Asset> { const release = this.pin(key); return this.writeImage(key, name, bytes).finally(release); }
   private async writeImage(key: string, name: string, bytes: Uint8Array): Promise<Asset> {
-    await this.read(key);
+    await this.get(key);
     const assetId = randomUUID(); const file = `assets/${assetId}`; const path = join(this.directory(key), file); const temporary = `${path}.tmp`;
     try {
       const output = await open(temporary, 'wx', 0o600);
@@ -216,7 +227,7 @@ export class Sessions {
     await this.update(key, session => { session.assets.push(asset); });
     return asset;
   }
-  /** Removal hides the session at once; deleting its files runs outside the save lock, and a later listing retries leftovers. */
+  /** Removal hides the session at once; deleting its uniquely named folder runs outside the chain, and the next launch's sweep retries a leftover. */
   async remove(key: string): Promise<{ cleanup?: import('../../shared/i18n/index.ts').Message }> {
     const hidden = await this.serial(async () => {
       await this.read(key); const hidden = join(this.root, `${key}.removing-${randomUUID()}`);

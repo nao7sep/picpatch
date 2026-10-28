@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Sessions } from '../../src/main/core/sessions.ts';
@@ -11,12 +11,14 @@ vi.mock('node:fs/promises', async original => {
 const roots: string[] = [];
 afterEach(async () => { held.denyRemoval = false; await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() { const root = await mkdtemp(join(tmpdir(), 'picpatch-owner-')); roots.push(root); const sessions = new Sessions(join(root, 'sessions')); return { root, sessions, session: await sessions.create() }; }
-it('reports retained deletion files and a failed later retry without restoring the session', async () => {
+it('reports retained deletion files, and a failed sweep at the next opening, without restoring the session', async () => {
   const { sessions, session } = await fixture(); held.denyRemoval = true;
   const result = await sessions.remove(session.id);
   expect(result.cleanup?.key).toBe('ui.session_cleanup_pending'); expect(result.cleanup?.values?.path).toContain('.removing-');
-  const listed = await sessions.list(); expect(listed.sessions).toEqual([]); expect(listed.failures[0]?.message).toContain('Retained location');
-  held.denyRemoval = false; expect((await sessions.list()).failures).toEqual([]);
+  expect((await sessions.list()).sessions).toEqual([]);
+  const listed = await new Sessions(sessions.root).list(); expect(listed.sessions).toEqual([]); expect(listed.failures[0]?.message).toContain('Retained location');
+  held.denyRemoval = false; expect((await new Sessions(sessions.root).list()).failures).toEqual([]);
+  expect(await readdir(sessions.root)).toEqual([]);
 });
 it('saves draft-only changes with exact backup bytes and preserves history and foreign-reference checks', async () => {
   const { root, sessions, session } = await fixture(); sessions.focus(session.id);
