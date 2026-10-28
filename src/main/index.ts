@@ -98,10 +98,9 @@ async function ask(options: { message: Message; detail?: Message; buttons: Messa
 const editorAvailable = () => rendererReady && !!window && !window.isDestroyed() && !window.webContents.isDestroyed();
 /** A step stuck in native I/O would hold Electron's own exit, so the bounded teardown ends with SIGKILL instead. */
 const forceExit = () => process.kill(process.pid, 'SIGKILL');
-const delay = (milliseconds: number) => new Promise<'late'>(resolve => setTimeout(() => resolve('late'), milliseconds));
 const lifetime = quitFlow({
   freeze: value => { closing = value; command(value ? 'beginClose' : 'endClose'); },
-  flush: async () => { if (editorAvailable()) await requests.request({ kind: 'flush' }, 5000); },
+  flush: async remaining => { if (editorAvailable()) await requests.request({ kind: 'flush' }, remaining); },
   drafts: async () => !editorAvailable() || await requests.request({ kind: 'closeDrafts' }) === true,
   saveFailure: async error => {
     records?.write('error', 'Pending editor saves did not complete.', { error: errorRecord(error) });
@@ -112,28 +111,24 @@ const lifetime = quitFlow({
     if (service.queue.busy() && (await ask({ duringClose: true, message: message('ui.cancel_the_remaining_work_and_quit'), buttons: [message('ui.keep_working'), message('ui.cancel_work_and_quit')] })).response !== 1) return false;
     return true;
   },
+  // Every step draws on the close's one deadline, which ends the process if they run late.
   finish: async () => {
     await service.stopManaged();
     await service.queue.stop();
-    if (quitting) return;
-    // Saves already accepted settle before teardown, within a bound a stalled volume cannot extend.
-    const late = await Promise.race([service.settled().then(() => 'settled' as const), delay(5000)]) === 'late';
-    if (late) records?.write('warn', 'Session saves did not settle before quitting.');
+    await service.settled();
     await backup?.close();
     logs?.close(); await recordsReader?.close();
     records?.write('info', 'PicPatch closed normally.');
-    const recordsLate = await Promise.race([records?.close().then(() => 'closed' as const), delay(2000)]) === 'late';
-    quitting = true;
-    // Electron's own exit waits on Node cleanup, which a step still stuck in native I/O would hold forever.
-    if (late || recordsLate) forceExit(); else app.quit();
+    await records?.close();
   },
+  quit: () => { quitting = true; app.quit(); },
   failed: async error => {
     records?.write('error', 'Closing did not complete.', { error: errorRecord(error) });
     try { await ask({ duringClose: true, message: message('ui.picpatch_could_not_finish_closing'), buttons: [message('ui.keep_working')] }); }
     catch { /* No usable message surface: ordinary quit remains cancelled. */ }
   },
   interrupt: () => { quitting = true; command('shutdown'); requests.cancelAll(); service?.cancelManaged(); void service?.queue.stop(); },
-  shutdownSave: async () => { await requests.request({ kind: 'flush' }, 800); await service.settled(); },
+  shutdownSave: async () => { await requests.request({ kind: 'flush' }); await service.settled(); },
   exit: () => app.exit(0),
   forceExit,
 });
@@ -144,6 +139,8 @@ else {
   void app.whenReady().then(start).catch(startupFailure);
 }
 async function startupFailure(error: unknown) {
+  // A close aborts a window load still in progress; the close's own exit ends the process.
+  if (closing || quitting) return;
   quitting = true; clearTimeout(smokeTimer); requests.cancelAll();
   window?.destroy(); logs?.close();
   await Promise.allSettled([backup?.terminate(), recordsReader?.close(), records?.close()]);

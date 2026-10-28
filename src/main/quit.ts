@@ -1,7 +1,15 @@
-/** One owner for ordinary close/quit and OS takeover; UI decisions have no save timer. */
+/** An ordinary close has this long, from when it begins or a quit question is answered, before the process is ended. */
+const closeDeadline = 5000;
+/** OS takeover asks nothing and has this long in total. */
+const shutdownDeadline = 1000;
+/**
+ * One owner for ordinary close/quit and OS takeover. Each holds one exit deadline that every step draws on; a question
+ * pauses it, and it starts again when the answer arrives. UI decisions have no timer of their own.
+ */
 export function quitFlow(port: {
   freeze(value: boolean): void;
-  flush(): Promise<void>;
+  /** Saves the editor within the time that remains. */
+  flush(remaining: number): Promise<void>;
   drafts(): Promise<boolean>;
   saveFailure(error: unknown): Promise<number | undefined>;
   work(): Promise<boolean>;
@@ -9,6 +17,7 @@ export function quitFlow(port: {
   failed(error: unknown): Promise<void>;
   interrupt(): void;
   shutdownSave(): Promise<void>;
+  quit(): void;
   exit(): void;
   /** Ends the process without entering cleanup that a call stuck in native I/O would hold. */
   forceExit(): void;
@@ -19,22 +28,31 @@ export function quitFlow(port: {
     close(): Promise<void> {
       if (shutdown) return Promise.resolve();
       if (attempt) return attempt;
+      let ends = Date.now() + closeDeadline;
+      const restart = () => { ends = Date.now() + closeDeadline; };
       attempt = (async () => {
         port.freeze(true);
+        let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           for (;;) {
-            try { await port.flush(); break; }
+            try { await port.flush(Math.max(0, ends - Date.now())); break; }
             catch (error) {
               if (shutdown) return;
               const answer = await port.saveFailure(error);
+              restart();
               if (shutdown || answer === undefined || answer === 0) return;
               if (answer === 2) break;
             }
           }
+          // The work and draft steps only ask the user, so the deadline starts again after them.
           if (shutdown || !await port.work() || shutdown) return;
           if (!await port.drafts() || shutdown) return;
+          restart();
+          // A step still stuck in native I/O would also hold Electron's own exit, so the deadline stays armed through it.
+          timer = setTimeout(() => port.forceExit(), Math.max(0, ends - Date.now()));
           await port.finish();
-        } catch (error) { if (!shutdown) await port.failed(error); }
+          if (!shutdown) port.quit();
+        } catch (error) { clearTimeout(timer); if (!shutdown) await port.failed(error); }
         finally { if (!shutdown) port.freeze(false); }
       })().finally(() => { attempt = undefined; });
       return attempt;
@@ -43,9 +61,9 @@ export function quitFlow(port: {
       if (shutdown) return;
       shutdown = true;
       port.interrupt();
-      // One total budget; neither a stuck renderer nor cleanup may extend it.
+      // Neither a stuck renderer nor cleanup may extend the total.
       let exited = false;
-      const deadline = setTimeout(() => { if (!exited) { exited = true; port.forceExit(); } }, 1000);
+      const deadline = setTimeout(() => { if (!exited) { exited = true; port.forceExit(); } }, shutdownDeadline);
       void port.shutdownSave().catch(() => {}).finally(() => { clearTimeout(deadline); if (!exited) { exited = true; port.exit(); } });
     },
   };

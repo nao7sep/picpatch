@@ -6,17 +6,17 @@ function fixture() {
     freeze: vi.fn(), flush: vi.fn(async () => {}), drafts: vi.fn(async () => true),
     saveFailure: vi.fn(async (_error: unknown): Promise<number | undefined> => undefined),
     work: vi.fn(async () => true), finish: vi.fn(async () => {}), failed: vi.fn(async () => {}),
-    interrupt: vi.fn(), shutdownSave: vi.fn(async () => {}), exit: vi.fn(), forceExit: vi.fn(),
+    interrupt: vi.fn(), shutdownSave: vi.fn(async () => {}), quit: vi.fn(), exit: vi.fn(), forceExit: vi.fn(),
   };
   return { port, flow: quitFlow(port) };
 }
 afterEach(() => vi.useRealTimers());
 it('joins repeated close requests and cancels without discarding a dirty draft', async () => {
   const { port, flow } = fixture();
-  let answer!: (value: boolean) => void;
-  port.drafts.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+  const asked = Promise.withResolvers<(value: boolean) => void>();
+  port.drafts.mockImplementation(() => new Promise(resolve => asked.resolve(resolve)));
   const first = flow.close(); expect(flow.close()).toBe(first);
-  await vi.waitFor(() => expect(port.drafts).toHaveBeenCalledOnce()); answer(false); await first;
+  (await asked.promise)(false); await first;
   expect(port.finish).not.toHaveBeenCalled(); expect(port.freeze.mock.calls).toEqual([[true], [false]]);
 });
 it('offers retry after a failed save and checks work before draft approval', async () => {
@@ -56,6 +56,27 @@ it('OS takeover exits normally when the save settles within the deadline', async
   flow.shutdown(); await vi.advanceTimersByTimeAsync(0);
   expect(port.exit).toHaveBeenCalledOnce(); expect(port.forceExit).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1000); expect(port.forceExit).not.toHaveBeenCalled();
+});
+it('an ordinary close draws every step on one deadline that restarts after each answer', async () => {
+  vi.useFakeTimers(); const { port, flow } = fixture();
+  let answer!: (value: number) => void;
+  port.flush.mockRejectedValueOnce(new Error('save failed'));
+  port.saveFailure.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+  port.finish.mockImplementation(() => new Promise(() => {}));
+  const attempt = flow.close(); await vi.advanceTimersByTimeAsync(0);
+  expect(port.flush).toHaveBeenLastCalledWith(5000);
+  // The question pauses the deadline: answering long after it would have passed starts it again.
+  await vi.advanceTimersByTimeAsync(60_000); answer(1); await vi.advanceTimersByTimeAsync(0);
+  expect(port.flush).toHaveBeenLastCalledWith(5000); expect(port.finish).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(4999); expect(port.forceExit).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1); expect(port.forceExit).toHaveBeenCalledOnce(); expect(port.quit).not.toHaveBeenCalled();
+  void attempt;
+});
+it('an ordinary close quits once its steps finish, with the deadline still backing the exit', async () => {
+  vi.useFakeTimers(); const { port, flow } = fixture();
+  await flow.close(); expect(port.quit).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(4999); expect(port.forceExit).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1); expect(port.forceExit).toHaveBeenCalledOnce();
 });
 it('late flush replies cannot satisfy a later request, and interrupted questions reject', async () => {
   vi.useFakeTimers(); const send = vi.fn(); const requests = rendererRequests(send);

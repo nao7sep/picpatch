@@ -40,12 +40,11 @@ export class Backup {
     this.stopped = true; this.pending.clear(); this.active = false;
     this.issue({ kind: 'unavailable' }); this.idle?.();
   }
-  /** Captures already accepted settle first, within a bound a stalled disk cannot extend; history is optional at quit. */
+  /** Captures already accepted settle first; the quit's exit deadline bounds the wait. */
   async close(): Promise<void> {
     await new Promise<void>(resolve => {
-      const timer = setTimeout(resolve, 500);
-      this.idle = () => { clearTimeout(timer); resolve(); };
-      if (!this.active || this.stopped) this.idle();
+      this.idle = resolve;
+      if (!this.active || this.stopped) resolve();
     });
     await this.terminate();
   }

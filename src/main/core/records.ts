@@ -57,12 +57,12 @@ export class Records {
       .then(async () => { await mkdir(join(this.root, 'logs'), { recursive: true, mode: 0o700 }); await appendFile(path, line, { mode: 0o600 }); })
       .catch(() => { process.stderr.write(line); });
   }
+  /** Waits for the writer to finish what it was sent; the quit's exit deadline bounds the wait. */
   async close(): Promise<void> {
-    await new Promise<void>(resolve => {
-      const done = (message: any) => { if (message.flushed) { clearTimeout(timer); this.worker.off('message', done); resolve(); } };
-      const timer = setTimeout(() => { this.worker.off('message', done); resolve(); }, 500);
-      this.worker.on('message', done);
-      try { this.worker.postMessage({ flush: true }); } catch { clearTimeout(timer); resolve(); }
+    if (!this.failed) await new Promise<void>(resolve => {
+      const done = (message: any) => { if (message.flushed) { this.worker.off('message', done); resolve(); } };
+      this.worker.on('message', done); this.worker.once('exit', () => resolve());
+      try { this.worker.postMessage({ flush: true }); } catch { resolve(); }
     });
     this.closing = true;
     await this.worker.terminate(); await this.fallbackTail;
