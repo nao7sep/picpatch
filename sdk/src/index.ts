@@ -1,6 +1,6 @@
 export { VERSION } from './version.ts';
-export { createImageClient } from './client.ts';
-export type { ImageClient, ImageClientOptions } from './client.ts';
+export { createImageClient, prepareImageClient } from './client.ts';
+export type { ImageClient, ImageClientOptions, ImageClientPreparation, PreparedImageClient } from './client.ts';
 export type { ImageResult, ImageOutcome, OperationRefusal, GenerateRequest, GenerateResult, EditRequest, EditResult, InputGeometry, ImageArtifact, ImageSize, ModelCapabilities, CallOptions, OperationOptions, ProgressEvent, ReferenceGroup, Refusal, RefusalCode, RefusalDetails, ModelPresenceIssue } from './types.ts';
 export { refusalCodes } from './types.ts';
 export { validateEditRequest, validateGenerateRequest } from './validation.ts';

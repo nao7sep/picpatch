@@ -1,9 +1,9 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { openModel, inspectModels, readModelRegistration, validateModelRegistration, verifyModel } from '../../src/index.ts';
+import { openModel, inspectModels, prepareImageClient, readModelRegistration, validateModelRegistration, verifyModel } from '../../src/index.ts';
 let directory: string;
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/registrations/${name}.json`, import.meta.url));
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'picpatch-opening-')); });
@@ -48,4 +48,21 @@ it('round-trips persisted native split encoder roles without dropping or redirec
   const incomplete = structuredClone(expected);
   incomplete.model.manifest.components = incomplete.model.manifest.components.filter((component: { path: string }) => component.path !== incomplete.model.t5);
   expect(() => validateModelRegistration(incomplete)).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+});
+
+it('prepares a run from a model id, its registration and the profile, refusing and failing with its own codes', async () => {
+  const read = await readModelRegistration(fixture('current')); if (read.status === 'refused') throw new Error(read.code);
+  const registration = { ...read.registration, model: { ...read.registration.model, directory } };
+  const profile = { version: 1 as const, engineDirectory: join(directory, 'engine') };
+  expect(await prepareImageClient('flux2-klein-4b', { profile, registration })).toMatchObject({ status: 'refused', code: 'MODEL_INCOMPLETE' });
+  await writeFile(join(directory, 'weights.safetensors'), 'test');
+  expect(await prepareImageClient('flux2-klein-4b', { profile, registration })).toMatchObject({ status: 'completed', options: { model: registration.model, profile }, capabilities: { maskMode: expect.any(String) } });
+  expect(await prepareImageClient('flux2-klein-4b-4bit', { profile: { ...profile, modelsDirectory: directory } })).toMatchObject({ status: 'refused', code: 'MODEL_INCOMPLETE' });
+  const native = await readModelRegistration(fixture('native-split-encoders')); if (native.status === 'refused') throw new Error(native.code);
+  native.registration.model.directory = directory;
+  for (const component of native.registration.model.manifest.components) { await writeFile(join(directory, component.path), ''); await truncate(join(directory, component.path), component.bytes); }
+  // No native engine is installed under this engine folder.
+  await expect(prepareImageClient('sd35-large', { profile, registration: native.registration })).rejects.toMatchObject({ code: process.platform === 'darwin' || process.platform === 'win32' ? 'ENGINE_MISSING' : 'UNSUPPORTED_CAPABILITY' });
+  await expect(prepareImageClient('unknown-model', { profile })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(prepareImageClient('flux2-klein-4b', { profile, signal: AbortSignal.abort() } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });

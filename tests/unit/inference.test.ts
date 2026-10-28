@@ -23,12 +23,11 @@ async function completedImage(request: { outputPath: string; seed: number }) {
   return { status: 'completed' as const, model: record.model, modelRevision: record.modelRevision, runtime: record.runtime, seed: record.seed, references: [], effectiveParameters: record.effectiveParameters, image: { path: request.outputPath, mimeType: 'image/png' as const, size: record.image.size }, record };
 }
 /** A fake SDK whose clients count how often they are created and closed. */
+const masks: Record<string, string> = { a: 'composite', b: 'latent-composite', n: 'native' };
 function fakeSdk() {
   const clients: { model: string; disposed: boolean }[] = [];
   const sdk = {
-    listModels: () => [{ id: 'a', capabilities: { maskMode: 'composite' }, runtime: { name: 'mflux', engine: 'python' } }, { id: 'b', capabilities: { maskMode: 'latent-composite' }, runtime: { name: 'mflux', engine: 'python' } }, { id: 'n', capabilities: { maskMode: 'native' }, runtime: { name: 'stable-diffusion.cpp', engine: 'native' } }],
-    openModel: async (id: string) => ({ status: 'completed', model: { id } }),
-    inspectNativeEngine: async () => ({ status: 'ready' }),
+    prepareImageClient: async (id: string) => ({ status: 'completed', options: { model: { id } }, capabilities: { maskMode: masks[id] } }),
     createImageClient: (options: { model: { id: string } }) => {
       const client = { model: options.model.id, disposed: false };
       clients.push(client);
@@ -53,18 +52,20 @@ it('reuses a warm client for the same model, never keeps more clients than the l
   await run.release!(); expect(clients.every(client => client.disposed)).toBe(true);
 });
 
-it('runs with the SDK’s own refusal and engine state instead of inventing codes, and keeps the record without a sidecar', async () => {
+it('runs with the SDK’s own preparation and refusal, and keeps the record without a sidecar', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
   const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {} };
   const { sdk } = fakeSdk();
   const events = { signal: new AbortController().signal, onEvent: () => {}, onProgress: () => {}, onTeardownError: () => {} };
   const attempt = (modelId: string) => inference(() => sessions, () => settings, sdk)(session.id, { id: crypto.randomUUID(), modelId, seed: 1, draft: session.draft, status: 'running', created: '' }, events);
   const refusal = { status: 'refused', code: 'MODEL_REGISTRATION_VERSION_UNSUPPORTED', message: 'Newer.', details: { version: 2 } };
-  sdk.openModel = (async () => refusal) as never;
+  const prepare = vi.fn(async () => refusal);
+  sdk.prepareImageClient = prepare as never;
+  const registration = { version: 1, model: { variant: 'flux2-klein-4b' } } as never;
+  settings.registrations.a = registration;
   expect(await attempt('a')).toEqual({ outcome: refusal });
-  sdk.openModel = (async (id: string) => ({ status: 'completed', model: { id } })) as never;
-  sdk.inspectNativeEngine = (async () => ({ status: 'incompatible', code: 'ENGINE_CHECK_FAILED', message: 'Wrong revision.' })) as never;
-  await expect(attempt('n')).rejects.toMatchObject({ code: 'ENGINE_INCOMPATIBLE', message: 'Wrong revision.' });
+  expect(prepare).toHaveBeenCalledWith('a', { profile: settings.profile, registration }, expect.objectContaining({ signal: events.signal }));
+  sdk.prepareImageClient = fakeSdk().sdk.prepareImageClient;
   let request: Record<string, unknown> = {};
   sdk.createImageClient = (() => ({ generate: async (input: { outputPath: string; seed: number }) => { request = input; return completedImage(input); }, dispose: async () => {} })) as never;
   await attempt('a');
