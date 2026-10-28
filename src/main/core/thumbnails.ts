@@ -2,10 +2,9 @@ import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 
 /**
- * Small previews of immutable session images, made one at a time and kept for the most recent paths; a repeated
- * request waits its turn and finds the cache. Measured on real generated PNGs of 1-3 MB: about 30 ms each one at a
- * time (libvips already spreads one decode over its threads), so a screen of rail covers fills in a few tenths of a
- * second, and the window caches each immutable response after that.
+ * Small previews of immutable session images, made one at a time and kept for the most recent paths; a repeated request
+ * waits its turn and finds the cache. Real 1-3 MB generated PNGs take about 30 ms each, so a screen of covers fills in a
+ * few tenths of a second.
  */
 export class Thumbnails {
   private cache = new Map<string, Buffer>();

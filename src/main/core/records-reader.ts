@@ -1,10 +1,6 @@
 import { Worker } from 'node:worker_threads';
 import type { RecordsQuery, RecordsPage } from '../../shared/records.ts';
-/**
- * Reads records.sqlite3 for the Records window on one worker thread, started at the first read, so reads never queue
- * behind the writer or hold up inference. A local read gets no timeout; a worker that fails or exits fails its waiting
- * reads and is replaced at the next read.
- */
+/** One worker reads for the Records window, with no timeout; one that stops fails its waiting reads and the next read replaces it. */
 export class RecordsReader {
   private worker?: Worker;
   private serial = 0;
@@ -38,6 +34,5 @@ export class RecordsReader {
   }
   query(query: RecordsQuery): Promise<RecordsPage> { return this.request('query', query); }
   detail(id: number): Promise<string | null> { return this.request('detail', id); }
-  /** The quit's exit deadline bounds the wait. */
   async close(): Promise<void> { await this.stop(new Error('Records reader closed.')); }
 }

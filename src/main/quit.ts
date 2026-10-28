@@ -1,10 +1,7 @@
-/** An ordinary close has this long, from when it begins or a quit question is answered, before the process is ended. */
-const closeDeadline = 5000;
-/** OS takeover asks nothing and has this long in total. */
-const shutdownDeadline = 1000;
+const closeDeadline = 5000, shutdownDeadline = 1000;
 /**
- * One owner for ordinary close/quit and OS takeover. Each holds one exit deadline that every step draws on; a question
- * pauses it, and it starts again when the answer arrives. UI decisions have no timer of their own.
+ * One owner for ordinary close/quit and OS takeover. Each holds one exit deadline that every step draws on; a quit
+ * question pauses it, and it starts again when the answer arrives. UI decisions have no timer of their own.
  */
 export function quitFlow(port: {
   freeze(value: boolean): void;
