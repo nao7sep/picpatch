@@ -14,7 +14,7 @@ export const locations = {
   /** A renderer page's address; the exact value main trusts as its sender. */
   page: (name: 'index' | 'records') => devServer ? `${devServer}/${name}.html` : pathToFileURL(join(out, 'renderer', `${name}.html`)).href,
   preload: (name: 'index' | 'records') => join(out, 'preload', `${name}.cjs`),
-  worker: (name: 'backup-worker' | 'records-worker' | 'records-reader-worker') => join(out, 'main', `${name}.js`),
+  worker: (name: 'backup-worker' | 'records-worker') => join(out, 'main', `${name}.js`),
   /** The window icon Windows and Linux paint; macOS takes the bundle's. */
   icon: () => app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(out, '..', 'build', 'icon.png'),
   uv: () => app.isPackaged ? join(process.resourcesPath, 'tools', uvName) : join(out, '..', 'node_modules', '.cache', 'picpatch-desktop', 'uv', uvName),

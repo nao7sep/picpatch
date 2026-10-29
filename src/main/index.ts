@@ -2,7 +2,6 @@ import { readSettingsSync, type Settings } from './core/settings.ts';
 import { pickBundleComponent, pickPaths } from './native-pickers.ts';
 import { startupFailureWindow } from './startup-failure.ts';
 import { menuTemplate } from './menu-template.ts';
-import { RecordsReader } from './core/records-reader.ts';
 import { focusWorkspaceForCommand } from './workspace-command.ts';
 import { LogsWindow } from './logs-window.ts';
 import { about } from '../shared/about.ts';
@@ -39,7 +38,6 @@ let window: BrowserWindow | undefined; let service: Application; let quitting = 
 let backup: Backup | undefined;
 let records: Records | undefined;
 let logs: LogsWindow | undefined;
-let recordsReader: RecordsReader | undefined;
 let paths: Awaited<ReturnType<typeof appPaths>>;
 try {
   paths = await appPaths();
@@ -117,7 +115,7 @@ const lifetime = quitFlow({
     await service.queue.stop();
     await service.settled();
     await backup?.close();
-    logs?.close(); await recordsReader?.close();
+    logs?.close();
     records?.write('info', 'PicPatch closed normally.');
     await records?.close();
   },
@@ -143,7 +141,7 @@ async function startupFailure(error: unknown) {
   if (closing || quitting) return;
   quitting = true; clearTimeout(smokeTimer); requests.cancelAll();
   window?.destroy(); logs?.close();
-  await Promise.allSettled([backup?.terminate(), recordsReader?.close(), records?.close()]);
+  await Promise.allSettled([backup?.terminate(), records?.close()]);
   if (smoke) { console.error(error); app.exit(1); return; }
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'PicPatch', submenu: [{ label: t('native.quit'), accelerator: 'CmdOrCtrl+Q', click: () => app.exit(1) }] },
@@ -161,7 +159,6 @@ async function start() {
   if (earlyFailure) throw earlyFailure;
   await bootstrapLanguage(startupSettings!.language);
   records = new Records(paths.root, locations.worker('records-worker'), () => logs?.changed());
-  recordsReader = new RecordsReader(paths.root, records.session, locations.worker('records-reader-worker'));
   records.write('info', 'PicPatch started.', { version: app.getVersion() });
   process.on('uncaughtExceptionMonitor', error => records?.write('error', 'Uncaught exception.', { error: errorRecord(error) }));
   backup = new Backup(paths.backups, locations.worker('backup-worker'), issue => {
@@ -185,7 +182,7 @@ async function start() {
     }
     catch { return new Response('Image unavailable', { status: 404 }); }
   });
-  logs = new LogsWindow(recordsReader, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth, timeZone: service.settings.timeZone }), error => records?.readFailed(error), width => storePane({ recordsListWidth: width }));
+  logs = new LogsWindow(records, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth, timeZone: service.settings.timeZone }), error => records?.readFailed(error), width => storePane({ recordsListWidth: width }));
   const renderer = locations.page('index');
   ipcMain.handle('picpatch:call', async (event, action: string, payload: unknown) => {
     if (!trustedSender(event, window, renderer)) throw new Error('Untrusted request.');

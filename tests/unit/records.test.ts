@@ -41,7 +41,6 @@ it('keeps the cause chain and stack for diagnostics', () => {
   expect(errorRecord(error)).toMatchObject({ name: 'Error', message: 'outer', stack: expect.any(String), cause: { name: 'TypeError', message: 'inner' } });
 });
 
-import { RecordsReader } from '../../src/main/core/records-reader.ts';
 import { recordsQuery, recordId } from '../../src/shared/records.ts';
 it('validates untrusted query and detail arguments', () => {
   expect(() => recordsQuery({ current: true, level: 'fatal', search: '' })).toThrow();
@@ -52,28 +51,27 @@ it('validates untrusted query and detail arguments', () => {
 });
 it('reads bounded historical pages, filters and full selected details without changing stored events', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-reader-'));
-  const reader = new RecordsReader(root, 'current', new URL('../../src/main/core/records-reader-worker.ts', import.meta.url));
+  const reader = new Records(root, new URL('../../src/main/core/records-worker.ts', import.meta.url));
   try {
+    // The first read creates the database the seed below fills from a connection of its own.
     expect(await reader.query({ current: false, level: 'all', search: '' })).toEqual({ records: [], more: false });
     const db = new DatabaseSync(join(root, 'records.sqlite3'));
-    db.exec('CREATE TABLE records(id INTEGER PRIMARY KEY,session TEXT,time TEXT,level TEXT,message TEXT,json TEXT)');
     const insert = db.prepare('INSERT INTO records VALUES(?,?,?,?,?,?)');
     // One transaction: 205 separately synced commits take seconds on Windows.
     db.exec('BEGIN');
-    for (let id = 1; id <= 205; id++) insert.run(id, id > 200 ? 'current' : 'previous', '2026-10-19T00:00:00Z', id % 2 ? 'info' : 'warn', `Message ${id}`, JSON.stringify({ message: `Message ${id}`, nested: { literal: '%_needle' }, time: '2026-10-19T00:00:00Z' }));
+    for (let id = 1; id <= 205; id++) insert.run(id, id > 200 ? reader.session : 'previous', '2026-10-19T00:00:00Z', id % 2 ? 'info' : 'warn', `Message ${id}`, JSON.stringify({ message: `Message ${id}`, nested: { literal: '%_needle' }, time: '2026-10-19T00:00:00Z' }));
     db.exec('COMMIT');
     db.close();
     const first = await reader.query({ current: false, level: 'all', search: '' }); expect(first.records).toHaveLength(100); expect(first.more).toBe(true); expect(first.records[0]!.id).toBe(205);
     const second = await reader.query({ current: false, level: 'all', search: '', before: first.records.at(-1)!.id }); expect(second.records[0]!.id).toBe(105);
     const filtered = await reader.query({ current: true, level: 'attention', search: '%_needle' }); expect(filtered.records.map(row => row.id)).toEqual([204,202]);
-    const detail = JSON.parse((await reader.detail(204))!); expect(detail).toMatchObject({ session: 'current', event: { nested: { literal: '%_needle' } } });
+    const detail = JSON.parse((await reader.detail(204))!); expect(detail).toMatchObject({ session: reader.session, event: { nested: { literal: '%_needle' } } });
     expect(await reader.detail(999)).toBe(null);
   } finally { await reader.close(); await rm(root, { recursive: true, force: true }); }
 });
 it('stores a large diagnostic as a file beside its record and shows the record whole', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-files-'));
   const worker = new Worker(new URL('../../src/main/core/records-worker.ts', import.meta.url), { workerData: { root, session: 'current' } });
-  const reader = new RecordsReader(root, 'current', new URL('../../src/main/core/records-reader-worker.ts', import.meta.url));
   const output = `Traceback (most recent call last):\n${'  File "worker.py", line 1, in run\n'.repeat(3000)}RuntimeError: out of memory\n`;
   const event = { time: '2026-10-19T00:00:01Z', level: 'error', message: 'Image attempt ended without a result.', error: { details: { diagnostic: { phase: 'worker', output } } } };
   try {
@@ -84,13 +82,14 @@ it('stores a large diagnostic as a file beside its record and shows the record w
     try {
       const row = db.prepare('SELECT id,json FROM records').get()!;
       expect(JSON.parse(row.json as string).error.details.diagnostic.output).toEqual({ $file: `record-files/${file}` });
-      expect(JSON.parse((await reader.detail(row.id as number))!).event).toEqual(event);
+      const detail = await new Promise<string>((resolve, reject) => { worker.on('message', message => { if (message.read) { if (message.error) reject(new Error(message.error.message)); else resolve(message.value); } }); worker.postMessage({ id: 2, action: 'detail', payload: row.id }); });
+      expect(JSON.parse(detail).event).toEqual(event);
     } finally { db.close(); }
-  } finally { await worker.terminate(); await reader.close(); await rm(root, { recursive: true, force: true }); }
+  } finally { await worker.terminate(); await rm(root, { recursive: true, force: true }); }
 });
 it('rejects corrupt history without claiming an empty successful page', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-corrupt-'));
-  const reader = new RecordsReader(root, 'current', new URL('../../src/main/core/records-reader-worker.ts', import.meta.url));
+  const reader = new Records(root, new URL('../../src/main/core/records-worker.ts', import.meta.url));
   try {
     await mkdir(join(root, 'records.sqlite3'));
     await expect(reader.query({ current: false, level: 'all', search: '' })).rejects.toThrow();

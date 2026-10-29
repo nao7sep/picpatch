@@ -36,18 +36,13 @@ it('keeps the causal read diagnostic inspectable without notifying recovery, the
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-it('coalesces newest pending backups and sends only one before each acknowledgement', async () => {
+it('sends every backup capture at once, in save order, without waiting for acknowledgements', async () => {
   const backup = new Backup('/unused', heldWriter, () => {});
   const worker = backup['worker']; const post = vi.spyOn(worker, 'postMessage').mockImplementation(() => {});
   try {
     backup.capture('/first', Buffer.alloc(8, 1));
     backup.capture('/pending', Buffer.alloc(8, 2)); backup.capture('/pending', Buffer.alloc(8, 3));
     backup.capture('/other', Buffer.alloc(16, 4));
-    expect(post).toHaveBeenCalledTimes(1); expect(backup['pending'].size).toBe(2);
-    worker.emit('message', { written: true });
-    expect(post).toHaveBeenCalledTimes(2);
-    expect(post.mock.calls[1]![0]).toMatchObject({ path: '/pending', bytes: Buffer.alloc(8, 3) });
-    worker.emit('message', { written: true });
-    expect(post.mock.calls[2]![0]).toMatchObject({ path: '/other' });
+    expect(post.mock.calls.map(([message]) => [message.path, message.bytes[0]])).toEqual([['/first', 1], ['/pending', 2], ['/pending', 3], ['/other', 4]]);
   } finally { await backup.terminate(); }
 });

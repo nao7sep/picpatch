@@ -53,7 +53,6 @@ export default defineConfig({
           index: resolve("src/main/index.ts"),
           "backup-worker": resolve("src/main/core/backup-worker.ts"),
           "records-worker": resolve("src/main/core/records-worker.ts"),
-          "records-reader-worker": resolve("src/main/core/records-reader-worker.ts"),
         },
         output: { preserveModules: true, preserveModulesRoot: resolve("."), entryFileNames: "[name].js" },
       },

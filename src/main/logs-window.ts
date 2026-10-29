@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain, screen } from 'electron';
 import { locations } from './locations.ts';
 import { recordsQuery, recordId } from '../shared/records.ts';
 import type { LogsAppearance } from '../shared/logs-bridge.ts';
-import type { RecordsReader } from './core/records-reader.ts';
+import type { Records } from './core/records.ts';
 import { normalizeZoom, windowBackground, windowMinimum } from '../shared/appearance.ts';
 import { t } from '../shared/i18n/index.ts';
 import { trustedSender } from './trust.ts';
@@ -13,7 +13,7 @@ export class LogsWindow {
   private notifyTimer?: ReturnType<typeof setTimeout>;
   private renderer: string;
   private fitMinimum?: () => void;
-  constructor(reader: RecordsReader, private appearance: () => LogsAppearance, private failed: (error: unknown) => void, private resizeList: (width: number) => Promise<void> = async () => {}) {
+  constructor(reader: Pick<Records, 'query' | 'detail'>, private appearance: () => LogsAppearance, private failed: (error: unknown) => void, private resizeList: (width: number) => Promise<void> = async () => {}) {
     this.renderer = locations.page('records');
     ipcMain.handle('picpatch:logs', async (event, action: string, payload: unknown) => {
       if (!trustedSender(event, this.window, this.renderer)) throw new Error('Untrusted logs request.');

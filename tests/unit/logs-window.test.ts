@@ -19,12 +19,12 @@ import { LogsWindow } from '../../src/main/logs-window.ts';
 import { insideBundle, trustedSender } from '../../src/main/trust.ts';
 import { win32 } from 'node:path';
 import { locations } from '../../src/main/locations.ts';
-import type { RecordsReader } from '../../src/main/core/records-reader.ts';
+import type { Records } from '../../src/main/core/records.ts';
 beforeEach(() => { mocks.windows.length = 0; mocks.handlers.clear(); mocks.load = undefined; });
 function setup() {
   const reader = { query: vi.fn().mockResolvedValue({ records: [], more: false }), detail: vi.fn().mockResolvedValue(null) };
   const failed = vi.fn();
-  const owner = new LogsWindow(reader as unknown as RecordsReader, () => ({ locale: { language:'en', format:'en' }, dark:false }), failed);
+  const owner = new LogsWindow(reader as unknown as Records, () => ({ locale: { language:'en', format:'en' }, dark:false }), failed);
   return { owner, reader, failed };
 }
 it('creates one durable sandboxed window and refuses subframes, changed pages and main-workspace calls', async () => {
