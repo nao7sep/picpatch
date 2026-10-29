@@ -13,6 +13,7 @@ export function quitFlow(port: {
   finish(): Promise<void>;
   failed(error: unknown): Promise<void>;
   interrupt(): void;
+  /** Saves the editor and stops the store workers, skipping pending backup captures. */
   shutdownSave(): Promise<void>;
   quit(): void;
   exit(): void;
@@ -58,10 +59,11 @@ export function quitFlow(port: {
       if (shutdown) return;
       shutdown = true;
       port.interrupt();
-      // Neither a stuck renderer nor cleanup may extend the total.
+      // Neither a stuck renderer nor cleanup may extend the total, so the deadline stays armed through the exit.
       let exited = false;
-      const deadline = setTimeout(() => { if (!exited) { exited = true; port.forceExit(); } }, shutdownDeadline);
-      void port.shutdownSave().catch(() => {}).finally(() => { clearTimeout(deadline); if (!exited) { exited = true; port.exit(); } });
+      // An exit already under way that has not ended the process by then is forced too.
+      setTimeout(() => { exited = true; port.forceExit(); }, shutdownDeadline);
+      void port.shutdownSave().catch(() => {}).finally(() => { if (!exited) { exited = true; port.exit(); } });
     },
   };
 }

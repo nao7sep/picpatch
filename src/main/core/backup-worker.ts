@@ -22,7 +22,7 @@ async function capture(message: Capture) {
     const opened = new DatabaseSync(message.database);
     try {
       await chmod(message.database, 0o600);
-      opened.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=100; CREATE TABLE IF NOT EXISTS backups(id INTEGER PRIMARY KEY, session_id TEXT, path TEXT NOT NULL, content BLOB NOT NULL, content_sha256 TEXT NOT NULL, byte_size INTEGER NOT NULL, written_at_utc TEXT NOT NULL, UNIQUE(path, session_id)); CREATE INDEX IF NOT EXISTS backup_paths ON backups(path,id);');
+      opened.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS backups(id INTEGER PRIMARY KEY, session_id TEXT, path TEXT NOT NULL, content BLOB NOT NULL, content_sha256 TEXT NOT NULL, byte_size INTEGER NOT NULL, written_at_utc TEXT NOT NULL, UNIQUE(path, session_id)); CREATE INDEX IF NOT EXISTS backup_paths ON backups(path,id);');
     } catch (error) { opened.close(); throw error; }
     db = opened;
   }

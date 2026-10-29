@@ -126,7 +126,11 @@ const lifetime = quitFlow({
     catch { /* No usable message surface: ordinary quit remains cancelled. */ }
   },
   interrupt: () => { quitting = true; command('shutdown'); requests.cancelAll(); service?.cancelManaged(); void service?.queue.stop(); },
-  shutdownSave: async () => { await requests.request({ kind: 'flush' }); await service.settled(); },
+  // The store workers stop within the deadline too: Electron's exit would wait for one blocked inside SQLite.
+  shutdownSave: async () => {
+    try { await requests.request({ kind: 'flush' }); await service.settled(); }
+    finally { await Promise.allSettled([backup?.terminate(), records?.close()]); }
+  },
   exit: () => app.exit(0),
   forceExit,
 });

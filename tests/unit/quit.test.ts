@@ -51,11 +51,12 @@ it('OS takeover interrupts a human question and exits once at the total deadline
   saved(); await vi.advanceTimersByTimeAsync(0); expect(port.forceExit).toHaveBeenCalledOnce(); expect(port.exit).not.toHaveBeenCalled();
   expect(port.freeze).toHaveBeenCalledExactlyOnceWith(true);
 });
-it('OS takeover exits normally when the save settles within the deadline', async () => {
+it('OS takeover exits normally when the save settles within the deadline, and forces an exit still running at it', async () => {
   vi.useFakeTimers(); const { port, flow } = fixture();
   flow.shutdown(); await vi.advanceTimersByTimeAsync(0);
   expect(port.exit).toHaveBeenCalledOnce(); expect(port.forceExit).not.toHaveBeenCalled();
-  await vi.advanceTimersByTimeAsync(1000); expect(port.forceExit).not.toHaveBeenCalled();
+  // A real exit has ended the process by now; one Electron is still waiting in is ended at the deadline.
+  await vi.advanceTimersByTimeAsync(1000); expect(port.forceExit).toHaveBeenCalledOnce(); expect(port.exit).toHaveBeenCalledOnce();
 });
 it('an ordinary close draws every step on one deadline that restarts after each answer', async () => {
   vi.useFakeTimers(); const { port, flow } = fixture();
