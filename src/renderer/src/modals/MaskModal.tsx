@@ -6,10 +6,9 @@ import { fitImage, imagePoint } from '../../../shared/viewport.ts';
 import { BrushIcon, EraserIcon, RedoIcon, UndoIcon } from '../components/icons.tsx';
 import { useI18n } from '../i18n.tsx';
 import { isComposing } from '../ime.ts';
+import { extend, MaskHistory, pixelRect, type Rect } from './mask-history.ts';
 import { Modal } from './Modal.tsx';
 
-/** Undo snapshots are whole canvases; keep their total bounded, but always one. */
-const HISTORY_BYTES = 64 * 1024 * 1024;
 const PAINT = '#f2a65a';
 
 export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard, onDirty }: {
@@ -26,11 +25,17 @@ export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard,
   const [dirty, setDirty] = useState(false);
   const [failure, setFailure] = useState<string>();
   const [saving, setSaving] = useState(false);
-  const history = useRef<{ undo: ImageData[]; redo: ImageData[] }>({ undo: [], redo: [] });
+  const context = () => canvas.current!.getContext('2d', { willReadFrequently: true })!;
+  const history = useRef(new MaskHistory<ImageData>({
+    read: rect => context().getImageData(rect.x, rect.y, rect.width, rect.height),
+    write: ({ rect, pixels }) => context().putImageData(pixels, rect.x, rect.y),
+  })).current;
   const [, setRevision] = useState(0);
   const last = useRef<{ x: number; y: number } | undefined>(undefined);
   const drawing = useRef(false);
-  const context = () => canvas.current!.getContext('2d', { willReadFrequently: true })!;
+  /** The layer as it was when the stroke began; its changed region becomes the undo entry when the stroke ends. */
+  const before = useRef<HTMLCanvasElement | undefined>(undefined);
+  const bounds = useRef<Rect | undefined>(undefined);
   useEffect(() => { onDirty(dirty); }, [dirty, onDirty]);
 
   // Image, overlay and pointer mapping share one fit of the image inside the stage.
@@ -62,16 +67,27 @@ export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard,
   }, [size, mask]);
 
   const snapshot = () => context().getImageData(0, 0, size!.width, size!.height);
-  const remember = () => {
-    const { undo } = history.current;
-    undo.push(snapshot()); history.current.redo = [];
-    while (undo.length > 1 && undo.length * size!.width * size!.height * 4 > HISTORY_BYTES) undo.shift();
+  const begin = () => {
+    const copy = before.current ??= document.createElement('canvas');
+    copy.width = size!.width; copy.height = size!.height;
+    copy.getContext('2d', { willReadFrequently: true })!.drawImage(canvas.current!, 0, 0);
+    bounds.current = undefined; last.current = undefined; drawing.current = true;
+  };
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const rect = bounds.current && pixelRect(bounds.current, size!);
+    if (!rect) return;
+    history.record({ rect, pixels: before.current!.getContext('2d', { willReadFrequently: true })!.getImageData(rect.x, rect.y, rect.width, rect.height) });
     setRevision(value => value + 1);
   };
+  const clear = () => {
+    history.record({ rect: { x: 0, y: 0, width: size!.width, height: size!.height }, pixels: snapshot() });
+    context().clearRect(0, 0, size!.width, size!.height); setDirty(true); setRevision(value => value + 1);
+  };
   const step = (from: 'undo' | 'redo') => {
-    const stack = history.current[from], other = history.current[from === 'undo' ? 'redo' : 'undo'];
-    const previous = stack.pop(); if (!previous) return;
-    other.push(snapshot()); context().putImageData(previous, 0, 0); setDirty(true); setRevision(value => value + 1);
+    if (drawing.current || !history.step(from)) return;
+    setDirty(true); setRevision(value => value + 1);
   };
   const stroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const ctx = context();
@@ -81,6 +97,7 @@ export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard,
     ctx.strokeStyle = PAINT; ctx.fillStyle = PAINT; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = brush * scale;
     ctx.beginPath(); ctx.moveTo(last.current?.x ?? point.x, last.current?.y ?? point.y); ctx.lineTo(point.x, point.y); ctx.stroke();
     ctx.beginPath(); ctx.arc(point.x, point.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fill();
+    bounds.current = extend(extend(bounds.current, last.current?.x ?? point.x, last.current?.y ?? point.y, ctx.lineWidth / 2), point.x, point.y, ctx.lineWidth / 2);
     last.current = point; setDirty(true);
   };
 
@@ -130,9 +147,9 @@ export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard,
             <label className={erase ? 'on' : undefined}><input type="radio" name="mask-tool" checked={erase} onChange={() => setErase(true)} /><EraserIcon /><span>{t('mask.erase')}</span></label>
           </div>
           <label className="mask-brush"><span>{t('ui.brush_size')}</span><input type="range" min={4} max={200} value={brush} onChange={event => setBrush(Number(event.target.value))} /></label>
-          <button type="button" className="icon-button" disabled={!history.current.undo.length} onClick={() => step('undo')} aria-label={t('ui.undo_stroke')} title={t('ui.undo_stroke')}><UndoIcon /></button>
-          <button type="button" className="icon-button" disabled={!history.current.redo.length} onClick={() => step('redo')} aria-label={t('ui.redo_stroke')} title={t('ui.redo_stroke')}><RedoIcon /></button>
-          <button type="button" className="button compact" disabled={!size} onClick={() => { remember(); context().clearRect(0, 0, size!.width, size!.height); setDirty(true); }}>{t('ui.clear_mask')}</button>
+          <button type="button" className="icon-button" disabled={!history.canUndo} onClick={() => step('undo')} aria-label={t('ui.undo_stroke')} title={t('ui.undo_stroke')}><UndoIcon /></button>
+          <button type="button" className="icon-button" disabled={!history.canRedo} onClick={() => step('redo')} aria-label={t('ui.redo_stroke')} title={t('ui.redo_stroke')}><RedoIcon /></button>
+          <button type="button" className="button compact" disabled={!size} onClick={clear}>{t('ui.clear_mask')}</button>
         </div>
         <div className="mask-stage" ref={stage}>
           {size ? (
@@ -140,10 +157,10 @@ export function MaskModal({ source, mask, note, onClose, onDone, confirmDiscard,
               <img src={source} alt="" draggable={false} />
               <canvas
                 ref={canvas} width={size.width} height={size.height} tabIndex={0} aria-label={t('mask.canvas')}
-                onPointerDown={event => { if (event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); remember(); drawing.current = true; last.current = undefined; stroke(event); }}
+                onPointerDown={event => { if (event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); begin(); stroke(event); }}
                 onPointerMove={event => { if (drawing.current) stroke(event); }}
-                onPointerUp={() => { drawing.current = false; }}
-                onPointerCancel={() => { drawing.current = false; }}
+                onPointerUp={end}
+                onPointerCancel={end}
               />
             </div>
           ) : <p className="mask-problem">{failure ?? t('mask.loading')}</p>}

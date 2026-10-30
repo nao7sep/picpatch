@@ -33,7 +33,7 @@ async function readReady(root: string, identity: EngineIdentity): Promise<Engine
   let record: unknown;
   try {
     const info = await stat(filename);
-    if (!info.isFile() || info.size > 8192) return { status: 'incompatible', code: 'ENGINE_RECORD_INVALID', identity, engineDirectory: root };
+    if (!info.isFile()) return { status: 'incompatible', code: 'ENGINE_RECORD_INVALID', identity, engineDirectory: root };
     record = JSON.parse(await readFile(filename, 'utf8'));
   } catch (cause) {
     if (missing(cause)) return { status: 'missing', code: 'ENGINE_MISSING', identity, engineDirectory: root };

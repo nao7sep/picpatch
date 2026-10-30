@@ -177,7 +177,7 @@ export class Application {
 
   async mask(sessionId: string, bytes: Uint8Array) {
     // Authored mask pixels belong to the GUI; the SDK validates their image semantics on execution.
-    if (!(bytes instanceof Uint8Array) || bytes.byteLength > 64 * 1024 * 1024) throw new UiError('error.invalid_mask_image');
+    if (!(bytes instanceof Uint8Array)) throw new UiError('error.invalid_mask_image');
     const asset = await this.sessions.addImage(sessionId, 'mask.png', bytes);
     this.backup(await this.sessions.imagePath(sessionId, asset.id), Buffer.from(bytes)); return asset;
   }
