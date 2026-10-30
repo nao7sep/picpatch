@@ -17,13 +17,15 @@ export function id(value: unknown): asserts value is string { if (typeof value !
 export function validateDraft(value: unknown): Draft {
   const draft = value as Draft;
   if (!draft || !['generate', 'edit'].includes(draft.mode) || typeof draft.text !== 'string' || !Array.isArray(draft.modelIds) || !draft.modelIds.every(v => typeof v === 'string' && v.length) || !Number.isSafeInteger(draft.width) || draft.width < 1 || !Number.isSafeInteger(draft.height) || draft.height < 1 || !draft.parameters || typeof draft.parameters !== 'object' || Array.isArray(draft.parameters) || !Array.isArray(draft.references)) throw new UiError('error.invalid_session_draft');
-  if (draft.seed !== undefined && (!Number.isSafeInteger(draft.seed) || draft.seed < 0)) throw new UiError('error.invalid_seed');
+  // The same ranges the options pane accepts; a value outside them is refused, never corrected.
+  if (draft.seed !== undefined && (!Number.isSafeInteger(draft.seed) || draft.seed < 0 || draft.seed > 2 ** 32 - 1)) throw new UiError('error.invalid_seed');
+  if (draft.outpaint !== undefined && (!draft.outpaint || [draft.outpaint.width, draft.outpaint.height].some(value => !Number.isSafeInteger(value) || value < 1) || [draft.outpaint.left, draft.outpaint.top].some(value => !Number.isSafeInteger(value) || value < 0))) throw new UiError('error.invalid_session_draft');
   for (const asset of [draft.source, draft.mask, draft.control?.image]) if (asset !== undefined) id(asset);
   for (const group of draft.references) {
     if (!group || typeof group.id !== 'string' || !Array.isArray(group.images)) throw new UiError('error.invalid_reference_group');
     group.images.forEach(id);
   }
-  if (draft.control && (!(controlKinds as readonly string[]).includes(draft.control.kind) || (draft.control.strength !== undefined && !Number.isFinite(draft.control.strength)))) throw new UiError('error.invalid_structural_control');
+  if (draft.control && (!(controlKinds as readonly string[]).includes(draft.control.kind) || (draft.control.strength !== undefined && (!Number.isFinite(draft.control.strength) || draft.control.strength < 0)))) throw new UiError('error.invalid_structural_control');
   return structuredClone(draft);
 }
 export function validateSession(value: unknown): Session {
@@ -81,7 +83,7 @@ export class Sessions {
   constructor(root: string, private saved: (path: string, bytes: Buffer) => void = () => {}, private existingCollection = false) {
     if (!isAbsolute(root)) throw new UiError('error.session_collection_must_be_absolute');
     this.root = root;
-    // Swept once, first in the chain, so no removal of this collection can be under way.
+    // Swept once, first in the chain, so no removal or run of this collection can be under way.
     this.tail = this.sweep();
   }
   private async sweep(): Promise<void> {
@@ -89,9 +91,22 @@ export class Sessions {
     // An unreadable collection is reported by listing it.
     try { entries = await readdir(this.root, { withFileTypes: true }); } catch { return; }
     for (const entry of entries) {
-      if (!entry.isDirectory() || !removing.test(entry.name)) continue;
+      if (!entry.isDirectory()) continue;
+      if (uuid.test(entry.name)) { await this.sweepScratch(join(this.root, entry.name, 'outputs')); continue; }
+      if (!removing.test(entry.name)) continue;
       try { await rm(join(this.root, entry.name), { recursive: true, force: true }); }
       catch (error) { this.leftovers.push({ id: entry.name, message: new UiError('ui.session_cleanup_pending', { path: join(this.root, entry.name) }, { cause: error }).message }); }
+    }
+  }
+  /**
+   * A run's private folder (`.picpatch-*` beside its output) is left behind only when the app quit mid-run; no run
+   * of this collection can be going while it opens. One that cannot be removed now is tried again at the next opening.
+   */
+  private async sweepScratch(outputs: string): Promise<void> {
+    let entries;
+    try { entries = await readdir(outputs, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name.startsWith('.picpatch-')) await rm(join(outputs, entry.name), { recursive: true, force: true }).catch(() => {});
     }
   }
   directory(key: string): string { id(key); return join(this.root, key); }

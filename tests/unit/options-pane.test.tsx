@@ -16,12 +16,12 @@ it('preserves explicit empty negative prompt separately from reset across guidan
   fireEvent.change(screen.getByRole('textbox', { name: 'Negative prompt' }), { target: { value: '' } });
   expect(draft.parameters.negativePrompt).toBe('');
   expect(admissionIssues({ operation: 'generate', parameters: draft.parameters }, model.capabilities)).toEqual([]);
-  fireEvent.change(screen.getByRole('spinbutton', { name: 'Guidance' }), { target: { value: '1' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Guidance' }), { target: { value: '1' } });
   expect(admissionIssues({ operation: 'generate', parameters: draft.parameters }, model.capabilities)).toContainEqual(expect.objectContaining({ subject: 'negativePrompt' }));
   fireEvent.click(screen.getByRole('button', { name: 'Default' }));
   expect(draft.parameters).not.toHaveProperty('negativePrompt');
   expect(admissionIssues({ operation: 'generate', parameters: draft.parameters }, model.capabilities)).toEqual([]);
-  fireEvent.change(screen.getByRole('spinbutton', { name: 'Guidance' }), { target: { value: '2' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Guidance' }), { target: { value: '2' } });
   expect(admissionIssues({ operation: 'generate', parameters: draft.parameters }, model.capabilities)).toContainEqual(expect.objectContaining({ subject: 'guidance' }));
   fireEvent.focus(screen.getByRole('textbox', { name: 'Negative prompt' }));
   expect(draft.parameters.negativePrompt).toBe('');

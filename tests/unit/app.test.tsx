@@ -87,7 +87,7 @@ it('edits a result, reuses its settings and groups runs submitted together', asy
   expect(screen.getByText('2 results')).toBeTruthy();
   const options = screen.getAllByRole('button', { name: 'Image options' })[0]!;
   fireEvent.click(options);
-  expect((screen.getByRole('spinbutton', { name: 'Seed' }) as HTMLInputElement).value).toBe('41');
+  expect((screen.getByRole('textbox', { name: 'Seed' }) as HTMLInputElement).value).toBe('41');
 });
 
 it('drops one image to edit it when nothing is being edited, and later images as a reference group', async () => {
@@ -258,17 +258,18 @@ it('says when models this computer cannot run are hidden, and reports a session 
   expect(await screen.findByText('More models run on Apple Silicon Macs.')).toBeTruthy();
 });
 
-it('moves the sessions rail with arrow keys and saves its width once, on key release', async () => {
+it('moves the sessions rail with arrow keys and saves its width once, a short delay after the last step', async () => {
   const fake = await start();
   const splitter = screen.getByRole('separator', { name: 'Session list width' });
   const before = Number(splitter.getAttribute('aria-valuenow'));
-  for (let i = 0; i < 3; i++) fireEvent.keyDown(splitter, { key: 'ArrowRight' });
+  for (let i = 0; i < 3; i++) { fireEvent.keyDown(splitter, { key: 'ArrowRight' }); fireEvent.keyUp(splitter, { key: 'ArrowRight' }); }
   expect(Number(splitter.getAttribute('aria-valuenow'))).toBe(before + 24);
   expect(fake.calls('savePane')).toEqual([]);
-  fireEvent.keyUp(splitter, { key: 'ArrowRight' });
   await waitFor(() => expect(fake.calls('savePane')).toEqual([{ railWidth: before + 24, optionsPane: false }]));
-  fireEvent.blur(splitter);
-  expect(fake.calls('savePane')).toHaveLength(1);
+  // A step still waiting is saved when the app quits.
+  fireEvent.keyDown(splitter, { key: 'ArrowLeft' });
+  await act(async () => { await fake.request({ kind: 'flush' }); });
+  expect(fake.calls('savePane')).toEqual([{ railWidth: before + 24, optionsPane: false }, { railWidth: before + 16, optionsPane: false }]);
 });
 
 it('asks the fleet discard question when quitting with unsaved settings, keeping them by default', async () => {
@@ -398,6 +399,34 @@ it('refuses files outside the composer and anything that is not a file, opening 
   expect(fake.calls('import')).toEqual([]);
 });
 
+it('keeps a number field’s typed text, shows what it accepts, and holds Send back until it is fixed, even with its panel closed', async () => {
+  const fake = await start();
+  fireEvent.change(field(), { target: { value: 'A lighthouse' } });
+  fireEvent.click(screen.getAllByRole('button', { name: 'Image options' })[0]!);
+  const seed = screen.getByRole('textbox', { name: 'Seed' }) as HTMLInputElement;
+  fireEvent.change(seed, { target: { value: '12.5' } });
+  expect(seed.value).toBe('12.5'); expect(seed.getAttribute('aria-invalid')).toBe('true');
+  expect(screen.getAllByText('Enter a whole number from 0 to 4,294,967,295.').length).toBeGreaterThan(0);
+  expect((send() as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText('Seed: Enter a whole number from 0 to 4,294,967,295.')).toBeTruthy();
+  fireEvent.change(seed, { target: { value: '12' } });
+  expect((send() as HTMLButtonElement).disabled).toBe(false);
+
+  fireEvent.click(screen.getByTitle('Image size'));
+  const width = screen.getByRole('textbox', { name: 'Width' }) as HTMLInputElement;
+  fireEvent.change(width, { target: { value: '1000' } });
+  fireEvent.keyDown(width, { key: 'Escape' });
+  expect(screen.queryByRole('textbox', { name: 'Width' })).toBeNull();
+  expect((send() as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText('Width: Enter a multiple of 16.')).toBeTruthy();
+  fireEvent.click(screen.getByTitle('Image size'));
+  const reopened = screen.getByRole('textbox', { name: 'Width' }) as HTMLInputElement;
+  expect(reopened.value).toBe('1000');
+  fireEvent.change(reopened, { target: { value: '1008' } });
+  expect((send() as HTMLButtonElement).disabled).toBe(false);
+  await waitFor(() => expect(fake.session.draft).toMatchObject({ seed: 12, width: 1008 }));
+});
+
 it('settles only submission-owned text and target while retaining every newer composer control', async () => {
   let finish!: (value: ReturnType<typeof run>[]) => void;
   const initial = session({ runs: [run('original')] });
@@ -409,11 +438,11 @@ it('settles only submission-owned text and target while retaining every newer co
   await waitFor(() => expect(fake.calls('submit')).toHaveLength(1));
   fireEvent.change(field(), { target: { value: 'Next instruction' } });
   fireEvent.click(screen.getAllByRole('button', { name: 'Image options' })[0]!);
-  fireEvent.change(screen.getByRole('spinbutton', { name: 'Seed' }), { target: { value: '42' } });
-  fireEvent.change(screen.getByRole('spinbutton', { name: 'Steps' }), { target: { value: '8' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Seed' }), { target: { value: '42' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Steps' }), { target: { value: '8' } });
   fireEvent.click(screen.getByTitle('Image size'));
-  fireEvent.change(screen.getByRole('spinbutton', { name: 'Width' }), { target: { value: '832' } });
-  fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Width' }), { key: 'Escape' });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Width' }), { target: { value: '832' } });
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Width' }), { key: 'Escape' });
   fireEvent.click(screen.getByRole('button', { name: 'Subject Person' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Reference group name' }), { target: { value: 'Changed reference' } });
   fireEvent.click(screen.getByRole('button', { name: 'Done' }));

@@ -96,6 +96,8 @@ select {
 input[type="range"] { accent-color: var(--accent); }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .inline-number { width: 96px; height: var(--control-h-compact) !important; }
+.inline-field { display: flex; flex-direction: column; }
+.inline-field .field-error { margin: 4px 0 0; max-width: 160px; }
 
 /* A segmented control: a recessed track with the chosen segment raised. Native radios keep the keys. */
 .segmented { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--radius-control); background: var(--sunken); }
@@ -117,6 +119,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .field-help { margin: 0 0 10px; color: var(--ink-3); font-size: 12px; }
 .field-warn { margin: 0 0 10px; color: var(--warn); font-size: 12px; }
 .field-error { margin: 0 0 10px; color: var(--danger); font-size: 12px; }
+.field .field-error { margin: 0; }
 .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); align-items: end; gap: 12px; }
 .field-pair, .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 .button-row { display: flex; flex-wrap: wrap; gap: var(--gap); margin: 0 0 10px; }

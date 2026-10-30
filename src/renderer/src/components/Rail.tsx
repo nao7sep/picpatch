@@ -20,7 +20,8 @@ export interface RailProps {
   optionsPane: boolean;
   /** The display zone dates are shown in. */
   timeZone: string;
-  onWidth: (width: number) => void;
+  /** `stepping` marks one keyboard step of a continuous resize, saved after the last step. */
+  onWidth: (width: number, stepping?: boolean) => void;
   onOpen: (id: string) => void;
   onNew: () => void;
   onRename: () => void;
@@ -33,13 +34,12 @@ export function Rail(props: RailProps) {
   const { sessions, currentId } = props;
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [drag, setDrag] = useState<number | null>(null);
-  const [keyed, setKeyed] = useState<number | null>(null);
   useEffect(() => {
     const resize = () => setWindowWidth(window.innerWidth);
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
   }, []);
-  const width = railWidth(drag ?? keyed ?? props.width, windowWidth, props.optionsPane);
+  const width = railWidth(drag ?? props.width, windowWidth, props.optionsPane);
   const activeIndex = sessions.findIndex(session => session.id === currentId);
 
   useEffect(() => { if (activeIndex >= 0) document.getElementById(`session-${activeIndex}`)?.scrollIntoView({ block: 'nearest' }); }, [activeIndex]);
@@ -78,14 +78,16 @@ export function Rail(props: RailProps) {
     };
     target.addEventListener('pointermove', move); target.addEventListener('pointerup', up); target.addEventListener('pointercancel', up);
   };
-  // Keys move the splitter at once; the width is saved once, when the key is released or focus leaves.
+  // Keys move the splitter at once; the owner saves the width a short delay after the last step.
   const onSplitterKey = (event: React.KeyboardEvent) => {
     if (isComposing(event.nativeEvent)) return;
     const step = event.shiftKey ? 32 : 8;
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setKeyed(Math.max(layout.rail, Math.min(layout.railMax, width + (event.key === 'ArrowRight' ? step : -step)))); }
-    else if (event.key === 'Home') { event.preventDefault(); setKeyed(layout.railDefault); }
+    const next = event.key === 'ArrowLeft' || event.key === 'ArrowRight' ? Math.max(layout.rail, Math.min(layout.railMax, width + (event.key === 'ArrowRight' ? step : -step)))
+      : event.key === 'Home' ? layout.railDefault : undefined;
+    if (next === undefined) return;
+    event.preventDefault();
+    if (next !== width) props.onWidth(next, true);
   };
-  const saveKeyed = () => { if (keyed === null) return; setKeyed(null); if (keyed !== props.width) props.onWidth(keyed); };
 
   return (
     <>
@@ -125,7 +127,7 @@ export function Rail(props: RailProps) {
       <div
         className="splitter" role="separator" aria-orientation="vertical" tabIndex={0}
         aria-valuemin={layout.rail} aria-valuemax={layout.railMax} aria-valuenow={Math.round(width)} aria-label={t('rail.resize')}
-        onPointerDown={startDrag} onKeyDown={onSplitterKey} onKeyUp={saveKeyed} onBlur={saveKeyed}
+        onPointerDown={startDrag} onKeyDown={onSplitterKey}
       />
     </>
   );

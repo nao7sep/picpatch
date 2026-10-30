@@ -1,15 +1,17 @@
 // The Records window: the app's diagnostic history, filtered by launch, severity and
 // text, newest first, with the selected record's fields and raw detail beside it.
-// New records join the top of the list while it is scrolled to the top, keeping the selection; scrolled away, they
-// wait until the list returns to the top.
-import { useCallback, useEffect, useRef, useState } from 'react';
+// Pages of 100 load newest first as the list nears its end. New records join the top only while the list is
+// at its top, keeping the selection and its detail; scrolled away, nothing moves until the list returns there.
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { activeLocale, t, useLocale } from '../../../shared/i18n/index.ts';
 import type { LogsBridge } from '../../../shared/logs-bridge.ts';
-import { recordsPageSize, type RecordSummary, type RecordsQuery } from '../../../shared/records.ts';
+import type { RecordSummary, RecordsQuery } from '../../../shared/records.ts';
 import { displayTimeZone } from '../../../shared/time-zone.ts';
 import { applyFont } from '../fonts.ts';
-import { LanguageRevision } from '../i18n.tsx';
+import { LanguageRevision, useI18n } from '../i18n.tsx';
+import { DelayedSave } from '../delayed-save.ts';
 import { isComposing } from '../ime.ts';
+import { useRecordPages } from './record-pages.ts';
 
 declare global { interface Window { picpatchLogs: LogsBridge } }
 
@@ -38,32 +40,39 @@ export function RecordsWindow({ api }: { api: LogsBridge }) {
 
 /** The display zone, set with the window's appearance before each render. */
 let zone = displayTimeZone(undefined);
+/** One formatter per locale and zone, since a long list formats every row on each render. */
+let formatter: { key: string; format: Intl.DateTimeFormat } | undefined;
 function formatTime(value: string) {
   const instant = new Date(value);
-  return Number.isNaN(instant.valueOf()) ? value : new Intl.DateTimeFormat(activeLocale().format, { dateStyle: 'medium', timeStyle: 'medium', timeZone: zone }).format(instant);
+  if (Number.isNaN(instant.valueOf())) return value;
+  const key = `${activeLocale().format}\n${zone}`;
+  if (formatter?.key !== key) formatter = { key, format: new Intl.DateTimeFormat(activeLocale().format, { dateStyle: 'medium', timeStyle: 'medium', timeZone: zone }) };
+  return formatter.format.format(instant);
 }
+
+// Measurements are the list's own scroll offset, visible height and content height.
+/** The next page is wanted while what is left below the visible part is no more than the visible height. */
+const nearEnd = (list: HTMLElement) => list.scrollHeight - list.scrollTop - list.clientHeight <= list.clientHeight;
+const atTop = (list: HTMLElement) => list.scrollTop < 1;
 
 function Records({ api }: { api: LogsBridge }) {
   const [current, setCurrent] = useState(true);
   const [level, setLevel] = useState<RecordsQuery['level']>('all');
   const [search, setSearch] = useState('');
-  const [query, setQuery] = useState<RecordsQuery>({ current: true, level: 'all', search: '' });
-  const [rows, setRows] = useState<RecordSummary[]>([]);
-  const [more, setMore] = useState(false);
-  const [pending, setPending] = useState(true);
-  const [failed, setFailed] = useState(false);
-  const [changed, setChanged] = useState(false);
+  const [query, setQuery] = useState<Omit<RecordsQuery, 'before'>>({ current: true, level: 'all', search: '' });
+  const pages = useRecordPages(api, query);
+  const { records: rows, readNewest, readMore } = pages;
   const [selected, setSelected] = useState<number>();
   const [detail, setDetail] = useState<string | null | undefined>();
+  const [detailFailed, setDetailFailed] = useState(false);
   const [width, setWidth] = useState<number>(LIST_MIN);
   const [drag, setDrag] = useState<number | null>(null);
-  const [keyed, setKeyed] = useState<number | null>(null);
-  // IPC cannot be cancelled, so a result checks the token it was asked under. The list token changes only when the list
-  // restarts (a filter change), so an older page and the newest records join the same list; the detail token changes
-  // when another record is chosen or the list restarts.
-  const listToken = useRef(0), detailToken = useRef(0);
+  // The detail token changes when another record is chosen or the list restarts; IPC cannot be cancelled.
+  const detailToken = useRef(0);
   const list = useRef<HTMLDivElement>(null), shell = useRef<HTMLDivElement>(null);
   const [shellWidth, setShellWidth] = useState(1100);
+  /** New records arrived, or a newest page was dropped, while the list was away from its top. */
+  const newestWaiting = useRef(false);
 
   useEffect(() => { void api.appearance().then(view => { if (view.listWidth) setWidth(view.listWidth); }, () => {}); }, [api]);
   useEffect(() => {
@@ -73,48 +82,41 @@ function Records({ api }: { api: LogsBridge }) {
   }, []);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (!isComposing(event) && (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'w') { event.preventDefault(); void api.close().catch(() => setFailed(true)); }
+      // Main records a failed close itself.
+      if (!isComposing(event) && (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'w') { event.preventDefault(); void api.close().catch(() => {}); }
     };
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
   }, [api]);
 
-  const load = useCallback(async (next: RecordsQuery, before?: number) => {
-    setPending(true); setFailed(false);
-    if (before === undefined) { setChanged(false); ++listToken.current; ++detailToken.current; setSelected(undefined); setDetail(undefined); setRows([]); }
-    const token = listToken.current;
-    try {
-      const page = await api.query({ ...next, ...(before === undefined ? {} : { before }) });
-      if (token !== listToken.current) return;
-      setRows(existing => before === undefined ? page.records : [...existing, ...page.records.filter(row => !existing.some(item => item.id === row.id))]);
-      setMore(page.more);
-    } catch { if (token === listToken.current) setFailed(true); }
-    finally { if (token === listToken.current) setPending(false); }
-  }, [api]);
-
-  useEffect(() => { void load(query); }, [load, query]);
-  // The newest page merges into the list without a reload, so loaded older pages and the selection stay.
-  const queryRef = useRef(query); queryRef.current = query;
-  const rowsRef = useRef(rows); rowsRef.current = rows;
-  const addNewest = useCallback(async () => {
-    const token = listToken.current;
-    try {
-      const page = await api.query(queryRef.current);
-      if (token !== listToken.current) return;
-      setChanged(false);
-      const newest = rowsRef.current[0]?.id ?? 0, added = page.records.filter(row => row.id > newest);
-      // A full page of new records may leave a gap before the loaded ones, so the list restarts from this page.
-      if (added.length >= recordsPageSize) { setRows(page.records); setMore(page.more); }
-      else if (added.length) setRows(existing => [...added.filter(row => row.id > (existing[0]?.id ?? 0)), ...existing]);
-    } catch { if (token === listToken.current) setFailed(true); }
-  }, [api]);
-  const atTop = () => (list.current?.scrollTop ?? 0) <= 8;
-  // A read that failed is retried when the next record arrives, or when a filter changes.
-  const failedRef = useRef(failed); failedRef.current = failed;
+  // A filter change clears the selection with the list.
+  useEffect(() => { ++detailToken.current; newestWaiting.current = false; setSelected(undefined); setDetail(undefined); }, [query]);
+  // New records appear only while the list is at its top; otherwise nothing moves until it is back there,
+  // including a newest page that was already being read when the list left the top.
+  const readNewestAtTop = useCallback(() => {
+    void readNewest(() => {
+      const element = list.current;
+      if (!element || atTop(element)) return true;
+      newestWaiting.current = true; return false;
+    });
+  }, [readNewest]);
+  const failureRef = useRef(pages.failure); failureRef.current = pages.failure;
   useEffect(() => api.onRecordsChanged(() => {
-    if (failedRef.current) void load(queryRef.current);
-    else if (atTop()) void addNewest(); else setChanged(true);
-  }), [api, addNewest, load]);
+    // An arrival is also the retry of a failed older page.
+    if (failureRef.current === 'more') void readMore(true);
+    const element = list.current;
+    if (!element || atTop(element)) readNewestAtTop(); else newestWaiting.current = true;
+  }), [api, readMore, readNewestAtTop]);
+  // Each settled read checks again, so pages keep loading while the list is short of filling the window.
+  useEffect(() => {
+    const element = list.current;
+    if (element && pages.status === 'ready' && nearEnd(element)) void readMore();
+  }, [pages.revision, pages.status, readMore]);
+  const onScroll = () => {
+    const element = list.current; if (!element) return;
+    if (newestWaiting.current && atTop(element)) { newestWaiting.current = false; readNewestAtTop(); }
+    if (nearEnd(element)) void readMore();
+  };
   // Typing settles briefly before it queries; the filters apply at once.
   useEffect(() => {
     if (search === query.search) return;
@@ -123,42 +125,52 @@ function Records({ api }: { api: LogsBridge }) {
   }, [search, query.search]);
 
   const choose = async (id: number) => {
-    setSelected(id); setDetail(undefined);
+    setSelected(id); setDetail(undefined); setDetailFailed(false);
     const token = ++detailToken.current;
     try { const text = await api.detail(id); if (token === detailToken.current) setDetail(text); }
-    catch { if (token === detailToken.current) { setDetail(null); setFailed(true); } }
+    catch { if (token === detailToken.current) setDetailFailed(true); }
   };
 
-  const loadOlder = () => { if (!pending && !failed && more && rows.length) void load(query, rows.at(-1)!.id); };
+  const chooseRef = useRef(choose); chooseRef.current = choose;
+  const chooseRow = useCallback((id: number) => { void chooseRef.current(id); }, []);
+
   const activeIndex = rows.findIndex(row => row.id === selected);
   useEffect(() => { if (activeIndex >= 0) document.getElementById(`record-${activeIndex}`)?.scrollIntoView({ block: 'nearest' }); }, [activeIndex]);
   const onListKey = (event: React.KeyboardEvent) => {
     if (isComposing(event.nativeEvent) || !rows.length) return;
-    const page = Math.max(1, Math.floor((list.current?.clientHeight ?? 400) / 56));
+    const rowHeight = list.current?.querySelector<HTMLElement>('[role=option]')?.offsetHeight ?? 0;
+    const page = rowHeight ? Math.max(1, Math.floor(list.current!.clientHeight / rowHeight)) : 1;
     const target = { ArrowDown: activeIndex + 1, ArrowUp: Math.max(0, activeIndex - 1), Home: 0, End: rows.length - 1, PageDown: activeIndex + page, PageUp: activeIndex - page }[event.key];
     if (target === undefined) return;
     event.preventDefault();
     const index = Math.max(0, Math.min(rows.length - 1, target));
-    if (index === rows.length - 1 && event.key !== 'Home') loadOlder();
+    if (index === rows.length - 1 && event.key !== 'Home') void readMore();
     void choose(rows[index]!.id);
   };
 
   const widest = Math.max(LIST_MIN, shellWidth - DETAIL_MIN);
-  const shown = Math.max(LIST_MIN, Math.min(drag ?? keyed ?? width, widest));
-  // Keys move the splitter at once; the width is saved once, when the key is released or focus leaves.
-  const saveKeyed = () => { if (keyed === null) return; setKeyed(null); if (keyed !== width) saveWidth(keyed); };
-  const saveWidth = (value: number) => { setWidth(value); void api.resizeList(value).catch(() => setFailed(true)); };
+  const shown = Math.max(LIST_MIN, Math.min(drag ?? width, widest));
+  // Keys move the splitter at once and save a short delay after the last step; a drag saves when it ends.
+  // Main records a failed save itself.
+  const [widthSave] = useState(() => new DelayedSave<number>(value => api.resizeList(value).catch(() => {})));
+  useEffect(() => {
+    const flush = () => { void widthSave.flush(); };
+    window.addEventListener('pagehide', flush);
+    return () => { window.removeEventListener('pagehide', flush); flush(); };
+  }, [widthSave]);
+  const stepWidth = (value: number) => { if (value === width) return; setWidth(value); widthSave.later(value); };
   const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const target = event.currentTarget, startX = event.clientX, start = shown; let latest = start;
     target.setPointerCapture(event.pointerId);
     const move = (e: PointerEvent) => { latest = Math.max(LIST_MIN, Math.min(start + e.clientX - startX, shellWidth - DETAIL_MIN)); setDrag(latest); };
-    const up = () => { target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', up); setDrag(null); if (latest !== start) saveWidth(latest); };
+    const up = () => { target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', up); setDrag(null); if (latest !== start) { setWidth(latest); void widthSave.now(latest); } };
     target.addEventListener('pointermove', move); target.addEventListener('pointerup', up);
   };
 
   const record = detail ? parseRecord(detail) : undefined;
-  const status = pending ? t('logs.loading') : failed ? t('logs.failed') : changed ? t('logs.newRecords') : rows.length ? '' : t('logs.empty');
+  const failed = pages.failure !== undefined;
+  const status = pages.status === 'loading' ? t('logs.loading') : failed ? t('logs.failed') : rows.length ? '' : t('logs.empty');
 
   return (
     <div className="records-shell" ref={shell}>
@@ -179,30 +191,24 @@ function Records({ api }: { api: LogsBridge }) {
           </div>
         </div>
         <div
-          ref={list} className="records-rows" role="listbox" tabIndex={0} aria-label={t('ui.logs')}
-          aria-activedescendant={activeIndex >= 0 ? `record-${activeIndex}` : undefined} onKeyDown={onListKey}
-          onScroll={event => { const el = event.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) loadOlder(); if (changed && atTop()) void addNewest(); }}
+          ref={list} className="records-rows" role="listbox" tabIndex={0} aria-label={t('ui.logs')} aria-busy={pages.reading !== undefined}
+          aria-activedescendant={activeIndex >= 0 ? `record-${activeIndex}` : undefined} onKeyDown={onListKey} onScroll={onScroll}
         >
-          {rows.map((row, index) => (
-            <div key={row.id} id={`record-${index}`} role="option" aria-selected={row.id === selected} className={`record-card${row.id === selected ? ' selected' : ''}`} onClick={() => void choose(row.id)}>
-              <span className="record-line"><span className={`pill level-${row.level}`}>{t(`logs.${row.level}`)}</span><time className="record-time" dateTime={row.time}>{formatTime(row.time)}</time></span>
-              <span className="record-text">{row.message}</span>
-            </div>
-          ))}
+          {rows.map((row, index) => <RecordRow key={row.id} row={row} index={index} selected={row.id === selected} onChoose={chooseRow} />)}
         </div>
       </section>
       <div className="splitter" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={t('logs.splitter')} aria-valuemin={LIST_MIN} aria-valuemax={Math.round(widest)} aria-valuenow={Math.round(shown)}
         onPointerDown={startDrag}
         onKeyDown={event => {
           if (isComposing(event.nativeEvent)) return;
-          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setKeyed(Math.max(LIST_MIN, Math.min(shown + (event.key === 'ArrowRight' ? SPLITTER_STEP : -SPLITTER_STEP), widest))); }
-          else if (event.key === 'Home') { event.preventDefault(); setKeyed(LIST_MIN); }
-          else if (event.key === 'End') { event.preventDefault(); setKeyed(widest); }
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); stepWidth(Math.max(LIST_MIN, Math.min(shown + (event.key === 'ArrowRight' ? SPLITTER_STEP : -SPLITTER_STEP), widest))); }
+          else if (event.key === 'Home') { event.preventDefault(); stepWidth(LIST_MIN); }
+          else if (event.key === 'End') { event.preventDefault(); stepWidth(widest); }
         }}
-        onKeyUp={saveKeyed} onBlur={saveKeyed}
+        onBlur={() => void widthSave.flush()}
       />
       <section className="records-detail" aria-label={t('logs.detail')}>
-        {selected === undefined ? <p className="records-state">{t('logs.select')}</p> : detail === undefined ? <p className="records-state">{t('logs.loading')}</p> : (
+        {selected === undefined ? <p className="records-state">{t('logs.select')}</p> : detailFailed ? <p className="records-state problem">{t('logs.failed')}</p> : detail === undefined ? <p className="records-state">{t('logs.loading')}</p> : (
           <>
             {record && record.fields.length > 0 && (
               <dl className="records-fields">
@@ -220,6 +226,17 @@ function Records({ api }: { api: LogsBridge }) {
     </div>
   );
 }
+
+/** A row re-renders only when its record, place or selection changes, or the language or zone does. */
+const RecordRow = memo(function RecordRow({ row, index, selected, onChoose }: { row: RecordSummary; index: number; selected: boolean; onChoose: (id: number) => void }) {
+  useI18n();
+  return (
+    <div id={`record-${index}`} role="option" aria-selected={selected} className={`record-card${selected ? ' selected' : ''}`} onClick={() => onChoose(row.id)}>
+      <span className="record-line"><span className={`pill level-${row.level}`}>{t(`logs.${row.level}`)}</span><time className="record-time" dateTime={row.time}>{formatTime(row.time)}</time></span>
+      <span className="record-text">{row.message}</span>
+    </div>
+  );
+});
 
 /** The structured fields of a record, when its payload has them; older payloads stay raw only. */
 function parseRecord(text: string): { fields: [string, string][] } | undefined {

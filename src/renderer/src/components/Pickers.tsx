@@ -1,9 +1,10 @@
 // The composer's model and size choices, each a small panel from a chip in its row.
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { incompatibilities } from '../../../shared/admission.ts';
 import type { Draft } from '../../../shared/session.ts';
 import type { CatalogModel, Readiness } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
+import { NumberField } from '../number-field.tsx';
 import { modelLabel, modelRows, modelSummary, tierOrder } from '../models.ts';
 import { ChevronDownIcon, ShapeIcon } from './icons.tsx';
 import { Popover } from './Popover.tsx';
@@ -92,11 +93,11 @@ const PRESETS = [
   { key: 'landscape', width: 1216, height: 832 },
 ] as const;
 
-export function SizePicker({ draft, multiple, onDraft }: { draft: Draft; multiple: number; onDraft: (draft: Draft) => void }) {
+export function SizePicker({ draft, multiple, onDraft }: { draft: Draft; multiple: number; onDraft: (draft: Draft, save: 'later' | 'now') => void }) {
   const { t } = useI18n();
-  const set = (width: number, height: number) => onDraft({ ...draft, width, height });
-  const snap = (value: number) => Math.max(multiple, Math.round(value / multiple) * multiple);
+  const set = (width: number, height: number, save: 'later' | 'now') => onDraft({ ...draft, width, height }, save);
   const preset = PRESETS.find(item => item.width === draft.width && item.height === draft.height);
+  const rule = { whole: true, multiple };
   return (
     <Popover label={t('composer.size')} trigger={<><ShapeIcon width={draft.width} height={draft.height} /><span className="chip-text">{t('conversation.size', { width: String(draft.width), height: String(draft.height) })}</span></>}>
       {() => (
@@ -104,34 +105,18 @@ export function SizePicker({ draft, multiple, onDraft }: { draft: Draft; multipl
           <div className="segmented" role="radiogroup" aria-label={t('composer.size')}>
             {PRESETS.map(item => (
               <label key={item.key} className={preset?.key === item.key ? 'on' : undefined}>
-                <input type="radio" name="size-preset" checked={preset?.key === item.key} data-autofocus={preset?.key === item.key ? 'true' : undefined} onChange={() => set(item.width, item.height)} />
+                <input type="radio" name="size-preset" checked={preset?.key === item.key} data-autofocus={preset?.key === item.key ? 'true' : undefined} onChange={() => set(item.width, item.height, 'now')} />
                 <ShapeIcon width={item.width} height={item.height} /><span>{t(`composer.${item.key}`)}</span>
               </label>
             ))}
           </div>
           <div className="size-fields">
-            <DimensionField label={t('ui.width')} value={draft.width} multiple={multiple} onValue={width => set(width, draft.height)} snap={snap} />
-            <DimensionField label={t('ui.height')} value={draft.height} multiple={multiple} onValue={height => set(draft.width, height)} snap={snap} />
+            <NumberField id="size.width" label={t('ui.width')} value={draft.width} rule={rule} onCommit={width => set(width!, draft.height, 'later')} />
+            <NumberField id="size.height" label={t('ui.height')} value={draft.height} rule={rule} onCommit={height => set(draft.width, height!, 'later')} />
           </div>
           <p className="field-help">{t('composer.sizeRule', { multiple })}</p>
         </div>
       )}
     </Popover>
-  );
-}
-
-/** A size field that may be emptied while typing; leaving it restores or snaps the value. */
-function DimensionField({ label, value, multiple, onValue, snap }: { label: string; value: number; multiple: number; onValue: (value: number) => void; snap: (value: number) => number }) {
-  const [text, setText] = useState(String(value));
-  const editing = useRef(false);
-  useEffect(() => { if (!editing.current) setText(String(value)); }, [value]);
-  return (
-    <label className="field compact"><span className="field-label">{label}</span>
-      <input
-        type="number" min={multiple} step={multiple} value={text} onFocus={() => { editing.current = true; }}
-        onChange={event => { setText(event.target.value); const next = Number(event.target.value); if (event.target.value.trim() && next > 0) onValue(next); }}
-        onBlur={() => { editing.current = false; const next = snap(value); setText(String(next)); if (next !== value) onValue(next); }}
-      />
-    </label>
   );
 }

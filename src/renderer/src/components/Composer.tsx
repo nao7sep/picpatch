@@ -121,7 +121,7 @@ export function Composer(props: ComposerProps) {
             onChoose={id => id === 'target' ? props.onAttachTarget() : props.onAddReference()}
           />
           <ModelPicker draft={draft} models={props.models} hidden={props.hiddenModels} readiness={props.readiness} onDraft={next => props.onDraft(next, 'now')} onSetup={props.onSetup} />
-          <SizePicker draft={draft} multiple={multiple} onDraft={next => props.onDraft(next, 'now')} />
+          <SizePicker draft={draft} multiple={multiple} onDraft={props.onDraft} />
           <button type="button" className="icon-button" aria-pressed={props.optionsPane} onClick={props.onToggleOptions} aria-label={t('conversation.options')} title={t('conversation.options')}><SlidersIcon /></button>
           {dropping && <span className="composer-hint">{dropHint}</span>}
           <span className="spacer" />
@@ -139,7 +139,8 @@ function IssueLine({ issues, onSetup }: { issues: readonly CommandIssue[]; onSet
   const { t, locale } = useI18n();
   const first = issues[0];
   if (!first) return null;
-  const text = first.kind === 'checking' ? t('model.checking')
+  const text = first.kind === 'field' ? first.text
+    : first.kind === 'checking' ? t('model.checking')
     : first.kind === 'unready' ? t('composer.unready', { count: first.models.length, models: new Intl.ListFormat(locale.format, { type: 'conjunction', style: 'narrow' }).format(first.models.map(modelLabel)) })
     : first.kind === 'waiting' ? t('conversation.waiting')
     : first.kind === 'noModel' ? t('composer.chooseModel')

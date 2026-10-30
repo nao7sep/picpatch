@@ -33,6 +33,34 @@ it('keeps first bundle selection generic, reuses the chosen bundle for replaceme
   expect(screen.getByTitle(directory, { normalizer: value => value })).toBeTruthy();
 });
 
+it('holds Register back while a LoRA scale is not a number, keeping what was typed', async () => {
+  const fake = fakeBridge(); window.picpatch = fake.bridge;
+  fake.handlers.engines = () => ({ python: { status: 'ready' }, native: { status: 'ready' } });
+  fake.handlers.models = () => ({ entries: [] });
+  const overview = fake.handlers.overview!(undefined) as Overview;
+  render(<ManagementModal models={overview.models.map(model => ({ ...model, capabilities: { ...model.capabilities, loraFormats: ['sd-unet-safetensors'] } }))} initial="sd15" readiness={{}} managed={{}} onClose={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Register local bundle' }));
+  const choose = (label: string) => fireEvent.click(within(screen.getByText(label).closest('.field') as HTMLElement).getByRole('button', { name: 'Choose' }));
+  fake.handlers.pickPath = () => '/bundles/native';
+  choose('Bundle directory');
+  await screen.findByTitle('/bundles/native');
+  fake.handlers.pickComponent = () => '/bundles/native/model.safetensors';
+  choose('Checkpoint');
+  await screen.findByTitle('/bundles/native/model.safetensors');
+  fake.handlers.pickComponent = () => '/bundles/native/style.safetensors';
+  fireEvent.click(screen.getByRole('button', { name: 'Add LoRA' }));
+  const scale = await screen.findByRole('textbox', { name: /style\.safetensors/ }) as HTMLInputElement;
+  const register = screen.getByRole('button', { name: 'Register' }) as HTMLButtonElement;
+  expect(register.disabled).toBe(false);
+  fireEvent.change(scale, { target: { value: '0.8x' } });
+  expect(scale.value).toBe('0.8x'); expect(register.disabled).toBe(true);
+  expect(screen.getByText('Enter a number.')).toBeTruthy();
+  fireEvent.change(scale, { target: { value: '-0.8' } });
+  expect(register.disabled).toBe(false);
+  fireEvent.click(register);
+  await waitFor(() => expect(fake.calls('prepare')[0]).toMatchObject({ components: { loras: [{ path: '/bundles/native/style.safetensors', scale: -0.8 }] } }));
+});
+
 it('reopens each component and checkpoint at its current selection and keeps it after cancellation', async () => {
   const fake = fakeBridge(); window.picpatch = fake.bridge;
   fake.handlers.engines = () => ({ python: { status: 'ready' }, native: { status: 'ready' } });

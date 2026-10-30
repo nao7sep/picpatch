@@ -5,8 +5,10 @@
 import { canPaintMask, maskNote } from '../../../shared/image-command.ts';
 import { controlKinds, type Draft, type Session } from '../../../shared/session.ts';
 import type { ModelCapabilities, SamplingParameters } from 'picpatchsdk/types';
-import type { CatalogModel } from '../api.ts';
+import { useEffect, useState } from 'react';
+import { imageUrl, type CatalogModel } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
+import { NumberField } from '../number-field.tsx';
 import { BrushIcon, CloseIcon } from './icons.tsx';
 
 const PARAMETERS = ['steps', 'guidance', 'strength', 'identityStyleStrength', 'appearanceStrength', 'sampler', 'scheduler', 'negativePrompt'] as const;
@@ -22,6 +24,22 @@ export interface OptionsPaneProps {
   onPaintMask: () => void;
   onChooseControl: (kind: NonNullable<Draft['control']>['kind']) => void;
   onClose: () => void;
+}
+
+/** The highest seed a run can use. */
+export const SEED_MAX = 2 ** 32 - 1;
+
+/** The displayed (oriented) size of the image being edited, once it has loaded. */
+function useImageSize(url: string | undefined) {
+  const [size, setSize] = useState<{ url: string; width: number; height: number }>();
+  useEffect(() => {
+    if (!url) return;
+    const image = new Image();
+    image.onload = () => setSize({ url, width: image.naturalWidth, height: image.naturalHeight });
+    image.src = url;
+    return () => { image.onload = null; };
+  }, [url]);
+  return size?.url === url ? size : undefined;
 }
 
 export function OptionsPane({ session, draft, models, samples, onSamples, onDraft, onPaintMask, onChooseControl, onClose }: OptionsPaneProps) {
@@ -44,6 +62,13 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
   const editing = Boolean(draft.source);
   const control = draft.control;
   const controlName = control ? session.assets.find(asset => asset.id === control.image)?.name ?? t('ui.control_image') : undefined;
+  const source = useImageSize(editing && draft.outpaint ? imageUrl(session.id, draft.source!) : undefined);
+  // The canvas holds the image at its offset: each side's size bounds the offset, and the offset bounds the size.
+  const outpaintRule = (key: 'width' | 'height' | 'left' | 'top') => {
+    const canvas = draft.outpaint!, along = key === 'width' || key === 'left' ? 'width' : 'height', offset = along === 'width' ? canvas.left : canvas.top;
+    if (key === along) return { whole: true, min: source ? source[along] + offset : 1 };
+    return { whole: true, min: 0, ...(source ? { max: canvas[along] - source[along] } : {}) };
+  };
 
   return (
     <aside className="options-pane" aria-label={t('conversation.options')}>
@@ -54,15 +79,9 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
       <div className="pane-body">
         <section className="pane-section">
           <div className="field-pair">
-            <label className="field compact">
-              <span className="field-label">{t('ui.seed')}</span>
-              <input type="number" min={0} step={1} value={draft.seed ?? ''} placeholder={t('ui.random')}
-                onChange={event => { const next = { ...draft }; if (event.target.value === '') delete next.seed; else next.seed = Math.max(0, Math.trunc(Number(event.target.value))); onDraft(next, 'later'); }} />
-            </label>
-            <label className="field compact">
-              <span className="field-label">{t('ui.samples')}</span>
-              <input type="number" min={1} max={100} step={1} value={samples} onChange={event => onSamples(Math.max(1, Math.min(100, Math.trunc(Number(event.target.value)) || 1)))} />
-            </label>
+            <NumberField id="seed" label={t('ui.seed')} value={draft.seed} rule={{ whole: true, min: 0, max: SEED_MAX, empty: true }} placeholder={t('ui.random')}
+              onCommit={seed => { const next = { ...draft }; if (seed === undefined) delete next.seed; else next.seed = seed; onDraft(next, 'later'); }} />
+            <NumberField id="samples" label={t('ui.samples')} value={samples} rule={{ whole: true, min: 1, max: 100 }} onCommit={value => onSamples(value!)} />
           </div>
           <p className="field-help">{t('options.samplesHelp')}</p>
         </section>
@@ -91,13 +110,10 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
                 </label>
               );
               return (
-                <label key={key} className="field compact">
-                  <span className="field-label">{label}</span>
-                  <input type="number" step={descriptor?.integer ? 1 : 'any'} min={descriptor?.minimum} max={descriptor?.maximum}
-                    value={typeof value === 'number' ? value : ''}
-                    placeholder={typeof descriptor?.default === 'number' ? number(descriptor.default) : t('ui.default')}
-                    onChange={event => setParameter(key, event.target.value === '' ? undefined : Number(event.target.value))} />
-                </label>
+                <NumberField key={key} id={`parameter.${key}`} label={label} value={typeof value === 'number' ? value : undefined}
+                  rule={{ ...(descriptor?.integer ? { whole: true } : {}), ...(descriptor?.minimum !== undefined ? { min: descriptor.minimum } : {}), ...(descriptor?.maximum !== undefined ? { max: descriptor.maximum } : {}), empty: true }}
+                  placeholder={typeof descriptor?.default === 'number' ? number(descriptor.default) : t('ui.default')}
+                  onCommit={next => setParameter(key, next)} />
               );
             })}
           </section>
@@ -119,11 +135,8 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
             {draft.outpaint && (
               <div className="field-grid">
                 {(['width', 'height', 'left', 'top'] as const).map(key => (
-                  <label key={key} className="field compact">
-                    <span className="field-label">{t(key === 'width' ? 'ui.width' : key === 'height' ? 'ui.height' : key === 'left' ? 'ui.source_left' : 'ui.source_top')}</span>
-                    <input type="number" min={key === 'left' || key === 'top' ? 0 : 1} value={draft.outpaint![key]}
-                      onChange={event => onDraft({ ...draft, outpaint: { ...draft.outpaint!, [key]: Math.max(0, Math.trunc(Number(event.target.value))) } }, 'later')} />
-                  </label>
+                  <NumberField key={key} id={`outpaint.${key}`} label={t(key === 'width' ? 'ui.width' : key === 'height' ? 'ui.height' : key === 'left' ? 'ui.source_left' : 'ui.source_top')}
+                    value={draft.outpaint![key]} rule={outpaintRule(key)} onCommit={next => onDraft({ ...draft, outpaint: { ...draft.outpaint!, [key]: next! } }, 'later')} />
                 ))}
               </div>
             )}
@@ -152,11 +165,8 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
               <button type="button" className="button compact" disabled={!caps?.controlKinds?.length} onClick={() => onChooseControl(caps?.controlKinds?.[0] ?? 'canny')}>{t('ui.add_control_map')}</button>
             )}
             {control && (
-              <label className="field compact">
-                <span className="field-label">{t('ui.control_strength')}</span>
-                <input type="number" step="any" value={control.strength ?? ''} placeholder={t('ui.model_default')}
-                  onChange={event => { const next = { ...control }; if (event.target.value === '') delete next.strength; else next.strength = Number(event.target.value); onDraft({ ...draft, control: next }, 'later'); }} />
-              </label>
+              <NumberField id="control.strength" label={t('ui.control_strength')} value={control.strength} rule={{ min: 0, empty: true }} placeholder={t('ui.model_default')}
+                onCommit={strength => { const next = { ...control }; if (strength === undefined) delete next.strength; else next.strength = strength; onDraft({ ...draft, control: next }, 'later'); }} />
             )}
           </section>
         ) : null}

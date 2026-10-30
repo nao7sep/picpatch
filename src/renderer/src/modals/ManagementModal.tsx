@@ -3,7 +3,7 @@
 // acquires anything; each change is an explicit action. Application state owns every
 // operation, so this view only shows it and sends commands: Close always closes, the work
 // carries on, and the running row offers its own Cancel.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sameTarget, type ManagedState, type ManagedTarget } from '../../../shared/managed.ts';
 import type { Message } from '../../../shared/i18n/index.ts';
 import { resultMessage, runningMessage } from '../managed.ts';
@@ -11,6 +11,7 @@ import { controlKinds } from '../../../shared/session.ts';
 import { modelLabel, modelOption } from '../models.ts';
 import { api, type CatalogModel, type Components, type Engines, type Inventory, type Readiness } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
+import { fieldProblem, NumberField, NumberFields, type FieldEdit } from '../number-field.tsx';
 import { CloseIcon, PlusIcon } from '../components/icons.tsx';
 import { Modal } from './Modal.tsx';
 import { acceptsLoras, componentFields, engineReady, native, type ComponentKey } from './resources.ts';
@@ -27,6 +28,17 @@ export function ManagementModal({ models, initial, nativeExecutable, readiness, 
   const [engines, setEngines] = useState<Engines>();
   const [inventory, setInventory] = useState<Inventory>();
   const [registration, setRegistration] = useState<Registration>(emptyRegistration);
+  // Typed LoRA scales, by path; one that is not a number holds Register back.
+  const [scaleEdits, setScaleEdits] = useState<Record<string, FieldEdit>>({});
+  const scaleFields = useMemo(() => ({ edits: scaleEdits, edit: (id: string, edit: FieldEdit | undefined) => setScaleEdits(value => {
+    const next = { ...value }; if (edit) next[id] = edit; else delete next[id]; return next;
+  }) }), [scaleEdits]);
+  const scaleProblem = fieldProblem(scaleEdits, id => registration.loras.some(lora => lora.path === id));
+  // A removed LoRA takes its typed scale with it.
+  useEffect(() => setScaleEdits(value => {
+    const kept = Object.fromEntries(Object.entries(value).filter(([path]) => registration.loras.some(lora => lora.path === path)));
+    return Object.keys(kept).length === Object.keys(value).length ? value : kept;
+  }), [registration.loras]);
   const [registering, setRegistering] = useState(false);
   // A request refused before it started; a started operation reports through application state.
   const [failure, setFailure] = useState<string>();
@@ -142,22 +154,23 @@ export function ManagementModal({ models, initial, nativeExecutable, readiness, 
             />
           ))}
           {(acceptsLoras(model) || registration.loras.length > 0) && (
-            <div className="field">
+            <NumberFields value={scaleFields}><div className="field">
               <span className="field-label">{t('ui.local_loras')}</span>
               {registration.loras.map((lora, index) => (
                 <span key={lora.path} className="path-row">
                   <span className="path-value" title={lora.path}>{lora.path}</span>
-                  <input type="number" step="any" className="inline-number" placeholder={t('ui.scale_1')} aria-label={t('management.scale', { name: lora.path })} value={lora.scale ?? ''}
-                    onChange={event => setRegistration(value => ({ ...value, loras: value.loras.map((item, i) => i === index ? (event.target.value === '' ? { path: item.path } : { ...item, scale: Number(event.target.value) }) : item) }))} />
+                  <NumberField id={lora.path} label={t('management.scale', { name: lora.path })} hideLabel className="inline-field" inputClassName="inline-number" placeholder={t('ui.scale_1')}
+                    value={lora.scale} rule={{ empty: true }}
+                    onCommit={scale => setRegistration(value => ({ ...value, loras: value.loras.map((item, i) => i === index ? (scale === undefined ? { path: item.path } : { ...item, scale }) : item) }))} />
                   <button type="button" className="icon-button" aria-label={t('ui.remove')} title={t('ui.remove')} onClick={() => setRegistration(value => ({ ...value, loras: value.loras.filter((_, i) => i !== index) }))}><CloseIcon /></button>
                 </span>
               ))}
               <button type="button" className="button compact" disabled={!registration.directory} onClick={() => void pick(path => setRegistration(value => ({ ...value, loras: [...value.loras, { path }] })))}><PlusIcon /><span>{t('ui.add_lora')}</span></button>
               <span className="field-help">{t('ui.weights_stay_in_the_selected_model_bundle_these_choices')}</span>
-            </div>
+            </div></NumberFields>
           )}
           <div className="button-row end">
-            <button type="button" className="button primary" disabled={busy || (native(model) ? !registration.checkpoint : false)} onClick={register}>{t('management.register')}</button>
+            <button type="button" className="button primary" disabled={busy || Boolean(scaleProblem) || (native(model) ? !registration.checkpoint : false)} onClick={register}>{t('management.register')}</button>
           </div>
         </section>
       )}

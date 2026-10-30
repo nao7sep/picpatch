@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Sessions } from '../../src/main/core/sessions.ts';
@@ -19,6 +19,14 @@ it('reports retained deletion files, and a failed sweep at the next opening, wit
   const listed = await new Sessions(sessions.root).list(); expect(listed.sessions).toEqual([]); expect(listed.failures[0]?.message).toContain('Retained location');
   held.denyRemoval = false; expect((await new Sessions(sessions.root).list()).failures).toEqual([]);
   expect(await readdir(sessions.root)).toEqual([]);
+});
+it('clears run folders left in session outputs when the collection opens, keeping outputs and other files', async () => {
+  const { sessions, session } = await fixture();
+  const outputs = join(sessions.root, session.id, 'outputs');
+  await mkdir(join(outputs, '.picpatch-abc123'), { recursive: true }); await writeFile(join(outputs, '.picpatch-abc123', 'worker.png'), 'x');
+  await writeFile(join(outputs, 'kept.png'), 'x'); await writeFile(join(outputs, '.picpatch-note'), 'x');
+  await new Sessions(sessions.root).list();
+  expect((await readdir(outputs)).sort()).toEqual(['.picpatch-note', 'kept.png']);
 });
 it('saves draft-only changes with exact backup bytes and preserves history and foreign-reference checks', async () => {
   const { root, sessions, session } = await fixture(); sessions.focus(session.id);

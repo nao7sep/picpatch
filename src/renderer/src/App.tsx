@@ -17,6 +17,8 @@ import { Conversation, type ViewItem } from './components/Conversation.tsx';
 import { CloseIcon, ResumeIcon } from './components/icons.tsx';
 import { OptionsPane } from './components/OptionsPane.tsx';
 import { Rail } from './components/Rail.tsx';
+import { DelayedSave } from './delayed-save.ts';
+import { NumberFields, type FieldEdit } from './number-field.tsx';
 import { DraftWriter } from './draft-writer.ts';
 import { applyFont } from './fonts.ts';
 import { LanguageRevision, useI18n } from './i18n.tsx';
@@ -51,6 +53,14 @@ export function App() {
   const [overview, setOverview] = useState<Overview>();
   const [readiness, setReadiness] = useState<Readiness>();
   const [session, setSession] = useState<Session>();
+  // Typed number-field text that is not (or not yet) the draft's value, for the open session.
+  const [fieldEdits, setFieldEdits] = useState<Record<string, FieldEdit>>({});
+  const fieldEditsRef = useRef(fieldEdits); fieldEditsRef.current = fieldEdits;
+  const editField = useCallback((id: string, edit: FieldEdit | undefined) => setFieldEdits(value => {
+    const next = { ...value }; if (edit) next[id] = edit; else delete next[id]; return next;
+  }), []);
+  const numberFields = useMemo(() => ({ edits: fieldEdits, edit: editField }), [fieldEdits, editField]);
+  useEffect(() => { setFieldEdits({}); }, [session?.id]);
   const [draft, setDraftState] = useState<Draft>();
   const [pane, setPane] = useState<PaneState>({ railWidth: layout.railDefault, optionsPane: false });
   const [modals, setModals] = useState<ModalSpec[]>([]);
@@ -274,10 +284,10 @@ export function App() {
     if (failures[0]) throw failures[0];
   }), [addAssets, command, updateDraft]);
 
-  const issues = session && draft && overview ? commandIssues(session, draft, overview.models, readiness) : [];
+  const issues = session && draft && overview ? commandIssues(session, draft, overview.models, readiness, fieldEdits) : [];
   const send = useCallback(() => command('run', async () => {
     const owner = sessionRef.current, current = draftRef.current, models = overviewRef.current?.models;
-    if (!owner || !current || !models || !current.text.trim() || commandIssues(owner, current, models, readiness).length) return;
+    if (!owner || !current || !models || !current.text.trim() || commandIssues(owner, current, models, readiness, fieldEditsRef.current).length) return;
     setSubmitting(true);
     const intent = { ...draftIntent.current };
     try {
@@ -330,8 +340,10 @@ export function App() {
     const run = source ?? owner.runs.filter(item => item.output).at(-1);
     if (run) push({ kind: 'export', runId: run.id, sidecar });
   };
-  const toggleOptions = useCallback(() => setPane(value => { const next = { ...value, optionsPane: !value.optionsPane }; void api.savePane(next).catch(error => show('layout', error)); return next; }), [show]);
-  const setRailWidth = useCallback((railWidth: number) => setPane(value => { const next = { ...value, railWidth }; void api.savePane(next).catch(error => show('layout', error)); return next; }), [show]);
+  // Stepping the rail's splitter with keys saves after the last step; a drag's end and the options toggle save at once.
+  const [paneSave] = useState(() => new DelayedSave<PaneState>(state => api.savePane(state).catch(error => show('layout', error))));
+  const toggleOptions = useCallback(() => setPane(value => { const next = { ...value, optionsPane: !value.optionsPane }; void paneSave.now(next); return next; }), [paneSave]);
+  const setRailWidth = useCallback((railWidth: number, stepping = false) => setPane(value => { const next = { ...value, railWidth }; if (stepping) paneSave.later(next); else void paneSave.now(next); return next; }), [paneSave]);
 
   // ---- Native and keyboard commands ----
   const dispatch = (id: string) => {
@@ -379,8 +391,8 @@ export function App() {
       if (settingsGuard.current) return settingsGuard.current.approveQuit();
       return !modalDraft.current || await confirm('quit');
     }
-    // Capture the draft first: an open picker in the command chain must not delay it.
-    await writer.flush(); await settingsGuard.current?.settleSave();
+    // Capture the draft and a waiting layout save first: an open picker in the command chain must not delay them.
+    await Promise.all([writer.flush(), paneSave.flush()]); await settingsGuard.current?.settleSave();
     // Imports, exports and mask saves already issued finish before quitting; a finished mask save updates the draft.
     await chain.current; await writer.flush();
   };
@@ -415,7 +427,7 @@ export function App() {
 
   if (revision < 0) return null;
   return (
-    <LanguageRevision value={revision}>
+    <LanguageRevision value={revision}><NumberFields value={numberFields}>
       {phase === 'failed' || phase === 'unavailable' ? <StartupFailure retrying={false} onRetry={() => void boot()} onQuit={() => void api.closeWindow()} {...phase === 'unavailable' ? { collection: missingCollection, onOpenCollection: () => void api.collection().then(chosen => { if (chosen) void boot(); }, error => console.error('Collection change failed.', error)) } : {}} />
         : phase === 'loading' || !overview || !session || !draft ? <div className="shell loading" aria-busy="true" />
         : (
@@ -462,7 +474,7 @@ export function App() {
           </>
         )}
       {messages.current && <MessageModal message={messages.current.message} onAnswer={messages.answer} />}
-    </LanguageRevision>
+    </NumberFields></LanguageRevision>
   );
 
   // Only the front surface is drawn; the ones under it come back as it closes.
