@@ -75,7 +75,7 @@ button:disabled { cursor: default; }
   text-decoration: underline; text-underline-offset: 2px;
 }
 
-input[type="text"], input[type="number"], input[type="search"], select {
+input[type="text"], input[type="search"], select {
   height: var(--control-h); min-width: 0; padding: 0 10px;
   border: 1px solid var(--line-control); border-radius: var(--radius-control);
   background: var(--surface); user-select: text;
@@ -376,7 +376,7 @@ fieldset.plain { margin: 0; padding: 0; border: 0; min-width: 0; }
 .pane-head h2 { margin: 0; font-size: 13.5px; font-weight: 650; }
 .pane-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px 20px; }
 .pane-section + .pane-section { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--line-row); }
-.pane-body input[type="number"], .pane-body select, .pane-body textarea { width: 100%; }
+.pane-body input[type="text"], .pane-body select, .pane-body textarea { width: 100%; }
 
 /* ---------- Modals ---------- */
 
@@ -496,7 +496,8 @@ kbd {
 .records-filter-row select { width: 100%; }
 .records-status-row { display: flex; align-items: center; justify-content: space-between; gap: var(--gap); min-height: var(--control-h-compact); }
 .records-rows { position: relative; flex: 1 1 auto; overflow-y: auto; padding: 6px 8px 12px; outline: none; }
-.record-card { display: flex; flex-direction: column; gap: 2px; margin-bottom: 2px; padding: 7px 10px; border-radius: var(--radius-control); cursor: pointer; }
+.records-rows-inner { position: relative; }
+.record-card { display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; border-radius: var(--radius-control); cursor: pointer; }
 .record-card:hover { background: var(--sunken); }
 .record-card.selected { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); }
 .records-rows:focus-visible .record-card.selected { outline: 2px solid var(--focus); outline-offset: -2px; }

@@ -103,6 +103,7 @@
   "ui.delete_this_session_and_its_retained_images": "Diese Sitzung und ihre aufbewahrten Bilder löschen?",
   "ui.exported_images_and_original_files_are_kept": "Exportierte Bilder und Originaldateien bleiben erhalten. Im lokalen Sicherungsverlauf bleiben Sitzungstexte und gemalte Masken erhalten.",
   "ui.session_cleanup_pending": "Die Sitzung wurde aus der Liste entfernt, ihre Dateien konnten jedoch nicht gelöscht werden. Verbleibender Speicherort: {path}",
+  "ui.run_files_cleanup_pending": "Dateien eines unterbrochenen Durchlaufs konnten nicht gelöscht werden. Verbleibender Speicherort: {path}",
   "ui.keep_session": "Sitzung behalten",
   "ui.add_images": "Bilder hinzufügen",
   "ui.wait_for_the_current_resource_operation": "Warten Sie auf den laufenden Ressourcenvorgang.",

@@ -154,6 +154,8 @@ export class Queue {
     if (this.terminationUnconfirmed) throw new UiError('error.worker_termination_is_unconfirmed_restart_picpatch_before_starting_more_work');
     if (this.busy() || this.releasingCount) throw new UiError(reason);
   }
+  /** No work is queued or running, and no worker is still being stopped. */
+  quiet(): boolean { return !this.terminationUnconfirmed && !this.busy() && !this.releasingCount; }
   busy(sessionId?: string): boolean { return (!!this.state.active && (!sessionId || this.state.active.sessionId === sessionId)) || this.pending.some(item => !sessionId || item.sessionId === sessionId); }
   async stop(): Promise<void> { this.state.paused = true; this.running?.controller.abort(); await this.settled(); }
   async settled(): Promise<void> {

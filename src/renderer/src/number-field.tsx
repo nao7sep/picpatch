@@ -37,6 +37,7 @@ export type FieldEdit = { text: string; label: string; value?: number; error?: M
 export type FieldEdits = { edits: Readonly<Record<string, FieldEdit>>; edit: (id: string, edit: FieldEdit | undefined) => void };
 const Edits = createContext<FieldEdits>({ edits: {}, edit: () => {} });
 export const NumberFields = ({ value, children }: { value: FieldEdits; children: ReactNode }) => <Edits.Provider value={value}>{children}</Edits.Provider>;
+export const useFieldEdits = () => useContext(Edits);
 
 /** The first unusable field among those that still apply, as the reason an action waits. */
 export function fieldProblem(edits: Readonly<Record<string, FieldEdit>>, applies: (id: string) => boolean = () => true): string | undefined {

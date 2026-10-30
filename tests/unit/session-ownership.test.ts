@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Sessions } from '../../src/main/core/sessions.ts';
-const held = vi.hoisted(() => ({ denyRemoval: false }));
+const held = vi.hoisted(() => ({ denyRemoval: false, denyScratch: false }));
 vi.mock('node:fs/promises', async original => {
   const fs = await original<typeof import('node:fs/promises')>();
-  return { ...fs, rm: async (...args: Parameters<typeof fs.rm>) => { if (held.denyRemoval && String(args[0]).includes('.removing-')) throw Object.assign(new Error('Denied'), { code: 'EACCES' }); return fs.rm(...args); } };
+  return { ...fs, rm: async (...args: Parameters<typeof fs.rm>) => { if ((held.denyRemoval && String(args[0]).includes('.removing-')) || (held.denyScratch && String(args[0]).includes('.picpatch-'))) throw Object.assign(new Error('Denied'), { code: 'EACCES' }); return fs.rm(...args); } };
 });
 const roots: string[] = [];
-afterEach(async () => { held.denyRemoval = false; await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { held.denyRemoval = false; held.denyScratch = false; await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() { const root = await mkdtemp(join(tmpdir(), 'picpatch-owner-')); roots.push(root); const sessions = new Sessions(join(root, 'sessions')); return { root, sessions, session: await sessions.create() }; }
 it('reports retained deletion files, and a failed sweep at the next opening, without restoring the session', async () => {
   const { sessions, session } = await fixture(); held.denyRemoval = true;
@@ -27,6 +27,30 @@ it('clears run folders left in session outputs when the collection opens, keepin
   await writeFile(join(outputs, 'kept.png'), 'x'); await writeFile(join(outputs, '.picpatch-note'), 'x');
   await new Sessions(sessions.root).list();
   expect((await readdir(outputs)).sort()).toEqual(['.picpatch-note', 'kept.png']);
+});
+it('keeps a recovery folder holding a finished image, and reports a run folder it cannot remove', async () => {
+  const { sessions, session } = await fixture();
+  const outputs = join(sessions.root, session.id, 'outputs');
+  await mkdir(join(outputs, '.picpatch-saved'), { recursive: true }); await writeFile(join(outputs, '.picpatch-saved', 'complete.png'), 'x');
+  await mkdir(join(outputs, '.picpatch-stuck'), { recursive: true });
+  held.denyScratch = true;
+  const listed = await new Sessions(sessions.root).list();
+  expect(listed.failures).toEqual([{ id: session.id, message: expect.stringContaining(join(outputs, '.picpatch-stuck')) }]);
+  expect(listed.failures[0]!.message).toContain('interrupted run');
+  held.denyScratch = false;
+  expect((await new Sessions(sessions.root).list()).failures).toEqual([]);
+  expect(await readdir(outputs)).toEqual(['.picpatch-saved']);
+});
+it('stops sweeping run folders once work has started, leaving them for the next opening', async () => {
+  const { sessions, session } = await fixture();
+  const outputs = join(sessions.root, session.id, 'outputs');
+  await mkdir(join(outputs, '.picpatch-running'), { recursive: true });
+  let idle = false;
+  await new Sessions(sessions.root, () => {}, false, () => idle).list();
+  expect(await readdir(outputs)).toEqual(['.picpatch-running']);
+  idle = true;
+  await new Sessions(sessions.root, () => {}, false, () => idle).list();
+  expect(await readdir(outputs)).toEqual([]);
 });
 it('saves draft-only changes with exact backup bytes and preserves history and foreign-reference checks', async () => {
   const { root, sessions, session } = await fixture(); sessions.focus(session.id);

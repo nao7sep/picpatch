@@ -84,7 +84,8 @@ export class Application {
     return wrapped;
   }
   private constructor(readonly paths: AppPaths, public settings: Settings, private changed: (scope?: 'progress' | 'managed') => void, private backup: (path: string, bytes: Buffer) => void, private diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void) {
-    this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined);
+    // The queue exists before the sweep first asks it.
+    this.sessions = new Sessions(settings.sessionsDirectory ?? paths.sessions, (path, bytes) => backup(path, bytes), settings.sessionsDirectory !== undefined, () => this.queue.quiet());
     this.queue = new Queue(this.sessions, this.runner(), changed);
   }
   static async open(paths: AppPaths, changed: (scope?: 'progress' | 'managed') => void = () => {}, backup: (path: string, bytes: Buffer) => void = () => {}, diagnostic: (level: 'debug' | 'info' | 'warn' | 'error', message: string, details: Record<string, unknown>) => void = () => {}, snapshot?: Settings): Promise<Application> {
@@ -241,8 +242,10 @@ export class Application {
   }
   async collection(directory: string) {
     this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_collections');
-    const selected = new Sessions(directory, (path, bytes) => this.backup(path, bytes), true);
+    const selected = new Sessions(directory, (path, bytes) => this.backup(path, bytes), true, () => this.queue.quiet());
     if ((await selected.list()).unavailable) throw new UiError('error.storage');
+    // Work may have been queued while the new collection was read and swept.
+    this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_collections');
     await this.updateSettings(value => { value.sessionsDirectory = directory; });
     const previous = this.sessions; this.queue.use(selected); this.sessions = selected; await previous.settled();
   }

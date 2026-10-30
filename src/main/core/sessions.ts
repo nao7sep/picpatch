@@ -13,6 +13,10 @@ import { writeJson } from './files.ts';
 
 const removing = /^[a-f0-9-]{36}\.removing-[a-f0-9-]{36}$/;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
+/** Whether a path exists; any failure other than its absence is thrown. */
+async function exists(path: string): Promise<boolean> {
+  try { await lstat(path); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
+}
 export function id(value: unknown): asserts value is string { if (typeof value !== 'string' || !uuid.test(value)) throw new UiError('error.invalid_session_or_asset_identifier'); }
 export function validateDraft(value: unknown): Draft {
   const draft = value as Draft;
@@ -80,7 +84,8 @@ export class Sessions {
   private summaries = new Map<string, SessionSummary>();
   /** Removal folders a previous launch could not delete, reported in every listing. */
   private leftovers: { id: string; message: string }[] = [];
-  constructor(root: string, private saved: (path: string, bytes: Buffer) => void = () => {}, private existingCollection = false) {
+  /** `idle` says no run is going, asked again before each run folder the opening sweep removes. */
+  constructor(root: string, private saved: (path: string, bytes: Buffer) => void = () => {}, private existingCollection = false, private idle: () => boolean = () => true) {
     if (!isAbsolute(root)) throw new UiError('error.session_collection_must_be_absolute');
     this.root = root;
     // Swept once, first in the chain, so no removal or run of this collection can be under way.
@@ -92,21 +97,31 @@ export class Sessions {
     try { entries = await readdir(this.root, { withFileTypes: true }); } catch { return; }
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      if (uuid.test(entry.name)) { await this.sweepScratch(join(this.root, entry.name, 'outputs')); continue; }
+      if (uuid.test(entry.name)) { await this.sweepScratch(entry.name); continue; }
       if (!removing.test(entry.name)) continue;
       try { await rm(join(this.root, entry.name), { recursive: true, force: true }); }
       catch (error) { this.leftovers.push({ id: entry.name, message: new UiError('ui.session_cleanup_pending', { path: join(this.root, entry.name) }, { cause: error }).message }); }
     }
   }
   /**
-   * A run's private folder (`.picpatch-*` beside its output) is left behind only when the app quit mid-run; no run
-   * of this collection can be going while it opens. One that cannot be removed now is tried again at the next opening.
+   * A run's private folder (`.picpatch-*` beside its output) is left behind when the app quit mid-run. No run of this
+   * collection should be going while it opens, but the collection may be the open one chosen again, so idleness is
+   * asked before each removal; once work has started, the rest wait for the next opening. A folder holding a finished
+   * image is the recovery folder a failed save named, and stays. One that cannot be removed is reported in every
+   * listing and tried again at the next opening.
    */
-  private async sweepScratch(outputs: string): Promise<void> {
+  private async sweepScratch(session: string): Promise<void> {
+    const outputs = join(this.root, session, 'outputs');
     let entries;
     try { entries = await readdir(outputs, { withFileTypes: true }); } catch { return; }
     for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.startsWith('.picpatch-')) await rm(join(outputs, entry.name), { recursive: true, force: true }).catch(() => {});
+      if (!entry.isDirectory() || !entry.name.startsWith('.picpatch-')) continue;
+      const folder = join(outputs, entry.name);
+      try {
+        if (await exists(join(folder, 'complete.png'))) continue;
+        if (!this.idle()) return;
+        await rm(folder, { recursive: true, force: true });
+      } catch (error) { this.leftovers.push({ id: session, message: new UiError('ui.run_files_cleanup_pending', { path: folder }, { cause: error }).message }); }
     }
   }
   directory(key: string): string { id(key); return join(this.root, key); }

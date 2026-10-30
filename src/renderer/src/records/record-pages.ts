@@ -44,9 +44,13 @@ export function useRecordPages(api: LogsBridge, query: Omit<RecordsQuery, 'befor
     } finally { end(read); }
   }, [api]);
 
-  const readMore = useCallback(async (retry = false) => {
+  /**
+   * `drawn` is how many rows the list had when it was measured; a page that has arrived since is not on screen yet,
+   * so that measurement says nothing about it, and the list asks again once it is drawn.
+   */
+  const readMore = useCallback(async (retry = false, drawn?: number) => {
     const { records, more } = loaded.current;
-    if (!more || !records.length || reader.current || (failure.current && !(retry && failure.current === 'more'))) return;
+    if (!more || !records.length || reader.current || (drawn !== undefined && drawn !== records.length) || (failure.current && !(retry && failure.current === 'more'))) return;
     const read = begin('more'); changed();
     const last = records.at(-1)!.id;
     try {

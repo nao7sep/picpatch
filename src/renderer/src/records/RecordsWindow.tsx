@@ -2,7 +2,9 @@
 // text, newest first, with the selected record's fields and raw detail beside it.
 // Pages of 100 load newest first as the list nears its end. New records join the top only while the list is
 // at its top, keeping the selection and its detail; scrolled away, nothing moves until the list returns there.
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+// Only the rows in and near the view are rendered, each placed at its measured offset, so a long list stays light.
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { activeLocale, t, useLocale } from '../../../shared/i18n/index.ts';
 import type { LogsBridge } from '../../../shared/logs-bridge.ts';
 import type { RecordSummary, RecordsQuery } from '../../../shared/records.ts';
@@ -16,6 +18,8 @@ import { useRecordPages } from './record-pages.ts';
 declare global { interface Window { picpatchLogs: LogsBridge } }
 
 const LIST_MIN = 320, DETAIL_MIN = 440, SPLITTER_STEP = 16;
+/** A row's height before it is measured, and the space between rows. */
+const ROW_ESTIMATE = 52, ROW_GAP = 2;
 const LEVELS = ['all', 'attention', 'error', 'warn', 'info', 'debug'] as const;
 
 export function RecordsWindow({ api }: { api: LogsBridge }) {
@@ -93,29 +97,24 @@ function Records({ api }: { api: LogsBridge }) {
   useEffect(() => { ++detailToken.current; newestWaiting.current = false; setSelected(undefined); setDetail(undefined); }, [query]);
   // New records appear only while the list is at its top; otherwise nothing moves until it is back there,
   // including a newest page that was already being read when the list left the top.
-  const readNewestAtTop = useCallback(() => {
-    void readNewest(() => {
-      const element = list.current;
-      if (!element || atTop(element)) return true;
-      newestWaiting.current = true; return false;
-    });
-  }, [readNewest]);
+  const readNewestAtTop = useCallback(() => readNewest(() => {
+    const element = list.current;
+    if (!element || atTop(element)) return true;
+    newestWaiting.current = true; return false;
+  }), [readNewest]);
   const failureRef = useRef(pages.failure); failureRef.current = pages.failure;
   useEffect(() => api.onRecordsChanged(() => {
-    // An arrival is also the retry of a failed older page.
-    if (failureRef.current === 'more') void readMore(true);
+    // An arrival is also the retry of a failed older page. The window has one list read at a time, so at the top
+    // the retry follows the newest page instead of being superseded by it.
+    const retry = failureRef.current === 'more';
     const element = list.current;
-    if (!element || atTop(element)) readNewestAtTop(); else newestWaiting.current = true;
+    if (!element || atTop(element)) void readNewestAtTop().then(() => { if (retry) void readMore(true); });
+    else { newestWaiting.current = true; if (retry) void readMore(true); }
   }), [api, readMore, readNewestAtTop]);
-  // Each settled read checks again, so pages keep loading while the list is short of filling the window.
-  useEffect(() => {
-    const element = list.current;
-    if (element && pages.status === 'ready' && nearEnd(element)) void readMore();
-  }, [pages.revision, pages.status, readMore]);
   const onScroll = () => {
     const element = list.current; if (!element) return;
-    if (newestWaiting.current && atTop(element)) { newestWaiting.current = false; readNewestAtTop(); }
-    if (nearEnd(element)) void readMore();
+    if (newestWaiting.current && atTop(element)) { newestWaiting.current = false; void readNewestAtTop(); }
+    if (nearEnd(element)) void readMore(false, rows.length);
   };
   // Typing settles briefly before it queries; the filters apply at once.
   useEffect(() => {
@@ -134,8 +133,20 @@ function Records({ api }: { api: LogsBridge }) {
   const chooseRef = useRef(choose); chooseRef.current = choose;
   const chooseRow = useCallback((id: number) => { void chooseRef.current(id); }, []);
 
+  const virtualizer = useVirtualizer({
+    count: rows.length, getScrollElement: () => list.current, getItemKey: index => rows[index]!.id,
+    estimateSize: () => ROW_ESTIMATE, gap: ROW_GAP, overscan: 8, useFlushSync: false,
+    initialRect: { width: 0, height: window.innerHeight },
+  });
+  const virtualRows = virtualizer.getVirtualItems();
+  // Each settled read, and each change in the measured height of the rows, checks again, so pages keep loading
+  // while the list is short of filling the window.
+  const contentHeight = virtualizer.getTotalSize();
+  useEffect(() => {
+    const element = list.current;
+    if (element && pages.status === 'ready' && nearEnd(element)) void readMore(false, rows.length);
+  }, [pages.revision, pages.status, contentHeight, readMore]);
   const activeIndex = rows.findIndex(row => row.id === selected);
-  useEffect(() => { if (activeIndex >= 0) document.getElementById(`record-${activeIndex}`)?.scrollIntoView({ block: 'nearest' }); }, [activeIndex]);
   const onListKey = (event: React.KeyboardEvent) => {
     if (isComposing(event.nativeEvent) || !rows.length) return;
     const rowHeight = list.current?.querySelector<HTMLElement>('[role=option]')?.offsetHeight ?? 0;
@@ -144,7 +155,9 @@ function Records({ api }: { api: LogsBridge }) {
     if (target === undefined) return;
     event.preventDefault();
     const index = Math.max(0, Math.min(rows.length - 1, target));
-    if (index === rows.length - 1 && event.key !== 'Home') void readMore();
+    if (index === rows.length - 1 && event.key !== 'Home') void readMore(false, rows.length);
+    // Only the keys move the view to the chosen row; records joining the top leave it where it is.
+    virtualizer.scrollToIndex(index, { align: 'auto' });
     void choose(rows[index]!.id);
   };
 
@@ -192,9 +205,13 @@ function Records({ api }: { api: LogsBridge }) {
         </div>
         <div
           ref={list} className="records-rows" role="listbox" tabIndex={0} aria-label={t('ui.logs')} aria-busy={pages.reading !== undefined}
-          aria-activedescendant={activeIndex >= 0 ? `record-${activeIndex}` : undefined} onKeyDown={onListKey} onScroll={onScroll}
+          aria-activedescendant={virtualRows.some(item => item.index === activeIndex) ? `record-${rows[activeIndex]!.id}` : undefined} onKeyDown={onListKey} onScroll={onScroll}
         >
-          {rows.map((row, index) => <RecordRow key={row.id} row={row} index={index} selected={row.id === selected} onChoose={chooseRow} />)}
+          <div className="records-rows-inner" style={{ height: virtualizer.getTotalSize() }}>
+            {virtualRows.map(item => (
+              <RecordRow key={item.key} row={rows[item.index]!} index={item.index} count={rows.length} start={item.start} selected={rows[item.index]!.id === selected} onChoose={chooseRow} measure={virtualizer.measureElement} />
+            ))}
+          </div>
         </div>
       </section>
       <div className="splitter" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={t('logs.splitter')} aria-valuemin={LIST_MIN} aria-valuemax={Math.round(widest)} aria-valuenow={Math.round(shown)}
@@ -228,10 +245,16 @@ function Records({ api }: { api: LogsBridge }) {
 }
 
 /** A row re-renders only when its record, place or selection changes, or the language or zone does. */
-const RecordRow = memo(function RecordRow({ row, index, selected, onChoose }: { row: RecordSummary; index: number; selected: boolean; onChoose: (id: number) => void }) {
+const RecordRow = memo(function RecordRow({ row, index, count, start, selected, onChoose, measure }: {
+  row: RecordSummary; index: number; count: number; start: number; selected: boolean; onChoose: (id: number) => void; measure: (element: HTMLElement | null) => void;
+}) {
   useI18n();
+  const style: CSSProperties = { position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${start}px)` };
   return (
-    <div id={`record-${index}`} role="option" aria-selected={selected} className={`record-card${selected ? ' selected' : ''}`} onClick={() => onChoose(row.id)}>
+    <div
+      ref={measure} data-index={index} data-record-id={row.id} style={style} id={`record-${row.id}`} role="option" aria-posinset={index + 1} aria-setsize={count}
+      aria-selected={selected} className={`record-card${selected ? ' selected' : ''}`} onClick={() => onChoose(row.id)}
+    >
       <span className="record-line"><span className={`pill level-${row.level}`}>{t(`logs.${row.level}`)}</span><time className="record-time" dateTime={row.time}>{formatTime(row.time)}</time></span>
       <span className="record-text">{row.message}</span>
     </div>

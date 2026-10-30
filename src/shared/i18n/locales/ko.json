@@ -103,6 +103,7 @@
   "ui.delete_this_session_and_its_retained_images": "이 세션과 보관된 이미지를 삭제하시겠습니까?",
   "ui.exported_images_and_original_files_are_kept": "내보낸 이미지와 원본 파일은 유지됩니다. 로컬 백업 기록에는 세션 텍스트와 그린 마스크가 남습니다.",
   "ui.session_cleanup_pending": "세션이 목록에서 제거되었지만 파일을 삭제하지 못했습니다. 파일이 남아 있는 위치: {path}",
+  "ui.run_files_cleanup_pending": "중단된 실행이 남긴 파일을 삭제하지 못했습니다. 파일이 남아 있는 위치: {path}",
   "ui.keep_session": "세션 유지",
   "ui.add_images": "이미지 추가",
   "ui.wait_for_the_current_resource_operation": "현재 리소스 작업이 끝날 때까지 기다리십시오.",

@@ -103,6 +103,7 @@
   "ui.delete_this_session_and_its_retained_images": "このセッションと保持されている画像を削除しますか？",
   "ui.exported_images_and_original_files_are_kept": "書き出した画像と元のファイルは保持されます。ローカルのバックアップ履歴には、セッションのテキストと描画したマスクが残ります。",
   "ui.session_cleanup_pending": "セッションは一覧から削除されましたが、ファイルを削除できませんでした。ファイルが残っている場所：{path}",
+  "ui.run_files_cleanup_pending": "中断された実行が残したファイルを削除できませんでした。ファイルが残っている場所：{path}",
   "ui.keep_session": "セッションを保持",
   "ui.add_images": "画像を追加",
   "ui.wait_for_the_current_resource_operation": "現在のリソース操作が終わるまで待ってください。",

@@ -42,6 +42,7 @@
     "check:release-tag": "node scripts/check-release-tag.mjs"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.21",
     "ajv": "^8.20.0",
     "sharp": "^0.35.5",
     "stream-json": "^3.7.0"

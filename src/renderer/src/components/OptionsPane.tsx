@@ -8,11 +8,13 @@ import type { ModelCapabilities, SamplingParameters } from 'picpatchsdk/types';
 import { useEffect, useState } from 'react';
 import { imageUrl, type CatalogModel } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
-import { NumberField } from '../number-field.tsx';
+import { checkNumber, NumberField, useFieldEdits } from '../number-field.tsx';
 import { BrushIcon, CloseIcon } from './icons.tsx';
 
 const PARAMETERS = ['steps', 'guidance', 'strength', 'identityStyleStrength', 'appearanceStrength', 'sampler', 'scheduler', 'negativePrompt'] as const;
 type ParameterKey = typeof PARAMETERS[number];
+const CANVAS = ['width', 'height', 'left', 'top'] as const;
+type CanvasKey = typeof CANVAS[number];
 
 export interface OptionsPaneProps {
   session: Session;
@@ -64,11 +66,28 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
   const controlName = control ? session.assets.find(asset => asset.id === control.image)?.name ?? t('ui.control_image') : undefined;
   const source = useImageSize(editing && draft.outpaint ? imageUrl(session.id, draft.source!) : undefined);
   // The canvas holds the image at its offset: each side's size bounds the offset, and the offset bounds the size.
-  const outpaintRule = (key: 'width' | 'height' | 'left' | 'top') => {
-    const canvas = draft.outpaint!, along = key === 'width' || key === 'left' ? 'width' : 'height', offset = along === 'width' ? canvas.left : canvas.top;
+  const outpaintRule = (key: CanvasKey, canvas = draft.outpaint!) => {
+    const along = key === 'width' || key === 'left' ? 'width' : 'height', offset = along === 'width' ? canvas.left : canvas.top;
     if (key === along) return { whole: true, min: source ? source[along] + offset : 1 };
     return { whole: true, min: 0, ...(source ? { max: canvas[along] - source[along] } : {}) };
   };
+  // The four canvas values bound each other, so a value one of them refused is checked again, with the others,
+  // whenever another changes or the image's size becomes known: it commits once it fits, and its reason follows the new bounds.
+  const fields = useFieldEdits();
+  const canvas = draft.outpaint;
+  useEffect(() => {
+    if (!canvas) return;
+    let next = canvas;
+    for (const key of CANVAS) {
+      const id = `outpaint.${key}`, entry = fields.edits[id];
+      if (!entry?.error) continue;
+      const checked = checkNumber(entry.text, outpaintRule(key, next));
+      if ('error' in checked) { if (JSON.stringify(checked.error) !== JSON.stringify(entry.error)) fields.edit(id, { ...entry, error: checked.error }); continue; }
+      fields.edit(id, { text: entry.text, label: entry.label, value: checked.value! });
+      next = { ...next, [key]: checked.value! };
+    }
+    if (next !== canvas) onDraft({ ...draft, outpaint: next }, 'later');
+  }, [canvas?.width, canvas?.height, canvas?.left, canvas?.top, source?.width, source?.height]);
 
   return (
     <aside className="options-pane" aria-label={t('conversation.options')}>
@@ -134,7 +153,7 @@ export function OptionsPane({ session, draft, models, samples, onSamples, onDraf
             </label>
             {draft.outpaint && (
               <div className="field-grid">
-                {(['width', 'height', 'left', 'top'] as const).map(key => (
+                {CANVAS.map(key => (
                   <NumberField key={key} id={`outpaint.${key}`} label={t(key === 'width' ? 'ui.width' : key === 'height' ? 'ui.height' : key === 'left' ? 'ui.source_left' : 'ui.source_top')}
                     value={draft.outpaint![key]} rule={outpaintRule(key)} onCommit={next => onDraft({ ...draft, outpaint: { ...draft.outpaint!, [key]: next! } }, 'later')} />
                 ))}

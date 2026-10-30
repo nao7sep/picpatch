@@ -103,6 +103,7 @@
   "ui.delete_this_session_and_its_retained_images": "¿Eliminar esta sesión y las imágenes que contiene?",
   "ui.exported_images_and_original_files_are_kept": "Las imágenes exportadas y los archivos originales se conservan. El historial de copias de seguridad locales conserva el texto de la sesión y las máscaras pintadas.",
   "ui.session_cleanup_pending": "La sesión se eliminó de la lista, pero no se pudieron eliminar sus archivos. Ubicación conservada: {path}",
+  "ui.run_files_cleanup_pending": "No se pudieron eliminar los archivos que dejó una ejecución interrumpida. Ubicación conservada: {path}",
   "ui.keep_session": "Conservar sesión",
   "ui.add_images": "Agregar imágenes",
   "ui.wait_for_the_current_resource_operation": "Espera a que termine la operación de recursos actual.",

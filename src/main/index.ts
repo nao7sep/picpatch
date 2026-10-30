@@ -47,8 +47,9 @@ try {
 const qualificationIndex = process.argv.indexOf('--smoke-inference');
 const qualification = qualificationIndex < 0 ? undefined : process.argv[qualificationIndex + 1];
 const localizationSmoke = process.argv.includes('--smoke-localization');
+const recordsSmoke = process.argv.includes('--smoke-records'), maskSmoke = process.argv.includes('--smoke-mask');
 const backgroundReload = !app.isPackaged && process.argv.includes('--background-reload');
-const smoke = process.argv.includes('--smoke') || qualificationIndex >= 0 || localizationSmoke;
+const smoke = process.argv.includes('--smoke') || qualificationIndex >= 0 || localizationSmoke || recordsSmoke || maskSmoke;
 // Smoke runs change settings and create sessions, so they only run against a separate data folder.
 if (smoke && !process.env.PICPATCH_DATA_DIR) { console.error('Smoke runs require PICPATCH_DATA_DIR.'); process.exit(2); }
 let smokeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -210,7 +211,7 @@ async function start() {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => { if (url !== renderer) event.preventDefault(); });
   window.once('ready-to-show', () => { if (!smoke) { if (backgroundReload) window?.showInactive(); else window?.show(); } });
-  if (smoke) smokeTimer = setTimeout(() => { app.exit(1); }, qualification ? 300_000 : localizationSmoke ? 240_000 : 15000);
+  if (smoke) smokeTimer = setTimeout(() => { app.exit(1); }, qualification || recordsSmoke ? 300_000 : localizationSmoke ? 240_000 : maskSmoke ? 60_000 : 15000);
   window.on('close', event => { if (!quitting) { event.preventDefault(); void lifetime.close(); } });
   process.on('SIGTERM', () => lifetime.shutdown());
   window.on('query-session-end', () => lifetime.shutdown());
@@ -311,6 +312,8 @@ async function finishSmoke() {
     window: window!, packaged: app.isPackaged,
     ...(localizationSmoke ? { localization: { root: paths.root, command, openLogs: () => logs!.open(false), closeLogs: () => logs!.close() } } : {}),
     ...(qualification ? { inference: { service, configuration: qualification, uv: locations.uv() } } : {}),
+    ...(recordsSmoke ? { records: { records: records!, openLogs: () => logs!.open(false) } } : {}),
+    ...(maskSmoke ? { mask: { service, root: paths.root } } : {}),
   });
   if (code === 0) { clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); }
   app.exit(code);
