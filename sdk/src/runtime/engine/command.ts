@@ -8,7 +8,7 @@ export function runCommand(executable: string, args: string[], cwd: string, env:
   checkSignal(signal);
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], ...ownedSpawn });
-    let output = ''; let failure: Error | undefined; let closed = false;
+    const output: Buffer[] = []; let failure: Error | undefined; let closed = false;
     let escalation: ReturnType<typeof setTimeout> | undefined;
     let termination: ReturnType<typeof setTimeout> | undefined;
     const kill = (value: NodeJS.Signals) => {
@@ -33,7 +33,7 @@ export function runCommand(executable: string, args: string[], cwd: string, env:
     const cleanup = () => { clearTimeout(timer); clearTimeout(escalation); clearTimeout(termination); signal.removeEventListener('abort', abort); };
     signal.addEventListener('abort', abort, { once: true });
     child.once('error', cause => { failure ??= new PicPatchSdkError('ENGINE_UNAVAILABLE', 'Could not start the engine tool.', { cause }); });
-    child.stdout.on('data', (bytes: Buffer) => { if (output.length < 65536) output += bytes.toString('utf8').slice(0, 65536 - output.length); });
+    child.stdout.on('data', (bytes: Buffer) => { output.push(bytes); });
     const errors = streamText(child.stderr);
     child.stdout.on('error', cause => stop(new PicPatchSdkError('ENGINE_UNAVAILABLE', 'Engine output pipe failed.', { cause })));
     child.stderr.on('error', cause => stop(new PicPatchSdkError('ENGINE_UNAVAILABLE', 'Engine diagnostic pipe failed.', { cause })));
@@ -46,7 +46,7 @@ export function runCommand(executable: string, args: string[], cwd: string, env:
         error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(exitSignal ? { signal: exitSignal } : {}), ...(errorOutput ? { output: errorOutput } : {}) };
         failure = error;
       }
-      if (!failure) { resolve(output); return; }
+      if (!failure) { resolve(Buffer.concat(output).toString('utf8')); return; }
       // uv may close its pipes before a compiler child stops. Settle the whole owned group
       // before the installer is allowed to delete its private environment.
       kill('SIGKILL');

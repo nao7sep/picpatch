@@ -20,3 +20,12 @@ it('keeps everything a failed native process wrote to its error stream', async (
   const failure = await native.run(['-e', script], process.cwd(), 10_000).catch((error: unknown) => error);
   expect(failure).toMatchObject({ code: 'WORKER_EXITED', details: { diagnostic: { exitCode: 3, output: `${'x'.repeat(10000)}\n[ERROR] model file is truncated\n` } } });
 });
+
+it('reads help and version output whole, however long', async () => {
+  const { NativeProcess } = await import('../../src/backends/stable-diffusion-cpp/process.ts');
+  const timeouts = { startupMs: 10_000, editMs: 10_000, cancellationMs: 1000, shutdownMs: 1000, terminationMs: 1000 };
+  const native = new NativeProcess(process.execPath, timeouts);
+  // Split multi-byte characters across chunks must survive too.
+  const text = `${'usage: sd-cli '.repeat(2000)}é—${'x'.repeat(100_000)}\n--version`;
+  expect(await native.run(['-e', `process.stdout.write(${JSON.stringify(text)})`], process.cwd(), 10_000, undefined, true)).toBe(text);
+});

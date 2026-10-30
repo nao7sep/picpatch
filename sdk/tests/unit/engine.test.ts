@@ -173,3 +173,9 @@ it('waits for disappearance after transient process-group permission errors duri
     expect(observed).toBe(true);
   } finally { spy.mockRestore(); }
 });
+
+it('reads an engine tool’s output whole, however long', async () => {
+  const text = `${'resolved package\n'.repeat(10_000)}é—end`;
+  const output = await runCommand(process.execPath, ['-e', `process.stdout.write(${JSON.stringify(text)})`], process.cwd(), process.env, new AbortController().signal, 10_000);
+  expect(output).toBe(text);
+});

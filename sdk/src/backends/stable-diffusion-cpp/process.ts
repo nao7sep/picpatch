@@ -38,7 +38,7 @@ export class NativeProcess {
       checkSignal(combined);
       return new Promise<string>((resolve, reject) => {
         const child = spawn(this.executable, args, { cwd, env: toolEnvironment(), stdio: ['ignore', 'pipe', 'pipe'], ...ownedSpawn });
-        let failure: Error | undefined; let output = Buffer.alloc(0); let closed = false;
+        let failure: Error | undefined; let closed = false;
         let escalation: ReturnType<typeof setTimeout> | undefined;
         let termination: ReturnType<typeof setTimeout> | undefined;
         const kill = (signal: NodeJS.Signals) => {
@@ -64,9 +64,10 @@ export class NativeProcess {
         child.once('error', cause => { failure ??= new PicPatchSdkError('WORKER_UNAVAILABLE', 'Could not run the native executable.', { cause }); });
         child.stdout.on('error', cause => stop(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Native output pipe failed.', { cause })));
         child.stderr.on('error', cause => stop(new PicPatchSdkError('WORKER_UNAVAILABLE', 'Native diagnostic pipe failed.', { cause })));
-        // Capture only bounded help/version output. Inference output may contain private text.
+        // Capture help/version output whole; inference output may contain private text, so it is not kept.
         const steps = onSteps && stepParser(onSteps);
-        child.stdout.on('data', (chunk: Buffer) => { steps?.(chunk); if (capture && output.length < 8192) output = Buffer.concat([output, chunk.subarray(0, 8192 - output.length)]); });
+        const captured: Buffer[] = [];
+        child.stdout.on('data', (chunk: Buffer) => { steps?.(chunk); if (capture) captured.push(chunk); });
         const errors = streamText(child.stderr);
         child.once('close', (code, signal) => {
           closed = true; clearTimeout(deadline); clearTimeout(escalation); clearTimeout(termination);
@@ -78,7 +79,7 @@ export class NativeProcess {
             error.details.diagnostic = { phase: 'worker', causes: [{ kind: 'ProcessExit' }], ...(code !== null ? { exitCode: code } : {}), ...(signal ? { signal } : {}), ...(errorOutput ? { output: errorOutput } : {}) };
             reject(error);
           }
-          else resolve(output.toString('utf8'));
+          else resolve(Buffer.concat(captured).toString('utf8'));
         });
         if (combined.aborted) abort();
       });
