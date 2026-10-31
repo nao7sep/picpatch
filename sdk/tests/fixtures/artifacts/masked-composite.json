@@ -2,7 +2,7 @@
   "version": 1,
   "writer": {
     "name": "picpatchsdk",
-    "version": "0.0.0"
+    "version": "1.0.0"
   },
   "operation": "edit",
   "inputsIncluded": false,

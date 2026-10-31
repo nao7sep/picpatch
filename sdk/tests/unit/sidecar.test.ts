@@ -77,7 +77,7 @@ it.each(['edit', 'generate'] as const)('writes no sidecar unless %s explicitly r
     : await editor.generate({ prompt: 'private-prompt', outputPath: output });
     if (saved.status === 'refused') throw new Error(saved.code);
   expect(saved).not.toHaveProperty('sidecar');
-  expect(saved.record.writer).toEqual({ name: 'picpatchsdk', version: '0.0.0' });
+  expect(saved.record.writer).toEqual({ name: 'picpatchsdk', version: '1.0.0' });
   expect(saved.record.fingerprints).toHaveLength(verb === 'edit' ? 1 : 0);
   expect(await fs.readdir(directory)).toEqual(['out.png', 'source.png']);
 });

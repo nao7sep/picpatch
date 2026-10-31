@@ -1,7 +1,7 @@
 {
   "name": "picpatch",
   "productName": "PicPatch",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "packageManager": "npm@12.2.0",
   "description": "Generate and edit images with local AI models.",

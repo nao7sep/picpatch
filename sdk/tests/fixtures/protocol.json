@@ -262,7 +262,7 @@
       "version": 1,
       "id": 1,
       "type": "ready",
-      "workerVersion": "0.0.0",
+      "workerVersion": "1.0.0",
       "models": [],
       "runtimeCheck": {
         "status": "imports-ready",
@@ -278,7 +278,7 @@
       "version": 1,
       "id": 1,
       "type": "ready",
-      "workerVersion": "0.0.0",
+      "workerVersion": "1.0.0",
       "models": [],
       "runtimeCheck": {
         "status": "ready"

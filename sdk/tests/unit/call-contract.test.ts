@@ -78,7 +78,7 @@ it('leaves a record’s inputs out of a saved copy when asked', async () => {
   await sharp({ create: { width: 2, height: 2, channels: 3, background: 'red' } }).png().toFile(image);
   const bytes = await readFile(image);
   const { createHash } = await import('node:crypto');
-  const record: ArtifactRecord = { version: 1, writer: { name: 'picpatchsdk', version: '0.0.0' }, operation: 'generate', inputsIncluded: true, inputs: { prompt: 'private' },
+  const record: ArtifactRecord = { version: 1, writer: { name: 'picpatchsdk', version: '1.0.0' }, operation: 'generate', inputsIncluded: true, inputs: { prompt: 'private' },
     image: { filename: 'image.png', mimeType: 'image/png', size: { width: 2, height: 2 } }, sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length,
     model: 'test', modelRevision: 'rev', runtime: { name: 'test', version: '1' }, seed: 1, effectiveParameters: { negativePrompt: 'private' }, fingerprints: [] };
   const saved = await saveArtifact(image, join(directory, 'copy.png'), record, { includeInputs: false, sidecar: true });
