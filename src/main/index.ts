@@ -1,4 +1,4 @@
-import { readSettingsSync, type Settings } from './core/settings.ts';
+import type { Settings } from './core/settings.ts';
 import { pickBundleComponent, pickPaths } from './native-pickers.ts';
 import { startupFailureWindow } from './startup-failure.ts';
 import { menuTemplate } from './menu-template.ts';
@@ -14,7 +14,8 @@ import type { Message } from '../shared/i18n/index.ts';
 import { bootstrapLanguage, selectLanguage, localeState, prepareChromiumLanguage } from './language.ts';
 import { t, number, errorText, errorNotice, UiError, message } from '../shared/i18n/index.ts';
 import { Records, errorRecord } from './core/records.ts';
-import { checkPaneState, readPaneState, savePaneState } from './core/layout-state.ts';
+import { checkPaneState, savePaneState } from './core/layout-state.ts';
+import { readLaunchFiles } from './core/launch.ts';
 import { app, BrowserWindow, ipcMain, dialog, Menu, protocol, net, powerMonitor, nativeTheme, systemPreferences, screen, session as browserSession, shell } from 'electron';
 import { pathToFileURL } from 'node:url';
 import { dirname, join, delimiter } from 'node:path';
@@ -32,11 +33,14 @@ import type { Draft } from '../shared/session.ts';
 app.setName('PicPatch');
 let earlyFailure: unknown;
 let startupSettings: Settings;
-try { startupSettings = readSettingsSync(resolveAppPaths().config); prepareChromiumLanguage(startupSettings.language); } catch (error) { earlyFailure = error; }
+let startupPane: PaneState;
+try { ({ settings: startupSettings, pane: startupPane } = readLaunchFiles(resolveAppPaths())); prepareChromiumLanguage(startupSettings.language); } catch (error) { earlyFailure = error; }
 protocol.registerSchemesAsPrivileged([{ scheme: 'picpatch-image', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 let window: BrowserWindow | undefined; let service: Application; let quitting = false;
 let backup: Backup | undefined;
 let records: Records | undefined;
+let recordsIssue: UiError | undefined;
+let backupRefusal: UiError | undefined;
 let recordsWindow: RecordsWindow | undefined;
 let paths: Awaited<ReturnType<typeof appPaths>>;
 try {
@@ -163,10 +167,15 @@ async function start() {
   browserSession.defaultSession.setPermissionCheckHandler(() => false);
   if (earlyFailure) throw earlyFailure;
   await bootstrapLanguage(startupSettings!.language);
-  records = new Records(paths.root, locations.worker('records-worker'), () => recordsWindow?.changed());
+  records = new Records(paths.root, locations.worker('records-worker'), () => recordsWindow?.changed(), (newer, path) => {
+    recordsIssue = new UiError(newer ? 'ui.records_off_newer' : 'ui.records_off_unreadable', { path });
+    if (service) { service.recordsIssue = recordsIssue; window?.webContents.send('picpatch:changed'); }
+  });
   records.write('info', 'PicPatch started.', { version: app.getVersion() });
   process.on('uncaughtExceptionMonitor', error => records?.write('error', 'Uncaught exception.', { error: errorRecord(error) }));
   backup = new Backup(paths.backups, locations.worker('backup-worker'), issue => {
+    // A refused database is found at launch, usually before the service opens; it is shown as soon as it can be.
+    if (issue.kind === 'refused') { backupRefusal = new UiError(issue.newer ? 'ui.backup_off_newer' : 'ui.backup_off_unreadable', { path: issue.path }); if (service) { service.historyIssue = backupRefusal; window?.webContents.send('picpatch:changed'); } return; }
     if (!service) return;
     if (issue.kind === 'unavailable') { service.historyIssue = new UiError('ui.backup_history_is_unavailable_primary_session_saves_remain_active'); window?.webContents.send('picpatch:changed'); return; }
     records?.write('warn', 'Backup capture failed.', { diagnostic: issue.diagnostic });
@@ -178,6 +187,7 @@ async function start() {
     else window?.webContents.send('picpatch:changed');
   };
   service = await Application.open(paths, changed, (path, bytes) => backup?.capture(path, bytes), (level, message, details) => records?.write(level, message, details), startupSettings!);
+  service.recordsIssue = recordsIssue; if (backupRefusal) service.historyIssue = backupRefusal;
   protocol.handle('picpatch-image', async request => {
     try {
       const url = new URL(request.url); const path = await service.sessions.imagePath(url.hostname, url.pathname.slice(1));
@@ -199,7 +209,7 @@ async function start() {
     }
     catch (error) { records?.write(isPicPatchSdkError(error) && error.kind === 'cancelled' ? 'info' : 'error', 'Command did not complete.', { action, error: errorRecord(error) }); return { ok: false, message: errorText(error), ...(isPicPatchSdkError(error) ? { code: error.code, kind: error.kind, effect: error.effect } : {}), notice: errorNotice(error) }; }
   });
-  paneState = await readPaneState(paths.state);
+  paneState = startupPane!;
   nativeTheme.themeSource = service.settings.theme ?? 'system';
   nativeTheme.on('updated', () => { recordsWindow?.updateAppearance(); window?.setBackgroundColor(windowBackground(nativeTheme.shouldUseDarkColors)); if (rendererReady) window?.webContents.send('picpatch:changed'); });
   menus();

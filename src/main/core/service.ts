@@ -54,6 +54,8 @@ export class Application {
   private lastReadiness: Readiness = {};
   queue: Queue;
   historyIssue?: string | { message: string; notice?: import('../../shared/i18n/index.ts').Message };
+  /** Set when the records database is refused: records are off for the session. */
+  recordsIssue?: { message: string; notice?: import('../../shared/i18n/index.ts').Message };
   private settingsTail: Promise<unknown> = Promise.resolve();
   private managed?: { view: ManagedOperation; controller: AbortController; task: Promise<unknown> };
   private lastManaged?: ManagedResult;
@@ -99,10 +101,11 @@ export class Application {
     const { engineDirectory, modelsDirectory } = this.settings.profile;
     const resources = resolveStoragePaths(engineDirectory || modelsDirectory ? { engineDirectory, modelsDirectory } : {});
     const historyIssue = typeof this.historyIssue === 'object' ? { message: this.historyIssue.message, notice: this.historyIssue.notice } : this.historyIssue;
+    const recordsIssue = this.recordsIssue && { message: this.recordsIssue.message, notice: this.recordsIssue.notice };
     return {
       ...await this.sessions.list(),
       models: listModels().filter(model => model.supported), unsupportedModels: listModels().filter(model => !model.supported).length,
-      queue: this.queue.snapshot(), resourcesBusy: this.resourcesBusy(), managed: this.managedState, historyIssue,
+      queue: this.queue.snapshot(), resourcesBusy: this.resourcesBusy(), managed: this.managedState, historyIssue, ...(recordsIssue ? { recordsIssue } : {}),
       settings: structuredClone(this.settings), resourceDefaults: resolveStoragePaths(), locations: { ...resources, sessionsDirectory: this.sessions.root },
     };
   }

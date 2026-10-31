@@ -32,13 +32,13 @@ it('preserves unknown formats and reports them beside readable sessions', async 
   const newer = JSON.stringify({ ...saved, format: { ...saved.format, version: 99 } }); await writeFile(filename, newer);
   const fresh = new Sessions(root); const inventory = await fresh.list();
   expect(inventory.sessions.map(s => s.id)).toEqual([b.id]); expect(inventory.failures[0]?.id).toBe(a.id);
-  await expect(fresh.update(a.id, () => {})).rejects.toThrow('Unsupported');
+  await expect(fresh.update(a.id, () => {})).rejects.toMatchObject({ notice: { key: 'error.file_newer', values: { path: filename } } });
   expect(await readFile(filename, 'utf8')).toBe(newer);
   await expect(fresh.get('../outside')).rejects.toThrow('Invalid');
   // Another owner or kind, or no header at all, is not a session; the writer is never read.
   for (const value of [{ ...saved, format: { ...saved.format, kind: 'state' } }, { ...saved, format: { ...saved.format, owner: 'pixelup' } }, { ...a, version: 1 }]) {
     const contents = JSON.stringify(value); await writeFile(filename, contents);
-    await expect(new Sessions(root).get(a.id)).rejects.toThrow('Invalid session'); expect(await readFile(filename, 'utf8')).toBe(contents);
+    await expect(new Sessions(root).get(a.id)).rejects.toMatchObject({ notice: { key: 'error.file_unreadable', values: { path: filename } } }); expect(await readFile(filename, 'utf8')).toBe(contents);
   }
   await writeFile(filename, JSON.stringify({ ...saved, writer: 'anything' })); expect((await new Sessions(root).get(a.id)).id).toBe(a.id);
 });

@@ -2,6 +2,7 @@
 // listbox whose active row follows the arrow keys and opens that session.
 import { useEffect, useState } from 'react';
 import type { SessionSummary } from '../../../shared/session.ts';
+import type { Message } from '../../../shared/i18n/index.ts';
 import { layout, railWidth } from '../../../shared/layout.ts';
 import { imageUrl } from '../api.ts';
 import { useI18n } from '../i18n.tsx';
@@ -12,7 +13,7 @@ import { ImageIcon, PlusIcon } from './icons.tsx';
 
 export interface RailProps {
   sessions: readonly SessionSummary[];
-  failures: number;
+  failures: Message[];
   currentId: string | undefined;
   /** The session whose run is executing now. */
   working: string | undefined;
@@ -121,7 +122,7 @@ export function Rail(props: RailProps) {
             </div>
           ))}
           {!sessions.length && <p className="rail-note">{t('ui.no_saved_sessions')}</p>}
-          {props.failures > 0 && <p className="rail-note">{t('rail.unreadable', { count: props.failures })}</p>}
+          {props.failures.map((failure, index) => <p key={index} className="rail-note">{t(failure.key, failure.values)}</p>)}
         </div>
       </nav>
       <div

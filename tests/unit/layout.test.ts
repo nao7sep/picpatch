@@ -29,7 +29,7 @@ it('retains valid UI zoom beside pane state and drops an invalid zoom independen
     expect(await readPaneState(path)).toEqual({railWidth:300,optionsPane:true});
   } finally { await rm(directory,{recursive:true,force:true}); }
 });
-it('reads state.json by its header alone, and never saves over a newer one', async () => {
+it('reads state.json by its header alone: another format is disposable, and a newer one is refused untouched', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-state-')); const path = join(directory, 'state.json');
   try {
     await savePaneState(path, { railWidth: 300, optionsPane: true });
@@ -41,8 +41,8 @@ it('reads state.json by its header alone, and never saves over a newer one', asy
     // The writer is never read.
     await writeFile(path, JSON.stringify({ format, writer: 'anything', railWidth: 300, optionsPane: true })); expect(await readPaneState(path)).toEqual({ railWidth: 300, optionsPane: true });
     const newer = stateFile({ format: { ...format, version: 2 }, railWidth: 300 });
-    await writeFile(path, newer); expect(await readPaneState(path)).toEqual(defaults);
-    await savePaneState(path, { railWidth: 320, optionsPane: true });
+    await writeFile(path, newer); expect(() => readPaneState(path)).toThrow(expect.objectContaining({ notice: { key: 'error.file_newer', values: { path } } }));
+    await expect(savePaneState(path, { railWidth: 320, optionsPane: true })).rejects.toThrow();
     expect(await readFile(path, 'utf8')).toBe(newer);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

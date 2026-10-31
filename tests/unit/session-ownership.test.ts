@@ -35,7 +35,7 @@ it('keeps a recovery folder holding a finished image, and reports a run folder i
   await mkdir(join(outputs, '.picpatch-stuck'), { recursive: true });
   held.denyScratch = true;
   const listed = await new Sessions(sessions.root).list();
-  expect(listed.failures).toEqual([{ id: session.id, message: expect.stringContaining(join(outputs, '.picpatch-stuck')) }]);
+  expect(listed.failures).toEqual([{ id: session.id, message: expect.stringContaining(join(outputs, '.picpatch-stuck')), notice: { key: 'ui.run_files_cleanup_pending', values: { path: join(outputs, '.picpatch-stuck') } } }]);
   expect(listed.failures[0]!.message).toContain('interrupted run');
   held.denyScratch = false;
   expect((await new Sessions(sessions.root).list()).failures).toEqual([]);

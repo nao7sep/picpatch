@@ -4,21 +4,26 @@ import { chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { removeFiles, restoreLargeText, storeLargeText } from './record-files.ts';
 import { recordsQuery, recordId, recordsPageSize } from '../../shared/records.ts';
-import { openDatabaseHeader } from './file-header.ts';
+import { openDatabaseHeader, RefusedDatabase } from './file-header.ts';
 const { root, session } = workerData as { root: string; session: string };
 let database: DatabaseSync | undefined;
+/** A refused database stays refused for the session: it is never opened again, so nothing retries a change. */
+let refusal: RefusedDatabase | undefined;
 /** The one connection to the records database, for the writes and the Records window's reads alike. */
 function open(): DatabaseSync {
   if (database) return database;
+  if (refusal) throw refusal;
   // The handle is kept only once the schema exists, so a failed setup is retried by the next message.
-  const opened = new DatabaseSync(join(root, 'records.sqlite3'));
+  const path = join(root, 'records.sqlite3');
+  const opened = new DatabaseSync(path);
   try {
-    chmodSync(join(root, 'records.sqlite3'), 0o600);
-    // A database of another format or a newer version is refused untouched; records then go to the fallback log.
+    // The header is checked before anything else touches the file: a database of another format or a newer version
+    // is refused untouched, and records then go to the fallback log.
     openDatabaseHeader(opened, 'records');
+    chmodSync(path, 0o600);
     // The Records window lists one launch or one severity newest first; these indexes keep that from scanning every record.
     opened.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY, session TEXT NOT NULL, time TEXT NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL, json TEXT NOT NULL); CREATE INDEX IF NOT EXISTS records_session ON records(session, id); CREATE INDEX IF NOT EXISTS records_level ON records(level, id)');
-  } catch (error) { opened.close(); throw error; }
+  } catch (error) { opened.close(); if (error instanceof RefusedDatabase) refusal = error; throw error; }
   return database = opened;
 }
 /** A read answers after every record sent before it, in the order the messages came. */
@@ -51,6 +56,7 @@ parentPort!.on('message', message => {
   if (record.flush) { parentPort!.postMessage({ flushed: true }); return; }
   let files: string[] = [];
   let failure: string | undefined;
+  let refused: { newer: boolean } | undefined;
   try {
     const db = open();
     const separated = storeLargeText(root, record);
@@ -60,5 +66,6 @@ parentPort!.on('message', message => {
     // Main writes the whole record to the fallback log, so files written for a row that was never stored are removed.
     removeFiles(root, files);
     failure = String(error);
-  } finally { parentPort!.postMessage({ written: true, id: message.id, ...(failure === undefined ? { stored: true } : { stored: false, failure }) }); }
+    if (error instanceof RefusedDatabase) refused = { newer: error.newer };
+  } finally { parentPort!.postMessage({ written: true, id: message.id, ...(failure === undefined ? { stored: true } : { stored: false, failure, ...(refused ? { refused } : {}) }) }); }
 });

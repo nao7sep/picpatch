@@ -29,7 +29,8 @@ export class Records {
   private closing = false;
   readonly session = new Date().toISOString();
   private fallbackTail: Promise<void> = Promise.resolve();
-  constructor(private root: string, script: string | URL, private changed: () => void = () => {}) {
+  /** A refused records database is reported once, by path, and records go to the fallback log for the session. */
+  constructor(private root: string, script: string | URL, private changed: () => void = () => {}, private refused: (newer: boolean, path: string) => void = () => {}) {
     this.worker = new Worker(script, { workerData: { root, session: this.session } });
     this.worker.on('message', message => {
       if (message.read) {
@@ -40,6 +41,11 @@ export class Records {
       if (!message.written) return;
       const entry = this.unacknowledged.get(message.id)!; this.unacknowledged.delete(message.id);
       if (message.stored) { if (entry.notify) this.changed(); return; }
+      if (message.refused) {
+        // The worker never opens a refused database again, so the session's records go straight to the fallback log.
+        if (!this.failed) { this.failed = true; this.failReads(new Error('Records are unavailable.')); this.refused(message.refused.newer, join(this.root, 'records.sqlite3')); }
+        this.fallback(entry.record); return;
+      }
       // A record the database refused goes to the fallback log after the reason, in the same order as every other line.
       this.fallback({ time: new Date().toISOString(), level: 'error', message: 'Records database write failed.', error: message.failure });
       this.fallback(entry.record);

@@ -1,11 +1,18 @@
 import { BrowserWindow } from 'electron';
 import { t, errorText } from '../shared/i18n/index.ts';
+import { RefusedFiles, refusedNotice } from './core/refused-files.ts';
 const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
+/** Refused files are named one by one with what the user can do; any other failure is described in a line. */
+function failureBody(error: unknown) {
+  if (!(error instanceof RefusedFiles)) return `<p>${escape(t('startup.detail'))}</p><p role="alert">${escape(errorText(error))}</p>`;
+  const files = error.files.map(file => { const notice = refusedNotice(file); return `<li>${escape(t(notice.key, notice.values))}</li>`; }).join('');
+  return `<p>${escape(t('startup.refusedDetail'))}</p><ul role="alert">${files}</ul><p>${escape(t('startup.refusedAdvice'))}</p>`;
+}
 /** No workspace authority, preload or script is needed for this last-resort surface. Raw error text stays in Records. */
 export function startupFailureHtml(error: unknown, dark: boolean) {
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; form-action https://picpatch.invalid"><title>PicPatch</title><style>
-  :root{color-scheme:${dark ? 'dark' : 'light'}}body{font:13px system-ui;margin:0;padding:24px;background:light-dark(#f4f4f2,#17191c);color:light-dark(#202124,#f2f2f2)}h1{font-size:18px}p{line-height:1.5}nav{display:flex;justify-content:flex-end;gap:12px;margin-top:24px}button{font:inherit;color:inherit;cursor:pointer;background:light-dark(#fff,#292c31);border:1px solid light-dark(#ccc,#555);border-radius:6px;padding:7px 16px;text-decoration:none}button:focus-visible{outline:2px solid light-dark(#0864cd,#84b8ff)}
-  </style></head><body><h1>${escape(t('startup.title'))}</h1><p>${escape(t('startup.detail'))}</p><p role="alert">${escape(errorText(error))}</p><nav><form action="https://picpatch.invalid/quit"><button type="submit">${escape(t('native.quit'))}</button></form><form action="https://picpatch.invalid/retry"><button type="submit">${escape(t('ui.retry'))}</button></form></nav></body></html>`;
+  :root{color-scheme:${dark ? 'dark' : 'light'}}body{font:13px system-ui;margin:0;padding:24px;background:light-dark(#f4f4f2,#17191c);color:light-dark(#202124,#f2f2f2)}h1{font-size:18px}p,li{line-height:1.5;overflow-wrap:anywhere}nav{display:flex;justify-content:flex-end;gap:12px;margin-top:24px}button{font:inherit;color:inherit;cursor:pointer;background:light-dark(#fff,#292c31);border:1px solid light-dark(#ccc,#555);border-radius:6px;padding:7px 16px;text-decoration:none}button:focus-visible{outline:2px solid light-dark(#0864cd,#84b8ff)}
+  </style></head><body><h1>${escape(t('startup.title'))}</h1>${failureBody(error)}<nav><form action="https://picpatch.invalid/quit"><button type="submit">${escape(t('native.quit'))}</button></form><form action="https://picpatch.invalid/retry"><button type="submit">${escape(t('ui.retry'))}</button></form></nav></body></html>`;
 }
 export async function startupFailureWindow(error: unknown, dark: boolean, retry: () => void, quit: () => void) {
   const window = new BrowserWindow({ title: 'PicPatch', width: 620, height: 440, minWidth: 400, minHeight: 300, show: false, backgroundColor: dark ? '#17191c' : '#f4f4f2', webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });

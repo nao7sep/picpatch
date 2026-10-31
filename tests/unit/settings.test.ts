@@ -22,7 +22,7 @@ it('leaves unsupported settings untouched and rejects relative resource paths be
   const config = join(root, 'config.json'); const newer = configFile({ format: { owner: 'picpatch', kind: 'config', version: 2 } });
   await writeFile(config, newer);
   // A newer format and malformed content both name the file and its full path, and leave it as it was.
-  await expect(readSettings(config)).rejects.toMatchObject({ notice: { key: 'startup.settingsFile', values: { path: config } } }); expect(await readFile(config, 'utf8')).toBe(newer);
+  await expect(readSettings(config)).rejects.toMatchObject({ notice: { key: 'error.file_newer', values: { path: config } } }); expect(await readFile(config, 'utf8')).toBe(newer);
   await writeFile(config, '{"format":'); await expect(readSettings(config)).rejects.toThrow(config); expect(await readFile(config, 'utf8')).toBe('{"format":');
   await writeFile(config, configFile({ sessionsDirectory: 'relative' })); await expect(readSettings(config)).rejects.toThrow('config.json');
   await rm(config);
@@ -76,7 +76,7 @@ it('reads config.json by its header alone: another owner or kind, a missing head
     configFile({ format: { owner: 'picpatch', kind: 'config', version: 2 }, theme: 'dark' }),
   ]) {
     await writeFile(config, contents);
-    await expect(readSettings(config)).rejects.toMatchObject({ notice: { key: 'startup.settingsFile', values: { path: config } } });
+    await expect(readSettings(config)).rejects.toMatchObject({ notice: { key: contents.includes('"version":2') ? 'error.file_newer' : 'error.file_unreadable', values: { path: config } } });
     expect(await readFile(config, 'utf8')).toBe(contents);
   }
   for (const writer of [undefined, 'garbage', { name: 'someone else', version: 7 }]) {
@@ -132,8 +132,9 @@ it('uses the same validation for the synchronous startup snapshot and later asyn
 it.each(['{"format":', configFile({ format: { owner: 'picpatch', kind: 'config', version: 99 }, language: 'ja' }), configFile({ profile: { version: 1 } })])('rejects unusable synchronous startup settings and preserves their bytes: %s', async contents => {
   const config = join(root, 'config.json'); await writeFile(config, contents);
   let syncError: unknown; try { readSettingsSync(config); } catch (error) { syncError = error; }
-  expect(syncError).toMatchObject({ notice: { key: 'startup.settingsFile', values: { path: config } }, cause: expect.any(Error) });
-  await expect(readSettings(config)).rejects.toMatchObject({ notice: { key: 'startup.settingsFile', values: { path: config } } });
+  const key = contents.includes('"version":99') ? 'error.file_newer' : 'error.file_unreadable';
+  expect(syncError).toMatchObject({ notice: { key, values: { path: config } } });
+  await expect(readSettings(config)).rejects.toMatchObject({ notice: { key, values: { path: config } } });
   expect(await readFile(config, 'utf8')).toBe(contents);
 });
 it('reports synchronous storage read failures instead of fabricating defaults', () => {

@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-export type BackupIssue = { kind: 'unavailable' } | { kind: 'capture'; diagnostic: string };
+export type BackupIssue = { kind: 'unavailable' } | { kind: 'capture'; diagnostic: string } | { kind: 'refused'; path: string; newer: boolean };
 /**
  * Backup history: one worker thread captures each authored file's exact bytes into a database, every save in save
  * order. A failure is reported to the owner and never fails the save that asked for the capture.
@@ -15,16 +15,25 @@ export class Backup {
     this.worker.on('error', () => this.unavailable());
     this.worker.on('exit', () => this.unavailable());
     this.worker.on('message', message => {
+      // A refused database is reported once and switches backups off for the session; nothing retries it.
+      if (message.refused) this.refuse(message.refused.newer);
       if (!message.written) return;
       this.outstanding--;
       if (message.issue) this.issue({ kind: 'capture', diagnostic: String(message.issue) });
       if (this.outstanding === 0) this.idle?.();
     });
+    // The database is checked at launch, so a refused one is reported before the first save needs it.
+    this.worker.postMessage({ open: database });
   }
   /** The bytes are copied as they are sent, so the caller keeps its buffer. */
   capture(path: string, bytes: Buffer): void {
     if (this.stopped) return;
     try { this.worker.postMessage({ database: this.database, path, bytes }); this.outstanding++; } catch { this.unavailable(); }
+  }
+  private refuse(newer: boolean) {
+    if (this.stopped) return;
+    this.stopped = true; this.outstanding = 0;
+    this.issue({ kind: 'refused', path: this.database, newer }); this.idle?.();
   }
   private unavailable() {
     if (this.stopped) return;

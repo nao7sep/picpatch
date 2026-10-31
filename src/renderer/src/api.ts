@@ -18,10 +18,10 @@ export interface LocaleState { language: Language; format: string; systemLanguag
 export interface ResourcePaths { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }
 export interface AppSettings { profile: ResourcePaths; uiFont?: string; theme?: 'light' | 'dark'; language?: Language; modelsKeptLoaded?: number; timeZone?: string }
 export interface Overview {
-  sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string }; models: CatalogModel[];
+  sessions: SessionSummary[]; failures: { id: string; message: string; notice: Message }[]; unavailable?: { path: string; code?: string }; models: CatalogModel[];
   /** Catalog models with no build for this computer, left out of models. */
   unsupportedModels: number; queue: QueueState;
-  historyIssue?: string | { message: string; notice?: Message }; settings: AppSettings;
+  historyIssue?: string | { message: string; notice?: Message }; recordsIssue?: { message: string; notice?: Message }; settings: AppSettings;
   locations: { engineDirectory?: string; modelsDirectory?: string; sessionsDirectory: string };
   resourceDefaults: { engineDirectory: string; modelsDirectory: string };
   resourcesBusy: boolean; managed: ManagedState; locale: LocaleState; systemDark: boolean;

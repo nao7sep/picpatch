@@ -67,7 +67,7 @@ export function App() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [managedDismissed, setManagedDismissed] = useState<number>();
   /** The backup notice the user dismissed; a different one shows again. */
-  const [historyDismissed, setHistoryDismissed] = useState<string>();
+  const [storeDismissed, setStoreDismissed] = useState<string[]>([]);
   const [closing, setClosing] = useState(false);
   const [samples, setSamples] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -434,7 +434,7 @@ export function App() {
           <>
             <div className="shell" inert={closing} style={{ minWidth: minimum(pane.optionsPane).width, minHeight: minimum(pane.optionsPane).height }}>
               <Rail
-                sessions={overview.sessions} failures={overview.failures.length} currentId={session.id} working={overview.queue.active?.sessionId}
+                sessions={overview.sessions} failures={overview.failures.map(failure => failure.notice)} currentId={session.id} working={overview.queue.active?.sessionId}
                 width={pane.railWidth} optionsPane={pane.optionsPane} timeZone={displayTimeZone(overview.settings.timeZone)} onWidth={setRailWidth}
                 onOpen={id => void open(id)} onNew={() => void newSession()} onRename={() => push({ kind: 'rename' })} onDelete={() => void deleteSession()}
                 onMenu={dispatch}
@@ -450,7 +450,7 @@ export function App() {
                     notices={modals.at(-1)?.kind === 'reference' ? notices.filter(notice => notice.key !== 'draft' && notice.key !== 'addPhotos') : notices} onDismiss={clear} queue={overview.queue} session={session} onResume={() => void resume()}
                     managed={overview.managed} managedDismissed={managedDismissed} onDismissManaged={setManagedDismissed}
                     onShowManaged={() => dispatchRef.current('manage')} onCancelManaged={() => void api.cancelManaged().catch(error => show('managed', error))}
-                    history={JSON.stringify(overview.historyIssue ?? null) === historyDismissed ? undefined : overview.historyIssue} onDismissHistory={() => setHistoryDismissed(JSON.stringify(overview.historyIssue ?? null))}
+                    stores={[overview.recordsIssue, overview.historyIssue].filter((issue): issue is NonNullable<typeof issue> => issue !== undefined && !storeDismissed.includes(JSON.stringify(issue)))} onDismissStore={issue => setStoreDismissed(dismissed => [...dismissed, JSON.stringify(issue)])}
                   />
                   <Composer
                     session={session} draft={draft} models={overview.models} hiddenModels={overview.unsupportedModels} readiness={readiness} issues={issues} submitting={submitting}
@@ -547,10 +547,10 @@ export function App() {
   }
 }
 
-/** Results the stage keeps above the composer: failed commands, the backup notice and a paused queue. */
-function StageNotices({ notices, onDismiss, queue, session, onResume, history, onDismissHistory, managed, managedDismissed, onDismissManaged, onShowManaged, onCancelManaged }: {
+/** Results the stage keeps above the composer: failed commands, the records and backup notices and a paused queue. */
+function StageNotices({ notices, onDismiss, queue, session, onResume, stores, onDismissStore, managed, managedDismissed, onDismissManaged, onShowManaged, onCancelManaged }: {
   notices: Notice[]; onDismiss: (key: string) => void; queue: Overview['queue']; session: Session; onResume: () => void;
-  history: Overview['historyIssue']; onDismissHistory: () => void;
+  stores: NonNullable<Overview['historyIssue']>[]; onDismissStore: (issue: NonNullable<Overview['historyIssue']>) => void;
   managed: Overview['managed']; managedDismissed: number | undefined; onDismissManaged: (id: number) => void; onShowManaged: () => void; onCancelManaged: () => void;
 }) {
   const { t, errorText } = useI18n();
@@ -585,12 +585,12 @@ function StageNotices({ notices, onDismiss, queue, session, onResume, history, o
           </span>
         </div>
       )}
-      {history && (
-        <div className="notice notice-warn" role="status">
-          <span>{errorText(history)}</span>
-          <button type="button" className="icon-button tiny" onClick={onDismissHistory} aria-label={t('ui.clear_message')} title={t('ui.clear_message')}><CloseIcon /></button>
+      {stores.map(issue => (
+        <div key={JSON.stringify(issue)} className="notice notice-warn" role="status">
+          <span>{errorText(issue)}</span>
+          <button type="button" className="icon-button tiny" onClick={() => onDismissStore(issue)} aria-label={t('ui.clear_message')} title={t('ui.clear_message')}><CloseIcon /></button>
         </div>
-      )}
+      ))}
       {notices.map(notice => (
         <div key={notice.key} className="notice notice-error" role="alert">
           <span>{errorText(notice.error)}</span>

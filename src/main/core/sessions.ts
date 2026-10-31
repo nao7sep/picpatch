@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { UiError } from '../../shared/i18n/index.ts';
+import { errorNotice, UiError, type Message } from '../../shared/i18n/index.ts';
 import { recoverCommand } from '../../shared/image-command.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -10,7 +10,8 @@ import sharp from 'sharp';
 import { controlKinds, initialDraft } from '../../shared/session.ts';
 import type { Session, SessionSummary, Draft, Asset } from '../../shared/session.ts';
 import { writeJson } from './files.ts';
-import { appFile, checkFileHeader, fileContent } from './file-header.ts';
+import { appFile, checkBeforeWrite, checkFileHeader, fileContent } from './file-header.ts';
+import { refused } from './refused-files.ts';
 
 const removing = /^[a-f0-9-]{36}\.removing-[a-f0-9-]{36}$/;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -33,13 +34,9 @@ export function validateDraft(value: unknown): Draft {
   if (draft.control && (!(controlKinds as readonly string[]).includes(draft.control.kind) || (draft.control.strength !== undefined && (!Number.isFinite(draft.control.strength) || draft.control.strength < 0)))) throw new UiError('error.invalid_structural_control');
   return structuredClone(draft);
 }
-/** A session.json document: a newer format is preserved unread, and a file without a session header is not a session. */
-export function sessionDocument(value: unknown): Session {
-  const header = checkFileHeader(value, 'session');
-  if (header.status === 'newer') throw new UiError('error.unsupported_session_format_the_file_was_preserved');
-  if (header.status === 'unreadable') throw new UiError('error.invalid_session');
-  return validateSession(fileContent(value as object));
-}
+/** A session the listing could not show, or a cleanup it could not finish, with the notice that names its file. */
+export interface SessionFailure { id: string; message: string; notice: Message }
+const failure = (id: string, error: unknown): SessionFailure => ({ id, message: error instanceof Error ? error.message : 'Could not read session.', notice: errorNotice(error, 'error.invalid_session') });
 export function validateSession(value: unknown): Session {
   const session = value as Session;
   if (!session || typeof session !== 'object') throw new UiError('error.invalid_session');
@@ -91,7 +88,7 @@ export class Sessions {
   private evict() { for (const key of this.loaded.keys()) if (key !== this.focused && !this.pins.has(key)) this.loaded.delete(key); }
   private summaries = new Map<string, SessionSummary>();
   /** Removal folders a previous launch could not delete, reported in every listing. */
-  private leftovers: { id: string; message: string }[] = [];
+  private leftovers: SessionFailure[] = [];
   /** `idle` says no run is going, asked again before each run folder the opening sweep removes. */
   constructor(root: string, private saved: (path: string, bytes: Buffer) => void = () => {}, private existingCollection = false, private idle: () => boolean = () => true) {
     if (!isAbsolute(root)) throw new UiError('error.session_collection_must_be_absolute');
@@ -108,7 +105,7 @@ export class Sessions {
       if (uuid.test(entry.name)) { await this.sweepScratch(entry.name); continue; }
       if (!removing.test(entry.name)) continue;
       try { await rm(join(this.root, entry.name), { recursive: true, force: true }); }
-      catch (error) { this.leftovers.push({ id: entry.name, message: new UiError('ui.session_cleanup_pending', { path: join(this.root, entry.name) }, { cause: error }).message }); }
+      catch (error) { this.leftovers.push(failure(entry.name, new UiError('ui.session_cleanup_pending', { path: join(this.root, entry.name) }, { cause: error }))); }
     }
   }
   /**
@@ -129,16 +126,16 @@ export class Sessions {
         if (await exists(join(folder, 'complete.png'))) continue;
         if (!this.idle()) return;
         await rm(folder, { recursive: true, force: true });
-      } catch (error) { this.leftovers.push({ id: session, message: new UiError('ui.run_files_cleanup_pending', { path: folder }, { cause: error }).message }); }
+      } catch (error) { this.leftovers.push(failure(session, new UiError('ui.run_files_cleanup_pending', { path: folder }, { cause: error }))); }
     }
   }
   directory(key: string): string { id(key); return join(this.root, key); }
   private serial<T>(work: () => Promise<T>): Promise<T> { const next = this.tail.then(work); this.tail = next.catch(() => {}); return next; }
   /** A chosen collection that is missing (an unplugged drive) is reported, never recreated. */
-  list(): Promise<{ sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string } }> {
+  list(): Promise<{ sessions: SessionSummary[]; failures: SessionFailure[]; unavailable?: { path: string; code?: string } }> {
     return this.serial(() => this.listing());
   }
-  private async listing(): Promise<{ sessions: SessionSummary[]; failures: { id: string; message: string }[]; unavailable?: { path: string; code?: string } }> {
+  private async listing(): Promise<{ sessions: SessionSummary[]; failures: SessionFailure[]; unavailable?: { path: string; code?: string } }> {
     if (!this.existingCollection) await mkdir(this.root, { recursive: true, mode: 0o700 });
     let entries;
     try { entries = await readdir(this.root, { withFileTypes: true }); }
@@ -150,7 +147,7 @@ export class Sessions {
         let summary = this.summaries.get(entry.name);
         if (!summary) { summary = summarize(this.loaded.get(entry.name) ?? await this.parse(entry.name)); this.summaries.set(entry.name, summary); }
         sessions.push(summary);
-      } catch (error) { failures.push({ id: entry.name, message: error instanceof Error ? error.message : 'Could not read session.' }); }
+      } catch (error) { failures.push(failure(entry.name, error)); }
     }
     return { sessions: sessions.sort((a, b) => b.updated.localeCompare(a.updated)), failures };
   }
@@ -160,7 +157,14 @@ export class Sessions {
   private async parse(key: string): Promise<Session> {
     const directory = this.directory(key);
     if ((await lstat(directory)).isSymbolicLink()) throw new UiError('error.linked_sessions_are_not_supported');
-    const session = sessionDocument(JSON.parse(await readFile(join(directory, 'session.json'), 'utf8')));
+    // A session.json that is newer, or that cannot be read, is refused alone by its path and left as it is.
+    const path = join(directory, 'session.json');
+    let document: unknown;
+    try { document = JSON.parse(await readFile(path, 'utf8')); } catch (error) { throw refused(path, false, error); }
+    const header = checkFileHeader(document, 'session');
+    if (header.status !== 'current') throw refused(path, header.status === 'newer');
+    let session: Session;
+    try { session = validateSession(fileContent(document as object)); } catch (error) { throw refused(path, false, error); }
     if (session.id !== key) throw new UiError('error.session_identity_does_not_match_its_directory');
     return session;
   }
@@ -186,6 +190,8 @@ export class Sessions {
   private async publish(session: Session, historyChanged = true): Promise<void> {
     const valid = session;
     const path = join(this.directory(session.id), 'session.json');
+    // Guarded at the write: a session.json replaced since it was read (by a newer PicPatch, say) is never saved over.
+    await checkBeforeWrite(path, 'session');
     const bytes = await writeJson(path, appFile('session', valid));
     this.loaded.set(session.id, valid);
     if (historyChanged || !this.summaries.has(session.id)) this.summaries.set(session.id, summarize(valid));
