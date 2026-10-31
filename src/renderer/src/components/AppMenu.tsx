@@ -18,7 +18,7 @@ export function AppMenu({ onCommand }: { onCommand: (command: string) => void })
     { id: 'manage', label: t('ui.managed_tools_and_models') },
     { id: 'setup', label: t('model.fix') },
     'separator',
-    { id: 'showRecords', label: t('ui.logs') },
+    { id: 'showRecords', label: t('ui.records') },
     'separator',
     { id: 'uiZoomIn', label: t('native.zoomIn'), keys: keys('uiZoomIn') },
     { id: 'uiZoomOut', label: t('native.zoomOut'), keys: keys('uiZoomOut') },

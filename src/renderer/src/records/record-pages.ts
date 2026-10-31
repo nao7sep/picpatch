@@ -3,7 +3,7 @@
 // read supersedes the one in flight, whose answer is dropped, since IPC cannot be
 // cancelled. A failed read stops paging until a record arrives or a filter changes.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { LogsBridge } from '../../../shared/logs-bridge.ts';
+import type { RecordsBridge } from '../../../shared/records-bridge.ts';
 import type { RecordsPage, RecordsQuery, RecordSummary } from '../../../shared/records.ts';
 
 type Loaded = { records: RecordSummary[]; more: boolean };
@@ -16,7 +16,7 @@ export function mergeNewest(loaded: Loaded, page: RecordsPage): Loaded {
   return { records: [...added, ...loaded.records], more: loaded.records.length ? loaded.more : page.more };
 }
 
-export function useRecordPages(api: LogsBridge, query: Omit<RecordsQuery, 'before'>) {
+export function useRecordPages(api: RecordsBridge, query: Omit<RecordsQuery, 'before'>) {
   const loaded = useRef<Loaded>({ records: [], more: false });
   const [revision, redraw] = useState(0);
   const changed = () => redraw(value => value + 1);

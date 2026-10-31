@@ -6,7 +6,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { activeLocale, t, useLocale } from '../../../shared/i18n/index.ts';
-import type { LogsBridge } from '../../../shared/logs-bridge.ts';
+import type { RecordsBridge } from '../../../shared/records-bridge.ts';
 import type { RecordSummary, RecordsQuery } from '../../../shared/records.ts';
 import { displayTimeZone } from '../../../shared/time-zone.ts';
 import { applyFont } from '../fonts.ts';
@@ -15,14 +15,14 @@ import { DelayedSave } from '../delayed-save.ts';
 import { isComposing } from '../ime.ts';
 import { useRecordPages } from './record-pages.ts';
 
-declare global { interface Window { picpatchLogs: LogsBridge } }
+declare global { interface Window { picpatchRecords: RecordsBridge } }
 
 const LIST_MIN = 320, DETAIL_MIN = 440, SPLITTER_STEP = 16;
 /** A row's height before it is measured, and the space between rows. */
 const ROW_ESTIMATE = 52, ROW_GAP = 2;
-const LEVELS = ['all', 'attention', 'error', 'warn', 'info', 'debug'] as const;
+const LEVELS = ['all', 'warningsAndErrors', 'error', 'warn', 'info', 'debug'] as const;
 
-export function RecordsWindow({ api }: { api: LogsBridge }) {
+export function RecordsWindow({ api }: { api: RecordsBridge }) {
   const [revision, setRevision] = useState(-1);
   useEffect(() => {
     let stopped = false;
@@ -30,7 +30,7 @@ export function RecordsWindow({ api }: { api: LogsBridge }) {
       try {
         const view = await api.appearance(); if (stopped) return;
         applyFont(view.uiFont); await useLocale(view.locale); zone = displayTimeZone(view.timeZone);
-        document.documentElement.lang = view.locale.language; document.title = t('ui.logs');
+        document.documentElement.lang = view.locale.language; document.title = t('ui.records');
         setRevision(value => value + 1);
       } catch { if (!stopped) setRevision(value => Math.max(0, value)); }
     };
@@ -59,7 +59,7 @@ function formatTime(value: string) {
 const nearEnd = (list: HTMLElement) => list.scrollHeight - list.scrollTop - list.clientHeight <= list.clientHeight;
 const atTop = (list: HTMLElement) => list.scrollTop < 1;
 
-function Records({ api }: { api: LogsBridge }) {
+function Records({ api }: { api: RecordsBridge }) {
   const [current, setCurrent] = useState(true);
   const [level, setLevel] = useState<RecordsQuery['level']>('all');
   const [search, setSearch] = useState('');
@@ -183,20 +183,20 @@ function Records({ api }: { api: LogsBridge }) {
 
   const record = detail ? parseRecord(detail) : undefined;
   const failed = pages.failure !== undefined;
-  const status = pages.status === 'loading' ? t('logs.loading') : failed ? t('logs.failed') : rows.length ? '' : t('logs.empty');
+  const status = pages.status === 'loading' ? t('records.loading') : failed ? t('records.failed') : rows.length ? '' : t('records.empty');
 
   return (
     <div className="records-shell" ref={shell}>
       <section className="records-pane" style={{ width: shown }}>
         <div className="records-filters">
-          <input type="search" value={search} maxLength={500} placeholder={t('logs.search')} aria-label={t('logs.search')} onChange={event => setSearch(event.target.value)} />
+          <input type="search" value={search} maxLength={500} placeholder={t('records.search')} aria-label={t('records.search')} onChange={event => setSearch(event.target.value)} />
           <div className="records-filter-row">
-            <select aria-label={t('logs.launch')} value={current ? 'current' : 'all'} onChange={event => { const value = event.target.value === 'current'; setCurrent(value); setQuery(q => ({ ...q, current: value })); }}>
-              <option value="current">{t('logs.currentLaunch')}</option>
-              <option value="all">{t('logs.allLaunches')}</option>
+            <select aria-label={t('records.launch')} value={current ? 'current' : 'all'} onChange={event => { const value = event.target.value === 'current'; setCurrent(value); setQuery(q => ({ ...q, current: value })); }}>
+              <option value="current">{t('records.currentLaunch')}</option>
+              <option value="all">{t('records.allLaunches')}</option>
             </select>
-            <select aria-label={t('logs.level')} value={level} onChange={event => { const value = event.target.value as RecordsQuery['level']; setLevel(value); setQuery(q => ({ ...q, level: value })); }}>
-              {LEVELS.map(value => <option key={value} value={value}>{t(value === 'all' ? 'logs.allLevels' : `logs.${value}`)}</option>)}
+            <select aria-label={t('records.level')} value={level} onChange={event => { const value = event.target.value as RecordsQuery['level']; setLevel(value); setQuery(q => ({ ...q, level: value })); }}>
+              {LEVELS.map(value => <option key={value} value={value}>{t(value === 'all' ? 'records.allLevels' : `records.${value}`)}</option>)}
             </select>
           </div>
           <div className="records-status-row">
@@ -204,7 +204,7 @@ function Records({ api }: { api: LogsBridge }) {
           </div>
         </div>
         <div
-          ref={list} className="records-rows" role="listbox" tabIndex={0} aria-label={t('ui.logs')} aria-busy={pages.reading !== undefined}
+          ref={list} className="records-rows" role="listbox" tabIndex={0} aria-label={t('ui.records')} aria-busy={pages.reading !== undefined}
           aria-activedescendant={virtualRows.some(item => item.index === activeIndex) ? `record-${rows[activeIndex]!.id}` : undefined} onKeyDown={onListKey} onScroll={onScroll}
         >
           <div className="records-rows-inner" style={{ height: virtualizer.getTotalSize() }}>
@@ -214,7 +214,7 @@ function Records({ api }: { api: LogsBridge }) {
           </div>
         </div>
       </section>
-      <div className="splitter" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={t('logs.splitter')} aria-valuemin={LIST_MIN} aria-valuemax={Math.round(widest)} aria-valuenow={Math.round(shown)}
+      <div className="splitter" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={t('records.splitter')} aria-valuemin={LIST_MIN} aria-valuemax={Math.round(widest)} aria-valuenow={Math.round(shown)}
         onPointerDown={startDrag}
         onKeyDown={event => {
           if (isComposing(event.nativeEvent)) return;
@@ -224,21 +224,21 @@ function Records({ api }: { api: LogsBridge }) {
         }}
         onBlur={() => void widthSave.flush()}
       />
-      <section className="records-detail" aria-label={t('logs.detail')}>
-        {selected === undefined ? <p className="records-state">{t('logs.select')}</p> : detailFailed ? <p className="records-state problem">{t('logs.failed')}</p> : detail === undefined ? <p className="records-state">{t('logs.loading')}</p> : (
+      <section className="records-detail" aria-label={t('records.detail')}>
+        {selected === undefined ? <p className="records-state">{t('records.select')}</p> : detailFailed ? <p className="records-state problem">{t('records.failed')}</p> : detail === undefined ? <p className="records-state">{t('records.loading')}</p> : (
           <>
             {record && record.fields.length > 0 && (
               <dl className="records-fields">
-                {record.fields.map(([key, value]) => <div key={key} className="records-field"><dt>{t(`logs.${key}`)}</dt><dd>{value}</dd></div>)}
+                {record.fields.map(([key, value]) => <div key={key} className="records-field"><dt>{t(`records.${key}`)}</dt><dd>{value}</dd></div>)}
               </dl>
             )}
             <div className="records-block">
-              <h2>{t('logs.raw')}</h2>
-              <pre tabIndex={0}>{detail ?? t('logs.empty')}</pre>
+              <h2>{t('records.raw')}</h2>
+              <pre tabIndex={0}>{detail ?? t('records.empty')}</pre>
             </div>
           </>
         )}
-        <p className="records-privacy">{t('logs.privacy')}</p>
+        <p className="records-privacy">{t('records.privacy')}</p>
       </section>
     </div>
   );
@@ -255,7 +255,7 @@ const RecordRow = memo(function RecordRow({ row, index, count, start, selected, 
       ref={measure} data-index={index} data-record-id={row.id} style={style} id={`record-${row.id}`} role="option" aria-posinset={index + 1} aria-setsize={count}
       aria-selected={selected} className={`record-card${selected ? ' selected' : ''}`} onClick={() => onChoose(row.id)}
     >
-      <span className="record-line"><span className={`pill level-${row.level}`}>{t(`logs.${row.level}`)}</span><time className="record-time" dateTime={row.time}>{formatTime(row.time)}</time></span>
+      <span className="record-line"><span className={`pill level-${row.level}`}>{t(`records.${row.level}`)}</span><time className="record-time" dateTime={row.time}>{formatTime(row.time)}</time></span>
       <span className="record-text">{row.message}</span>
     </div>
   );

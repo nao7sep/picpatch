@@ -28,7 +28,7 @@ function read(action: string, payload: unknown): unknown {
     const where: string[] = []; const parameters: (string | number)[] = [];
     if (query.current) { where.push('session = ?'); parameters.push(session); }
     if (query.before !== undefined) { where.push('id < ?'); parameters.push(query.before); }
-    if (query.level === 'attention') where.push("level IN ('warn','error')");
+    if (query.level === 'warningsAndErrors') where.push("level IN ('warn','error')");
     else if (query.level !== 'all') { where.push('level = ?'); parameters.push(query.level); }
     if (query.search) { where.push('instr(lower(json), lower(?)) > 0'); parameters.push(query.search); }
     const rows = db.prepare(`SELECT id,session,time,level,substr(message,1,1000) AS message FROM records ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ?`).all(...parameters, recordsPageSize + 1);

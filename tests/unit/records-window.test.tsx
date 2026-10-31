@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RecordsWindow } from '../../src/renderer/src/records/RecordsWindow.tsx';
-import type { LogsBridge } from '../../src/shared/logs-bridge.ts';
+import type { RecordsBridge } from '../../src/shared/records-bridge.ts';
 import type { RecordSummary } from '../../src/shared/records.ts';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -23,9 +23,9 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const options = (list: HTMLElement) => within(list).queryAllByRole('option').sort((a, b) => Number(a.getAttribute('aria-posinset')) - Number(b.getAttribute('aria-posinset')));
 
 const row = (id: number, message: string, level: RecordSummary['level'] = 'info'): RecordSummary => ({ id, session: 's', time: '2026-10-01T00:00:00.000Z', level, message });
-function bridge(overrides: Partial<LogsBridge> = {}) {
+function bridge(overrides: Partial<RecordsBridge> = {}) {
   let changed: (() => void) | undefined;
-  const api: LogsBridge = {
+  const api: RecordsBridge = {
     appearance: vi.fn(async () => ({ locale: { language: 'en' as const, format: 'en' }, dark: false })),
     query: vi.fn(async query => ({ records: query.before ? [row(1, 'Oldest')] : [row(3, '<b>Literal</b>', 'error'), row(2, 'Second')], more: !query.before })),
     detail: vi.fn(async id => JSON.stringify({ event: { action: 'submit', message: `Detail ${id}` } })),
@@ -69,7 +69,7 @@ it('holds new records while the list is scrolled away, with no notice, and adds 
 it('drops a newest page that lands after the list left its top, and reads it again back at the top', async () => {
   const releases: (() => void)[] = [];
   let reads = 0;
-  const query = vi.fn<LogsBridge['query']>(async request => {
+  const query = vi.fn<RecordsBridge['query']>(async request => {
     if (request.before) return { records: [], more: false };
     if (++reads === 1) return { records: [row(3, 'Third')], more: false };
     return new Promise(resolve => releases.push(() => resolve({ records: [row(4, 'Arrived'), row(3, 'Third')], more: false })));
@@ -108,11 +108,11 @@ it('queries each filter change and settles typed search before querying', async 
   const { api } = bridge();
   render(<RecordsWindow api={api} />);
   await screen.findByText('Second');
-  fireEvent.change(screen.getByRole('combobox', { name: 'Severity' }), { target: { value: 'attention' } });
-  await waitFor(() => expect(api.query).toHaveBeenLastCalledWith({ current: true, level: 'attention', search: '' }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Severity' }), { target: { value: 'warningsAndErrors' } });
+  await waitFor(() => expect(api.query).toHaveBeenLastCalledWith({ current: true, level: 'warningsAndErrors', search: '' }));
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search records' }), { target: { value: 'disk' } });
   expect(api.query).not.toHaveBeenLastCalledWith(expect.objectContaining({ search: 'disk' }));
-  await waitFor(() => expect(api.query).toHaveBeenLastCalledWith({ current: true, level: 'attention', search: 'disk' }));
+  await waitFor(() => expect(api.query).toHaveBeenLastCalledWith({ current: true, level: 'warningsAndErrors', search: 'disk' }));
 });
 
 it('drops a detail that arrives after a newer selection', async () => {
@@ -156,7 +156,7 @@ it('shows record times in the display zone and follows a change of zone', async 
 
 it('retries a failed older page when a record arrives while the list is at the top', async () => {
   let older = 0;
-  const query = vi.fn<LogsBridge['query']>(async request => {
+  const query = vi.fn<RecordsBridge['query']>(async request => {
     if (!request.before) return { records: [row(3, 'Third'), row(2, 'Second')], more: true };
     if (++older === 1) throw new Error('locked');
     return { records: [row(1, 'Oldest')], more: false };
@@ -176,7 +176,7 @@ it('loads several pages by itself while the list is shorter than the window, and
   // Each page answers a moment later, as the records thread would.
   layout.listHeight = 6000;
   const store = Array.from({ length: 1000 }, (_, i) => row(1000 - i, `Record ${1000 - i}`));
-  const query = vi.fn<LogsBridge['query']>(async ({ before }) => {
+  const query = vi.fn<RecordsBridge['query']>(async ({ before }) => {
     await new Promise(resolve => setTimeout(resolve, 5));
     const older = before ? store.filter(item => item.id < before) : store;
     return { records: older.slice(0, 100), more: older.length > 100 };
@@ -196,7 +196,7 @@ it('pages 10,000 records newest first, each once, rendering only rows near the v
   const add = (count: number) => { for (let i = 0; i < count; i++) store.push(row(store.length + 1, `Record ${store.length + 1}`)); };
   add(10_000);
   layout.listHeight = 2_000;
-  const query = vi.fn<LogsBridge['query']>(async ({ before }) => {
+  const query = vi.fn<RecordsBridge['query']>(async ({ before }) => {
     const older = before ? store.slice(0, before - 1) : store;
     return { records: older.slice(-100).reverse(), more: older.length > 100 };
   });

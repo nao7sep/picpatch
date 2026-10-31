@@ -3,10 +3,10 @@ import { expect, it } from 'vitest';
 import { catalogues, languages, resolveLocale, useLocale, t, UiError, errorText, errorNotice, number } from '../../src/shared/i18n/index.ts';
 const literalKeys = ['component.clipL','component.clipG','component.t5','component.vae','component.photoMaker','component.ipAdapter','component.controlNet','conversation.size'];
 const identical: Record<string, string[]> = {
-  de: ['ui.seed','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint','control.pose','logs.info','setup.size','about.version','model.download','purpose.illustration','purpose.design','purpose.inpainting','purpose.outpainting'],
-  fr: ['ui.sessions','role.style','native.services','control.pose','conversation.image','menu.open','logs.action','logs.session','logs.message','about.version','composer.portrait','conversation.count','conversation.label','rail.meta','reference.photos','purpose.illustration','purpose.design'],
-  es: ['control.pose','logs.error','settings.general'], ja: [], ko: [], 'zh-Hans': [],
-  it: ['ui.seed','ui.file','conditioning.prompt','component.checkpoint','logs.debug','menu.open','about.repository','setup.size','model.download','purpose.design'],
+  de: ['ui.seed','settings.system','parameter.sampler','parameter.scheduler','conditioning.prompt','component.checkpoint','control.pose','records.info','setup.size','about.version','model.download','purpose.illustration','purpose.design','purpose.inpainting','purpose.outpainting'],
+  fr: ['ui.sessions','role.style','native.services','control.pose','conversation.image','menu.open','records.action','records.session','records.message','about.version','composer.portrait','conversation.count','conversation.label','rail.meta','reference.photos','purpose.illustration','purpose.design'],
+  es: ['control.pose','records.error','settings.general'], ja: [], ko: [], 'zh-Hans': [],
+  it: ['ui.seed','ui.file','conditioning.prompt','component.checkpoint','records.debug','menu.open','about.repository','setup.size','model.download','purpose.design'],
   'pt-BR': ['conditioning.prompt','component.checkpoint','control.pose','menu.open','setup.size','model.download','purpose.design'], ru: [],
 };
 it('ships independently reviewed catalogues with matching keys, placeholders, punctuation and intentional literals', async () => {

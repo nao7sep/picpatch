@@ -1,14 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { LogsBridge } from '../shared/logs-bridge.ts';
+import type { RecordsBridge } from '../shared/records-bridge.ts';
 const call = async (action: string, payload?: unknown) => {
-  const reply = await ipcRenderer.invoke('picpatch:logs', action, payload);
+  const reply = await ipcRenderer.invoke('picpatch:records', action, payload);
   if (!reply.ok) throw new Error(reply.message);
   return reply.value;
 };
 function subscribe(channel: string, listener: () => void) { const receive = () => listener(); ipcRenderer.on(channel, receive); return () => ipcRenderer.removeListener(channel, receive); }
-contextBridge.exposeInMainWorld('picpatchLogs', {
+contextBridge.exposeInMainWorld('picpatchRecords', {
   resizeList: width => call('resizeList', width),
   query: query => call('query', query), detail: id => call('detail', id), appearance: () => call('appearance'), close: () => call('close'),
-  onRecordsChanged: listener => subscribe('picpatch:logsChanged', listener),
-  onAppearanceChanged: listener => subscribe('picpatch:logsAppearance', listener),
-} satisfies LogsBridge);
+  onRecordsChanged: listener => subscribe('picpatch:recordsChanged', listener),
+  onAppearanceChanged: listener => subscribe('picpatch:recordsAppearance', listener),
+} satisfies RecordsBridge);

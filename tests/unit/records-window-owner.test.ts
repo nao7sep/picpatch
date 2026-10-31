@@ -15,7 +15,7 @@ vi.mock('electron', async () => {
   }
   return { app: { isPackaged: false }, BrowserWindow: Window, ipcMain: { handle: (name: string, callback: any) => mocks.handlers.set(name, callback) }, screen: Object.assign(new EventEmitter(), { getDisplayMatching: () => ({ workAreaSize: { width: 1440, height: 900 } }) }) };
 });
-import { LogsWindow } from '../../src/main/logs-window.ts';
+import { RecordsWindow } from '../../src/main/records-window.ts';
 import { insideBundle, trustedSender } from '../../src/main/trust.ts';
 import { win32 } from 'node:path';
 import { locations } from '../../src/main/locations.ts';
@@ -24,17 +24,17 @@ beforeEach(() => { mocks.windows.length = 0; mocks.handlers.clear(); mocks.load 
 function setup() {
   const reader = { query: vi.fn().mockResolvedValue({ records: [], more: false }), detail: vi.fn().mockResolvedValue(null) };
   const failed = vi.fn();
-  const owner = new LogsWindow(reader as unknown as Records, () => ({ locale: { language:'en', format:'en' }, dark:false }), failed);
+  const owner = new RecordsWindow(reader as unknown as Records, () => ({ locale: { language:'en', format:'en' }, dark:false }), failed);
   return { owner, reader, failed };
 }
 it('creates one durable sandboxed window and refuses subframes, changed pages and main-workspace calls', async () => {
   const { owner, reader } = setup(); await owner.open(); await owner.open();
   expect(mocks.windows).toHaveLength(1); const window = mocks.windows[0];
-  expect(window.options).toMatchObject({ name:'picpatch-logs', windowStatePersistence: { bounds:true }, webPreferences: { sandbox:true, contextIsolation:true, nodeIntegration:false, preload: locations.preload('records') } });
+  expect(window.options).toMatchObject({ name:'picpatch-records', windowStatePersistence: { bounds:true }, webPreferences: { sandbox:true, contextIsolation:true, nodeIntegration:false, preload: locations.preload('records') } });
   const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
   expect(window.webContents.mainFrame.url).toBe(locations.page('records'));
   expect(trustedSender(event, window, locations.page('records'))).toBe(true);
-  const handler = mocks.handlers.get('picpatch:logs')!;
+  const handler = mocks.handlers.get('picpatch:records')!;
   await expect(handler({ ...event, senderFrame: {} }, 'query', {})).rejects.toThrow('Untrusted');
   expect((await handler(event, 'query', { current:true, level:'all', search:'' })).ok).toBe(true);
   expect(reader.query).toHaveBeenCalledTimes(1);
@@ -55,7 +55,7 @@ it('returns read failures and only sends bounded change notifications', async ()
   try {
     const { owner, reader, failed } = setup(); await owner.open(); const window = mocks.windows[0];
     reader.query.mockRejectedValueOnce(new Error('read failed'));
-    const reply = await mocks.handlers.get('picpatch:logs')!({ sender:window.webContents, senderFrame:window.webContents.mainFrame }, 'query', {current:false,level:'all',search:''});
+    const reply = await mocks.handlers.get('picpatch:records')!({ sender:window.webContents, senderFrame:window.webContents.mainFrame }, 'query', {current:false,level:'all',search:''});
     expect(reply.ok).toBe(false); expect(failed).toHaveBeenCalledTimes(1);
     for (let i=0;i<200;i++) owner.changed(); await vi.advanceTimersByTimeAsync(250);
     expect(window.webContents.send).toHaveBeenCalledTimes(1); owner.close();

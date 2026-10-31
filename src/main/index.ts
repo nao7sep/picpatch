@@ -3,7 +3,7 @@ import { pickBundleComponent, pickPaths } from './native-pickers.ts';
 import { startupFailureWindow } from './startup-failure.ts';
 import { menuTemplate } from './menu-template.ts';
 import { focusWorkspaceForCommand } from './workspace-command.ts';
-import { LogsWindow } from './logs-window.ts';
+import { RecordsWindow } from './records-window.ts';
 import { about } from '../shared/about.ts';
 import { normalizeZoom, nextZoom, windowBackground, windowMinimum } from '../shared/appearance.ts';
 import type { PaneState } from './core/layout-state.ts';
@@ -37,7 +37,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'picpatch-image', privileges: { 
 let window: BrowserWindow | undefined; let service: Application; let quitting = false;
 let backup: Backup | undefined;
 let records: Records | undefined;
-let logs: LogsWindow | undefined;
+let recordsWindow: RecordsWindow | undefined;
 let paths: Awaited<ReturnType<typeof appPaths>>;
 try {
   paths = await appPaths();
@@ -116,7 +116,7 @@ const lifetime = quitFlow({
     await service.queue.stop();
     await service.settled();
     await backup?.close();
-    logs?.close();
+    recordsWindow?.close();
     records?.write('info', 'PicPatch closed normally.');
     await records?.close();
   },
@@ -145,7 +145,7 @@ async function startupFailure(error: unknown) {
   // A close aborts a window load still in progress; the close's own exit ends the process.
   if (closing || quitting) return;
   quitting = true; clearTimeout(smokeTimer); requests.cancelAll();
-  window?.destroy(); logs?.close();
+  window?.destroy(); recordsWindow?.close();
   await Promise.allSettled([backup?.terminate(), records?.close()]);
   if (smoke) { console.error(error); app.exit(1); return; }
   Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -163,7 +163,7 @@ async function start() {
   browserSession.defaultSession.setPermissionCheckHandler(() => false);
   if (earlyFailure) throw earlyFailure;
   await bootstrapLanguage(startupSettings!.language);
-  records = new Records(paths.root, locations.worker('records-worker'), () => logs?.changed());
+  records = new Records(paths.root, locations.worker('records-worker'), () => recordsWindow?.changed());
   records.write('info', 'PicPatch started.', { version: app.getVersion() });
   process.on('uncaughtExceptionMonitor', error => records?.write('error', 'Uncaught exception.', { error: errorRecord(error) }));
   backup = new Backup(paths.backups, locations.worker('backup-worker'), issue => {
@@ -187,7 +187,7 @@ async function start() {
     }
     catch { return new Response('Image unavailable', { status: 404 }); }
   });
-  logs = new LogsWindow(records, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth, timeZone: service.settings.timeZone }), error => records?.readFailed(error), width => storePane({ recordsListWidth: width }));
+  recordsWindow = new RecordsWindow(records, () => ({ locale: localeState(), dark: nativeTheme.shouldUseDarkColors, uiFont: service.settings.uiFont, uiZoom: paneState?.uiZoom, listWidth: paneState?.recordsListWidth, timeZone: service.settings.timeZone }), error => records?.readFailed(error), width => storePane({ recordsListWidth: width }));
   const renderer = locations.page('index');
   ipcMain.handle('picpatch:call', async (event, action: string, payload: unknown) => {
     if (!trustedSender(event, window, renderer)) throw new Error('Untrusted request.');
@@ -201,7 +201,7 @@ async function start() {
   });
   paneState = await readPaneState(paths.state);
   nativeTheme.themeSource = service.settings.theme ?? 'system';
-  nativeTheme.on('updated', () => { logs?.updateAppearance(); window?.setBackgroundColor(windowBackground(nativeTheme.shouldUseDarkColors)); if (rendererReady) window?.webContents.send('picpatch:changed'); });
+  nativeTheme.on('updated', () => { recordsWindow?.updateAppearance(); window?.setBackgroundColor(windowBackground(nativeTheme.shouldUseDarkColors)); if (rendererReady) window?.webContents.send('picpatch:changed'); });
   menus();
   window = new BrowserWindow({ name: 'picpatch-main', windowStatePersistence: { bounds: true, displayMode: process.platform === 'win32' }, width: 1280, height: 850, minWidth: minimum(false).width, minHeight: minimum(false).height, title: 'PicPatch', ...(process.platform === 'darwin' ? {} : { icon: locations.icon() }), show: false, backgroundColor: windowBackground(nativeTheme.shouldUseDarkColors), webPreferences: { zoomFactor: normalizeZoom(paneState.uiZoom), preload: locations.preload('index'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   window.on('move', fitMinimum);
@@ -242,7 +242,7 @@ async function dispatch(action: string, payload: any) {
     case 'modalState': modalOpen = payload.open === true; for (const id of ['picpatch-about','picpatch-settings']) { const item = Menu.getApplicationMenu()?.getMenuItemById(id); if (item) item.enabled = !modalOpen; } return;
     case 'closeWindow': void lifetime.close(); return;
     case 'openProjectLink': { if (payload.destination !== 'repository' && payload.destination !== 'issues') throw new Error('Unknown project link.'); await shell.openExternal(about[payload.destination as 'repository' | 'issues']); return; }
-    case 'openLogs': try { await logs?.open(); } catch (error) { records?.write('error', 'Logs window could not open.', { error: errorRecord(error) }); throw new UiError('logs.openFailed'); } return;
+    case 'openRecords': try { await recordsWindow?.open(); } catch (error) { records?.write('error', 'Records window could not open.', { error: errorRecord(error) }); throw new UiError('records.openFailed'); } return;
     case 'listening': rendererReady = true; return;
     case 'renderer-error': records?.write('error', 'Renderer error.', { error: typeof payload.message === 'string' ? payload.message : 'unknown', stack: typeof payload.stack === 'string' ? payload.stack : undefined }); return;
     case 'ready': rendererReady = true; if (smoke) await finishSmoke(); return;
@@ -253,7 +253,7 @@ async function dispatch(action: string, payload: any) {
       if (!['in', 'out', 'reset'].includes(payload.direction)) throw new Error('Invalid UI zoom command.');
       const zoom = nextZoom(window!.webContents.getZoomFactor(), payload.direction);
       window!.webContents.setZoomFactor(zoom); fitMinimum();
-      await storePane({ uiZoom: zoom }).catch(error => records?.write('warn', 'UI zoom could not be retained.', { error: errorRecord(error) })); logs?.updateAppearance(); return;
+      await storePane({ uiZoom: zoom }).catch(error => records?.write('warn', 'UI zoom could not be retained.', { error: errorRecord(error) })); recordsWindow?.updateAppearance(); return;
     }
     case 'locale': return { ...localeState(), uiFont: service.settings.uiFont };
     case 'modelReadiness': return service.readiness();
@@ -278,7 +278,7 @@ async function dispatch(action: string, payload: any) {
       return saved;
     }
     case 'cancelManaged': service.cancelManaged(); return;
-    case 'preferences': await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); logs?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
+    case 'preferences': await service.preferences(payload); nativeTheme.themeSource = service.settings.theme ?? 'system'; await selectLanguage(service.settings.language); menus(); recordsWindow?.updateAppearance(); window?.webContents.send('picpatch:changed'); return service.overview();
     case 'pickPath': return (await pick([payload.file ? 'openFile' : 'openDirectory'], t('ui.choose_location'), payload.initialPath))[0];
     case 'pickComponent': return pickBundleComponent(window!, payload.directory, payload.current, t('ui.choose_a_file_inside_the_model_bundle'));
     case 'verify': return started(service.verify(payload.modelId));
@@ -310,9 +310,9 @@ async function dispatch(action: string, payload: any) {
 async function finishSmoke() {
   const code = await runSmoke({
     window: window!, packaged: app.isPackaged,
-    ...(localizationSmoke ? { localization: { root: paths.root, command, openLogs: () => logs!.open(false), closeLogs: () => logs!.close() } } : {}),
+    ...(localizationSmoke ? { localization: { root: paths.root, command, openRecords: () => recordsWindow!.open(false), closeRecords: () => recordsWindow!.close() } } : {}),
     ...(qualification ? { inference: { service, configuration: qualification, uv: locations.uv() } } : {}),
-    ...(recordsSmoke ? { records: { records: records!, openLogs: () => logs!.open(false) } } : {}),
+    ...(recordsSmoke ? { records: { records: records!, openRecords: () => recordsWindow!.open(false) } } : {}),
     ...(maskSmoke ? { mask: { service, root: paths.root } } : {}),
   });
   if (code === 0) { clearTimeout(smokeTimer); await backup?.terminate(); await records?.close(); }

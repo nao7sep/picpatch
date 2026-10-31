@@ -47,7 +47,7 @@ it('validates untrusted query and detail arguments', () => {
   expect(() => recordsQuery({ current: true, level: 'all', search: 'x'.repeat(501) })).toThrow();
   expect(() => recordsQuery({ current: true, level: 'all', search: '', before: -1 })).toThrow();
   expect(() => recordId('1')).toThrow();
-  expect(recordsQuery({ current: false, level: 'attention', search: '%_quoted' })).toEqual({ current: false, level: 'attention', search: '%_quoted' });
+  expect(recordsQuery({ current: false, level: 'warningsAndErrors', search: '%_quoted' })).toEqual({ current: false, level: 'warningsAndErrors', search: '%_quoted' });
 });
 it('reads bounded historical pages, filters and full selected details without changing stored events', async () => {
   const root = await mkdtemp(join(tmpdir(), 'picpatch-records-reader-'));
@@ -64,7 +64,7 @@ it('reads bounded historical pages, filters and full selected details without ch
     db.close();
     const first = await reader.query({ current: false, level: 'all', search: '' }); expect(first.records).toHaveLength(100); expect(first.more).toBe(true); expect(first.records[0]!.id).toBe(205);
     const second = await reader.query({ current: false, level: 'all', search: '', before: first.records.at(-1)!.id }); expect(second.records[0]!.id).toBe(105);
-    const filtered = await reader.query({ current: true, level: 'attention', search: '%_needle' }); expect(filtered.records.map(row => row.id)).toEqual([204,202]);
+    const filtered = await reader.query({ current: true, level: 'warningsAndErrors', search: '%_needle' }); expect(filtered.records.map(row => row.id)).toEqual([204,202]);
     const detail = JSON.parse((await reader.detail(204))!); expect(detail).toMatchObject({ session: reader.session, event: { nested: { literal: '%_needle' } } });
     expect(await reader.detail(999)).toBe(null);
   } finally { await reader.close(); await rm(root, { recursive: true, force: true }); }

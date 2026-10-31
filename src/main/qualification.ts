@@ -71,7 +71,7 @@ export async function qualifyLocalization(window: import('electron').BrowserWind
 }
 
 /** Geometry is measured in the real hidden renderer; records remain literal. */
-export async function qualifyLogs(window: import('electron').BrowserWindow, workspace: import('electron').BrowserWindow): Promise<void> {
+export async function qualifyRecordsWindow(window: import('electron').BrowserWindow, workspace: import('electron').BrowserWindow): Promise<void> {
   const { languages } = await import('../shared/i18n/index.ts');
   for (const [language] of languages) for (const theme of ['light', 'dark']) {
     await workspace.webContents.executeJavaScript(`window.picpatch.call('preferences', {language: ${JSON.stringify(language)}, theme: ${JSON.stringify(theme)}})`);
@@ -97,9 +97,9 @@ export async function qualifyLogs(window: import('electron').BrowserWindow, work
  */
 export async function runSmoke(options: {
   window: import('electron').BrowserWindow; packaged: boolean;
-  localization?: { root: string; command: (id: string) => void; openLogs: () => Promise<import('electron').BrowserWindow>; closeLogs: () => void };
+  localization?: { root: string; command: (id: string) => void; openRecords: () => Promise<import('electron').BrowserWindow>; closeRecords: () => void };
   inference?: { service: Application; configuration: string; uv: string };
-  records?: { records: import('./core/records.ts').Records; openLogs: () => Promise<import('electron').BrowserWindow> };
+  records?: { records: import('./core/records.ts').Records; openRecords: () => Promise<import('electron').BrowserWindow> };
   mask?: { service: Application; root: string };
 }): Promise<number> {
   const { window, localization, inference, records, mask } = options;
@@ -107,10 +107,10 @@ export async function runSmoke(options: {
     console.error('The packaged renderer runs without its content security policy.'); return 1;
   }
   try {
-    if (localization) { await qualifyLocalization(window, localization.root, localization.command); await qualifyLogs(await localization.openLogs(), window); localization.closeLogs(); }
+    if (localization) { await qualifyLocalization(window, localization.root, localization.command); await qualifyRecordsWindow(await localization.openRecords(), window); localization.closeRecords(); }
     if (inference) await qualifyInference(inference.service, inference.configuration, inference.uv);
     // The live checks print their verdict as one line for the test that runs them.
-    if (records) { const result = await qualifyRecordsLive(records.records, records.openLogs); process.stdout.write(`RECORDS-CHECK ${JSON.stringify(result)}\n`); if (!result.pass) return 1; }
+    if (records) { const result = await qualifyRecordsLive(records.records, records.openRecords); process.stdout.write(`RECORDS-CHECK ${JSON.stringify(result)}\n`); if (!result.pass) return 1; }
     if (mask) { const result = await qualifyMaskCanvas(window, mask.service, mask.root); process.stdout.write(`MASK-CHECK ${JSON.stringify(result)}\n`); if (!result.pass) return 1; }
   } catch (error) { console.error(error); return 1; }
   return 0;
@@ -137,11 +137,11 @@ true;`;
  * reports (scroll offsets, heights and the rows' rectangles) and waits frame by frame for each state it needs.
  * Returns the verdict, printed by the caller as one `RECORDS-CHECK {json}` line.
  */
-export async function qualifyRecordsLive(records: Pick<import('./core/records.ts').Records, 'write' | 'query'>, openLogs: () => Promise<import('electron').BrowserWindow>, seed = 10_000) {
+export async function qualifyRecordsLive(records: Pick<import('./core/records.ts').Records, 'write' | 'query'>, openRecords: () => Promise<import('electron').BrowserWindow>, seed = 10_000) {
   for (let n = 1; n <= seed; n++) records.write('info', `seed record ${n}`, { n });
   // A read is answered after every write posted before it.
   await records.query({ current: true, level: 'all', search: '' });
-  const window = await openLogs();
+  const window = await openRecords();
   let live = 0;
   const timer = setInterval(() => records.write('info', `live record ${++live}`, { n: live }), 333);
   try { return await recordsChecks(window, records, seed); } finally { clearInterval(timer); }
@@ -204,7 +204,7 @@ async function recordsChecks(window: import('electron').BrowserWindow, records: 
     await rc.frame();
     const before = rc.snapshot();
     let stored = 0;
-    const stop = window.picpatchLogs.onRecordsChanged(() => { stored++; });
+    const stop = window.picpatchRecords.onRecordsChanged(() => { stored++; });
     await rc.until(() => stored >= 5);
     stop();
     await rc.frame();
