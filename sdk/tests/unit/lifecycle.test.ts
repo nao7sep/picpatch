@@ -274,7 +274,7 @@ it('uses a prepared model registration across edits without reading its componen
   const { child, worker } = setup();
   const registered = new ProcessEditor(worker, {
     variant: 'flux2-klein-4b', directory: '/does-not-exist/picpatch-model',
-    manifest: { version: 1, model: 'test', source: { repository: 'local', revision: 'a'.repeat(40) },
+    manifest: { model: 'test', source: { repository: 'local', revision: 'a'.repeat(40) },
       components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] },
   });
   const base = child.onRequest;

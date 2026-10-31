@@ -29,7 +29,7 @@ it('accepts a local registration then returns a missing-runtime failure over rea
       '--cache-dir', cacheDirectory], { env: { ...process.env, UV_PROJECT_ENVIRONMENT: runtimeDirectory } });
     const options: Omit<ImageClientOptions, 'engineDirectory'> & { pythonExecutable: string } = { pythonExecutable: join(runtimeDirectory, 'bin/python'),
       model: { variant: 'flux2-klein-4b', directory, manifest: {
-        version: 1, model: 'test', source: { repository: 'test', revision: 'a'.repeat(40) },
+        model: 'test', source: { repository: 'test', revision: 'a'.repeat(40) },
         components: [{ path: 'weights.safetensors', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
       } } };
     editor = fixtureEditor(options);
@@ -46,7 +46,7 @@ it('uses the model-free handshake to reject unsupported sizes before opening ima
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-capabilities-'));
   const editor = fixtureEditor({ pythonExecutable: testPython, model: {
     variant: 'flux2-klein-4b', directory, manifest: {
-      version: 1, model: 'fixture', source: { repository: 'fixture', revision: 'a'.repeat(40) },
+      model: 'fixture', source: { repository: 'fixture', revision: 'a'.repeat(40) },
       components: [{ path: 'absent.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }],
     },
   } });

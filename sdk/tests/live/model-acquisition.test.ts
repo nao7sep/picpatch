@@ -23,7 +23,7 @@ it.each([false, true])('acquires a tiny HTTP fixture through the production stre
   const transport = globalThis.fetch;
   const fetcher: typeof fetch = (_url, options) => transport(`http://127.0.0.1:${address.port}/fixture`, options);
   const entry: CatalogModel = { ...listModels().find(model => model.acquisition === 'pinned')!, id: 'fixture', manifest: {
-    version: 1 as const, model: 'fixture', source: { repository: 'fixture', revision: 'b'.repeat(40) },
+    model: 'fixture', source: { repository: 'fixture', revision: 'b'.repeat(40) },
     components: [{ path: 'weights.safetensors', role: 'weights' as const, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
   } };
   // Fixture catalog pins replace real weights; all public orchestration remains intact.

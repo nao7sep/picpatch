@@ -1,4 +1,5 @@
 import { checkProfile } from '../../profile.ts';
+import { sdkWriter, withFileHeader } from '../../file-header.ts';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from '../../storage.ts';
 import { join, dirname } from 'node:path';
@@ -134,7 +135,7 @@ export function installEngine(settings: InstallEngineSettings, options: CallOpti
         operationStage(operation, 'checking', 'Checking installed dependency compatibility.');
         await runCommand(operation.uvExecutable, ['pip', 'check', '--python', result.pythonExecutable, '--no-config', '--offline'], installation, env, signal, 60_000);
         await probe(result, signal);
-        const record: EngineRecord = { version: 1, identity: definition.identity, installation: name };
+        const record: EngineRecord = withFileHeader('engine-record', sdkWriter(), { identity: definition.identity, installation: name });
         const handle = await open(temporary, 'wx', 0o600);
         try { await handle.writeFile(JSON.stringify(record) + '\n'); await handle.sync(); } finally { await handle.close(); }
         operationStage(operation, 'publishing', 'Publishing the verified engine.');

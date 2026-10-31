@@ -11,7 +11,7 @@ from picpatch_worker.backends.errors import Cancelled, BackendUnavailable
 @pytest.fixture
 def config(tmp_path):
     return {'variant': 'flux2-klein-4b', 'directory': str(tmp_path), 'manifest': {
-        'version': 1, 'model': 'local-klein', 'source': {'repository': 'local', 'revision': 'a' * 40},
+        'model': 'local-klein', 'source': {'repository': 'local', 'revision': 'a' * 40},
         'components': [{'path': 'weight.safetensors', 'role': 'weights', 'bytes': 1, 'sha256': 'a' * 64}]}}
 
 

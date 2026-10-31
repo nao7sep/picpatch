@@ -20,7 +20,12 @@ it('reads pinned records, preserves newer ones and rejects malformed/path-bearin
   expect(validateArtifactRecord(JSON.parse(original.toString('utf8')))).toMatchObject({ status: 'refused', code: 'ARTIFACT_VERSION_UNSUPPORTED' });
   expect(await readFile(path)).toEqual(original);
   for (const filename of ['/secret/a.png', '..\\secret.png', '../a.png']) expect(() => validateArtifactRecord({ ...record, image: { ...record.image, filename } })).toThrow();
-  expect(() => validateArtifactRecord({ ...record, version: 0 })).toThrow();
+  // The header alone identifies the record: another owner or kind, a missing or malformed format, or an old version marker is not a PicPatch record.
+  for (const format of [{ ...record.format, version: 0 }, { ...record.format, owner: 'gptimg' }, { ...record.format, kind: 'config' }, undefined, 'sidecar']) expect(() => validateArtifactRecord({ ...record, format })).toThrow();
+  const { format: _format, ...headless } = record;
+  expect(() => validateArtifactRecord({ ...headless, version: 1 })).toThrow();
+  // The writer is never read: a missing or foreign one changes nothing.
+  for (const writer of [undefined, 'garbage', { name: 'someone else' }]) expect(validateArtifactRecord({ ...record, writer })).toMatchObject({ status: 'completed' });
   await expect(readArtifactRecord('relative')).rejects.toMatchObject({ kind: 'invalid' });
 });
 it('checks final file bytes and full decoding without trusting names or touching originals', async () => {
@@ -28,10 +33,11 @@ it('checks final file bytes and full decoding without trusting names or touching
   await sharp({ create: { width: 8, height: 8, channels: 3, background: 'blue' } }).png().toFile(image);
   const bytes = await readFile(image);
   const record = await createArtifactRecord({ model: 'fixture', prompt: 'private', outputPath: image, record: { caller: { name: 'ExampleApp', version: '1' } } }, { image: { path: image, mimeType: 'image/png', size: { width: 8, height: 8 } }, model: 'fixture', modelRevision: 'fixture', runtime: { name: 'fixture', version: '1' }, seed: 42, effectiveParameters: { steps: 4 }, references: [] }, image, []);
-  expect(record).toMatchObject({ writer: { name: 'picpatchsdk', version: VERSION }, caller: { name: 'ExampleApp', version: '1' }, fingerprints: [] });
+  expect(record).toMatchObject({ format: { owner: 'picpatch', kind: 'sidecar', version: 1 }, writer: { name: 'picpatchsdk', version: VERSION, caller: { name: 'ExampleApp', version: '1' } }, fingerprints: [] });
+  expect(Object.keys(record).slice(0, 2)).toEqual(['format', 'writer']);
   const read = await readArtifactRecord(fixture('current')); if (read.status === 'refused') throw new Error(read.code); const pinned = read.record;
   // The fixture pins the format; the writer's version follows the package, so it is compared as VERSION.
-  expect({ ...record, caller: undefined, sha256: pinned.sha256, bytes: pinned.bytes, image: pinned.image }).toEqual({ ...pinned, writer: { ...pinned.writer, version: VERSION }, caller: undefined });
+  expect({ ...record, writer: { ...record.writer, caller: undefined }, sha256: pinned.sha256, bytes: pinned.bytes, image: pinned.image }).toEqual({ ...pinned, writer: { ...pinned.writer, version: VERSION, caller: undefined } });
   expect(await verifyArtifact(image, record)).toMatchObject({ status: 'completed' });
   expect(await verifyArtifact(image, { ...record, bytes: record.bytes + 1 })).toMatchObject({ status: 'refused', code: 'ARTIFACT_MISMATCH' });
   expect(await readFile(image)).toEqual(bytes);

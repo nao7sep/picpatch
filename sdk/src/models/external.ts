@@ -81,7 +81,7 @@ export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'va
       if (!components.some(component => component.path === required)) throw new PicPatchSdkError('MODEL_BUNDLE_INCOMPLETE', 'The selected variant requires complete component and processor configuration files.', { subject: root });
     }
     const revision = createHash('sha256').update(JSON.stringify({ variant: entry.variant, components })).digest('hex');
-    const manifest: ModelManifest = validateModelManifest({ version: 1, model: entry.id, source: { repository: 'local', revision }, components });
+    const manifest: ModelManifest = validateModelManifest({ model: entry.id, source: { repository: 'local', revision }, components });
     // The fingerprinting read already checked each file's identity and mutation, and the directory walk
     // refused linked folders. Check the shard indexes and recheck every file, rather than reading all weights twice.
     for (const component of components) {
@@ -95,7 +95,7 @@ export async function prepareExternalModel(entry: Pick<ExternalModel, 'id' | 'va
       if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new PicPatchSdkError('MODEL_CHANGED', 'A model component changed during preparation.', { subject: join(root, name) });
     }
     emitProgress(operation, { stage: 'verifying', completed: components.length, total: components.length });
-    return { version: 1, model: { variant: entry.variant, directory, manifest }, origin: 'external', integrity: 'locally-fingerprinted' };
+    return { model: { variant: entry.variant, directory, manifest }, origin: 'external', integrity: 'locally-fingerprinted' };
   } catch (cause) {
     checkSignal(signal);
     if (cause instanceof PicPatchSdkError) throw cause;

@@ -86,7 +86,7 @@ export interface ExternalModel extends CatalogBase {
 export type ModelCatalogEntry = CatalogModel | ExternalModel;
 
 /** Persist this envelope, not an inference session or historical verification claim. */
-export interface ModelRegistration { version: 1; model: LocalModel }
+export interface ModelRegistration { model: LocalModel }
 export type ModelRegistrationResult = { status: 'completed'; registration: ModelRegistration } | Refusal<'MODEL_REGISTRATION_VERSION_UNSUPPORTED'>;
 export interface OpenedModel extends ModelRegistration {
   status: 'completed';
@@ -94,7 +94,7 @@ export interface OpenedModel extends ModelRegistration {
   compatibility: 'unknown';
 }
 /** details.issues lists the components that are not present at their declared location and size. */
-export type ModelOpenRefusal = Refusal<'MODEL_INCOMPLETE' | 'MODEL_REGISTRATION_VERSION_UNSUPPORTED'>;
+export type ModelOpenRefusal = Refusal<'MODEL_INCOMPLETE'>;
 export type ModelOpenResult = OpenedModel | ModelOpenRefusal;
 export type { ModelPresenceIssue };
 export interface ManagedModelEntry {

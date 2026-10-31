@@ -26,7 +26,7 @@ it('looks for engine build tools on PATH and in the Homebrew folders a Finder la
 });
 it('suggests the image number shown in the conversation, in the folder the last save used', () => {
   const run = (id: string, output?: string) => ({ id, modelId: 'model', seed: 1, draft: initialDraft(), status: output ? 'completed' as const : 'failed' as const, created: '', ...(output ? { output } : {}) });
-  const session: Session = { version: 1, id: 'session', name: 'Holiday', created: '', updated: '', draft: initialDraft(), assets: [], runs: [run('first', 'outputs/first.png'), run('failed'), run('third', 'outputs/third.png')] };
+  const session: Session = { id: 'session', name: 'Holiday', created: '', updated: '', draft: initialDraft(), assets: [], runs: [run('first', 'outputs/first.png'), run('failed'), run('third', 'outputs/third.png')] };
   const name = exportDefaultPath(session, 'third', undefined);
   expect(name).toMatch(/3/); expect(exportDefaultPath(session, 'third', join(root, 'saved'))).toBe(join(root, 'saved', name));
   expect(() => exportDefaultPath(session, 'failed', undefined)).toThrow(); expect(() => exportDefaultPath(session, 'missing', undefined)).toThrow();
@@ -57,7 +57,7 @@ it('owns each model operation end to end: progress, one correlated result, and a
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
   const bytes = Buffer.from('model verification fixture');
   await writeFile(join(root, 'weights.bin'), bytes);
-  const manifest: ModelManifest = { version: 1, model: 'fixture', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [{ path: 'weights.bin', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }] };
+  const manifest: ModelManifest = { model: 'fixture', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [{ path: 'weights.bin', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }] };
   const first = manage({ action: 'download', modelId: 'flux2-klein-4b-4bit' }, async call => {
     // Public verification exercises the SDK's actual progress dispatch and production debug filtering.
     await expect(verifyModel(root, manifest, call)).resolves.toHaveProperty('status', 'matches-manifest');

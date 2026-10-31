@@ -1,3 +1,4 @@
+import type { FileHeader } from '../../file-header.ts';
 import type { PicPatchProfile } from '../../types.ts';
 import type { RuntimeName } from '../../hosts.ts';
 import type { pythonVersion } from './versions.ts';
@@ -39,8 +40,7 @@ export interface EngineIdentity {
   manifestSha256: string;
 }
 /** Versioned readiness reference. The installation is a single basename, never a caller path. */
-export interface EngineRecord {
-  version: 1;
+export interface EngineRecord extends FileHeader<'engine-record'> {
   identity: EngineIdentity;
   installation: string;
 }

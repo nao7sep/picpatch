@@ -12,7 +12,7 @@ import type { PreparedModel, PrepareModelOptions } from '../../models/preparatio
 
 export function validateMfluxLoras(loras: unknown): asserts loras is [LocalLora, ...LocalLora[]] {
   if (!Array.isArray(loras) || !loras.length || loras.some(lora => !contractValidator<LocalLora>('LocalLora')(lora) || !lora.path.toLowerCase().endsWith('.safetensors'))) throw new PicPatchSdkError('INVALID_REQUEST', 'Supply local safetensors LoRAs with finite scales.');
-  validateModelManifest({ version: 1, model: 'loras', source: { repository: 'local', revision: '0'.repeat(64) }, components: loras.map(lora => ({ path: lora.path, role: 'weights', bytes: 1, sha256: '0'.repeat(64) })) });
+  validateModelManifest({ model: 'loras', source: { repository: 'local', revision: '0'.repeat(64) }, components: loras.map(lora => ({ path: lora.path, role: 'weights', bytes: 1, sha256: '0'.repeat(64) })) });
 }
 
 /** Preparation checks the container/pairs; the installed runtime owns family target mappings. */

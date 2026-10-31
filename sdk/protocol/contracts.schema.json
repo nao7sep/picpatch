@@ -523,9 +523,6 @@
     "ModelManifest": {
       "type": "object",
       "properties": {
-        "version": {
-          "const": 1
-        },
         "model": {
           "type": "string",
           "pattern": "\\S"
@@ -557,7 +554,6 @@
         }
       },
       "required": [
-        "version",
         "model",
         "source",
         "components"
@@ -1024,7 +1020,7 @@
             "version"
           ],
           "additionalProperties": false,
-          "description": "The calling app's identity, recorded beside the SDK writer."
+          "description": "The calling app's identity, recorded as the writer's caller."
         }
       },
       "required": [],
@@ -1092,8 +1088,29 @@
     "ArtifactRecord": {
       "type": "object",
       "properties": {
-        "version": {
-          "const": 1
+        "format": {
+          "type": "object",
+          "properties": {
+            "owner": {
+              "const": "picpatch"
+            },
+            "kind": {
+              "const": "sidecar"
+            },
+            "version": {
+              "const": 1
+            }
+          },
+          "required": [
+            "owner",
+            "kind",
+            "version"
+          ],
+          "description": "The file identity header's format; other keys inside it are ignored."
+        },
+        "writer": {
+          "tsType": "{ name: string; version: string; caller?: { name: string; version: string } }",
+          "description": "The program and release that wrote the record, and the caller it wrote for. Never read or checked."
         },
         "operation": {
           "enum": [
@@ -1328,41 +1345,6 @@
         "control": {
           "$ref": "#/definitions/ControlProvenance"
         },
-        "writer": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "const": "picpatchsdk"
-            },
-            "version": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "required": [
-            "name",
-            "version"
-          ],
-          "additionalProperties": false
-        },
-        "caller": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1
-            },
-            "version": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "required": [
-            "name",
-            "version"
-          ],
-          "additionalProperties": false
-        },
         "fingerprints": {
           "type": "array",
           "description": "Original encoded input file bytes, before normalization; ordered by preparation.",
@@ -1400,11 +1382,11 @@
             "composite",
             "latent-composite"
           ],
-          "description": "Effective masked-edit mechanism. Native conditioning may change unmasked pixels. Composite blends normalized RGBA using white-to-edit masks; latent-composite restores fully black normalized pixels after latent masking. Absent for an unmasked operation or a legacy record with unknown mechanism."
+          "description": "Effective masked-edit mechanism. Native conditioning may change unmasked pixels. Composite blends normalized RGBA using white-to-edit masks; latent-composite restores fully black normalized pixels after latent masking. Absent for an unmasked operation."
         }
       },
       "required": [
-        "version",
+        "format",
         "operation",
         "inputsIncluded",
         "image",
@@ -1415,7 +1397,6 @@
         "runtime",
         "seed",
         "effectiveParameters",
-        "writer",
         "fingerprints"
       ],
       "additionalProperties": false

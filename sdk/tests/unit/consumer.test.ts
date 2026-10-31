@@ -36,7 +36,7 @@ it('inspects and verifies an external fixture without modifying it or loading in
   const path = join(external, 'weights.safetensors');
   await writeFile(path, bytes);
   const manifest: import('picpatchsdk').ModelManifest = {
-    version: 1, model: 'fixture', source: { repository: 'fixture', revision: 'a'.repeat(40) },
+    model: 'fixture', source: { repository: 'fixture', revision: 'a'.repeat(40) },
     components: [{ path: 'weights.safetensors', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
   };
   expect((await sdk.inspectModel(external)).path).toBe(external);

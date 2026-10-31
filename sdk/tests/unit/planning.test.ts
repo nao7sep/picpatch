@@ -70,7 +70,7 @@ it('refuses a removed input and a retargeted destination, and rejects plans from
 it('plans real Klein geometry and profile defaults without an engine or model files', async () => {
   const entry = listModels()[0]!; if (entry.acquisition !== 'pinned') throw new Error('Expected pinned model');
   const source = join(directory, 'source.png'); await image(source, 'blue', 1050, 800);
-  const editor = createImageClient({ profile: { version: 1, engineDirectory: join(directory, 'absent-engine'), defaults: { outputDirectory: directory, seed: 7, parameters: { steps: 2 } } }, defaults: { seed: 8 }, model: { variant: entry.variant, directory: join(directory, 'absent-model'), manifest: entry.manifest } });
+  const editor = createImageClient({ profile: { engineDirectory: join(directory, 'absent-engine'), defaults: { outputDirectory: directory, seed: 7, parameters: { steps: 2 } } }, defaults: { seed: 8 }, model: { variant: entry.variant, directory: join(directory, 'absent-model'), manifest: entry.manifest } });
   try {
     const plan = await editor.plan({ instruction: 'A bowl.', sourceImage: source }); if (plan.status !== 'completed') throw new Error(plan.code);
     expect(plan.request.seed).toBe(8); expect(plan.request.parameters?.steps).toBe(2);

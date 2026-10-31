@@ -3,7 +3,8 @@ import { open } from './storage.ts';
 import { validateDefaults, type ImageDefaults } from './defaults.ts';
 import { PicPatchSdkError } from './errors.ts';
 import { withDiagnostics } from './diagnostics.ts';
-import { newerVersion, versionRefusal } from './versions.ts';
+import { versionRefusal } from './versions.ts';
+import { checkFileHeader, fileContent } from './file-header.ts';
 import type { CallOptions, Refusal } from './types.ts';
 import { absolutePath, checkSignal, timeBudget, validateOperation } from './operations.ts';
 import { workerTimeouts } from './worker/process.ts';
@@ -23,17 +24,14 @@ export function validateTimeouts(value: unknown): Partial<WorkerTimeouts> {
   }
   return Object.fromEntries(Object.entries(value).filter(([, duration]) => duration !== undefined));
 }
-/** Validates a profile the caller holds; a newer format version is refused, as readProfile refuses it. */
-export function validateProfile(value: unknown): ProfileReadResult {
-  const version = newerVersion(value);
-  if (version !== undefined) return versionRefusal('PROFILE_VERSION_UNSUPPORTED', 'This profile version is unsupported.', version);
+/** Validates a profile the caller holds, such as one kept inside its own settings; a profile file's header is readProfile's. */
+export function validateProfile(value: unknown): { status: 'completed'; profile: PicPatchProfile } {
   return { status: 'completed', profile: checkProfile(value) };
 }
-/** Throws for an invalid or newer profile; a verb cannot run with one. */
+/** Throws for an invalid profile; a verb cannot run with one. */
 export function checkProfile(value: unknown): PicPatchProfile {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['version', 'engineDirectory', 'modelsDirectory', 'nativeExecutable', 'defaults', 'timeouts'].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid profile fields.');
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['engineDirectory', 'modelsDirectory', 'nativeExecutable', 'defaults', 'timeouts'].includes(key))) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid profile fields.');
   const profile = value as PicPatchProfile;
-  if (profile.version !== 1) throw new PicPatchSdkError('INVALID_REQUEST', 'Unsupported profile version.');
   for (const key of ['engineDirectory', 'modelsDirectory', 'nativeExecutable'] as const) if (profile[key] !== undefined) absolutePath(profile[key]);
   if (profile.defaults !== undefined) validateDefaults(profile.defaults);
   const timeouts = profile.timeouts === undefined ? undefined : validateTimeouts(profile.timeouts);
@@ -63,8 +61,10 @@ export function readProfile(path: string, options: ProfileReadOptions = {}): Pro
       let value: unknown;
       try { value = JSON.parse(bytes); }
       catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Profile contains invalid JSON.', { cause, subject: path }); }
-      const result = validateProfile(value);
-      return result.status === 'refused' ? { ...result, subject: path } : result;
+      const header = checkFileHeader(value, 'profile');
+      if (header.status === 'newer') return versionRefusal('PROFILE_VERSION_UNSUPPORTED', 'This profile version is unsupported.', header.version, path);
+      if (header.status === 'unreadable') throw new PicPatchSdkError('INVALID_REQUEST', 'This file is not a PicPatch profile.', { subject: path });
+      return validateProfile(fileContent(value as object));
     } catch (cause) {
       checkSignal(signal);
       if (cause instanceof PicPatchSdkError) throw cause;

@@ -1,4 +1,3 @@
-import packageInfo from '../../package.json' with { type: 'json' };
 import { contractValidator } from '../contracts.ts';
 import { PicPatchSdkError } from '../errors.ts';
 import { createHash } from 'node:crypto';
@@ -8,6 +7,7 @@ import { publishFile } from './publication.ts';
 import { basename, join } from 'node:path';
 import type { ArtifactRecord, EditResult, SidecarOutcome } from '../contracts.generated.ts';
 import type { ImageRequest } from '../types.ts';
+import { fileHeader, sdkWriter } from '../file-header.ts';
 
 /** Reproducibility metadata never enters the image. Hashes identify encoded file bytes. */
 export async function createArtifactRecord(request: ImageRequest, result: EditResult, complete: string, fingerprints: ArtifactRecord['fingerprints']): Promise<ArtifactRecord> {
@@ -18,7 +18,7 @@ export async function createArtifactRecord(request: ImageRequest, result: EditRe
     const caller = request.record?.caller;
     const { negativePrompt, ...parameters } = result.effectiveParameters;
     const record: ArtifactRecord = {
-      version: 1, writer: { name: 'picpatchsdk', version: packageInfo.version }, fingerprints, ...(caller ? { caller } : {}), operation: 'prompt' in request ? 'generate' : 'edit', inputsIncluded,
+      ...fileHeader('sidecar', sdkWriter(caller)), fingerprints, operation: 'prompt' in request ? 'generate' : 'edit', inputsIncluded,
       image: { filename: basename(result.image.path), mimeType: result.image.mimeType, size: result.image.size }, sha256: hash.digest('hex'), bytes,
       ...(result.maskMode ? { maskMode: result.maskMode } : {}),
       ...(result.control ? { control: result.control } : {}),

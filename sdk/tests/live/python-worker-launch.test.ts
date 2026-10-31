@@ -11,7 +11,7 @@ it('launches bundled Python entries with a real model-bound handshake and confir
     { runtime: 'dreamo' as const, variant: 'flux1-dreamo-v1.1' as const, python: process.env.PICPATCH_DREAMO_PYTHON ?? liveCache('dreamo-audit/venv/bin/python') },
   ];
   for (const entry of cases) {
-    const model: LocalModel = { variant: entry.variant, directory: '/not-loaded', manifest: { version: 1, model: entry.variant, source: { repository: 'local', revision: 'a'.repeat(40) }, components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } };
+    const model: LocalModel = { variant: entry.variant, directory: '/not-loaded', manifest: { model: entry.variant, source: { repository: 'local', revision: 'a'.repeat(40) }, components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } };
     const worker = new WorkerProcess({ ...workerLaunch(entry.python, undefined, entry.runtime), model }, workerTimeouts);
     try {
       const ready = await worker.start();

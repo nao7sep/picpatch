@@ -26,7 +26,7 @@ it('retains instructions and settings while changing targets and clears only sou
 });
 it('offers a mask only on an image that exists, for a model that takes masks', () => {
   const pending: Run = { id: 'pending', modelId: 'model', seed: 1, draft: initialDraft(), status: 'running', created: new Date().toISOString() };
-  const session: Session = { version: 1, id: 'session', name: 'Session', created: '', updated: '', draft: initialDraft(), runs: [pending, { ...pending, id: 'done', status: 'completed', output: 'outputs/done.png' }], assets: [{ id: 'photo', name: 'photo.png', file: 'assets/photo', bytes: 1, sha256: '0'.repeat(64) }] };
+  const session: Session = { id: 'session', name: 'Session', created: '', updated: '', draft: initialDraft(), runs: [pending, { ...pending, id: 'done', status: 'completed', output: 'outputs/done.png' }], assets: [{ id: 'photo', name: 'photo.png', file: 'assets/photo', bytes: 1, sha256: '0'.repeat(64) }] };
   const on = (source?: string) => ({ ...initialDraft(), ...(source ? { source } : {}) });
   expect(canPaintMask(session, on('photo'), 'native')).toBe(true); expect(canPaintMask(session, on('done'), 'composite')).toBe(true);
   // Every command targets its pending result next; that is not an image yet.

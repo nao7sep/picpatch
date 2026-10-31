@@ -1,5 +1,9 @@
 {
-  "version": 1,
+  "format": {
+    "owner": "picpatch",
+    "kind": "sidecar",
+    "version": 1
+  },
   "writer": {
     "name": "picpatchsdk",
     "version": "1.0.0"

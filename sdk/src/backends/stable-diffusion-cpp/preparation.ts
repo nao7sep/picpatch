@@ -24,7 +24,7 @@ export async function prepareNativeModel(variant: LocalModel['variant'], options
     if (typeof path !== 'string' || !['.safetensors', '.gguf'].includes(extname(path).toLowerCase())) throw new PicPatchSdkError('INVALID_REQUEST', 'Native weights must be safetensors or GGUF files.');
   }
   // Reuse manifest path rules before opening any selected file.
-  validateModelManifest({ version: 1, model: variant, source: { repository: 'local', revision: '0'.repeat(64) },
+  validateModelManifest({ model: variant, source: { repository: 'local', revision: '0'.repeat(64) },
     components: selected.map(path => ({ path, role: 'weights', bytes: 1, sha256: '0'.repeat(64) })) });
   const signal = options.signal;
   checkSignal(signal);
@@ -32,7 +32,7 @@ export async function prepareNativeModel(variant: LocalModel['variant'], options
     const root = await realpath(directory);
     const components: ModelComponent[] = [];
     const snapshots = new Map<string, BigIntStats>();
-    const provisional = validateLocalModel({ variant, directory: root, ...assets, manifest: { version: 1, model: variant, source: { repository: 'local', revision: '0'.repeat(64) }, components: selected.map(path => ({ path, role: 'weights', bytes: 1, sha256: '0'.repeat(64) })) } });
+    const provisional = validateLocalModel({ variant, directory: root, ...assets, manifest: { model: variant, source: { repository: 'local', revision: '0'.repeat(64) }, components: selected.map(path => ({ path, role: 'weights', bytes: 1, sha256: '0'.repeat(64) })) } });
     // Check compatibility before hashing multi-GB assets; repeat headers under final snapshots below.
     await inspectNativeAssets(provisional, signal);
     for (const path of selected) {
@@ -59,7 +59,7 @@ export async function prepareNativeModel(variant: LocalModel['variant'], options
       } finally { await file.close(); }
     }
     const revision = createHash('sha256').update(JSON.stringify({ variant, components })).digest('hex');
-    const manifest = validateModelManifest({ version: 1, model: variant, source: { repository: 'local', revision }, components });
+    const manifest = validateModelManifest({ model: variant, source: { repository: 'local', revision }, components });
     emitProgress(options, { stage: 'verifying', completed: selected.length, total: selected.length });
     const model = validateLocalModel({ variant, directory, manifest, ...assets });
     await inspectNativeAssets({ ...model, directory: root }, signal);
@@ -73,7 +73,7 @@ export async function prepareNativeModel(variant: LocalModel['variant'], options
       const after = await stat(target, { bigint: true });
       if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new PicPatchSdkError('MODEL_CHANGED', 'Native weights changed during preparation.');
     }
-    return { version: 1, model, origin: 'external', integrity: 'locally-fingerprinted' };
+    return { model, origin: 'external', integrity: 'locally-fingerprinted' };
   } catch (cause) {
     checkSignal(signal);
     if (cause instanceof PicPatchSdkError) throw cause;

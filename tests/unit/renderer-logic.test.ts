@@ -38,7 +38,7 @@ describe('draft writer', () => {
 });
 
 describe('command readiness', () => {
-  const session = (patch: Partial<Session> = {}): Session => ({ version: 1, id: 's', name: 'n', created: '', updated: '', draft: initialDraft(), assets: [], runs: [], ...patch });
+  const session = (patch: Partial<Session> = {}): Session => ({ id: 's', name: 'n', created: '', updated: '', draft: initialDraft(), assets: [], runs: [], ...patch });
   it('explains checking, unready models, a pending target and model refusals without changing the draft', () => {
     const draft = { ...initialDraft(), text: 'go' };
     expect(commandIssues(session(), draft, models as never, undefined)).toEqual([{ kind: 'checking' }]);
@@ -100,7 +100,7 @@ it('never retries a failed older draft after a newer intent is already queued, i
 
 it('builds display numbering once for an unchanged long runs revision, including unsuccessful attempts', () => {
   const runs = Array.from({ length: 5000 }, (_, index) => ({ ...run(String(index), 't'), status: (['failed', 'queued', 'completed'] as const)[index % 3]! }));
-  const owner: Session = { version: 1, id: 's', name: 'n', created: '', updated: '', draft: initialDraft(), assets: [], runs };
+  const owner: Session = { id: 's', name: 'n', created: '', updated: '', draft: initialDraft(), assets: [], runs };
   const mapped = vi.spyOn(runs, 'map');
   for (let index = 0; index < runs.length; index++) expect(imageNumber(owner, String(index))).toBe(index + 1);
   expect(mapped).toHaveBeenCalledTimes(1);

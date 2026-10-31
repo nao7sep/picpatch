@@ -62,7 +62,8 @@ it('ignores incomplete installations and refuses malformed or foreign readiness 
   await mkdir(join(root, 'installations', 'unfinished'), { recursive: true });
   expect(await inspectEngine({ engineDirectory: root })).toMatchObject({ status: 'missing' });
   await mkdir(join(root, 'ready'));
-  for (const record of ['bad json', JSON.stringify({ version: 2 }), JSON.stringify({ version: 1, identity, installation: '../elsewhere' })]) {
+  const format = { owner: 'picpatch', kind: 'engine-record', version: 1 };
+  for (const record of ['bad json', JSON.stringify({ format: { ...format, version: 2 }, identity, installation: 'x' }), JSON.stringify({ format, identity, installation: '../elsewhere' })]) {
     await writeFile(join(root, 'ready', `${identity.id}.json`), record);
     expect(await inspectEngine({ engineDirectory: root })).toMatchObject({ status: 'incompatible', code: 'ENGINE_RECORD_INVALID' });
     await expect(installEngine(options())).rejects.toMatchObject({ code: 'ENGINE_INCOMPATIBLE' });
@@ -109,11 +110,16 @@ it('bounds a stalled subprocess, confirms its death and keeps errors off caller 
 });
 
 it('pins the readiness format and isolates different dependency identities', async () => {
-  const record = JSON.parse(await readFile(new URL('../fixtures/engine-record-v1.json', import.meta.url), 'utf8'));
+  const record = JSON.parse(await readFile(new URL('../fixtures/engine-record.json', import.meta.url), 'utf8'));
   const identity = identifyEngine('fixture project', 'fixture lock');
   expect(record.identity).toEqual(identity);
   expect(validRecord(record, identity)).toBe(true);
-  expect(validRecord({ ...record, version: 2 }, identity)).toBe(false);
+  expect(Object.keys(record).slice(0, 2)).toEqual(['format', 'writer']);
+  // Identity is the header alone: another owner or kind, a newer or missing format, an old marker or an extra key is not this record.
+  for (const format of [{ ...record.format, version: 2 }, { ...record.format, kind: 'sidecar' }, { ...record.format, owner: 'zipkit' }, undefined]) expect(validRecord({ ...record, format }, identity)).toBe(false);
+  expect(validRecord({ ...record, version: 1 }, identity)).toBe(false);
+  // The writer is never read.
+  for (const writer of [undefined, 'garbage', { name: 'someone else' }]) expect(validRecord({ ...record, writer }, identity)).toBe(true);
   expect(validRecord(record, identifyEngine('fixture project', 'another lock'))).toBe(false);
   expect(validRecord(record, identifyEngine('another project', 'fixture lock'))).toBe(false);
 });

@@ -3,7 +3,7 @@ import { createImageClient, type LocalModel } from '../../src/index.ts';
 import { ProtocolSession } from '../../src/worker/protocol.ts';
 const model: LocalModel = {
   variant: 'flux2-klein-4b', directory: '/models/klein',
-  manifest: { version: 1, model: 'klein', source: { repository: 'local', revision: 'a'.repeat(40) },
+  manifest: { model: 'klein', source: { repository: 'local', revision: 'a'.repeat(40) },
     components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] },
 };
 it.each(['relative', '/models/\0bad'])('rejects invalid local model directory %s synchronously', directory => {

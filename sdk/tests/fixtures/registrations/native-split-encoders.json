@@ -1,5 +1,13 @@
 {
-  "version": 1,
+  "format": {
+    "owner": "picpatch",
+    "kind": "model-registration",
+    "version": 1
+  },
+  "writer": {
+    "name": "picpatchsdk",
+    "version": "1.0.0"
+  },
   "model": {
     "variant": "sd35-large",
     "directory": "/models/sd35-large",
@@ -9,7 +17,6 @@
     "t5": "t5.gguf",
     "vae": "vae.safetensors",
     "manifest": {
-      "version": 1,
       "model": "sd35-large",
       "source": {
         "repository": "local",

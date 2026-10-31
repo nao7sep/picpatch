@@ -66,3 +66,6 @@ export { inspectNativeEngine, installNativeEngine } from './runtime/engine/nativ
 export type { ReadyNativeEngine, NativeEngineInspection, NativeEngineInstallation } from './runtime/engine/native.ts';
 export { hostId, runtimeHosts, supportsRuntime } from './platform.ts';
 export type { Host, HostId, RuntimeName } from './platform.ts';
+
+export { checkFileHeader, fileContent, fileHeader, fileOwner, fileVersion, sdkWriter, withFileHeader } from './file-header.ts';
+export type { FileFormat, FileHeader, FileKind, FileProgram, FileWriter, HeaderCheck } from './file-header.ts';

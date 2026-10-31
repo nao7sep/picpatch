@@ -4,7 +4,8 @@ import { open, realpath, stat } from '../storage.ts';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { withDiagnostics } from '../diagnostics.ts';
 import type { CallOptions, ModelPresenceIssue } from '../types.ts';
-import { newerVersion, versionRefusal } from '../versions.ts';
+import { versionRefusal } from '../versions.ts';
+import { checkFileHeader, fileContent } from '../file-header.ts';
 import { PicPatchSdkError, sdkError } from '../errors.ts';
 import { absolutePath, checkSignal, validateOperation, withSettings } from '../operations.ts';
 import type { PicPatchProfile } from '../profile.ts';
@@ -22,16 +23,14 @@ export interface ModelOpenSettings extends ModelStoreSettings {
 }
 type ModelOpenOptions = ModelOpenSettings & CallOptions;
 export type { ManagedModelInventory, ModelInventoryFailure, ModelOpenRefusal, ModelOpenResult, ModelPresenceIssue, ModelRegistration, ModelRegistrationResult, OpenedModel } from './types.ts';
-import type { ManagedModelInventory, ModelOpenRefusal, ModelOpenResult, ModelRegistration, ModelRegistrationResult } from './types.ts';
+import type { ManagedModelInventory, ModelOpenResult, ModelRegistration, ModelRegistrationResult } from './types.ts';
 
 function checkRegistration(value: unknown): ModelRegistration {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || (value as ModelRegistration).version !== 1) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model registration.');
-  return { version: 1, model: validateLocalModel((value as ModelRegistration).model) };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model registration.');
+  return { model: validateLocalModel((value as ModelRegistration).model) };
 }
-/** Validates a registration the caller holds; a newer format version is refused, as the reader refuses it. */
-export function validateModelRegistration(value: unknown): ModelRegistrationResult {
-  const version = newerVersion(value);
-  if (version !== undefined) return versionRefusal('MODEL_REGISTRATION_VERSION_UNSUPPORTED', 'This model registration version is unsupported.', version);
+/** Validates a registration the caller holds, such as one kept inside its own settings; a registration file's header is readModelRegistration's. */
+export function validateModelRegistration(value: unknown): { status: 'completed'; registration: ModelRegistration } {
   return { status: 'completed', registration: checkRegistration(value) };
 }
 async function presence(registration: ModelRegistration, signal?: AbortSignal): Promise<ModelOpenResult> {
@@ -67,21 +66,19 @@ async function boundary<T>(options: ModelOpenOptions, action: (signal?: AbortSig
   try { return await action(options.signal); }
   catch (cause) { if (cause instanceof PicPatchSdkError) throw cause; throw new PicPatchSdkError('MODEL_IO', 'Could not open model files.', { cause }); }
 }
-function select(input: string | ModelRegistration, options: ModelOpenOptions): ModelRegistration | ModelOpenRefusal {
+function select(input: string | ModelRegistration, options: ModelOpenOptions): ModelRegistration {
   if (typeof input !== 'string') {
     if (options.directory !== undefined) throw new PicPatchSdkError('INVALID_REQUEST', 'A registration already names its directory.');
-    const valid = validateModelRegistration(input);
-    return valid.status === 'refused' ? valid : valid.registration;
+    return validateModelRegistration(input).registration;
   }
   const entry = catalogModel(input);
   if (entry.acquisition !== 'pinned') throw new PicPatchSdkError('INVALID_REQUEST', 'Prepare an external selection once and pass its saved registration to openModel.');
-  return { version: 1, model: { variant: entry.variant, directory: options.directory ?? join(root(options), entry.id, entry.manifest.source.revision), manifest: entry.manifest } };
+  return { model: { variant: entry.variant, directory: options.directory ?? join(root(options), entry.id, entry.manifest.source.revision), manifest: entry.manifest } };
 }
 /** Cheap presence only: never reads model contents, installs packages or starts inference. */
 export function openModel(input: string | ModelRegistration, settings: ModelOpenSettings = {}, options: CallOptions = {}): Promise<ModelOpenResult> {
   return withDiagnostics('openModel', options, call => { const operation = withSettings(settings, ['profile', 'modelsDirectory', 'directory'], call); return boundary(operation, async signal => {
-    const registration = select(input, operation);
-    return 'status' in registration ? registration : presence(registration, signal);
+    return presence(select(input, operation), signal);
   }); });
 }
 /** Reads only the explicitly selected registration file. The caller owns its persistence. */
@@ -96,8 +93,10 @@ export function readModelRegistration(path: string, options: CallOptions = {}): 
       checkSignal(signal);
       let value: unknown;
       try { value = JSON.parse(bytes); } catch (cause) { throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid model registration JSON.', { cause, subject: path }); }
-      const result = validateModelRegistration(value);
-      return result.status === 'refused' ? { ...result, subject: path } : result;
+      const header = checkFileHeader(value, 'model-registration');
+      if (header.status === 'newer') return versionRefusal('MODEL_REGISTRATION_VERSION_UNSUPPORTED', 'This model registration version is unsupported.', header.version, path);
+      if (header.status === 'unreadable') throw new PicPatchSdkError('INVALID_REQUEST', 'This file is not a PicPatch model registration.', { subject: path });
+      return validateModelRegistration(fileContent(value as object));
     } finally { await file.close(); }
   }));
 }

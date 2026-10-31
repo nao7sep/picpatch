@@ -38,7 +38,7 @@ function fakeSdk() {
 }
 it('reuses a warm client for the same model, keeps no more than Models kept loaded, closes the least recently used first and closes all on release', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
-  const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {} };
+  const settings: Settings = { profile: {}, registrations: {} };
   const { sdk, clients } = fakeSdk(); const run = inference(() => sessions, () => settings, sdk);
   const events = { signal: new AbortController().signal, onEvent: () => {}, onProgress: () => {}, onTeardownError: () => {} };
   const attempt = (modelId: string) => run(session.id, { id: crypto.randomUUID(), modelId, seed: 1, draft: session.draft, status: 'running', created: '' }, events);
@@ -54,14 +54,14 @@ it('reuses a warm client for the same model, keeps no more than Models kept load
 
 it('runs with the SDK’s own preparation and refusal, and keeps the record without a sidecar', async () => {
   const sessions = new Sessions(root); const session = await sessions.create();
-  const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {} };
+  const settings: Settings = { profile: {}, registrations: {} };
   const { sdk } = fakeSdk();
   const events = { signal: new AbortController().signal, onEvent: () => {}, onProgress: () => {}, onTeardownError: () => {} };
   const attempt = (modelId: string) => inference(() => sessions, () => settings, sdk)(session.id, { id: crypto.randomUUID(), modelId, seed: 1, draft: session.draft, status: 'running', created: '' }, events);
   const refusal = { status: 'refused', code: 'MODEL_REGISTRATION_VERSION_UNSUPPORTED', message: 'Newer.', details: { version: 2 } };
   const prepare = vi.fn(async () => refusal);
   sdk.prepareImageClient = prepare as never;
-  const registration = { version: 1, model: { variant: 'flux2-klein-4b' } } as never;
+  const registration = { model: { variant: 'flux2-klein-4b' } } as never;
   settings.registrations.a = registration;
   expect(await attempt('a')).toEqual({ outcome: refusal });
   expect(prepare).toHaveBeenCalledWith('a', { profile: settings.profile, registration }, expect.objectContaining({ signal: events.signal }));
@@ -76,7 +76,7 @@ it('runs with the SDK’s own preparation and refusal, and keeps the record with
 
 it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output and provenance when lowering Models kept loaded evicts a client with %s', async code => {
   const sessions = new Sessions(root), session = await sessions.create();
-  const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {}, modelsKeptLoaded: 2 };
+  const settings: Settings = { profile: {}, registrations: {}, modelsKeptLoaded: 2 };
   const records: ArtifactRecord[] = [];
   const teardown = new PicPatchSdkError(code, 'Worker teardown failed.');
   const held: (() => void)[] = [];
@@ -129,7 +129,7 @@ it.each(['TIMEOUT', 'TERMINATION_FAILED'] as const)('retains completed output an
 
 it('preserves the primary operation failure and reports a subsequent disposal failure once', async () => {
   const sessions = new Sessions(root), session = await sessions.create();
-  const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {} };
+  const settings: Settings = { profile: {}, registrations: {} };
   const { sdk } = fakeSdk();
   const primary = new PicPatchSdkError('INVALID_REQUEST', 'Inference request failed.');
   const cleanup = new PicPatchSdkError('TERMINATION_FAILED', 'Worker teardown failed.');
@@ -147,7 +147,7 @@ it('preserves the primary operation failure and reports a subsequent disposal fa
 
 it.each(['generate', 'edit'] as const)('keeps app teardown reporting outside the SDK %s options contract', async mode => {
   const sessions = new Sessions(root), session = await sessions.create();
-  const settings: Settings = { version: 1, profile: { version: 1 }, registrations: {} };
+  const settings: Settings = { profile: {}, registrations: {} };
   const { sdk } = fakeSdk();
   const operation = vi.fn(async (_request: unknown, options: Record<string, unknown>) => {
     // The real SDK rejects unknown call options before running a model.
@@ -171,8 +171,8 @@ it.each(['a', 'b', 'n'])('maps canvas and painted-mask geometry through real SDK
   const { sdk } = fakeSdk(); const requests: Record<string, any>[] = [];
   const planner = createImageClient({ model: { variant: modelId === 'n' ? 'sd15-inpaint' : 'flux2-klein-4b', directory: root,
     ...(modelId === 'n' ? { checkpoint: 'weights.bin' } : {}),
-    manifest: { version: 1, model: 'test', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [{ path: 'weights.bin', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] },
-  }, profile: { version: 1 }, ...(modelId === 'n' ? { nativeExecutable: join(root, 'unused-native') } : { engineDirectory: join(root, 'unused-engine') }) });
+    manifest: { model: 'test', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [{ path: 'weights.bin', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] },
+  }, profile: {}, ...(modelId === 'n' ? { nativeExecutable: join(root, 'unused-native') } : { engineDirectory: join(root, 'unused-engine') }) });
   const caps: ModelCapabilities = { model: 'test', instructionEditing: true, referenceRoles: ['subject' as const], maskMode: modelId === 'n' ? 'native' as const : 'composite' as const, outpainting: true };
   sdk.createImageClient = (() => ({ edit: async (input: Record<string, unknown>) => {
     requests.push(input);
@@ -186,7 +186,7 @@ it.each(['a', 'b', 'n'])('maps canvas and painted-mask geometry through real SDK
     }
     return { status: 'refused', code: 'OUTPUT_CONFLICT', message: 'Test only.', details: {} };
   }, dispose: async () => {} })) as never;
-  const run = inference(() => sessions, () => ({ version: 1, profile: { version: 1 }, registrations: {} }), sdk);
+  const run = inference(() => sessions, () => ({ profile: {}, registrations: {} }), sdk);
   const events = { signal: new AbortController().signal, onEvent: () => {}, onProgress: () => {}, onTeardownError: () => {} };
   const attempt = (draft: typeof session.draft) => run(session.id, { id: crypto.randomUUID(), modelId, seed: 1, draft, status: 'running', created: '' }, events);
   const draft = { ...session.draft, mode: 'edit' as const, text: 'Make it blue', source: source.id };

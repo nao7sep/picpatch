@@ -15,7 +15,7 @@ beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'picpatch-service-r
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 const paths = () => ({ root, config: join(root, 'config.json'), sessions: join(root, 'sessions'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') });
 const refused = { status: 'refused' as const, code: 'OUTPUT_CONFLICT' as const, message: 'Fixture output exists.', subject: '/fixture-output.png', details: {} };
-const manifest: ModelManifest = { version: 1, model: 'fixture', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [{ path: 'weights.bin', role: 'weights', bytes: 1, sha256: createHash('sha256').update('x').digest('hex') }] };
+const manifest: ModelManifest = { model: 'fixture', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [{ path: 'weights.bin', role: 'weights', bytes: 1, sha256: createHash('sha256').update('x').digest('hex') }] };
 
 it('preserves the inference release hook through Application and waits for idle disposal to settle', async () => {
   let finish!: () => void;

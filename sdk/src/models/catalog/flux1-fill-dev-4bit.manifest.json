@@ -1,5 +1,13 @@
 {
-  "version": 1,
+  "format": {
+    "owner": "picpatch",
+    "kind": "model-manifest",
+    "version": 1
+  },
+  "writer": {
+    "name": "picpatchsdk",
+    "version": "1.0.0"
+  },
   "model": "flux1-fill-dev-4bit",
   "source": {
     "repository": "mflux-community/flux-1-dev-fill-mflux-q4",

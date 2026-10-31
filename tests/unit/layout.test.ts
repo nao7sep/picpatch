@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
 import { readPaneState, savePaneState } from '../../src/main/core/layout-state.ts';
 import { layout, minimum, railWidth } from '../../src/shared/layout.ts';
+const format = { owner: 'picpatch', kind: 'state', version: 1 };
+const stateFile = (content: object) => JSON.stringify({ format, writer: { name: 'picpatch', version: '1.0.0' }, ...content });
 it('keeps pane intent independently of layout clamps and ignores corrupt disposable state', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-layout-')); const path = join(directory, 'state.json');
   try {
@@ -14,7 +16,7 @@ it('keeps pane intent independently of layout clamps and ignores corrupt disposa
     expect(JSON.parse(await readFile(path, 'utf8')).railWidth).toBe(320);
     await writeFile(path, 'bad'); expect(await readPaneState(path)).toEqual({ railWidth: layout.railDefault, optionsPane: false });
     // The earlier request-pane layout is disposable and falls back field by field.
-    await writeFile(path, JSON.stringify({ requestWidth: 500, sidebar: true, exportDirectory: directory }));
+    await writeFile(path, stateFile({ requestWidth: 500, sidebar: true, exportDirectory: directory }));
     expect(await readPaneState(path)).toEqual({ railWidth: layout.railDefault, optionsPane: false, exportDirectory: directory });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
@@ -23,9 +25,26 @@ it('retains valid UI zoom beside pane state and drops an invalid zoom independen
   try {
     await savePaneState(path,{railWidth:300,optionsPane:true,uiZoom:1.44});
     expect(await readPaneState(path)).toEqual({railWidth:300,optionsPane:true,uiZoom:1.44});
-    await writeFile(path,JSON.stringify({railWidth:300,optionsPane:true,uiZoom:'bad'}));
+    await writeFile(path,stateFile({railWidth:300,optionsPane:true,uiZoom:'bad'}));
     expect(await readPaneState(path)).toEqual({railWidth:300,optionsPane:true});
   } finally { await rm(directory,{recursive:true,force:true}); }
+});
+it('reads state.json by its header alone, and never saves over a newer one', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'picpatch-state-')); const path = join(directory, 'state.json');
+  try {
+    await savePaneState(path, { railWidth: 300, optionsPane: true });
+    expect(Object.keys(JSON.parse(await readFile(path, 'utf8'))).slice(0, 2)).toEqual(['format', 'writer']);
+    const defaults = { railWidth: layout.railDefault, optionsPane: false };
+    for (const contents of [JSON.stringify({ railWidth: 300, optionsPane: true }), stateFile({ format: { ...format, kind: 'config' }, railWidth: 300 }), stateFile({ format: { ...format, owner: 'zipkit' }, railWidth: 300 })]) {
+      await writeFile(path, contents); expect(await readPaneState(path)).toEqual(defaults);
+    }
+    // The writer is never read.
+    await writeFile(path, JSON.stringify({ format, writer: 'anything', railWidth: 300, optionsPane: true })); expect(await readPaneState(path)).toEqual({ railWidth: 300, optionsPane: true });
+    const newer = stateFile({ format: { ...format, version: 2 }, railWidth: 300 });
+    await writeFile(path, newer); expect(await readPaneState(path)).toEqual(defaults);
+    await savePaneState(path, { railWidth: 320, optionsPane: true });
+    expect(await readFile(path, 'utf8')).toBe(newer);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 it('derives the window floor from the panes and narrows the rail only to keep the stage whole', () => {
   expect(minimum(true).width - minimum(false).width).toBe(layout.options);

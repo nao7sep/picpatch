@@ -199,7 +199,7 @@ export class Application {
     this.queue.requireIdle('error.finish_or_cancel_queued_work_before_changing_prepared_models');
     return this.manage({ action: download ? 'download' : 'register', modelId }, async call => {
       const prepared = await prepareModel(modelId, { ...components, profile: this.settings.profile, ...(directory ? { directory } : {}), ...(checkpoint ? { checkpoint } : {}), download }, call);
-      await this.updateSettings(next => { next.registrations[modelId] = { version: 1, model: prepared.model }; }); return prepared;
+      await this.updateSettings(next => { next.registrations[modelId] = { model: prepared.model }; }); return prepared;
     });
   }
   resourcesChanged(value: { engineDirectory?: string; modelsDirectory?: string; nativeExecutable?: string }): boolean {

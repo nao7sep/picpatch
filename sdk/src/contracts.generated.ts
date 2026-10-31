@@ -100,7 +100,7 @@ export interface RecordOptions {
    */
   includeInputs?: boolean;
   /**
-   * The calling app's identity, recorded beside the SDK writer.
+   * The calling app's identity, recorded as the writer's caller.
    */
   caller?: {
     name: string;
@@ -405,7 +405,6 @@ export interface ModelComponent {
  * via the `definition` "ModelManifest".
  */
 export interface ModelManifest {
-  version: 1;
   model: string;
   source: {
     repository: string;
@@ -543,7 +542,19 @@ export interface GenerateRequest {
  * via the `definition` "ArtifactRecord".
  */
 export interface ArtifactRecord {
-  version: 1;
+  /**
+   * The file identity header's format; other keys inside it are ignored.
+   */
+  format: {
+    owner: "picpatch";
+    kind: "sidecar";
+    version: 1;
+    [k: string]: unknown;
+  };
+  /**
+   * The program and release that wrote the record, and the caller it wrote for. Never read or checked.
+   */
+  writer?: {name: string; version: string; caller?: {name: string; version: string}};
   operation: "edit" | "generate";
   inputsIncluded: boolean;
   image: {
@@ -625,14 +636,6 @@ export interface ArtifactRecord {
   conditioning?: ConditioningProvenance;
   loras?: LoraProvenance[];
   control?: ControlProvenance;
-  writer: {
-    name: "picpatchsdk";
-    version: string;
-  };
-  caller?: {
-    name: string;
-    version: string;
-  };
   /**
    * Original encoded input file bytes, before normalization; ordered by preparation.
    */
@@ -642,7 +645,7 @@ export interface ArtifactRecord {
     bytes: number;
   }[];
   /**
-   * Effective masked-edit mechanism. Native conditioning may change unmasked pixels. Composite blends normalized RGBA using white-to-edit masks; latent-composite restores fully black normalized pixels after latent masking. Absent for an unmasked operation or a legacy record with unknown mechanism.
+   * Effective masked-edit mechanism. Native conditioning may change unmasked pixels. Composite blends normalized RGBA using white-to-edit masks; latent-composite restores fully black normalized pixels after latent masking. Absent for an unmasked operation.
    */
   maskMode?: "native" | "composite" | "latent-composite";
 }

@@ -41,9 +41,9 @@ it('takes one call-options object on every verb, apart from each verb’s own ar
   await expect(inspectEngine({ unknown: true } as never)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
 });
 
-it('refuses newer formats in the validators exactly as the readers do', () => {
-  expect(validateModelRegistration({ version: 3, model: {} })).toEqual({ status: 'refused', code: 'MODEL_REGISTRATION_VERSION_UNSUPPORTED', message: expect.any(String), details: { version: 3 } });
-  expect(() => validateModelRegistration({ version: 0 })).toThrow(PicPatchSdkError);
+it('validates a held registration as content, leaving the file header to the reader', () => {
+  expect(() => validateModelRegistration({ model: {} })).toThrow(PicPatchSdkError);
+  expect(() => validateModelRegistration(null)).toThrow(PicPatchSdkError);
 });
 
 it('names why model preparation failed, not the step', async () => {
@@ -78,7 +78,7 @@ it('leaves a record’s inputs out of a saved copy when asked', async () => {
   await sharp({ create: { width: 2, height: 2, channels: 3, background: 'red' } }).png().toFile(image);
   const bytes = await readFile(image);
   const { createHash } = await import('node:crypto');
-  const record: ArtifactRecord = { version: 1, writer: { name: 'picpatchsdk', version: '1.0.0' }, operation: 'generate', inputsIncluded: true, inputs: { prompt: 'private' },
+  const record: ArtifactRecord = { format: { owner: 'picpatch', kind: 'sidecar', version: 1 }, writer: { name: 'picpatchsdk', version: '1.0.0' }, operation: 'generate', inputsIncluded: true, inputs: { prompt: 'private' },
     image: { filename: 'image.png', mimeType: 'image/png', size: { width: 2, height: 2 } }, sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length,
     model: 'test', modelRevision: 'rev', runtime: { name: 'test', version: '1' }, seed: 1, effectiveParameters: { negativePrompt: 'private' }, fingerprints: [] };
   const saved = await saveArtifact(image, join(directory, 'copy.png'), record, { includeInputs: false, sidecar: true });
@@ -86,7 +86,7 @@ it('leaves a record’s inputs out of a saved copy when asked', async () => {
   expect(saved.record).toMatchObject({ inputsIncluded: false });
   expect(JSON.stringify(saved.record)).not.toContain('private');
   expect(await readFile(join(directory, 'copy-picpatchsdk.json'), 'utf8')).not.toContain('private');
-  expect(await saveArtifact(image, join(directory, 'newer.png'), { ...record, version: 2 } as never)).toMatchObject({ status: 'refused', code: 'ARTIFACT_VERSION_UNSUPPORTED', details: { version: 2 } });
+  expect(await saveArtifact(image, join(directory, 'newer.png'), { ...record, format: { ...record.format, version: 2 } } as never)).toMatchObject({ status: 'refused', code: 'ARTIFACT_VERSION_UNSUPPORTED', details: { version: 2 } });
 });
 
 it.skipIf(process.platform === 'win32')('inspects a configured native executable in place of the managed one', async () => {
@@ -96,7 +96,7 @@ it.skipIf(process.platform === 'win32')('inspects a configured native executable
   const inspected = await inspectNativeEngine({ engineDirectory: directory, nativeExecutable: executable });
   if (inspected.status === 'unsupported') return;
   expect(inspected).toMatchObject({ status: 'ready', nativeExecutable: executable });
-  expect(await inspectNativeEngine({ engineDirectory: directory, profile: { version: 1, nativeExecutable: join(directory, 'absent') } })).toMatchObject({ status: 'missing', code: 'ENGINE_MISSING' });
+  expect(await inspectNativeEngine({ engineDirectory: directory, profile: { nativeExecutable: join(directory, 'absent') } })).toMatchObject({ status: 'missing', code: 'ENGINE_MISSING' });
   await writeFile(executable, '#!/bin/sh\necho "stable-diffusion.cpp version test, commit 0000000"\n');
   expect(await inspectNativeEngine({ engineDirectory: directory, nativeExecutable: executable })).toMatchObject({ status: 'incompatible' });
 });

@@ -4,6 +4,7 @@ import { chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { removeFiles, restoreLargeText, storeLargeText } from './record-files.ts';
 import { recordsQuery, recordId, recordsPageSize } from '../../shared/records.ts';
+import { openDatabaseHeader } from './file-header.ts';
 const { root, session } = workerData as { root: string; session: string };
 let database: DatabaseSync | undefined;
 /** The one connection to the records database, for the writes and the Records window's reads alike. */
@@ -13,6 +14,8 @@ function open(): DatabaseSync {
   const opened = new DatabaseSync(join(root, 'records.sqlite3'));
   try {
     chmodSync(join(root, 'records.sqlite3'), 0o600);
+    // A database of another format or a newer version is refused untouched; records then go to the fallback log.
+    openDatabaseHeader(opened, 'records');
     // The Records window lists one launch or one severity newest first; these indexes keep that from scanning every record.
     opened.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY, session TEXT NOT NULL, time TEXT NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL, json TEXT NOT NULL); CREATE INDEX IF NOT EXISTS records_session ON records(session, id); CREATE INDEX IF NOT EXISTS records_level ON records(level, id)');
   } catch (error) { opened.close(); throw error; }

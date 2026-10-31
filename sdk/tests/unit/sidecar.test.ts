@@ -190,5 +190,5 @@ it('reports uncertain sidecar publication without deleting either complete file'
   if (saved.status === 'refused') throw new Error(saved.code);
   expect(saved.sidecar).toMatchObject({ status: 'failed', code: 'IO_ERROR', effect: 'unknown' });
   expect((await sharp(output).metadata()).format).toBe('png');
-  expect(JSON.parse(await fs.readFile(join(directory, 'out-picpatchsdk.json'), 'utf8')).version).toBe(1);
+  expect(JSON.parse(await fs.readFile(join(directory, 'out-picpatchsdk.json'), 'utf8')).format).toEqual({ owner: 'picpatch', kind: 'sidecar', version: 1 });
 });

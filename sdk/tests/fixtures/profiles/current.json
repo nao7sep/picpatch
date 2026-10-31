@@ -1,5 +1,13 @@
 {
-  "version": 1,
+  "format": {
+    "owner": "picpatch",
+    "kind": "profile",
+    "version": 1
+  },
+  "writer": {
+    "name": "picpatchsdk",
+    "version": "1.0.0"
+  },
   "engineDirectory": "/resources/engine",
   "modelsDirectory": "/resources/models",
   "nativeExecutable": "/tools/sd-cli",

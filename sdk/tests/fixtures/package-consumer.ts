@@ -34,7 +34,7 @@ async function artifact(result: EditResult) {
   return record;
 }
 const profilePath = join(config.outputDirectory, 'consumer-profile.json');
-await writeFile(profilePath, JSON.stringify({ version: 1, engineDirectory: config.engineDirectory, nativeExecutable: config.native.executable, defaults }));
+await writeFile(profilePath, JSON.stringify({ engineDirectory: config.engineDirectory, nativeExecutable: config.native.executable, defaults }));
 const loadedProfile = await readProfile(profilePath);
 if (loadedProfile.status === 'refused') throw new Error(loadedProfile.code);
 const profile = loadedProfile.profile;

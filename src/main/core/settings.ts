@@ -4,9 +4,10 @@ import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { validateProfile, validateModelRegistration } from 'picpatchsdk';
+import { appFile, checkFileHeader, fileContent } from './file-header.ts';
 import type { ModelRegistration, PicPatchProfile } from 'picpatchsdk';
 export interface Settings {
-  version: 1; sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; modelsKeptLoaded?: number; uiFont?: string; theme?: 'light' | 'dark'; language?: Language;
+  sessionsDirectory?: string; profile: PicPatchProfile; registrations: Record<string, ModelRegistration>; modelsKeptLoaded?: number; uiFont?: string; theme?: 'light' | 'dark'; language?: Language;
   /** An IANA zone; absent means System. */
   timeZone?: string;
 }
@@ -31,40 +32,40 @@ export function readSettingsSync(path: string): Settings {
   return settingsText(path, text);
 }
 function settingsReadFailure(path: string, error: unknown): Settings {
-  if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, profile: { version: 1 }, registrations: {} };
+  if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { profile: {}, registrations: {} };
   throw unusable(path, error);
 }
 function settingsText(path: string, text: string): Settings {
-  try { return parseSettings(JSON.parse(text)); }
+  try { return parseSettings(settingsContent(JSON.parse(text))); }
   catch (error) { throw unusable(path, error); }
 }
 const unusable = (path: string, cause: unknown) => new UiError('startup.settingsFile', { path }, { cause });
+/** The settings under a config header; another format or a newer version is unusable like any other file. */
+function settingsContent(value: unknown): Settings {
+  const header = checkFileHeader(value, 'config');
+  if (header.status !== 'current') throw new Error(header.status === 'newer' ? `Settings from a newer PicPatch (format ${header.version}).` : 'Not a PicPatch config file.');
+  return fileContent<Settings>(value as object);
+}
 function parseSettings(value: Settings): Settings {
-  if (!value || typeof value !== 'object' || value.version !== 1 || (value.registrations !== undefined && (typeof value.registrations !== 'object' || value.registrations === null || Array.isArray(value.registrations)))) throw new Error('Unsupported settings format.');
-  value.profile ??= { version: 1 }; value.registrations ??= {};
+  if (!value || typeof value !== 'object' || (value.registrations !== undefined && (typeof value.registrations !== 'object' || value.registrations === null || Array.isArray(value.registrations)))) throw new Error('Unsupported settings format.');
+  value.profile ??= {}; value.registrations ??= {};
   if (value.theme !== undefined && !['light', 'dark'].includes(value.theme)) delete value.theme;
   value.language = preference(value.language);
   if (typeof value.uiFont !== 'string' || !value.uiFont.trim()) delete value.uiFont;
   if (value.timeZone !== undefined && !validTimeZone(value.timeZone)) delete value.timeZone;
   if (!validModelsKeptLoaded(value.modelsKeptLoaded) || value.modelsKeptLoaded === 1) delete value.modelsKeptLoaded;
-  // A resource profile from a newer PicPatch is a newer format like any other. A newer registration affects only its
-  // own model: it stays as saved, and opening that model refuses it.
-  if (validateProfile(value.profile).status === 'refused') throw new Error('Resource profile from a newer PicPatch.');
+  validateProfile(value.profile);
   for (const entry of Object.values(value.registrations)) validateModelRegistration(entry);
   if (value.sessionsDirectory !== undefined && !isAbsolute(value.sessionsDirectory)) throw new Error('Stored resource paths must be absolute.');
   return value;
 }
-/** The profile settings may hold; a newer one is never written. */
-export function usableProfile(value: unknown): PicPatchProfile {
-  const result = validateProfile(value);
-  if (result.status === 'refused') throw new UiError('error.newer_format');
-  return result.profile;
-}
+/** The profile settings may hold. */
+export const usableProfile = (value: unknown): PicPatchProfile => validateProfile(value).profile;
 export async function saveSettings(path: string, value: Settings): Promise<Buffer> {
   usableProfile(value.profile);
   const stored: Record<string, unknown> = { ...structuredClone(value) };
-  if (Object.keys(value.profile).length === 1) delete stored.profile;
+  if (!Object.keys(value.profile).length) delete stored.profile;
   if (!Object.keys(value.registrations).length) delete stored.registrations;
-  return writeJson(path, stored);
+  return writeJson(path, appFile('config', stored));
 }
 export const validModelsKeptLoaded = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 1 && (value as number) <= maxModelsKeptLoaded;

@@ -1,5 +1,13 @@
 {
-  "version": 1,
+  "format": {
+    "owner": "picpatch",
+    "kind": "engine-record",
+    "version": 1
+  },
+  "writer": {
+    "name": "picpatchsdk",
+    "version": "1.0.0"
+  },
   "identity": {
     "id": "ca897634a06f4d47d75eb01511a8a5a9a76d1e4766ac16fd8110a68cb1db521c",
     "platform": "darwin",

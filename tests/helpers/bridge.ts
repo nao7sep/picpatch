@@ -17,7 +17,7 @@ export const models = [
 ];
 
 export function session(patch: Partial<Session> = {}): Session {
-  return { version: 1, id: '11111111-1111-4111-8111-111111111111', name: 'Mountain poster', created: '2026-10-01T00:00:00.000Z', updated: '2026-10-01T00:00:00.000Z', draft: initialDraft(), assets: [], runs: [], ...patch };
+  return { id: '11111111-1111-4111-8111-111111111111', name: 'Mountain poster', created: '2026-10-01T00:00:00.000Z', updated: '2026-10-01T00:00:00.000Z', draft: initialDraft(), assets: [], runs: [], ...patch };
 }
 export function run(id: string, patch: Partial<Run> = {}): Run {
   return { id, modelId: 'flux2-klein-4b-4bit', seed: 7, draft: { ...initialDraft(), text: `Command ${id}` }, status: 'completed', created: `2026-10-01T00:00:0${id.length % 10}.000Z`, output: `outputs/${id}.png`, ...patch };
@@ -32,7 +32,7 @@ export function fakeBridge(initial: Session = session(), overrides: Record<strin
     paneState: () => ({ railWidth: 264, optionsPane: false }),
     savePane: () => undefined,
     modelReadiness: () => ({ 'flux2-klein-4b-4bit': 'ready', sd15: 'missing' }),
-    overview: () => ({ sessions: [{ id: current.id, name: current.name, updated: current.updated, results: current.runs.filter(r => r.output).length }], failures: [], models, queue: { paused: false }, settings: { version: 1, profile: { version: 1 }, registrations: {} }, resourceDefaults: { engineDirectory: '/e', modelsDirectory: '/m' }, locations: { engineDirectory: '/e', modelsDirectory: '/m', sessionsDirectory: '/s' }, resourcesBusy: false, managed: {}, locale: { language: 'en', format: 'en', systemLanguage: 'en' }, systemDark: false }),
+    overview: () => ({ sessions: [{ id: current.id, name: current.name, updated: current.updated, results: current.runs.filter(r => r.output).length }], failures: [], models, queue: { paused: false }, settings: { profile: {}, registrations: {} }, resourceDefaults: { engineDirectory: '/e', modelsDirectory: '/m' }, locations: { engineDirectory: '/e', modelsDirectory: '/m', sessionsDirectory: '/s' }, resourcesBusy: false, managed: {}, locale: { language: 'en', format: 'en', systemLanguage: 'en' }, systemDark: false }),
     get: () => structuredClone(current),
     draft: ({ draft }: { draft: Draft }) => { current = { ...current, draft }; return structuredClone(current); },
     create: () => { throw new Error('unexpected create'); },

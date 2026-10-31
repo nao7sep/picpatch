@@ -19,7 +19,7 @@ beforeEach(async () => {
   vi.stubEnv('PICPATCH_DATA_DIR', join(directory, 'data'));
   vi.stubEnv('PICPATCH_MODELS_DIR', join(directory, 'models'));
   entry = { ...listModels().find(model => model.acquisition === 'pinned')!, id: 'fixture', downloadBytes: bytes.length, manifest: {
-    version: 1, model: 'fixture', source: { repository: 'test/fixture', revision: 'a'.repeat(40) },
+    model: 'fixture', source: { repository: 'test/fixture', revision: 'a'.repeat(40) },
     components: [{ path: 'weights.safetensors', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
   } };
 });

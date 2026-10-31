@@ -12,7 +12,7 @@ function component(path: string, data: string, role: ModelComponent['role'] = 'w
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'picpatch-verify-'));
   const weight = component('weights.safetensors', 'fixture');
-  manifest = { version: 1, model: 'fixture', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [weight] };
+  manifest = { model: 'fixture', source: { repository: 'test/model', revision: 'a'.repeat(40) }, components: [weight] };
   await writeFile(join(directory, weight.path), 'fixture');
 });
 afterEach(async () => { await rm(directory, { recursive: true, force: true }); });

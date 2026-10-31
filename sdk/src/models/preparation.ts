@@ -112,7 +112,7 @@ export async function prepareCatalogModel(entry: CatalogModel, options: PrepareM
         const result = await verifyBundle(path, entry.manifest, { signal, onProgress: event => emitProgress(operation, event) });
         if (result.status !== 'matches-manifest') throw new PicPatchSdkError('MODEL_MISMATCH', 'Model files do not match the catalog. Existing files were preserved; choose a complete bundle or a new cache location.');
       };
-      const result = (origin: PreparedModel['origin']): PreparedModel => ({ version: 1, model: { variant: entry.variant, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });
+      const result = (origin: PreparedModel['origin']): PreparedModel => ({ model: { variant: entry.variant, directory, manifest: structuredClone(entry.manifest) }, origin, integrity: 'matches-manifest' });
       if (await exists(directory)) { await verified(directory); return result(options.directory ? 'external' : 'cache'); }
       checkSignal(signal);
       if (options.directory || !options.download) throw new PicPatchSdkError('MODEL_MISSING', 'Model bundle is missing. Supply a local directory or explicitly enable download.');

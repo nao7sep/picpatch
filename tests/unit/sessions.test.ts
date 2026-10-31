@@ -27,12 +27,20 @@ it('serializes concurrent draft changes without losing either field', async () =
 });
 it('preserves unknown formats and reports them beside readable sessions', async () => {
   const sessions = new Sessions(root); const a = await sessions.create(); const b = await sessions.create();
-  const filename = join(root, a.id, 'session.json'); const newer = JSON.stringify({ ...a, version: 99 }); await writeFile(filename, newer);
+  const filename = join(root, a.id, 'session.json'); const saved = JSON.parse(await readFile(filename, 'utf8'));
+  expect(Object.keys(saved).slice(0, 2)).toEqual(['format', 'writer']); expect(saved.format).toEqual({ owner: 'picpatch', kind: 'session', version: 1 });
+  const newer = JSON.stringify({ ...saved, format: { ...saved.format, version: 99 } }); await writeFile(filename, newer);
   const fresh = new Sessions(root); const inventory = await fresh.list();
   expect(inventory.sessions.map(s => s.id)).toEqual([b.id]); expect(inventory.failures[0]?.id).toBe(a.id);
   await expect(fresh.update(a.id, () => {})).rejects.toThrow('Unsupported');
   expect(await readFile(filename, 'utf8')).toBe(newer);
   await expect(fresh.get('../outside')).rejects.toThrow('Invalid');
+  // Another owner or kind, or no header at all, is not a session; the writer is never read.
+  for (const value of [{ ...saved, format: { ...saved.format, kind: 'state' } }, { ...saved, format: { ...saved.format, owner: 'pixelup' } }, { ...a, version: 1 }]) {
+    const contents = JSON.stringify(value); await writeFile(filename, contents);
+    await expect(new Sessions(root).get(a.id)).rejects.toThrow('Invalid session'); expect(await readFile(filename, 'utf8')).toBe(contents);
+  }
+  await writeFile(filename, JSON.stringify({ ...saved, writer: 'anything' })); expect((await new Sessions(root).get(a.id)).id).toBe(a.id);
 });
 it('keeps exported and original files after explicitly deleting a session', async () => {
   const sessions = new Sessions(join(root, 'collection')); const s = await sessions.create();
@@ -81,7 +89,7 @@ it('opens a session whose result record a newer PicPatch wrote, keeping the reco
   const sessions = new Sessions(root); const session = await sessions.create();
   const filename = join(root, session.id, 'session.json');
   const stored = JSON.parse(await readFile(filename, 'utf8'));
-  const record = { version: 2, futureField: true };
+  const record = { format: { owner: 'picpatch', kind: 'sidecar', version: 2 }, futureField: true };
   stored.runs = [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', modelId: 'm', seed: 1, draft: stored.draft, status: 'completed', created: stored.created, output: 'outputs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png', record }];
   await writeFile(filename, JSON.stringify(stored));
   const fresh = new Sessions(root);

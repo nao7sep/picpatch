@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { PicPatchSdkError } from '../../errors.ts';
 import type { EngineIdentity, EngineRecord, PythonRuntime } from './types.ts';
 import { pythonVersion } from './versions.ts';
+import { checkFileHeader } from '../../file-header.ts';
 
 const hash = (bytes: string) => createHash('sha256').update(bytes).digest('hex');
 /** The package's runtimes folder, from this module's own path. Not new URL(..., import.meta.url): a bundler treats that pattern as an asset import. */
@@ -33,8 +34,9 @@ export function identifyEngine(manifest: string, lock: string, runtime: PythonRu
 }
 export function validRecord(value: unknown, identity: EngineIdentity): value is EngineRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  // A newer record counts as invalid here too: installation preserves it either way. The writer is never read.
   const record = value as EngineRecord;
-  return Object.keys(record).sort().join(',') === 'identity,installation,version' && record.version === 1 &&
+  return checkFileHeader(record, 'engine-record').status === 'current' && Object.keys(record).filter(key => key !== 'writer').sort().join(',') === 'format,identity,installation' &&
     typeof record.installation === 'string' && new RegExp(`^${identity.id}-[a-f0-9-]{36}$`).test(record.installation) &&
     !!record.identity && Object.keys(record.identity).length === Object.keys(identity).length &&
     Object.entries(identity).every(([key, entry]) => (record.identity as unknown as Record<string, unknown>)[key] === entry);

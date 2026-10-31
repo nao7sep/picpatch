@@ -10,6 +10,7 @@ import sharp from 'sharp';
 import { controlKinds, initialDraft } from '../../shared/session.ts';
 import type { Session, SessionSummary, Draft, Asset } from '../../shared/session.ts';
 import { writeJson } from './files.ts';
+import { appFile, checkFileHeader, fileContent } from './file-header.ts';
 
 const removing = /^[a-f0-9-]{36}\.removing-[a-f0-9-]{36}$/;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -32,9 +33,16 @@ export function validateDraft(value: unknown): Draft {
   if (draft.control && (!(controlKinds as readonly string[]).includes(draft.control.kind) || (draft.control.strength !== undefined && (!Number.isFinite(draft.control.strength) || draft.control.strength < 0)))) throw new UiError('error.invalid_structural_control');
   return structuredClone(draft);
 }
+/** A session.json document: a newer format is preserved unread, and a file without a session header is not a session. */
+export function sessionDocument(value: unknown): Session {
+  const header = checkFileHeader(value, 'session');
+  if (header.status === 'newer') throw new UiError('error.unsupported_session_format_the_file_was_preserved');
+  if (header.status === 'unreadable') throw new UiError('error.invalid_session');
+  return validateSession(fileContent(value as object));
+}
 export function validateSession(value: unknown): Session {
   const session = value as Session;
-  if (!session || session.version !== 1) throw new UiError('error.unsupported_session_format_the_file_was_preserved');
+  if (!session || typeof session !== 'object') throw new UiError('error.invalid_session');
   id(session.id);
   if (typeof session.name !== 'string' || !Number.isFinite(Date.parse(session.created)) || !Number.isFinite(Date.parse(session.updated)) || !Array.isArray(session.assets) || !Array.isArray(session.runs)) throw new UiError('error.invalid_session');
   validateDraft(session.draft);
@@ -152,7 +160,7 @@ export class Sessions {
   private async parse(key: string): Promise<Session> {
     const directory = this.directory(key);
     if ((await lstat(directory)).isSymbolicLink()) throw new UiError('error.linked_sessions_are_not_supported');
-    const session = validateSession(JSON.parse(await readFile(join(directory, 'session.json'), 'utf8')));
+    const session = sessionDocument(JSON.parse(await readFile(join(directory, 'session.json'), 'utf8')));
     if (session.id !== key) throw new UiError('error.session_identity_does_not_match_its_directory');
     return session;
   }
@@ -169,7 +177,7 @@ export class Sessions {
   async create(name = 'Untitled session', draft = initialDraft()): Promise<Session> {
     return this.serial(async () => {
       const key = randomUUID(); const now = new Date().toISOString();
-      const session: Session = { version: 1, id: key, name, created: now, updated: now, draft: validateDraft(draft), assets: [], runs: [] };
+      const session: Session = { id: key, name, created: now, updated: now, draft: validateDraft(draft), assets: [], runs: [] };
       await mkdir(join(this.directory(key), 'assets'), { recursive: true, mode: 0o700 });
       await mkdir(join(this.directory(key), 'outputs'), { mode: 0o700 });
       await this.publish(session); return structuredClone(session);
@@ -178,7 +186,7 @@ export class Sessions {
   private async publish(session: Session, historyChanged = true): Promise<void> {
     const valid = session;
     const path = join(this.directory(session.id), 'session.json');
-    const bytes = await writeJson(path, valid);
+    const bytes = await writeJson(path, appFile('session', valid));
     this.loaded.set(session.id, valid);
     if (historyChanged || !this.summaries.has(session.id)) this.summaries.set(session.id, summarize(valid));
     try { this.saved(path, bytes); } catch { /* Backup history cannot fail a primary save. */ }

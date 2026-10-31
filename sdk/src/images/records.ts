@@ -7,7 +7,8 @@ import { PicPatchSdkError } from '../errors.ts';
 import { absolutePath, checkSignal, validateOperation } from '../operations.ts';
 import type { CallOptions, Refusal } from '../types.ts';
 import { inspectImage } from './fingerprint.ts';
-import { newerVersion, versionRefusal } from '../versions.ts';
+import { versionRefusal } from '../versions.ts';
+import { checkFileHeader } from '../file-header.ts';
 
 export type ArtifactReadOptions = CallOptions;
 export type ArtifactRefusal = Refusal<'ARTIFACT_VERSION_UNSUPPORTED' | 'ARTIFACT_MISMATCH'>;
@@ -22,8 +23,9 @@ export function checkArtifactRecord(value: unknown): ArtifactRecord {
 }
 /** Validates a record the caller holds; a newer format version is refused, as the reader refuses it. */
 export function validateArtifactRecord(value: unknown): ArtifactRecordResult {
-  const version = newerVersion(value);
-  if (version !== undefined) return versionRefusal('ARTIFACT_VERSION_UNSUPPORTED', 'This artifact record version is unsupported.', version);
+  const header = checkFileHeader(value, 'sidecar');
+  if (header.status === 'newer') return versionRefusal('ARTIFACT_VERSION_UNSUPPORTED', 'This artifact record version is unsupported.', header.version);
+  if (header.status === 'unreadable') throw new PicPatchSdkError('INVALID_REQUEST', 'Invalid artifact record.');
   return { status: 'completed', record: checkArtifactRecord(value) };
 }
 export function readArtifactRecord(path: string, options: ArtifactReadOptions = {}): Promise<ArtifactRecordResult> {

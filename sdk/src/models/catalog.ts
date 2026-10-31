@@ -8,6 +8,7 @@ import { externalModels, modelCapabilities, modelDefinition } from './variants.t
 import { PicPatchSdkError } from '../errors.ts';
 import { modelEvidence, modelProfile } from './profiles.ts';
 import { validateModelManifest } from './verification.ts';
+import { checkFileHeader, fileContent } from '../file-header.ts';
 import { runtimeHosts, supportsRuntime } from '../hosts.ts';
 import { runtimeVersions } from '../runtime/engine/versions.ts';
 
@@ -22,7 +23,8 @@ function buildCatalog(): ModelCatalogEntry[] {
     { manifest: fillManifest, variant: 'flux1-fill-dev' as const, license: 'flux-1-dev-non-commercial-license', licenseUrl: `https://huggingface.co/${fillManifest.source.repository}/blob/${fillManifest.source.revision}/README.md` },
   ];
   const pinned = configurations.map((configuration): CatalogModel => {
-    const pinned = validateModelManifest(configuration.manifest);
+    if (checkFileHeader(configuration.manifest, 'model-manifest').status !== 'current') throw new PicPatchSdkError('INTERNAL', 'A bundled model manifest has the wrong header.');
+    const pinned = validateModelManifest(fileContent(configuration.manifest));
     return { id: pinned.model, capabilities: modelCapabilities(configuration.variant, pinned.model), acquisition: 'pinned', family: modelDefinition(configuration.variant).family, ...modelEvidence(pinned.model, 'api'), profile: modelProfile(configuration.variant), variant: configuration.variant, manifest: pinned,
       downloadBytes: pinned.components.reduce((total, component) => total + component.bytes, 0),
       sourceUrl: `https://huggingface.co/${pinned.source.repository}/tree/${pinned.source.revision}`,

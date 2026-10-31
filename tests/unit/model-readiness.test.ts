@@ -2,8 +2,8 @@ import { beforeEach, expect, it, vi } from 'vitest';
 vi.mock('picpatchsdk', async original => ({ ...await original<typeof import('picpatchsdk')>(), listModels: vi.fn(), openModel: vi.fn(), inspectEngine: vi.fn(), inspectNativeEngine: vi.fn() }));
 import { listModels, openModel, inspectEngine, inspectNativeEngine, PicPatchSdkError, type ModelRegistration } from 'picpatchsdk';
 import { modelReadiness } from '../../src/main/core/model-readiness.ts';
-const registration: ModelRegistration = { version: 1, model: { variant: 'flux2-klein-4b', directory: '/registered', manifest: { version: 1, model: 'fixture', source: { repository: 'local', revision: 'a'.repeat(40) }, components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } } };
-const settings = { version: 1 as const, profile: { version: 1 as const }, registrations: {} };
+const registration: ModelRegistration = { model: { variant: 'flux2-klein-4b', directory: '/registered', manifest: { model: 'fixture', source: { repository: 'local', revision: 'a'.repeat(40) }, components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } } };
+const settings = { profile: {}, registrations: {} };
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(listModels).mockReturnValue([{ id: 'a', acquisition: 'pinned', runtime: { name: 'mflux', engine: 'python' }, supported: true }, { id: 'b', acquisition: 'pinned', runtime: { name: 'mflux', engine: 'python' }, supported: true }, { id: 'external', acquisition: 'local', runtime: { name: 'stable-diffusion.cpp', engine: 'native' }, supported: true }] as never);

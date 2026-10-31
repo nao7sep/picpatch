@@ -114,7 +114,6 @@ export type GenerateInput = Omit<GenerateRequest, 'model' | 'outputPath'> & { mo
 export type EditInput = Omit<EditRequest, 'model' | 'outputPath'> & { model?: string; outputPath?: string; outputDirectory?: string };
 /** Caller-owned argument bundle. Paths are absolute literals; never discovered or written by the SDK. */
 export interface PicPatchProfile {
-  version: 1;
   engineDirectory?: string;
   modelsDirectory?: string;
   nativeExecutable?: string;

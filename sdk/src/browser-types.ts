@@ -10,3 +10,5 @@ export type { CatalogModel, CatalogRuntime, ExternalModel, ManagedModelEntry, Ma
 export type { EngineInspection, NativeEngineInspection, PythonRuntime } from './runtime/engine/types.ts';
 export { admissionCodes, admissionIssues } from './admission.ts';
 export type { AdmissionCode, AdmissionIssue, AdmissionRequest } from './admission.ts';
+export { checkFileHeader, fileContent, fileHeader, fileOwner, fileVersion, withFileHeader } from './file-header.ts';
+export type { FileFormat, FileHeader, FileKind, FileProgram, FileWriter, HeaderCheck } from './file-header.ts';

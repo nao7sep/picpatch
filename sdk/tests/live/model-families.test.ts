@@ -13,7 +13,7 @@ it.each(['qwen-image', 'qwen-image-edit-2511', 'qwen-image-2.1', 'flux1-kontext-
   const directory = await mkdtemp(join(tmpdir(), 'picpatch-family-import-'));
   const bytes = Buffer.from('Import-only fixture; never load as weights.');
   const model: LocalModel = { variant: adapter, directory, quantize: 4, manifest: {
-    version: 1, model: adapter, source: { repository: 'fixture', revision: 'a'.repeat(40) },
+    model: adapter, source: { repository: 'fixture', revision: 'a'.repeat(40) },
     components: [{ path: 'fixture.bin', role: 'weights', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }],
   } };
   const editor = createImageClient({ engineDirectory: testEngineDirectory, model });

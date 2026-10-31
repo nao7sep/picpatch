@@ -35,7 +35,7 @@ it('selects isolated engine identity and source entry without ambient path confi
 it('requires preprocessing and fixed trained components, without accepting foreign quantization', () => {
   expect(modelDefinition('flux1-dreamo-v1.1').requiredFiles).toContain('preprocessing/BEN2_Base.pth');
   expect(() => validateLocalModel({ variant: 'flux1-dreamo-v1.1', directory: '/tmp/bundle', quantize: 4,
-    manifest: { version: 1, model: 'dreamo', source: { repository: 'local', revision: 'a'.repeat(40) }, components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } })).toThrow(/quantization/);
+    manifest: { model: 'dreamo', source: { repository: 'local', revision: 'a'.repeat(40) }, components: [{ path: 'weights.safetensors', role: 'weights', bytes: 1, sha256: 'a'.repeat(64) }] } })).toThrow(/quantization/);
 });
 
 it('fingerprints the complete DreamO base, adaptation and preprocessing bundle before accepting it', async () => {

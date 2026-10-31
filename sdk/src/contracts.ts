@@ -1,6 +1,8 @@
 import { Ajv, type ValidateFunction } from 'ajv';
 import schema from '../protocol/contracts.schema.json' with { type: 'json' };
 export const contractAjv = new Ajv({ strict: true, strictRequired: false });
+// tsType only shapes the generated types; a value it describes is not validated.
+contractAjv.addKeyword('tsType');
 contractAjv.addSchema(schema, 'contracts.schema.json');
 // Ajv caches a compiled schema by object identity, so a fresh `$ref` object per call would compile again every time
 // and keep each copy. One validator per definition serves every caller.

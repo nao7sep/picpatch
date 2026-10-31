@@ -24,7 +24,7 @@ it('generates, edits with references, branches and reopens through the real rend
   await mkdir(artifacts, { recursive: true });
   const root = await mkdtemp(join(artifacts, 'session-'));
   const paths: AppPaths = { root, sessions: join(root, 'sessions'), config: join(root, 'config.json'), state: join(root, 'state.json'), backups: join(root, 'backups.sqlite3') };
-  await saveSettings(paths.config, { version: 1, profile: { version: 1, engineDirectory: join(cache, 'managed-engine') }, registrations: { [modelId]: { version: 1, model: config.model } } });
+  await saveSettings(paths.config, { profile: { engineDirectory: join(cache, 'managed-engine') }, registrations: { [modelId]: { model: config.model } } });
   let change = () => {};
   const diagnostics: unknown[] = [];
   let app = await Application.open(paths, () => change(), () => {}, (level, message, details) => { if (level === 'error') diagnostics.push({ message, ...details }); });

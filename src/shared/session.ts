@@ -19,7 +19,7 @@ export interface Run {
   issue?: { code: string; effect?: 'none' | 'unknown' };
 }
 export interface Session {
-  version: 1; id: string; name: string; created: string; updated: string;
+  id: string; name: string; created: string; updated: string;
   draft: Draft; assets: Asset[]; runs: Run[];
 }
 /** cover is the latest completed result, shown as the session's picture. */
